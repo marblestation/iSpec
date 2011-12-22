@@ -2,6 +2,7 @@ import numpy as np
 import pyfits
 import scipy.ndimage as ndi
 from interpolate import *
+from plotting import *
 
 def get_fwhm(lambda_peak, resolution):
     delta_lambda = {}
@@ -21,67 +22,72 @@ arcturus_spectra['flux'] = atlas[1].data['ARCTURUS']
 arcturus_spectra['waveobs'] = atlas[1].data['WAVELENGTH']
 atlas.close()
 
-spectra = arcturus_spectra[:100]
+spectra = arcturus_spectra[:1000]
 spectra.sort(order='waveobs') # Make sure it is ordered by wavelength
 
-
-## TODO: Select window margin in function of FWHM
-window_margin = 20 # Total window width: window_margin + 1 + window_margin
 resolution = {}
 resolution['original'] = 150000
 resolution['final'] = 47000
 
-lambda_max = np.max(spectra['waveobs'])
-fwhm_max = get_fwhm(lambda_max, resolution)
-
-lambda_peak = 400.0
-wave_filter = (spectra['waveobs'] >= lambda_peak - 1.5*fwhm_max) & (spectra['waveobs'] <= lambda_peak_peak + 1.5*fwhm_max)    
-
-
 if resolution['original'] <= resolution['final']:
-    # This method degrades resolution, it cannot deal with a different situation
-    exit()
+    raise Exception("This method degrades resolution, it cannot deal with a different situation where final resolution is equal or bigger than original")
 
-
-total_points = len(spectra['waveobs']) - 2 * window_margin
-
+total_points = len(spectra['waveobs'])
 convolved_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-convolved_spectra['waveobs'] = spectra['waveobs'][window_margin:window_margin+total_points]
+convolved_spectra['waveobs'] = spectra['waveobs']
 
 #~ PROCEDURE:
-#~ ;           1. Interpolation of the flux on a fine spaced grid.
-#~ ;              Oversamplingfaktor: 17
-#~ ;           2. Convolution of the flux with a gaussian profile 
-#~ ;           3. Interpolation of the smoothed flux on the original grid.
+#~  1. Interpolation of the flux on a fine spaced grid (Oversampling factor: 17)
+#~  2. Convolution of the flux with a gaussian profile 
+#~  3. Interpolation of the smoothed flux on the original grid.
 
 for i in np.arange(total_points):
-    if i >= window_margin and i < total_points - window_margin:
-        j = i - window_margin
-        
-        lambda_peak = spectra['waveobs'][i]
-        fwhm = get_fwhm(lambda_peak, resolution)
+    lambda_peak = spectra['waveobs'][i] # Current lambda (wavelength) to be modified
+    fwhm = get_fwhm(lambda_peak, resolution) # Calculate the needed fwhm for this wavelength
+    
+    # Only work with a limited window considering 2 times the fwhm in each side of the current
+    # position to be modified and saved in the convolved spectra
+    wave_filter = (spectra['waveobs'] >= lambda_peak - 2*fwhm) & (spectra['waveobs'] <= lambda_peak + 2*fwhm)
+    spectra_window = spectra[wave_filter]
+    min = np.min(spectra_window['waveobs'])
+    max = np.max(spectra_window['waveobs'])
+    # Find the index position of the current lambda peak in the window
+    lambda_peak_win_index = spectra_window['waveobs'].searchsorted(lambda_peak)
+    
+    # Check that the window is large enough (i.e. points in the edges of the original spectra)
+    if np.round(max - min, 2) >= 3*fwhm:
         sigma = get_sigma(fwhm)
         
-        spectra_window = spectra[i-window_margin:i+1+window_margin]
-        min = np.min(spectra_window['waveobs'])
-        max = np.max(spectra_window['waveobs'])
-        wavelength_step = fwhm / 17.0
-        xaxis = np.arange(min, max, wavelength_step)
-        resampled_spectra_window = resample_spectra2axis(spectra_window, xaxis)
+        # Construct the gaussian
+        gaussian = np.exp(- ((spectra_window['waveobs'] - lambda_peak)**2) / (2*sigma**2)) / np.sqrt(2*np.pi*sigma**2)
+        gaussian = gaussian / np.sum(gaussian)
+        convolved_value = 0
+        for j in np.arange(len(spectra_window)):
+            convolved_value += spectra_window['flux'][j] * gaussian[j]
         
-        # Gauss filter (convolution) for the window centered in the current lambda_peak
-        convoluted_spectra_window = np.recarray((len(xaxis), ), dtype=[('waveobs', float),('flux', float),('err', float)])
-        convoluted_spectra_window['waveobs'] = resampled_spectra_window['waveobs']
-        convoluted_spectra_window['flux'] = ndi.gaussian_filter1d(resampled_spectra_window['flux'], sigma)
-        
-        #~ print convolved_spectra['flux'][j], "\t", convoluted_spectra_window[window_margin], "\t", sigma, 3*fwhm
-        print 3*fwhm, np.abs(spectra['waveobs'][i-window_margin] - spectra['waveobs'][i+2+window_margin]), np.abs(spectra['waveobs'][i-window_margin] - spectra['waveobs'][i+2+window_margin])/fwhm
-        
-        resampled_convoluted_spectra_window = resample_spectra2axis(convoluted_spectra_window, spectra_window['waveobs'])
-        
-        # Save only the peak convolved value
-        convolved_spectra['flux'][j] = resampled_convoluted_spectra_window[window_margin]['flux']
-        #~ print spectra['flux'][i], "\t", convolved_spectra['flux'][j]
+        convolved_spectra['flux'][i] = convolved_value
+        print i, spectra['flux'][i], "\t", convolved_value
+        #~ break
+        #~ # Interpolate on a fine spaced grid
+        #~ wavelength_step = fwhm / 17.0
+        #~ xaxis = np.arange(min, max, wavelength_step)
+        #~ resampled_spectra_window = resample_spectra2axis(spectra_window, xaxis)
+        #~ 
+        #~ # Gauss filter (convolution) for the window (which is centered in the current lambda_peak)
+        #~ convolved_spectra_window = np.recarray((len(xaxis), ), dtype=[('waveobs', float),('flux', float),('err', float)])
+        #~ convolved_spectra_window['waveobs'] = resampled_spectra_window['waveobs']
+        #~ convolved_spectra_window['flux'] = ndi.gaussian_filter1d(resampled_spectra_window['flux'], sigma)
+        #~ 
+        #~ # Interpolate on the original wavelength grid (which can be not spaced uniformly)
+        #~ resampled_convolved_spectra_window = resample_spectra2axis(convolved_spectra_window, spectra_window['waveobs'])
+        #~ 
+        #~ # Save only the current lambda convolved value
+        #~ convolved_spectra['flux'][i] = resampled_convolved_spectra_window[lambda_peak_win_index]['flux']
+        #~ print spectra['flux'][i], "\t", convolved_spectra['flux'][i]
+    else:
+        print "Not enough points for", lambda_peak, "(fwhm=", fwhm, ")"
+        convolved_spectra['flux'][i] = 0
 
 
+#~ plot_spectra([spectra, convolved_spectra])
 
