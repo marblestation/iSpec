@@ -170,7 +170,7 @@ def write_spectra(spectra, spectra_filename, compress=True):
         f_in.close()
         os.remove(tmp_spec)
     else:
-        asciitable.write(spectra, output=spectra_file, delimiter=' ')
+        asciitable.write(spectra, output=spectra_filename, delimiter=' ')
 
 
 
