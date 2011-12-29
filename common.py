@@ -173,6 +173,32 @@ def write_spectra(spectra, spectra_filename, compress=True):
         asciitable.write(spectra, output=spectra_filename, delimiter=' ')
 
 
+#### Read & write regions
+# Continuum
+def read_continuum_regions(continuum_regions_filename):
+    continuum_regions = asciitable.read(table=continuum_regions_filename, delimiter='\t', comment='#', names=['wave_base', 'wave_top'])
+    return continuum_regions
+
+def write_continuum_regions(continuum_regions, continuum_regions_filename):
+    asciitable.write(continuum_regions, output=continuum_regions_filename, delimiter='\t')
+
+# Lines
+def read_line_regions(line_regions_filename):
+    line_regions = asciitable.read(table=line_regions_filename, delimiter='\t', comment='#', names=['wave_peak', 'wave_base', 'wave_top', 'note'])
+    return line_regions
+
+def write_line_regions(line_regions, line_regions_filename):
+    asciitable.write(line_regions, output=line_regions_filename, delimiter='\t')
+
+# Segments
+def read_segment_regions(segment_regions_filename):
+    segment_regions = asciitable.read(table=segment_regions_filename, delimiter='\t', comment='#', names=['wave_base', 'wave_top'])
+    return segment_regions
+
+def write_segment_regions(segment_regions, segment_regions_filename):
+    asciitable.write(segment_regions, output=segment_regions_filename, delimiter='\t')
+
+
 
 
 

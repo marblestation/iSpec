@@ -93,8 +93,8 @@ def resample_spectra(spectra, xaxis):
         resampled_spectra['err'][i] = -999.9 # TODO: Calculate errors (propagation or interpolation?)
         if index > 4:
             from_index = index - 4
-        #~ if (i % 1000 == 0):
-            #~ print "%.2f" % resampled_spectra['waveobs'][i]
+        if (i % 1000 == 0):
+            print "%.2f" % resampled_spectra['waveobs'][i]
     
     return resampled_spectra
 

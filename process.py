@@ -2,7 +2,7 @@
 #################
 # Run with ipython -pdb -c "%run process.py"
 #################
-import ipdb
+#~ import ipdb
 import asciitable
 import numpy as np
 from multiprocessing import Pool
@@ -110,8 +110,11 @@ prepare_output_dirs(spectra_list)
 
 #### Homogenize correcting radial velocity and imposing a common wavelength grid
 #~ concurrent_homogenize_spectra(spectra_list, num_processes = 8)
-#homogenize_spectra(spectra_list)
+#~ homogenize_spectra(spectra_list)
 
+
+#~ import sys
+#~ sys.exit(0)
 
 #### Combine homogenized spectra with SNR >= 100
 #~ cumulative_mean_spectra, cumulative_median_spectra = combine_spectra(spectra_list)
@@ -135,44 +138,44 @@ continuum_model = fit_continuum(cumulative_median_spectra)
 spectra_continuum_median = read_spectra("output/cumulative_spectra_continuum_median.gz")
 
 
-#### Find continuum blocks
+#### Find continuum regions
 #~ resolution = 65000
-#~ continuum_mean_blocks = find_continuum(cumulative_mean_spectra, resolution, continuum_model=continuum_model)
-#~ write_continuum_blocks(continuum_mean_blocks, "output/cumulative_mean.continuum.txt")
-continuum_mean_blocks = read_continuum_blocks("output/cumulative_mean.continuum.txt")
-#~ #continuum_mean_blocks = merge_blocks(cumulative_mean_spectra, continuum_mean_blocks)
-#~ plot_spectra([cumulative_mean_spectra, spectra_continuum_mean], continuum=continuum_mean_blocks)
-
-#~ resolution = 65000
-#~ continuum_median_blocks = find_continuum(cumulative_median_spectra, resolution, continuum_model=continuum_model)
-#~ write_continuum_blocks(continuum_median_blocks, "output/cumulative_median.continuum.txt")
-continuum_median_blocks = read_continuum_blocks("output/cumulative_median.continuum.txt")
-#~ #continuum_median_blocks = merge_blocks(cumulative_median_spectra, continuum_median_blocks)
-#~ plot_spectra([cumulative_median_spectra, spectra_continuum_median], continuum=continuum_median_blocks)
-
-
-#### Find continuum blocks from "stable" regions considering low variation among the combined spectra
-#~ stable_blocks = find_stable_blocks(cumulative_mean_spectra)
-#~ merged_blocks = merge_blocks(cumulative_mean_spectra, stable_blocks)
-#~ # At least 12 measures per block
-#~ min_blocks = merged_blocks[merged_blocks['num_measures'] >= 12]
-#~ plot_spectra([cumulative_mean_spectra, spectra_continuum_mean], continuum=min_blocks)
+#~ continuum_mean_regions = find_continuum(cumulative_mean_spectra, resolution, continuum_model=continuum_model)
+#~ write_continuum_regions(continuum_mean_regions, "output/cumulative_mean.continuum.txt")
+continuum_mean_regions = read_continuum_regions("output/cumulative_mean.continuum.txt")
+#~ #continuum_mean_regions = merge_regions(cumulative_mean_spectra, continuum_mean_regions)
+#~ plot_spectra([cumulative_mean_spectra, spectra_continuum_mean], continuum=continuum_mean_regions)
 
 #~ resolution = 65000
-#~ continuum_mean_blocks = find_continuum_block_limited(cumulative_mean_spectra, resolution, min_blocks, continuum_model=continuum_model)
-#~ write_continuum_blocks(continuum_mean_blocks, "output/cumulative_mean.stable.continuum.txt")
-continuum_mean_blocks = read_continuum_blocks("output/cumulative_mean.stable.continuum.txt")
-plot_spectra([cumulative_mean_spectra, spectra_continuum_mean], continuum=continuum_mean_blocks)
+#~ continuum_median_regions = find_continuum(cumulative_median_spectra, resolution, continuum_model=continuum_model)
+#~ write_continuum_regions(continuum_median_regions, "output/cumulative_median.continuum.txt")
+continuum_median_regions = read_continuum_regions("output/cumulative_median.continuum.txt")
+#~ #continuum_median_regions = merge_regions(cumulative_median_spectra, continuum_median_regions)
+#~ plot_spectra([cumulative_median_spectra, spectra_continuum_median], continuum=continuum_median_regions)
 
 
-#~ stable_blocks = find_stable_blocks(cumulative_median_spectra)
-#~ merged_blocks = merge_blocks(cumulative_median_spectra, stable_blocks)
-#~ # At least 12 measures per block
-#~ min_blocks = merged_blocks[merged_blocks['num_measures'] >= 12]
-#~ plot_spectra([cumulative_median_spectra, spectra_continuum_median], continuum=min_blocks)
+#### Find continuum regions from "stable" regions considering low variation among the combined spectra
+#~ stable_regions = find_stable_regions(cumulative_mean_spectra)
+#~ merged_regions = merge_regions(cumulative_mean_spectra, stable_regions)
+#~ # At least 12 measures per region
+#~ min_regions = merged_regions[merged_regions['num_measures'] >= 12]
+#~ plot_spectra([cumulative_mean_spectra, spectra_continuum_mean], continuum=min_regions)
 
 #~ resolution = 65000
-#~ continuum_blocks = find_continuum_block_limited(cumulative_median_spectra, resolution, min_blocks, continuum_model=continuum_model)
-#~ write_continuum_blocks(continuum_median_blocks, "output/cumulative_median.stable.continuum.txt")
-continuum_median_blocks = read_continuum_blocks("output/cumulative_median.stable.continuum.txt")
-plot_spectra([cumulative_median_spectra, spectra_continuum_median], continuum=continuum_median_blocks)
+#~ continuum_mean_regions = find_continuum_on_regions(cumulative_mean_spectra, resolution, min_regions, continuum_model=continuum_model)
+#~ write_continuum_regions(continuum_mean_regions, "output/cumulative_mean.stable.continuum.txt")
+continuum_mean_regions = read_continuum_regions("output/cumulative_mean.stable.continuum.txt")
+#~ plot_spectra([cumulative_mean_spectra, spectra_continuum_mean], continuum=continuum_mean_regions)
+
+
+#~ stable_regions = find_stable_regions(cumulative_median_spectra)
+#~ merged_regions = merge_regions(cumulative_median_spectra, stable_regions)
+#~ # At least 12 measures per region
+#~ min_regions = merged_regions[merged_regions['num_measures'] >= 12]
+#~ plot_spectra([cumulative_median_spectra, spectra_continuum_median], continuum=min_regions)
+
+#~ resolution = 65000
+#~ continuum_regions = find_continuum_on_regions(cumulative_median_spectra, resolution, min_regions, continuum_model=continuum_model)
+#~ write_continuum_regions(continuum_median_regions, "output/cumulative_median.stable.continuum.txt")
+continuum_median_regions = read_continuum_regions("output/cumulative_median.stable.continuum.txt")
+#~ plot_spectra([cumulative_median_spectra, spectra_continuum_median], continuum=continuum_median_regions)
