@@ -12,6 +12,17 @@ import os, errno
 #import ipdb
 import random
 
+#~ import atpy
+#~ 
+#~ # Convert a numpy array with named columns to a atpy table, which is usefull for file/database saving
+#~ def numpy2atpy(numpy_array):
+    #~ if type(t.data) != np.ndarray: raise Exception("Array should be numpy")
+    #~ if numpy_array.dtype.names == None: raise Exception("Numpy array should have named columns")
+    #~ atpy_array = atpy.Table()
+    #~ for name in numpy_array.dtype.names:
+        #~ atpy_array.add_column(name, numpy_array[name])
+    #~ return atpy_array
+
 ## Select spectra with identified file path doing a inner join between narval.vr and liste_spectre.
 ## - It uses the name of the star, the date (true and previous day) and the SNR similarity
 ## - Writes the result to a txt file
@@ -72,15 +83,15 @@ def select_and_create_spectra_list(rv_name = "input/narval.vr", spectra_list_nam
     
 
     if output_file != None:
-        asciitable.write(selected_spectra, output=output_file, delimiter=' ', names=['name', 'date', 'datetime', 'radial_velocity', 'err', 'snr', 'dirname', 'filename'])
-        asciitable.write(discarded_spectra, output=output_file+".discard", delimiter=' ', names=['name', 'date', 'datetime', 'radial_velocity', 'err', 'snr'])
+        asciitable.write(selected_spectra, output=output_file, delimiter='\t', names=['name', 'date', 'datetime', 'radial_velocity', 'err', 'snr', 'dirname', 'filename'])
+        asciitable.write(discarded_spectra, output=output_file+".discard", delimiter='\t', names=['name', 'date', 'datetime', 'radial_velocity', 'err', 'snr'])
     
     return np.array(selected_spectra, dtype=[('name', '|S20'), ('date', '|S8'), ('datetime', '|S26'), ('radial_velocity', float), ('err', float), ('snr', int), ('dirname', '|S100'), ('filename', '|S100')])
 
 
 ## Read the selected spectra list
 def read_spectra_list(input_file = "output/spectra_list.txt"):
-    return asciitable.read(input_file, delimiter=' ')
+    return asciitable.read(input_file, delimiter='\t', names=['name', 'date', 'datetime', 'radial_velocity', 'err', 'snr', 'dirname', 'filename'])
 
 
 ## Make dir (mkdir -p)
@@ -125,11 +136,15 @@ def prepare_output_dirs(selected_spectra):
 ## Returns spectra from a filename:
 ## - if the file does not exists, checks if it exists a compressed version (gzip)
 ## - it the file exists, it can be automatically uncompressed (gzip)
-def read_spectra(spectra_filename):
+def read_spectra(spectra_filename):    
     #spectra_filename = "input/" + spectra_filename
     # If it is not compressed
     if os.path.exists(spectra_filename) and spectra_filename[-3:] != ".gz":
-        spectra = asciitable.read(table=spectra_filename, delimiter=' ', data_start=2, names=['waveobs', 'flux', 'err'])
+        try:
+            spectra = asciitable.read(table=spectra_filename, delimiter=' ', names=['waveobs', 'flux', 'err'])
+        except asciitable.core.InconsistentTableError, err:
+            # If it fails, try indicating that data starts at line 2 (original NARVAL spectra need this)
+            spectra = asciitable.read(table=spectra_filename, delimiter=' ', data_start=2, names=['waveobs', 'flux', 'err'])
     elif (os.path.exists(spectra_filename) and spectra_filename[-3:] == ".gz") or (os.path.exists(spectra_filename + ".gz")):
         if spectra_filename[-3:] != ".gz":
             spectra_filename = spectra_filename + ".gz"
@@ -148,7 +163,9 @@ def read_spectra(spectra_filename):
             # If it fails, try indicating that data starts at line 2 (original NARVAL spectra need this)
             spectra = asciitable.read(table=tmp_spec, delimiter=' ', data_start=2, names=['waveobs', 'flux', 'err'])
         os.remove(tmp_spec)
+    
     spectra.sort(order='waveobs') # Make sure it is ordered by wavelength
+    
     return spectra
 
 

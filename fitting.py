@@ -2,7 +2,6 @@ import numpy as np
 from plotting import *
 from continuum import *
 from common import *
-from radial_velocity import *
 from interpolate import *
 from pymodelfit import GaussianModel
 from pymodelfit import QuadraticModel
@@ -65,18 +64,18 @@ def sigma_clip(data,sig=3,iters=1,varfunc=np.var,maout=False):
 
 # Remove outliers and fits a uniform knot spline model with 100 knots
 # Returns the model
-def fit_continuum(spectra):
+def fit_continuum(spectra, nknots=100):
     # Find outliers considering 3 sigma around the median
     flux_selected, filter_outliers = sigma_clip(spectra['flux'], sig=3, iters=10)
 
     # Find continuum using a spline model with uniform knots and excluding outliers for the fit
-    continuum_model = UniformKnotSplineModel(nknots=100)
+    continuum_model = UniformKnotSplineModel(nknots=nknots)
     
     # Each point has different weigth depending on its error
-    weights = 1/spectra[filter_outliers]['err']
+    #~ weights = 1/spectra[filter_outliers]['err']
 
     # Fit
-    continuum_model.fitData(spectra[filter_outliers]['waveobs'], spectra[filter_outliers]['flux'], weights=weights)
+    continuum_model.fitData(spectra[filter_outliers]['waveobs'], spectra[filter_outliers]['flux'])
     
     return continuum_model
 

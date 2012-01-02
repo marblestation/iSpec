@@ -8,7 +8,7 @@ import asciitable
 import numpy as np
 import wx
 import wx.lib.sheet as sheet
-
+import ipdb
 
 class MySheet(sheet.CSheet):
     def __init__(self, parent, num_rows, num_cols):
@@ -60,7 +60,7 @@ class Notebook(wx.Frame):
         for row in np.arange(num_rows):
             for col in np.arange(num_cols):
                 sheet.SetCellValue(row, col, str(data[row][col]))
-        
+        ipdb.set_trace() 
         # Column names
         for i in np.arange(num_cols):
             sheet.SetColLabelValue(i, data.dtype.names[i])
@@ -92,7 +92,7 @@ class Notebook(wx.Frame):
         self.Close()
 
 if __name__ == '__main__':
-    regions_file = "input/L082N03_spec_norm/10oct08/sp2_Normal/hd4614_001.s"
+    regions_file = "input/L082N03_spec_norm/10oct08/sp2_Normal/hd4614_001.s.txt"
     regions = asciitable.read(table=regions_file, delimiter='\t')
 #    regions = np.array([(1,2,3), (3,4,5)], dtype=np.dtype([('x', 'int32'), ('y', 'int32'), ('z', 'int32')]))
 #    regions = np.array([[1,2,3], [3,4,5]])
