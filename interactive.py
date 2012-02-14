@@ -1,3 +1,20 @@
+"""
+    This file is part of Spectra.
+    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
+    
+    Spectra is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Spectra is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with Spectra.  If not, see <http://www.gnu.org/licenses/>.
+"""
 #!/usr/bin/env python
 #################
 # Run with ipython -pdb -c "%run interactive.py"
@@ -25,6 +42,7 @@ from matplotlib.backends.backend_wxagg import \
 from common import *
 from continuum import *
 from fitting import *
+from radial_velocity import *
 
 
 class InfoRegionDialog(wx.Dialog):
@@ -166,6 +184,7 @@ class FindContinuumDialog(wx.Dialog):
         
         self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
         
+        ### Where to look
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
         self.text_where = wx.StaticText(self, -1, "Look for continuum regions in: ", style=wx.ALIGN_LEFT)
         self.hbox.AddSpacer(10)
@@ -190,6 +209,200 @@ class FindContinuumDialog(wx.Dialog):
     def on_ok(self, event):
         self.action_accepted = True
         self.Close()
+
+class CorrectRVDialog(wx.Dialog):
+    def __init__(self, parent, id, title, rv):
+        wx.Dialog.__init__(self, parent, id, title)
+        
+        self.action_accepted = False
+
+        self.vbox = wx.BoxSizer(wx.VERTICAL)
+        
+        flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
+        
+        ### RV
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        
+        self.text_rv = wx.StaticText(self, -1, "Radial velocity (km/s): ", style=wx.ALIGN_LEFT)
+        self.rv = wx.TextCtrl(self, -1, str(rv),  style=wx.TE_RIGHT)
+        
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_rv, 0, border=3, flag=flags)
+        self.hbox.Add(self.rv, 0, border=3, flag=flags)
+        
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+        
+        ### Where to look
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.text_where = wx.StaticText(self, -1, "Apply correction on: ", style=wx.ALIGN_LEFT)
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_where, 0, border=3, flag=flags)
+        
+        self.vbox2 = wx.BoxSizer(wx.VERTICAL)
+        self.radio_button_spectra = wx.RadioButton(self, -1, 'Spectra', style=wx.RB_GROUP)
+        self.vbox2.Add(self.radio_button_spectra, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
+        self.radio_button_regions = wx.RadioButton(self, -1, 'Regions')
+        self.vbox2.Add(self.radio_button_regions, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
+        self.radio_button_spectra.SetValue(True)
+        self.hbox.Add(self.vbox2, 0, border=3, flag=flags)
+        
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        sizer =  self.CreateButtonSizer(wx.CANCEL|wx.OK)
+        self.vbox.Add(sizer, 0, wx.ALIGN_CENTER)
+        self.vbox.AddSpacer(10)
+        self.SetSizer(self.vbox)
+        self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
+
+    def on_ok(self, event):
+        self.action_accepted = True
+        self.Close()
+
+class DetermineRVDialog(wx.Dialog):
+    def __init__(self, parent, id, title, rv_limit, rv_step):
+        wx.Dialog.__init__(self, parent, id, title)
+        
+        self.action_accepted = False
+
+        self.vbox = wx.BoxSizer(wx.VERTICAL)
+        
+        flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
+        
+        ### RV limit
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        
+        self.text_rv_limit = wx.StaticText(self, -1, "Radial velocity limit abs(km/s): ", style=wx.ALIGN_LEFT)
+        self.rv_limit = wx.TextCtrl(self, -1, str(rv_limit),  style=wx.TE_RIGHT)
+        
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_rv_limit, 0, border=3, flag=flags)
+        self.hbox.Add(self.rv_limit, 0, border=3, flag=flags)
+        
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+        
+        ### RV step
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        
+        self.text_rv_step = wx.StaticText(self, -1, "Radial velocity steps (km/s): ", style=wx.ALIGN_LEFT)
+        self.rv_step = wx.TextCtrl(self, -1, str(rv_step),  style=wx.TE_RIGHT)
+        
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_rv_step, 0, border=3, flag=flags)
+        self.hbox.Add(self.rv_step, 0, border=3, flag=flags)
+        
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+        
+        ### Renormalize
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        
+        self.renormalize = wx.CheckBox(self, -1 ,'Renormalize profile', (15, 30))
+        self.renormalize.SetValue(False)
+        
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.renormalize, 0, border=3, flag=flags)
+        
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+        
+        
+
+        sizer =  self.CreateButtonSizer(wx.CANCEL|wx.OK)
+        self.vbox.Add(sizer, 0, wx.ALIGN_CENTER)
+        self.vbox.AddSpacer(10)
+        self.SetSizer(self.vbox)
+        self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
+
+    def on_ok(self, event):
+        self.action_accepted = True
+        self.Close()
+
+
+class RVProfileDialog(wx.Dialog):
+    def __init__(self, parent, id, title, xcoord, fluxes, model):
+        wx.Dialog.__init__(self, parent, id, title, size=(600, 600))
+        
+        self.action_accepted = False
+
+        self.vbox = wx.BoxSizer(wx.VERTICAL)
+        
+        flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
+        
+        ### Plot
+        # Create the mpl Figure and FigCanvas objects. 
+        # 5x4 inches, 100 dots-per-inch
+        #
+        self.dpi = 100
+        self.fig = Figure((3.0, 3.0), dpi=self.dpi)
+        self.canvas = FigCanvas(self, -1, self.fig)
+        
+        # Since we have only one plot, we can use add_axes 
+        # instead of add_subplot, but then the subplot
+        # configuration tool in the navigation toolbar wouldn't
+        # work.
+        self.axes = self.fig.add_subplot(1, 1, 1)
+        
+        self.toolbar = NavigationToolbar(self.canvas)
+        
+        self.vbox.Add(self.canvas, 1, wx.LEFT | wx.TOP | wx.GROW)
+        self.vbox.Add(self.toolbar, 0, wx.EXPAND)
+        self.vbox.AddSpacer(10)
+        
+        ### Stats
+        self.stats = wx.ListCtrl(self, -1, style=wx.LC_REPORT)
+        self.stats.InsertColumn(0, 'Property')
+        self.stats.InsertColumn(1, 'Value')
+        self.stats.SetColumnWidth(0, 300)
+        self.stats.SetColumnWidth(1, 300)
+        
+        #self.vbox.Add(self.stats, 0, flag = wx.ALIGN_LEFT | wx.ALL | wx.TOP | wx.EXPAND)
+        self.vbox.Add(self.stats, 0, wx.EXPAND)
+        self.vbox.AddSpacer(10)
+        
+        ### RV limit
+        #self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        
+        #self.text_rv_limit = wx.StaticText(self, -1, "Radial velocity limit abs(km/s): ", style=wx.ALIGN_LEFT)
+        #self.rv_limit = wx.TextCtrl(self, -1, str(rv_limit),  style=wx.TE_RIGHT)
+        
+        #self.hbox.AddSpacer(10)
+        #self.hbox.Add(self.text_rv_limit, 0, border=3, flag=flags)
+        #self.hbox.Add(self.rv_limit, 0, border=3, flag=flags)
+        
+        #self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+        
+        sizer =  self.CreateButtonSizer(wx.OK)
+        self.vbox.Add(sizer, 0, wx.ALIGN_CENTER)
+        self.vbox.AddSpacer(10)
+        self.SetSizer(self.vbox)
+        self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
+        
+        ## Draw
+        self.axes.plot(xcoord, fluxes, lw=1, color='b', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=1)
+        self.axes.plot(xcoord, model(xcoord), lw=1, color='r', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='r', zorder=2)
+        
+        self.axes.grid(True, which="both")
+        self.axes.set_title("Profile", fontsize="10")
+        self.axes.set_xlabel("radial velocity (km/s)", fontsize="10")
+        self.axes.set_ylabel("average flux", fontsize="10")
+        
+        ## Stats
+        num_items = self.stats.GetItemCount()
+        self.stats.InsertStringItem(num_items, "Mean (km/s)")
+        self.stats.SetStringItem(num_items, 1, str(np.round(model.mu, 2)))
+        num_items += 1
+        self.stats.InsertStringItem(num_items, "Sigma (km/s)")
+        self.stats.SetStringItem(num_items, 1, str(np.round(model.sig, 2)))
+        #num_items += 1
+        #self.stats.InsertStringItem(num_items, "A")
+        #self.stats.SetStringItem(num_items, 1, str(np.round(model.A, 2)))
+        fwhm = model.sig * (2*np.sqrt(2*np.log(2)))
+        num_items += 1
+        self.stats.InsertStringItem(num_items, "FWHM (km/s)")
+        self.stats.SetStringItem(num_items, 1, str(np.round(fwhm, 2)))
+
+    def on_ok(self, event):
+        self.action_accepted = True
+        self.Close()
+
 
 
 class CustomizableRegion:
@@ -470,9 +683,21 @@ class CustomizableRegion:
 class SpectraFrame(wx.Frame):
     title = 'Spectra: Regions definition'
     
+    def ipython(self):
+        import IPython
+        self.embedshell = IPython.Shell.IPShellEmbed(argv=['--pdb'])
+        self.embedshell()
+    
     # regions should be a dictionary with 'continuum', 'lines' and 'segments' keys
     # filenames should be a dictionary with 'spectra', 'continuum', 'lines' and 'segments' keys
     def __init__(self, spectra=None, regions=None, filenames=None):
+        
+        self.embedshell = None
+        self.ipython_thread = None
+        #self.ipython_thread = threading.Thread(target=self.ipython)
+        #self.ipython_thread.setDaemon(True)
+        #self.ipython_thread.start()
+        
         if spectra == None:
             self.spectra = np.zeros((0,), dtype=[('waveobs', '<f8'), ('flux', '<f8'), ('err', '<f8')])
         else:
@@ -516,6 +741,9 @@ class SpectraFrame(wx.Frame):
         self.not_saved["continuum"] = False
         self.not_saved["lines"] = False
         self.not_saved["segments"] = False
+        self.rv = 0 # Radial velocity (km/s)
+        self.rv_limit = 200 # km/2
+        self.rv_step = 0.5 # km/2
         
         self.timeroff = None
         
@@ -570,6 +798,10 @@ class SpectraFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_fit_lines, m_fit_lines)
         m_find_continuum = menu_spectra.Append(-1, "&Find continuum regions", "Find continuum regions")
         self.Bind(wx.EVT_MENU, self.on_find_continuum, m_find_continuum)
+        m_determine_rv = menu_spectra.Append(-1, "&Determine RV", "Determine radial velocity")
+        self.Bind(wx.EVT_MENU, self.on_determine_rv, m_determine_rv)
+        m_correct_rv = menu_spectra.Append(-1, "&Correct RV", "Correct spectra by using its radial velocity")
+        self.Bind(wx.EVT_MENU, self.on_correct_rv, m_correct_rv)
         
         menu_help = wx.Menu()
         m_about = menu_help.Append(-1, "&About\tF1", "About the visual editor")
@@ -794,6 +1026,11 @@ class SpectraFrame(wx.Frame):
                 self.Destroy()
         else:
             self.Destroy()
+        
+        # Embeded ipython terminal
+        if self.ipython_thread != None:
+            self.ipython_thread.join()
+        
 
     def on_action_change(self, event):
         self.enable_elements()
@@ -922,8 +1159,9 @@ class SpectraFrame(wx.Frame):
         
         wave_filter = (self.spectra['waveobs'] >= wave_base) & (self.spectra['waveobs'] <= wave_top)
         spectra_window = self.spectra[wave_filter]
+        num_points = len(spectra_window['flux'])
         
-        self.add_stats("Number of measures", len(spectra_window['flux']))
+        self.add_stats("Number of measures", num_points)
         
         self.add_stats("Wavelength min.", "%.4f" % wave_base)
         self.add_stats("Wavelength max.", "%.4f" % wave_top)
@@ -936,11 +1174,12 @@ class SpectraFrame(wx.Frame):
             if note != "":
                 self.add_stats("Note", note)
         
-        self.add_stats("Flux min.", "%.6f" % np.min(spectra_window['flux']))
-        self.add_stats("Flux max.", "%.6f" % np.max(spectra_window['flux']))
-        self.add_stats("Flux mean", "%.6f" % np.mean(spectra_window['flux']))
-        self.add_stats("Flux median", "%.6f" % np.median(spectra_window['flux']))
-        self.add_stats("Flux standard deviation", "%.6f" % np.std(spectra_window['flux']))
+        if num_points > 0:
+            self.add_stats("Flux min.", "%.6f" % np.min(spectra_window['flux']))
+            self.add_stats("Flux max.", "%.6f" % np.max(spectra_window['flux']))
+            self.add_stats("Flux mean", "%.6f" % np.mean(spectra_window['flux']))
+            self.add_stats("Flux median", "%.6f" % np.median(spectra_window['flux']))
+            self.add_stats("Flux standard deviation", "%.6f" % np.std(spectra_window['flux']))
         
         if region.element_type == "lines" and region.line_model != None:
             self.add_stats("Gaussian mean (mu)", "%.4f" % region.line_model.mu)
@@ -951,8 +1190,9 @@ class SpectraFrame(wx.Frame):
             self.add_stats("Gaussian fit root mean squeare (RMS)", "%.4f" % rms)
         
         if self.continuum_model != None:
-            mean_continuum = np.mean(self.continuum_model(spectra_window['waveobs']))
-            self.add_stats("Continuum mean for the region", "%.4f" % mean_continuum)
+            if num_points > 0:
+                mean_continuum = np.mean(self.continuum_model(spectra_window['waveobs']))
+                self.add_stats("Continuum mean for the region", "%.4f" % mean_continuum)
             rms = np.mean(self.continuum_model.residuals()) + np.std(self.continuum_model.residuals())
             self.add_stats("Continuum fit root mean square (RMS)", "%.4f" % rms)
             
@@ -1106,7 +1346,7 @@ class SpectraFrame(wx.Frame):
                     dlg_confirm = wx.MessageDialog(self, 'Are you sure you want to overwrite the file %s?' % dlg.GetFilename(), 'File already exists', wx.YES|wx.NO|wx.ICON_QUESTION)
                     if dlg_confirm.ShowModal() != wx.ID_YES:
                         continue # Give the oportunity to select a new file name
-                self.filenames[elements] = dirname + filename
+                self.filenames[elements] = path
                 output = open(path, "w")
                 # Write header
                 if elements == "lines":
@@ -1240,9 +1480,12 @@ class SpectraFrame(wx.Frame):
         else:
             spectra_regions = self.spectra
         
-        self.continuum_model = fit_continuum(spectra_regions, nknots=nknots)
-        self.continuum_spectra = get_spectra_from_model(self.continuum_model, self.spectra['waveobs'])
-        wx.CallAfter(self.on_fit_continuum_finish, nknots)
+        if spectra_regions != None:
+            self.continuum_model = fit_continuum(spectra_regions, nknots=nknots)
+            self.continuum_spectra = get_spectra_from_model(self.continuum_model, self.spectra['waveobs'])
+            wx.CallAfter(self.on_fit_continuum_finish, nknots)
+        else:
+            wx.CallAfter(self.flash_status_message, "No continuum regions found.")
     
     def on_fit_continuum_finish(self, nknots):
         self.draw_continuum_spectra()
@@ -1255,6 +1498,13 @@ class SpectraFrame(wx.Frame):
             dlg_error.ShowModal()
             dlg_error.Destroy()
             return
+        
+        if self.not_saved["continuum"]:
+            dlg = wx.MessageDialog(self, 'Are you sure you want to find new continuum regions without saving the current ones?', 'Changes not saved', wx.YES|wx.NO|wx.ICON_QUESTION)
+            if dlg.ShowModal() != wx.ID_YES:
+                self.flash_status_message("Discarded.")
+                return
+        
         dlg = FindContinuumDialog(self, -1, "Properties for finding continuum regions")
         dlg.ShowModal()
         
@@ -1270,8 +1520,13 @@ class SpectraFrame(wx.Frame):
         dlg.Destroy()
         
         if fixed_wave_step == None or sigma == None:
+            wx.CallAfter(self.flash_status_message, "Bad value.")
             return
         
+        if in_segments and (self.region_widgets["segments"] == None or len(self.region_widgets["segments"]) == 0):
+            wx.CallAfter(self.flash_status_message, "No segments found.")
+            return
+    
         thread = threading.Thread(target=self.on_find_continuum_thread, args=(resolution, sigma,), kwargs={'fixed_wave_step':fixed_wave_step, 'in_segments':in_segments, })
         thread.setDaemon(True)
         thread.start()
@@ -1286,6 +1541,7 @@ class SpectraFrame(wx.Frame):
                     self.regions[elements]['wave_base'][i] = region.get_wave_base()
                     self.regions[elements]['wave_top'][i] = region.get_wave_top()
                     self.regions[elements]['wave_peak'][i] = region.get_wave_peak()
+                    self.regions[elements]['note'][i] = region.get_note_text()
                 i += 1
         else:
             self.regions[elements] = np.recarray((total_regions, ), dtype=[('wave_base', float),('wave_top', float)])
@@ -1317,36 +1573,88 @@ class SpectraFrame(wx.Frame):
         self.canvas.draw()
         self.flash_status_message("Automatic finding of continuum regions ended.")
                     
-   
+    def on_determine_rv(self, event):
+        if self.continuum_model == None:
+            dlg_error = wx.MessageDialog(self, "Please, execute a general continuum fit first.", 'Continuum model not fitted', wx.OK | wx.ICON_ERROR)
+            dlg_error.ShowModal()
+            dlg_error.Destroy()
+            return
+        
+        self.update_numpy_arrays_from_widgets("lines")
+        
+        if len(self.regions["lines"]) == 0:
+            dlg_error = wx.MessageDialog(self, "Please, create or load a reference line file first.", 'Lines not present', wx.OK | wx.ICON_ERROR)
+            dlg_error.ShowModal()
+            dlg_error.Destroy()
+            return
+        
+        dlg = DetermineRVDialog(self, -1, "Radial velocity determination", rv_limit=self.rv_limit, rv_step=self.rv_step)
+        dlg.ShowModal()
+        
+        if not dlg.action_accepted:
+            dlg.Destroy()
+            return
+        
+        self.rv_limit = self.text2float(dlg.rv_limit.GetValue(), 'Radial velocity limit is not a valid one.')
+        self.rv_step = self.text2float(dlg.rv_step.GetValue(), 'Radial velocity step is not a valid one.')
+        renormalize = dlg.renormalize.GetValue()
+        dlg.Destroy()
+        
+        thread = threading.Thread(target=self.on_determine_rv_thread, args=(renormalize,))
+        thread.setDaemon(True)
+        thread.start()
+
+    def on_determine_rv_thread(self, renormalize):
+        wx.CallAfter(self.status_message, "Determining RV...")
+        xcoord, fluxes = build_radial_velocity_profile(self.spectra, self.continuum_model, self.regions["lines"], rv_limit=self.rv_limit, rv_step=self.rv_step, frame=self)
+        wx.CallAfter(self.on_determine_rv_finish, xcoord, fluxes, renormalize)
+    
+    def on_determine_rv_finish(self, xcoord, fluxes, renormalize):
+        # Modelize
+        model = model_radial_velocity_profile(xcoord, fluxes, renormalize=renormalize)
+        self.rv = np.round(model.mu, 2) # km/s
+        self.flash_status_message("Radial velocity determined: " + str(self.rv) + " km/s")
+        
+        dlg = RVProfileDialog(self, -1, "Radial velocity profile", xcoord, fluxes, model)
+        dlg.ShowModal()
+
+    def on_correct_rv(self, event):
+        dlg = CorrectRVDialog(self, -1, "Radial velocity correction", self.rv)
+        dlg.ShowModal()
+        
+        if not dlg.action_accepted:
+            dlg.Destroy()
+            return
+        
+        radial_vel = self.text2float(dlg.rv.GetValue(), 'Radial velocity value is not a valid one.')
+        in_regions = dlg.radio_button_regions.GetValue()
+        dlg.Destroy()
+        
+        if in_regions:
+            for elements in ["lines", "continuum", "segments"]:
+                self.update_numpy_arrays_from_widgets(elements)
+                if len(self.regions[elements]) > 0:
+                    if elements == "lines":
+                        self.regions[elements] = correct_radial_velocity_regions(self.regions[elements], radial_vel, with_peak=True)
+                    else:
+                        self.regions[elements] = correct_radial_velocity_regions(self.regions[elements], radial_vel)
+                    self.draw_regions(elements)
+                    self.not_saved[elements] = False
+                    self.update_title()
+        else:
+            self.spectra = correct_radial_velocity(self.spectra, radial_vel)
+            self.draw_spectra()
+            if self.continuum_model != None:
+                self.continuum_spectra = correct_radial_velocity(self.continuum_spectra, radial_vel)
+                self.draw_continuum_spectra()
+        self.canvas.draw()
+        self.flash_status_message("Applied a radial velocity correction of %s." % radial_vel)
     
     def on_exit(self, event):
         self.Destroy()
         
     def on_about(self, event):
-        msg = """ Spectra visualizer for interactive regions definition:
-        
-         * Create action:
-            - Left click to create a new region
-            - It will create the kind of region selected in the elements options
-                ~ In case of 'Line marks', a note will be added to the line region
-         * Modify action:
-            - Left/Right click on a region to modify its left/right limit
-            - In case of 'Line marks':
-                ~ Left click to modify its position
-                ~ Right click to modify the associated note
-            - It will modify only regions of the kind selected in the elements options
-         * Remove action:
-            - Click on the region to be removed
-                ~ In case of 'Line marks', the note of the line region will be removed
-            - It will remove only regions of the kind selected in the elements options
-         * Zoom mode:
-            - Click and drag to define the zone to be zoomed
-         * Pan mode:
-            - Click and drag to move the plot
-            
-        Create, modify and remove action are only effective when zoom/pan modes are not be active.
-        
-        The user is responsible for creating overlapping regions.
+        msg = """ Spectra Visual Editor is a tool for the definition of continuum regions, line masks and segments needed for the execution of the SME tool (Spectroscopy Made Easy).
         """
         dlg = wx.MessageDialog(self, msg, "About", wx.OK)
         dlg.ShowModal()

@@ -1,3 +1,20 @@
+"""
+    This file is part of Spectra.
+    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
+    
+    Spectra is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Spectra is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with Spectra.  If not, see <http://www.gnu.org/licenses/>.
+"""
 import asciitable
 from scipy.interpolate import UnivariateSpline
 import numpy as np
@@ -11,17 +28,6 @@ import tempfile
 import os, errno
 #import ipdb
 import random
-
-#~ import atpy
-#~ 
-#~ # Convert a numpy array with named columns to a atpy table, which is usefull for file/database saving
-#~ def numpy2atpy(numpy_array):
-    #~ if type(t.data) != np.ndarray: raise Exception("Array should be numpy")
-    #~ if numpy_array.dtype.names == None: raise Exception("Numpy array should have named columns")
-    #~ atpy_array = atpy.Table()
-    #~ for name in numpy_array.dtype.names:
-        #~ atpy_array.add_column(name, numpy_array[name])
-    #~ return atpy_array
 
 ## Select spectra with identified file path doing a inner join between narval.vr and liste_spectre.
 ## - It uses the name of the star, the date (true and previous day) and the SNR similarity
