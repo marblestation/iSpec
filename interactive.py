@@ -31,6 +31,11 @@ import threading
 import sys
 import getopt
 
+if os.path.exists("synthesizer.so"):
+    import synthesizer
+    from atmospheres import *
+
+
 # The recommended way to use wx with mpl is with the WXAgg backend.
 import matplotlib
 matplotlib.use('WXAgg')
@@ -744,6 +749,7 @@ class SpectraFrame(wx.Frame):
         self.rv = 0 # Radial velocity (km/s)
         self.rv_limit = 200 # km/2
         self.rv_step = 0.5 # km/2
+        self.modeled_layers_pack = None # Synthesize spectrum (atmospheric models)
         
         self.timeroff = None
         
@@ -802,6 +808,10 @@ class SpectraFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_determine_rv, m_determine_rv)
         m_correct_rv = menu_spectra.Append(-1, "&Correct RV", "Correct spectra by using its radial velocity")
         self.Bind(wx.EVT_MENU, self.on_correct_rv, m_correct_rv)
+        
+        if sys.modules.has_key('synthesizer'):
+            m_synthesize = menu_spectra.Append(-1, "&Synthesize spectrum", "Synthesize spectrum")
+            self.Bind(wx.EVT_MENU, self.on_synthesize, m_synthesize)
         
         menu_help = wx.Menu()
         m_about = menu_help.Append(-1, "&About\tF1", "About the visual editor")
@@ -1650,6 +1660,35 @@ class SpectraFrame(wx.Frame):
         self.canvas.draw()
         self.flash_status_message("Applied a radial velocity correction of %s." % radial_vel)
     
+    def on_synthesize(self, event):
+        if sys.modules.has_key('synthesizer'):
+            if self.modeled_layers_pack == None:
+                self.modeled_layers_pack = load_modeled_layers_pack()
+            
+            total_points = len(self.spectra)
+            self.synth_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+            self.synth_spectra['waveobs'] = self.spectra['waveobs']
+            
+            #waveobs = np.arange(515.0, 525.0, 0.02)
+            #total_points = len(waveobs)
+            #self.synth_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+            #self.synth_spectra['waveobs'] = waveobs
+            
+            teff_obj = 5725
+            logg_obj = 4.5
+            MH_obj = 0.0
+
+            valid_objective(self.modeled_layers_pack, teff_obj, logg_obj, MH_obj)
+            layers = interpolate_atmosphere_layers(self.modeled_layers_pack, teff_obj, logg_obj, MH_obj)
+            atm_filename = write_atmosphere(teff_obj, logg_obj, MH_obj, layers)
+            
+            self.synth_spectra['flux'] = synthesizer.spectrum(self.synth_spectra['waveobs']*10.0, atm_filename, verbose=1)
+            os.remove(atm_filename)
+            self.spectra_id = self.axes.plot(self.synth_spectra['waveobs'], self.synth_spectra['flux'], lw=1, color='r', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='r', zorder=1)
+            self.canvas.draw()
+            self.flash_status_message("Synthetic spectra generated!")
+
+    
     def on_exit(self, event):
         self.Destroy()
         
@@ -1810,6 +1849,18 @@ if __name__ == '__main__':
     regions['continuum'] = continuum
     regions['lines'] = lines
     regions['segments'] = segments
+
+    ## Force locale to English. If for instance Spanish is the default,
+    ## wxPython makes that functions like atof(), called from external
+    ## C libraries through Cython, behave interpreting comma as decimal separator
+    ## and brokes the code that expects to have dots as decimal separators
+    ## (i.e. SPECTRUM and its external files like linelists)
+    locales = {
+        u'en' : (wx.LANGUAGE_ENGLISH, u'en_US.UTF-8'),
+        u'es' : (wx.LANGUAGE_SPANISH, u'es_ES.UTF-8'),
+        u'fr' : (wx.LANGUAGE_FRENCH, u'fr_FR.UTF-8'),
+        }
+    os.environ['LANG'] = locales[u'en'][1]
 
     app = wx.PySimpleApp()
     app.frame = SpectraFrame(spectra, regions, filenames)

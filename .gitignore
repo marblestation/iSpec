@@ -1,4 +1,7 @@
 *.pyc
 input/*
 output/*
-
+*.so
+*.o
+synthesizer/build/*
+synthesizer/synthesizer.c
