@@ -147,10 +147,19 @@ def read_spectra(spectra_filename):
     # If it is not compressed
     if os.path.exists(spectra_filename) and spectra_filename[-3:] != ".gz":
         try:
-            spectra = asciitable.read(table=spectra_filename, delimiter=' ', names=['waveobs', 'flux', 'err'])
+            spectra = asciitable.read(table=spectra_filename, names=['waveobs', 'flux', 'err'])
         except asciitable.core.InconsistentTableError, err:
-            # If it fails, try indicating that data starts at line 2 (original NARVAL spectra need this)
-            spectra = asciitable.read(table=spectra_filename, delimiter=' ', data_start=2, names=['waveobs', 'flux', 'err'])
+            try:
+                # If it fails, try indicating that data starts at line 2 (original NARVAL spectra need this)
+                spectra = asciitable.read(table=spectra_filename, data_start=2, names=['waveobs', 'flux', 'err'])
+            except asciitable.core.InconsistentTableError, err:
+                # Try without error column
+                spectra_tmp = asciitable.read(table=spectra_filename, names=['waveobs', 'flux'])
+                spectra = np.recarray((len(spectra_tmp), ), dtype=[('waveobs', float),('flux', float),('err', float)])
+                spectra['waveobs'] = spectra_tmp['waveobs']
+                spectra['flux'] = spectra_tmp['flux']
+                spectra['err'] = np.zeros(len(spectra)) # Add a zeroed error column
+            
     elif (os.path.exists(spectra_filename) and spectra_filename[-3:] == ".gz") or (os.path.exists(spectra_filename + ".gz")):
         if spectra_filename[-3:] != ".gz":
             spectra_filename = spectra_filename + ".gz"
@@ -164,10 +173,18 @@ def read_spectra(spectra_filename):
         f_in.close()
         
         try:
-            spectra = asciitable.read(table=tmp_spec, delimiter=' ', names=['waveobs', 'flux', 'err'])
+            spectra = asciitable.read(table=tmp_spec, names=['waveobs', 'flux', 'err'])
         except asciitable.core.InconsistentTableError, err:
-            # If it fails, try indicating that data starts at line 2 (original NARVAL spectra need this)
-            spectra = asciitable.read(table=tmp_spec, delimiter=' ', data_start=2, names=['waveobs', 'flux', 'err'])
+            try:
+                # If it fails, try indicating that data starts at line 2 (original NARVAL spectra need this)
+                spectra = asciitable.read(table=tmp_spec, data_start=2, names=['waveobs', 'flux', 'err'])
+            except asciitable.core.InconsistentTableError, err:
+                # Try without error column
+                spectra_tmp = asciitable.read(table=tmp_spec, names=['waveobs', 'flux'])
+                spectra = np.recarray((len(spectra_tmp), ), dtype=[('waveobs', float),('flux', float),('err', float)])
+                spectra['waveobs'] = spectra_tmp['waveobs']
+                spectra['flux'] = spectra_tmp['flux']
+                spectra['err'] = np.zeros(len(spectra)) # Add a zeroed error column
         os.remove(tmp_spec)
     
     spectra.sort(order='waveobs') # Make sure it is ordered by wavelength
@@ -183,7 +200,7 @@ def write_spectra(spectra, spectra_filename, compress=True):
             spectra_filename = spectra_filename + ".gz"
         
         tmp_spec = tempfile.mktemp() + str(int(random.random() * 100000000))
-        asciitable.write(spectra, output=tmp_spec, delimiter=' ')
+        asciitable.write(spectra, output=tmp_spec, delimiter='\t')
         
         # Compress the temporary file
         f_in = open(tmp_spec, 'rb')
@@ -193,13 +210,13 @@ def write_spectra(spectra, spectra_filename, compress=True):
         f_in.close()
         os.remove(tmp_spec)
     else:
-        asciitable.write(spectra, output=spectra_filename, delimiter=' ')
+        asciitable.write(spectra, output=spectra_filename, delimiter='\t')
 
 
 #### Read & write regions
 # Continuum
 def read_continuum_regions(continuum_regions_filename):
-    continuum_regions = asciitable.read(table=continuum_regions_filename, delimiter='\t', comment='#', names=['wave_base', 'wave_top'])
+    continuum_regions = asciitable.read(table=continuum_regions_filename, comment='#', names=['wave_base', 'wave_top'])
     return continuum_regions
 
 def write_continuum_regions(continuum_regions, continuum_regions_filename):
@@ -207,7 +224,7 @@ def write_continuum_regions(continuum_regions, continuum_regions_filename):
 
 # Lines
 def read_line_regions(line_regions_filename):
-    line_regions = asciitable.read(table=line_regions_filename, delimiter='\t', comment='#', names=['wave_peak', 'wave_base', 'wave_top', 'note'])
+    line_regions = asciitable.read(table=line_regions_filename, comment='#', names=['wave_peak', 'wave_base', 'wave_top', 'note'])
     return line_regions
 
 def write_line_regions(line_regions, line_regions_filename):
@@ -215,7 +232,7 @@ def write_line_regions(line_regions, line_regions_filename):
 
 # Segments
 def read_segment_regions(segment_regions_filename):
-    segment_regions = asciitable.read(table=segment_regions_filename, delimiter='\t', comment='#', names=['wave_base', 'wave_top'])
+    segment_regions = asciitable.read(table=segment_regions_filename, comment='#', names=['wave_base', 'wave_top'])
     return segment_regions
 
 def write_segment_regions(segment_regions, segment_regions_filename):

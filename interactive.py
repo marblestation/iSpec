@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
     This file is part of Spectra.
     Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
@@ -15,7 +16,6 @@
     You should have received a copy of the GNU Affero General Public License
     along with Spectra.  If not, see <http://www.gnu.org/licenses/>.
 """
-#!/usr/bin/env python
 #################
 # Run with ipython -pdb -c "%run interactive.py"
 #################
@@ -49,65 +49,6 @@ from continuum import *
 from fitting import *
 from radial_velocity import *
 
-
-class InfoRegionDialog(wx.Dialog):
-    def add_parameter(self, name, value, editable=False):
-        hbox = wx.BoxSizer(wx.HORIZONTAL)
-        param_text = wx.StaticText(self, -1, name, style=wx.ALIGN_LEFT)
-        parameter = wx.TextCtrl(self, -1, str(value),  style=wx.TE_RIGHT)
-        parameter.SetEditable(editable)
-        
-        hbox.AddSpacer(10)
-        hbox.Add(param_text, 0, border=3, flag=wx.ALIGN_LEFT | wx.ALL | wx.EXPAND | wx.ALIGN_CENTER_VERTICAL)
-        hbox.Add(parameter, 0, border=3, flag=wx.ALIGN_RIGHT | wx.ALL | wx.ALIGN_CENTER_VERTICAL)
-        return hbox, parameter
-        
-    def __init__(self, parent, id, title, spectra, region):
-        wx.Dialog.__init__(self, parent, id, title)
-        self.region = region
-        
-        self.update = False
-
-        self.vbox = wx.BoxSizer(wx.VERTICAL)
-        
-        flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
-        
-        ### Info
-        wave_base = region.get_wave_base()
-        wave_top = region.get_wave_top()
-        wave_filter = (spectra['waveobs'] >= wave_base) & (spectra['waveobs'] <= wave_top)
-        spectra_window = spectra[wave_filter]
-        std = np.std(spectra_window['flux'])
-        num = len(spectra_window['flux'])
-        
-        hbox, self.element_type = self.add_parameter("Type:", region.element_type)
-        self.vbox.Add(hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
-        hbox, self.wave_base = self.add_parameter("Min. wavelength:", wave_base)
-        self.vbox.Add(hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
-        hbox, self.wave_top = self.add_parameter("Max. wavelength:", wave_top)
-        self.vbox.Add(hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
-        hbox, self.wave_top = self.add_parameter("Flux standard deviation:", std)
-        self.vbox.Add(hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
-        hbox, self.wave_top = self.add_parameter("Number of points:", num)
-        self.vbox.Add(hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
-        
-        if region.element_type == "lines":
-            note = region.get_note_text()
-            wave_peak = region.get_wave_peak()
-            hbox, self.wave_top = self.add_parameter("Wave peak:", wave_peak)
-            self.vbox.Add(hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
-            hbox, self.wave_top = self.add_parameter("Note:", note)
-            self.vbox.Add(hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
-        
-        sizer =  self.CreateButtonSizer(wx.CANCEL|wx.OK)
-        self.vbox.Add(sizer, 0, wx.ALIGN_CENTER)
-        self.vbox.AddSpacer(10)
-        self.SetSizer(self.vbox)
-        self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
-
-    def on_ok(self, event):
-        self.update = True
-        self.Close()
 
 class FitContinuumDialog(wx.Dialog):
     def __init__(self, parent, id, title):
@@ -658,19 +599,10 @@ class CustomizableRegion:
         # let's use a lock to allow the modification of one of them
         if self.frame.lock.acquire(False):
             if self.frame.action == "Remove":
+                # The real removal is in the "on_release" event
                 if self.frame.elements == "lines" and self.frame.subelements == "marks":
-                    # Remove note
-                    if self.note != None:
-                        self.note.set_visible(False)
-                        self.note = None
-                        self.frame.canvas.draw()
+                    self.press = event.button, event.x, event.xdata
                 else:
-                    ## Remove region
-                    self.disconnect_and_hide()
-                    self.frame.region_widgets[self.element_type].remove(self)
-                    self.frame.regions_changed(self.element_type)
-                    self.frame.flash_status_message("Removed region from " + "%.4f" % self.axvspan.get_xy()[0,0] + " to " + "%.4f" % self.axvspan.get_xy()[2,0])
-                    self.frame.canvas.draw()
                     self.press = event.button, event.x, event.xdata
                 # Do not free the lock until the user releases the click
             elif self.frame.action == "Modify":
@@ -707,10 +639,19 @@ class CustomizableRegion:
                 self.press = event.button, event.x, event.xdata
                 
             
-    def disconnect_and_hide(self):
+    def disconnect_and_remove(self):
+        #self.hide()
+        #self.frame.canvas.draw()
         self.axvspan.figure.canvas.mpl_disconnect(self.cid_press)
         self.axvspan.figure.canvas.mpl_disconnect(self.cid_release)
         self.axvspan.figure.canvas.mpl_disconnect(self.cid_motion)
+        self.axvspan.remove()
+        if self.mark != None:
+            self.mark.remove()
+        if self.note != None:
+            self.note.remove()
+    
+    def hide(self):
         self.axvspan.set_visible(False)
         if self.mark != None:
             self.mark.set_visible(False)
@@ -718,7 +659,7 @@ class CustomizableRegion:
             self.note.set_visible(False)
         if self.line_plot_id != None:
             for plot_id in self.line_plot_id.values():
-                if v != None:
+                if plot_id != None:
                     self.frame.axes.lines.remove(plot_id)
         
     
@@ -726,42 +667,59 @@ class CustomizableRegion:
         # Validate it is not in PAN or ZOOM mode
         if event.inaxes != None and event.inaxes.get_navigate_mode() != None: return
         
-        # If it is in remove mode, the lock should be released
-        # NOTE: The selected region has already been removed, so it will not  
-        # receive the "release" event.
-        if self.frame.action == "Remove" and self.frame.lock.locked():
-            self.frame.lock.release()
-        elif self.press != None:
+        # Validate it is not in PAN or ZOOM mode
+        if event.inaxes != None and event.inaxes.get_navigate_mode() != None: return
+        
+        # This element is the kind of element that is selected to be modified?
+        if self.frame.elements != self.element_type: return
+        # If the action is "create", this should be managed by the frame and not individual elements
+        if self.frame.action == "Create" and not (self.frame.elements == "lines" and self.frame.subelements == "marks"): return
+        
+        if self.press != None:
             # In modification mode, if it is the current selected widget
             self.press = None
-            if self.frame.action == "Modify":
-                # If it was a right click when elements is lines and subelements marks
-                # => Change note
-                if event.button == 3 and self.frame.elements == "lines" and self.frame.subelements == "marks":
-                    # Right button, modify note
-                    if self.frame.action == "Modify" or self.frame.action == "Create":
+            if self.frame.action == "Remove":
+                self.frame.lock.release() # Release now because the next commands will 
+                if self.frame.elements == "lines" and self.frame.subelements == "marks":
+                    # Remove note
+                    if self.note != None:
+                        self.note.set_visible(False)
+                        self.note.remove()
+                        self.note = None
+                        self.frame.canvas.draw()
+                else:
+                    # Remove from the figure now (except for line marks)
+                    #  (if we do it on_press, this event would not be trigered and the lock not released)
+                    self.frame.region_widgets[self.element_type].remove(self)
+                    self.frame.regions_changed(self.element_type)
+                    self.frame.flash_status_message("Removed region from " + "%.4f" % self.axvspan.get_xy()[0,0] + " to " + "%.4f" % self.axvspan.get_xy()[2,0])
+                    self.disconnect_and_remove()
+                    self.hide()
+                    self.frame.canvas.draw()
+            else:
+                if self.frame.action == "Modify":
+                    # If it was a right click when elements is lines and subelements marks
+                    # => Change note
+                    if event.button == 3 and self.frame.elements == "lines" and self.frame.subelements == "marks":
+                        # Right button, modify note
+                        if self.frame.action == "Modify" or self.frame.action == "Create":
+                            self.update_mark_note(event)
+                        else:
+                            # Note removal is managed on_press
+                            pass
+                elif self.frame.action == "Create" and self.frame.elements == "lines" and self.frame.subelements == "marks":
+                    # Create a note (left or right click)
+                    if (event.button == 1 or event.button == 3) and self.note == None:
                         self.update_mark_note(event)
-                    else:
-                        # Note removal is managed on_press
-                        pass
-            elif self.frame.action == "Create" and self.frame.elements == "lines" and self.frame.subelements == "marks":
-                # Create a note (left or right click)
-                if (event.button == 1 or event.button == 3) and self.note == None:
-                    self.update_mark_note(event)
-            elif self.frame.action == "Stats" and self.frame.lock.locked():
-                self.frame.update_stats(self)
-                #~ dlg = InfoRegionDialog(self.frame, -1, "Info", spectra, self)
-                #~ dlg.ShowModal()
-                #~ if not dlg.action_accepted:
-                #~ dlg.Destroy()
-                #~ resolution = self.text2float(dlg.resolution.GetValue(), 'Resolution value is not a valid one.')
-            
-            self.axvspan.set_facecolor(self.original_facecolor)
-            self.axvspan.set_edgecolor(self.original_edgecolor)
-            self.axvspan.set_alpha(0.30)
-            self.frame.status_message("")
-            self.frame.lock.release()
-            self.frame.canvas.draw()
+                elif self.frame.action == "Stats" and self.frame.lock.locked():
+                    self.frame.update_stats(self)
+                
+                self.axvspan.set_facecolor(self.original_facecolor)
+                self.axvspan.set_edgecolor(self.original_edgecolor)
+                self.axvspan.set_alpha(0.30)
+                self.frame.status_message("")
+                self.frame.lock.release()
+                self.frame.canvas.draw()
     
     def on_motion(self, event):
         # Validate that the object has been pressed and the click is on this axis
@@ -772,10 +730,11 @@ class CustomizableRegion:
         if self.frame.action == "Stats": return
         
 #        button, x, xpress = self.press
-        if self.frame.subelements == "marks":
-            self.update_mark(event)
-        else:
-            self.update_size(event)
+        if self.frame.action == "Modify":
+            if self.frame.subelements == "marks":
+                self.update_mark(event)
+            else:
+                self.update_size(event)
             
             
     def get_note_text(self):
@@ -810,7 +769,7 @@ class Spectrum():
         self.rv = rv # Radial velocity (km/s)
         self.path = path
 
-
+    
 class SpectraFrame(wx.Frame):
     title = 'Spectra Visual Editor '
     
@@ -822,7 +781,6 @@ class SpectraFrame(wx.Frame):
     # regions should be a dictionary with 'continuum', 'lines' and 'segments' keys
     # filenames should be a dictionary with 'spectra', 'continuum', 'lines' and 'segments' keys
     def __init__(self, spectra=None, name=None, regions=None, filenames=None):
-        
         self.embedshell = None
         self.ipython_thread = None
         #self.ipython_thread = threading.Thread(target=self.ipython)
@@ -881,11 +839,17 @@ class SpectraFrame(wx.Frame):
         self.timeroff = None
         
         wx.Frame.__init__(self, None, -1, self.title)
+        self.icon = wx.Icon("input/SVE.ico", wx.BITMAP_TYPE_ICO)
+        self.tbicon = wx.TaskBarIcon()
+        self.tbicon.SetIcon(self.icon, "")
+        wx.Frame.SetIcon(self, self.icon)
+                
         self.Bind(wx.EVT_CLOSE, self.on_close)
         self.create_menu()
         self.create_status_bar()
         self.create_main_panel()
         self.draw_figure()
+    
     
     def ask(self, text, title, default_value):
             dlg = wx.TextEntryDialog(self, text, title)
@@ -902,6 +866,8 @@ class SpectraFrame(wx.Frame):
     def create_menu(self):
         self.menubar = wx.MenuBar()
         
+        self.spectrum_function_items = []
+        
         menu_file = wx.Menu()
         m_expt = menu_file.Append(-1, "&Open spectra\tCtrl-O", "Open spectra file")
         self.Bind(wx.EVT_MENU, self.on_open_spectra, m_expt)
@@ -916,6 +882,7 @@ class SpectraFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_save_plot, m_expt)
         m_expt = menu_file.Append(-1, "Save s&pectra as\tCtrl-P", "Save active spectra to file")
         self.Bind(wx.EVT_MENU, self.on_save_spectra, m_expt)
+        self.spectrum_function_items.append(m_expt)
         m_expt = menu_file.Append(-1, "Save &continuum regions as\tCtrl-C", "Save continuum regions to file")
         self.Bind(wx.EVT_MENU, self.on_save_continuum_regions, m_expt)
         m_expt = menu_file.Append(-1, "Save &line regions as\tCtrl-L", "Save line regions to file")
@@ -928,21 +895,49 @@ class SpectraFrame(wx.Frame):
         
         menu_edit = wx.Menu()
         self.menu_active_spectrum = wx.Menu()
-        self.update_menu_active_spectrum()
-        menu_edit.AppendMenu(-1, 'Select spectra', self.menu_active_spectrum)
+        m_expt = menu_edit.AppendMenu(-1, 'Select spectra', self.menu_active_spectrum)
+        self.spectrum_function_items.append(m_expt)
+        
+        m_expt = m_close_spectrum = menu_edit.Append(-1, "Close spectrum", "Close current active spectrum")
+        self.Bind(wx.EVT_MENU, self.on_close_spectrum, m_close_spectrum)
+        self.spectrum_function_items.append(m_expt)
+        menu_edit.AppendSeparator()
         
         m_fit_continuum = menu_edit.Append(-1, "Fit &continuum", "Fit continuum")
         self.Bind(wx.EVT_MENU, self.on_fit_continuum, m_fit_continuum)
+        self.spectrum_function_items.append(m_fit_continuum)
         m_fit_lines = menu_edit.Append(-1, "Fit &lines", "Fit lines using the fitted continuum")
         self.Bind(wx.EVT_MENU, self.on_fit_lines, m_fit_lines)
+        self.spectrum_function_items.append(m_fit_lines)
+        menu_edit.AppendSeparator()
+        
+        m_remove_fitted_continuum = menu_edit.Append(-1, "Clear fitted continuum", "Remove the fitted continuum")
+        self.Bind(wx.EVT_MENU, self.on_remove_fitted_continuum, m_remove_fitted_continuum)
+        self.spectrum_function_items.append(m_remove_fitted_continuum)
+        m_remove_fitted_lines = menu_edit.Append(-1, "Clear fitted lines", "Remove fitted lines")
+        self.Bind(wx.EVT_MENU, self.on_remove_fitted_lines, m_remove_fitted_lines)
+        self.spectrum_function_items.append(m_remove_fitted_lines)
+        menu_edit.AppendSeparator()
+        
         m_find_continuum = menu_edit.Append(-1, "&Find continuum regions", "Find continuum regions")
         self.Bind(wx.EVT_MENU, self.on_find_continuum, m_find_continuum)
+        self.spectrum_function_items.append(m_find_continuum)
+        menu_edit.AppendSeparator()
+        
         m_determine_rv = menu_edit.Append(-1, "&Determine RV", "Determine radial velocity")
         self.Bind(wx.EVT_MENU, self.on_determine_rv, m_determine_rv)
+        self.spectrum_function_items.append(m_determine_rv)
         m_correct_rv = menu_edit.Append(-1, "&Correct RV", "Correct spectra by using its radial velocity")
+        menu_edit.AppendSeparator()
+        
         self.Bind(wx.EVT_MENU, self.on_correct_rv, m_correct_rv)
+        self.spectrum_function_items.append(m_correct_rv)
+        m_convert_to_nm = menu_edit.Append(-1, "Convert to nanometers", "Divide wavelength by 10")
+        self.Bind(wx.EVT_MENU, self.on_convert_to_nm, m_convert_to_nm)
+        self.spectrum_function_items.append(m_convert_to_nm)
         
         if sys.modules.has_key('synthesizer'):
+            menu_edit.AppendSeparator()
             m_synthesize = menu_edit.Append(-1, "&Synthesize spectrum", "Synthesize spectrum")
             self.Bind(wx.EVT_MENU, self.on_synthesize, m_synthesize)
         
@@ -954,6 +949,7 @@ class SpectraFrame(wx.Frame):
         self.menubar.Append(menu_edit, "&Edit")
         self.menubar.Append(menu_help, "&Help")
         self.SetMenuBar(self.menubar)
+        self.update_menu_active_spectrum()
 
     def create_main_panel(self):
         """ Creates the main panel with all the controls on it:
@@ -1067,15 +1063,13 @@ class SpectraFrame(wx.Frame):
         self.statusbar = self.CreateStatusBar()
 
     def draw_active_spectrum(self):
-        if self.active_spectrum == None:
-            return
-        
-        # Remove spectrum plot if exists
-        if self.active_spectrum.plot_id != None:
-            self.axes.lines.remove(self.active_spectrum.plot_id)
-        
-        # zorder = 1, always in the background
-        self.active_spectrum.plot_id = self.axes.plot(self.active_spectrum.data['waveobs'], self.active_spectrum.data['flux'], lw=1, color=self.active_spectrum.color, linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor=self.active_spectrum.color, zorder=1, label="[A] "+self.active_spectrum.name)[0]
+        if self.active_spectrum != None:
+            # Remove spectrum plot if exists
+            if self.active_spectrum.plot_id != None:
+                self.axes.lines.remove(self.active_spectrum.plot_id)
+            
+            # zorder = 1, always in the background
+            self.active_spectrum.plot_id = self.axes.plot(self.active_spectrum.data['waveobs'], self.active_spectrum.data['flux'], lw=1, color=self.active_spectrum.color, linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor=self.active_spectrum.color, zorder=1, label="[A] "+self.active_spectrum.name)[0]
         
         # Put a legend to the right of the current axis
         self.update_legend()
@@ -1085,6 +1079,11 @@ class SpectraFrame(wx.Frame):
             self.axes.lines.remove(self.active_spectrum.continuum_plot_id)
             self.active_spectrum.continuum_plot_id = None
             self.canvas.draw()
+    
+    def remove_continuum_spectra(self):
+        self.remove_drawn_continuum_spectra()
+        self.active_spectrum.continuum_model = None
+        self.active_spectrum.continuum_data = None
     
     def draw_continuum_spectra(self):
         if self.active_spectrum == None:
@@ -1102,7 +1101,7 @@ class SpectraFrame(wx.Frame):
     # Elements cann be "continuum", "lines" or "segments"
     def draw_regions(self, elements):
         for r in self.region_widgets[elements]:
-            r.disconnect_and_hide()
+            r.disconnect_and_remove()
         self.region_widgets[elements] = []
         
         if elements == "continuum":
@@ -1198,8 +1197,10 @@ class SpectraFrame(wx.Frame):
         if self.not_saved["continuum"] or self.not_saved["lines"] or self.not_saved["segments"] or spectra_not_saved:
             dlg = wx.MessageDialog(self, 'Are you sure you want to exit without saving the regions/spectra?', 'Changes not saved', wx.YES|wx.NO|wx.ICON_QUESTION)
             if dlg.ShowModal() == wx.ID_YES:
+                self.tbicon.Destroy()
                 self.Destroy()
         else:
+            self.tbicon.Destroy()
             self.Destroy()
         
         # Embeded ipython terminal
@@ -1335,11 +1336,21 @@ class SpectraFrame(wx.Frame):
 
             if self.active_spectrum == self.spectra[i]:
                 spec_element.Check()
+        
+        if len(self.spectra) > 0:
+            for item in self.spectrum_function_items:
+                item.Enable(True)
+        else:
+            for item in self.spectrum_function_items:
+                item.Enable(False)
     
     def update_legend(self):
-        leg = self.axes.legend(loc='center right', bbox_to_anchor=(1.1, 1), ncol=1, shadow=False)
-        ltext  = leg.get_texts()
-        plt.setp(ltext, fontsize='8')
+        if len(self.spectra) == 0:
+            self.axes.legend_ = None
+        else:
+            leg = self.axes.legend(loc='center right', bbox_to_anchor=(1.1, 1), ncol=1, shadow=False)
+            ltext  = leg.get_texts()
+            plt.setp(ltext, fontsize='8')
     
     def add_stats(self, k, v):
         num_items = self.stats.GetItemCount()
@@ -1347,6 +1358,13 @@ class SpectraFrame(wx.Frame):
         self.stats.SetStringItem(num_items, 1, str(v))
         
     def update_stats(self, region):
+        
+        if self.active_spectrum == None or len(self.active_spectrum.data['waveobs']) == 0:
+            dlg_error = wx.MessageDialog(self, "There is no loaded spectrum", 'Spectrum not present', wx.OK | wx.ICON_ERROR)
+            dlg_error.ShowModal()
+            dlg_error.Destroy()
+            return
+        
         self.stats.DeleteAllItems()
         
         wave_base = region.get_wave_base()
@@ -1376,12 +1394,12 @@ class SpectraFrame(wx.Frame):
             self.add_stats("Flux median", "%.6f" % np.median(spectra_window['flux']))
             self.add_stats("Flux standard deviation", "%.6f" % np.std(spectra_window['flux']))
         
-        if region.element_type == "lines" and region.line_model != None:
-            self.add_stats("Gaussian mean (mu)", "%.4f" % region.line_model.mu)
-            self.add_stats("Gaussian width (A)", "%.4f" % region.line_model.A)
-            self.add_stats("Gaussian standard deviation (sigma)", "%.4f" % region.line_model.sig)
-            self.add_stats("Gaussian base level (mean continuum)", "%.4f" % region.continuum_base_level)
-            rms = np.mean(region.line_model.residuals()) + np.std(region.line_model.residuals())
+        if region.element_type == "lines" and region.line_plot_id.has_key(self.active_spectrum) and region.line_model[self.active_spectrum] != None:
+            self.add_stats("Gaussian mean (mu)", "%.4f" % region.line_model[self.active_spectrum].mu)
+            self.add_stats("Gaussian width (A)", "%.4f" % region.line_model[self.active_spectrum].A)
+            self.add_stats("Gaussian standard deviation (sigma)", "%.4f" % region.line_model[self.active_spectrum].sig)
+            self.add_stats("Gaussian base level (mean continuum)", "%.4f" % region.continuum_base_level[self.active_spectrum])
+            rms = np.mean(region.line_model[self.active_spectrum].residuals()) + np.std(region.line_model[self.active_spectrum].residuals())
             self.add_stats("Gaussian fit root mean squeare (RMS)", "%.4f" % rms)
         
         if self.active_spectrum.continuum_model != None:
@@ -1502,6 +1520,39 @@ class SpectraFrame(wx.Frame):
     
     def on_open_segments(self, event):
         self.open_file("segments")
+    
+    def on_close_spectrum(self, event):
+        if self.active_spectrum == None:
+            return
+        
+        if self.active_spectrum.not_saved:
+            dlg = wx.MessageDialog(self, 'Are you sure you want to close the spectrum without saving it?', 'Changes not saved', wx.YES|wx.NO|wx.ICON_QUESTION)
+            if dlg.ShowModal() == wx.ID_NO:
+                return
+        
+        self.spectra.remove(self.active_spectrum)
+        self.axes.lines.remove(self.active_spectrum.plot_id)
+        # Remove fitted lines if they exist
+        for region in self.region_widgets["lines"]:
+            if region.line_plot_id.has_key(self.active_spectrum):
+                if region.line_plot_id[self.active_spectrum] != None:
+                    self.axes.lines.remove(region.line_plot_id[self.active_spectrum])
+                region.line_plot_id.remove(self.active_spectrum)
+                region.line_model.remove(self.active_spectrum)
+                region.continuum_base_level.remove(self.active_spectrum)
+        if len(self.spectra) == 0:
+            self.active_spectrum = None
+            self.spectra_color_id = 0
+        else:
+            self.active_spectrum = self.spectra[0]
+        
+        self.update_menu_active_spectrum()
+        self.update_title()
+        self.draw_active_spectrum()
+        self.draw_continuum_spectra()
+        self.draw_fitted_lines()
+        self.canvas.draw()
+        self.flash_status_message("Spectrum closed.")
     
     def on_save_plot(self, event):
         file_choices = "PNG (*.png)|*.png"
@@ -1696,6 +1747,9 @@ class SpectraFrame(wx.Frame):
         
         return result
     
+    def on_remove_fitted_lines(self, event):
+        self.remove_fitted_lines()
+    
     def on_fit_lines(self, event):
         if self.active_spectrum == None or len(self.active_spectrum.data['waveobs']) == 0:
             dlg_error = wx.MessageDialog(self, "Spectra not loaded, there is nothing to fit.", 'Spectra not loaded', wx.OK | wx.ICON_ERROR)
@@ -1742,6 +1796,14 @@ class SpectraFrame(wx.Frame):
                 region.line_plot_id[self.active_spectrum] = None
         self.canvas.draw()
         
+    def remove_fitted_lines(self):
+        self.remove_drawn_fitted_lines()
+        # Remove fitted lines if they exist
+        for region in self.region_widgets["lines"]:
+            if region.line_model.has_key(self.active_spectrum):
+                del region.line_plot_id[self.active_spectrum]
+                del region.line_model[self.active_spectrum]
+                del region.continuum_base_level[self.active_spectrum]
     
     def draw_fitted_lines(self):
         for region in self.region_widgets["lines"]:
@@ -1783,7 +1845,9 @@ class SpectraFrame(wx.Frame):
                 self.flash_status_message("Active spectrum: %s" % self.active_spectrum.name)
                 break
             i += 1
-        
+    
+    def on_remove_fitted_continuum(self, event):
+        self.remove_continuum_spectra()
     
     def on_fit_continuum(self, event):
         if self.active_spectrum == None or len(self.active_spectrum.data['waveobs']) == 0:
@@ -2021,12 +2085,29 @@ class SpectraFrame(wx.Frame):
             self.active_spectrum.data = correct_radial_velocity(self.active_spectrum.data, radial_vel)
             self.active_spectrum.not_saved = True
             self.draw_active_spectrum()
-            if self.active_spectrum.continuum_model != None:
-                self.active_spectrum.continuum_data = correct_radial_velocity(self.active_spectrum.continuum_data, radial_vel)
-                self.draw_continuum_spectra()
+        self.remove_continuum_spectra()
+        self.remove_fitted_lines()
         self.update_title()
         self.canvas.draw()
         self.flash_status_message("Applied a radial velocity correction of %s." % radial_vel)
+    
+    
+    
+    
+    def on_convert_to_nm(self, event):
+        self.active_spectrum.data['waveobs'] = self.active_spectrum.data['waveobs'] / 10
+        self.active_spectrum.not_saved = True
+        self.draw_active_spectrum()
+        
+        self.remove_continuum_spectra()
+        self.remove_fitted_lines()
+        
+        self.update_title()
+        # Autoscale
+        self.axes.relim()
+        self.axes.autoscale_view()
+        self.canvas.draw()
+        self.flash_status_message("Wavelength divided by 10.")
     
     def on_synthesize(self, event):
         
@@ -2188,14 +2269,46 @@ class SpectraFrame(wx.Frame):
 
     
     def on_exit(self, event):
-        self.Destroy()
+        self.on_close(event)
         
     def on_about(self, event):
-        msg = """ Spectra Visual Editor is a tool for the definition of continuum regions, line masks and segments needed for the execution of the SME tool (Spectroscopy Made Easy).
-        """
-        dlg = wx.MessageDialog(self, msg, "About", wx.OK)
-        dlg.ShowModal()
-        dlg.Destroy()
+        description = """Spectra Visual Editor is a tool for the treatment of spectrum files in order to identify lines, continuum regions and determine radial velocities among other options.
+
+The generation of synthetic spectrum (if the corresponding module has been compiled) is done thanks to:
+
+SPECTRUM a Stellar Spectral Synthesis Program 
+(C) Richard O. Gray 1992 - 2010 Version 2.76e
+"""
+
+        licence = """Spectra Visual Editor is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Spectra Visual Editor is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with Spectra Visual Editor.  If not, see <http://www.gnu.org/licenses/>."""
+
+
+        info = wx.AboutDialogInfo()
+
+        info.SetIcon(wx.Icon('input/SVE.png', wx.BITMAP_TYPE_PNG))
+        info.SetName('Spectra Visual Editor')
+        info.SetVersion('2012.02.22')
+        info.SetDescription(description)
+        info.SetCopyright('(C) 2011 - 2012 Sergi Blanco Cuaresma')
+        info.SetWebSite('http://www.marblestation.com')
+        info.SetLicence(licence)
+        info.AddDeveloper('Sergi Blanco Cuaresma')
+        #info.AddDocWriter('Jan Bodnar')
+        #info.AddArtist('The Tango crew')
+        #info.AddTranslator('Jan Bodnar')
+
+        wx.AboutBox(info)
     
     def flash_status_message(self, msg, flash_len_ms=3000, progress=True):
         self.timeroff = wx.Timer(self)
