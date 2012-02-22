@@ -222,13 +222,23 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
     if(flagw == 1) printf("Entering Main Loop\n");
 
     int pos = 0;
+    int dwave1 = dwave;
+    int dwave2 = dwave;
     while(pos < num_measures) {
         wave = waveobs[pos];
         
-        if (pos < num_measures-1) {
-            dwave = waveobs[pos+1] - waveobs[pos]; // For the last wavelength
+        if ((pos > 0) && (pos < num_measures-1)) {
+            dwave1 = waveobs[pos] - waveobs[pos-1];
+            dwave2 = waveobs[pos+1] - waveobs[pos];
+            if (dwave1 < dwave2) {
+                dwave = dwave1;
+            } else {
+                dwave = dwave2;
+            }
             inc = dwave;
-        }// else: use the previous dwave value
+        } else if (pos == 0) {
+            dwave = 0.02;
+        } // else: pos == num_measures-1 => use the last dwave calculated value
         
         Depth = 1.0;
 

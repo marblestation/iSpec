@@ -275,6 +275,14 @@ def valid_objective(modeled_layers_pack, teff_obj, logg_obj, MH_obj):
         #raise Exception("Out of range: high logg value")
         return False
     
+    MH_index = np.searchsorted(MH_range, MH_obj)
+    if MH_index == 0 and MH_obj != MH_range[0]:
+        #raise Exception("Out of range: low MH value")
+        return False
+    if MH_index >= nMH:
+        #raise Exception("Out of range: high MH value")
+        return False
+    
     valid = True
     for metal_num in np.arange(nMH):
         valid = valid & (model_combinations[metal_num][teff_index][logg_index] != -1)
@@ -337,21 +345,22 @@ def load_modeled_layers_pack(filename='input/atmospheres/modeled_layers_pack.dum
 if __name__ == '__main__':
     # Model file and metallicity
     #atmosphere_models = ["input/atmospheres/am25k2odfnew.dat", "input/atmospheres/am20k2odfnew.dat", "input/atmospheres/am15k2odfnew.dat", "input/atmospheres/am10k2odfnew.dat", "input/atmospheres/am05k2odfnew.dat", "input/atmospheres/ap00k2odfnew.dat", "input/atmospheres/ap02k2odfnew.dat", "input/atmospheres/ap05k2odfnew.dat"]
-    #atmosphere_models_metalicities = [0.5, 0.2, 0.0, -0.5, -1.0, -1.5, -2.0, -2.5]
+    #atmosphere_models_metalicities = [-2.5, -2.0, -1.5, -1.0, -0.5, 0.0, 0.2, 0.5]
     #atmospheres, atmospheres_params = read_castelli_kurucz_atmospheres(atmosphere_models, atmosphere_models_metalicities)
 
-    ### Stats
+    #### Stats
     #teff_range, logg_range, MH_range, nteff, nlogg, nMH, nlayers, nvalues, teff_min, teff_max, logg_min, logg_max, MH_min, MH_max = atmospheres_statistics(atmospheres_params)
 
-    ## Check teff-logg combinations and register its position in atmospheres array (-1 if it does not exist)
+    ### Check teff-logg combinations and register its position in atmospheres array (-1 if it does not exist)
     #model_combinations = check_teff_logg_combinations(atmospheres_params, nteff, nlogg, nMH)
 
     #modeled_layers = modeled_interpolated_layer_values(atmospheres, model_combinations, nteff, nlogg, nMH, nlayers, nvalues, teff_range, logg_range)
 
-    #plot_original_and_finer_grid(modeled_layers, teff_range, logg_range, teff_min, teff_max, logg_min, logg_max, nMH, nlayers, nvalues, nteff, nlogg, teff_step=100, logg_step=0.10)
+    ##plot_original_and_finer_grid(modeled_layers, teff_range, logg_range, teff_min, teff_max, logg_min, logg_max, nMH, nlayers, nvalues, nteff, nlogg, teff_step=100, logg_step=0.10)
 
-    ### Serialize
+    #### Serialize
     #save_modeled_layers_pack(modeled_layers, model_combinations, atmosphere_models, atmosphere_models_metalicities, teff_range, logg_range, MH_range, nteff, nlogg, nMH, nlayers, nvalues, teff_min, teff_max, logg_min, logg_max, MH_min, MH_max)
+    
     modeled_layers_pack = load_modeled_layers_pack(filename='input/atmospheres/modeled_layers_pack.dump')
 
     teff_obj = 5500
@@ -362,4 +371,4 @@ if __name__ == '__main__':
     layers = interpolate_atmosphere_layers(modeled_layers_pack, teff_obj, logg_obj, MH_obj)
     atm_filename = write_atmosphere(teff_obj, logg_obj, MH_obj, layers)
 
-    #os.remove(atm_filename)
+    os.remove(atm_filename)

@@ -82,7 +82,8 @@ def get_flux(spectra, wavelength):
 # points needed to hold a spectra of a given resolution
 def generate_wavelength_grid(base_wave, top_wave, resolution, points_per_fwhm = 3):
     xaxis = []
-    current_wave = base_wave
+    current_wave = base_wave * 1.0 # Ensure it is a float
+    top_wave = top_wave * 1.0
     while current_wave <= top_wave:
         fwhm = current_wave/resolution
         wave_step = fwhm / points_per_fwhm

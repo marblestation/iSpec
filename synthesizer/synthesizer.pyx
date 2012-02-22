@@ -152,7 +152,7 @@ def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, char* atmosphere_model_file
     cdef np.ndarray[np.double_t,ndim=1] fluxes = np.zeros(num_measures, dtype=float)
     if num_measures <= 1:
         # We need at least 2 wavelengths, if not return an zeroed result
-        return flux
+        return fluxes
     
     # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
     synthesize_spectrum(atmosphere_model_file, linelist_file, abundances_file, microturbulence_vel, verbose, num_measures, <double*> waveobs.data, <double*> fluxes.data)
