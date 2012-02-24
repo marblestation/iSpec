@@ -48,6 +48,7 @@ from common import *
 from continuum import *
 from fitting import *
 from radial_velocity import *
+from convolve import *
 
 
 class FitContinuumDialog(wx.Dialog):
@@ -248,9 +249,89 @@ class DetermineRVDialog(wx.Dialog):
         self.action_accepted = True
         self.Close()
 
+class DetermineBarycentricCorrectionDialog(wx.Dialog):
+    def __init__(self, parent, id, title, day, month, year, hours, minutes, seconds, ra_hours, ra_minutes, ra_seconds, dec_degrees, dec_minutes, dec_seconds):
+        wx.Dialog.__init__(self, parent, id, title)
+        
+        self.action_accepted = False
+
+        self.vbox = wx.BoxSizer(wx.VERTICAL)
+        
+        flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
+
+        # Date
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.text_date = wx.StaticText(self, -1, "Date: ", style=wx.ALIGN_LEFT)
+        self.day = wx.TextCtrl(self, -1, str(int(day)),  style=wx.TE_RIGHT)
+        self.month = wx.TextCtrl(self, -1, str(int(month)),  style=wx.TE_RIGHT)
+        self.year = wx.TextCtrl(self, -1, str(int(year)),  style=wx.TE_RIGHT)
+        
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_date, 0, border=3, flag=flags)
+        self.hbox.Add(self.day, 0, border=3, flag=flags)
+        self.hbox.Add(self.month, 0, border=3, flag=flags)
+        self.hbox.Add(self.year, 0, border=3, flag=flags)
+        
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+        
+        # Time
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.text_time = wx.StaticText(self, -1, "Time: ", style=wx.ALIGN_LEFT)
+        self.hours = wx.TextCtrl(self, -1, str(int(hours)),  style=wx.TE_RIGHT)
+        self.minutes = wx.TextCtrl(self, -1, str(int(minutes)),  style=wx.TE_RIGHT)
+        self.seconds = wx.TextCtrl(self, -1, str(seconds),  style=wx.TE_RIGHT)
+        
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_time, 0, border=3, flag=flags)
+        self.hbox.Add(self.hours, 0, border=3, flag=flags)
+        self.hbox.Add(self.minutes, 0, border=3, flag=flags)
+        self.hbox.Add(self.seconds, 0, border=3, flag=flags)
+        
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+        
+        # Right Ascension
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.text_ra = wx.StaticText(self, -1, "Right Ascension: ", style=wx.ALIGN_LEFT)
+        self.ra_hours = wx.TextCtrl(self, -1, str(int(ra_hours)),  style=wx.TE_RIGHT)
+        self.ra_minutes = wx.TextCtrl(self, -1, str(int(ra_minutes)),  style=wx.TE_RIGHT)
+        self.ra_seconds = wx.TextCtrl(self, -1, str(ra_seconds),  style=wx.TE_RIGHT)
+        
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_ra, 0, border=3, flag=flags)
+        self.hbox.Add(self.ra_hours, 0, border=3, flag=flags)
+        self.hbox.Add(self.ra_minutes, 0, border=3, flag=flags)
+        self.hbox.Add(self.ra_seconds, 0, border=3, flag=flags)
+        
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+        
+        # Declination
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.text_dec = wx.StaticText(self, -1, "Declination: ", style=wx.ALIGN_LEFT)
+        self.dec_degrees = wx.TextCtrl(self, -1, str(int(dec_degrees)),  style=wx.TE_RIGHT)
+        self.dec_minutes = wx.TextCtrl(self, -1, str(int(dec_minutes)),  style=wx.TE_RIGHT)
+        self.dec_seconds = wx.TextCtrl(self, -1, str(dec_seconds),  style=wx.TE_RIGHT)
+        
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_dec, 0, border=3, flag=flags)
+        self.hbox.Add(self.dec_degrees, 0, border=3, flag=flags)
+        self.hbox.Add(self.dec_minutes, 0, border=3, flag=flags)
+        self.hbox.Add(self.dec_seconds, 0, border=3, flag=flags)
+        
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+        
+        sizer =  self.CreateButtonSizer(wx.CANCEL|wx.OK)
+        self.vbox.Add(sizer, 0, wx.ALIGN_CENTER)
+        self.vbox.AddSpacer(10)
+        self.SetSizer(self.vbox)
+        self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
+
+    def on_ok(self, event):
+        self.action_accepted = True
+        self.Close()
+
 
 class RVProfileDialog(wx.Dialog):
-    def __init__(self, parent, id, title, xcoord, fluxes, model):
+    def __init__(self, parent, id, title, xcoord, fluxes, model, num_used_lines, rv_step):
         wx.Dialog.__init__(self, parent, id, title, size=(600, 600))
         
         self.action_accepted = False
@@ -309,28 +390,38 @@ class RVProfileDialog(wx.Dialog):
         self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
         
         ## Draw
-        self.axes.plot(xcoord, fluxes, lw=1, color='b', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=1)
-        self.axes.plot(xcoord, model(xcoord), lw=1, color='r', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='r', zorder=2)
+        self.axes.plot(xcoord, fluxes+1, lw=1, color='b', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=1)
+        if rv_step >= 0.1:
+            xcoord_mod = np.arange(np.min(xcoord), np.max(xcoord), 0.1)
+            self.axes.plot(xcoord_mod, model(xcoord_mod)+1, lw=1, color='r', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='r', zorder=2)
+        else:
+            self.axes.plot(xcoord, model(xcoord)+1, lw=1, color='r', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='r', zorder=2)
         
         self.axes.grid(True, which="both")
         self.axes.set_title("Profile", fontsize="10")
         self.axes.set_xlabel("radial velocity (km/s)", fontsize="10")
-        self.axes.set_ylabel("average flux", fontsize="10")
+        self.axes.set_ylabel("relative intensity", fontsize="10")
         
         ## Stats
         num_items = self.stats.GetItemCount()
         self.stats.InsertStringItem(num_items, "Mean (km/s)")
         self.stats.SetStringItem(num_items, 1, str(np.round(model.mu, 2)))
         num_items += 1
+        self.stats.InsertStringItem(num_items, "Min. error (+/- km/s)")
+        self.stats.SetStringItem(num_items, 1, str(np.round(rv_step, 2)))
+        num_items += 1
         self.stats.InsertStringItem(num_items, "Sigma (km/s)")
         self.stats.SetStringItem(num_items, 1, str(np.round(model.sig, 2)))
-        #num_items += 1
-        #self.stats.InsertStringItem(num_items, "A")
-        #self.stats.SetStringItem(num_items, 1, str(np.round(model.A, 2)))
+        num_items += 1
+        self.stats.InsertStringItem(num_items, "A (rel. intensity)")
+        self.stats.SetStringItem(num_items, 1, str(np.round(model.A+1, 2)))
         fwhm = model.sig * (2*np.sqrt(2*np.log(2)))
         num_items += 1
         self.stats.InsertStringItem(num_items, "FWHM (km/s)")
         self.stats.SetStringItem(num_items, 1, str(np.round(fwhm, 2)))
+        num_items += 1
+        self.stats.InsertStringItem(num_items, "Number of lines used")
+        self.stats.SetStringItem(num_items, 1, str(num_used_lines))
 
     def on_ok(self, event):
         self.action_accepted = True
@@ -462,6 +553,53 @@ class SyntheticSpectrumDialog(wx.Dialog):
         self.action_accepted = True
         self.Close()
 
+class DegradeResolutionDialog(wx.Dialog):
+    def __init__(self, parent, id, title, from_resolution, to_resolution):
+        wx.Dialog.__init__(self, parent, id, title)
+        
+        self.action_accepted = False
+
+        self.vbox = wx.BoxSizer(wx.VERTICAL)
+        
+        flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
+        
+        
+        ### From resolution
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        
+        self.text_from_resolution = wx.StaticText(self, -1, "Initial resolution: ", style=wx.ALIGN_LEFT)
+        self.from_resolution = wx.TextCtrl(self, -1, str(from_resolution),  style=wx.TE_RIGHT)
+        
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_from_resolution, 0, border=3, flag=flags)
+        self.hbox.Add(self.from_resolution, 0, border=3, flag=flags)
+        
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+        
+        ### To resolution
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        
+        self.text_to_resolution = wx.StaticText(self, -1, "Final resolution: ", style=wx.ALIGN_LEFT)
+        self.to_resolution = wx.TextCtrl(self, -1, str(to_resolution),  style=wx.TE_RIGHT)
+        
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_to_resolution, 0, border=3, flag=flags)
+        self.hbox.Add(self.to_resolution, 0, border=3, flag=flags)
+        
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+        
+        self.vbox.AddSpacer(10)
+        
+        sizer =  self.CreateButtonSizer(wx.CANCEL|wx.OK)
+        self.vbox.Add(sizer, 0, wx.ALIGN_CENTER)
+        self.vbox.AddSpacer(10)
+        self.SetSizer(self.vbox)
+        self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
+
+    def on_ok(self, event):
+        self.action_accepted = True
+        self.Close()
+
 
 class CustomizableRegion:
     min_width = 0.002 # nm
@@ -557,7 +695,7 @@ class CustomizableRegion:
         else:
             note_text = ""
         
-        note_text = self.frame.ask('Note for the new line region:', 'Note', note_text)
+        note_text = self.frame.ask_value('Note for the new line region:', 'Note', note_text)
         
         if note_text != None and note_text != "":
             # Set
@@ -594,6 +732,9 @@ class CustomizableRegion:
         if self.frame.elements != self.element_type: return
         # If the action is "create", this should be managed by the frame and not individual elements
         if self.frame.action == "Create" and not (self.frame.elements == "lines" and self.frame.subelements == "marks"): return
+        
+        if self.frame.operation_in_progress:
+            return
         
         # When regions overlap two or more can receive the click event, so
         # let's use a lock to allow the modification of one of them
@@ -778,6 +919,50 @@ class SpectraFrame(wx.Frame):
         self.embedshell = IPython.Shell.IPShellEmbed(argv=['--pdb'])
         self.embedshell()
     
+    
+    def get_color(self):
+        # Look for a free color
+        free_color_found = None
+        if len(self.spectra) < len(self.spectra_colors):
+            for color in self.spectra_colors:
+                discard_color = False
+                for spec in self.spectra:
+                    if spec.color == color:
+                        discard_color = True
+                        break
+                if discard_color:
+                    continue
+                else:
+                    free_color_found = color
+                    break
+        
+        if free_color_found == None:
+            msg = "There are not enough colors for new plots."
+            title = "Color limitation"
+            self.error(title, msg)
+            free_color_found = "#000000"
+            
+        return free_color_found
+    
+    # Check if exists a spectrum with that name, in that case add a suffix
+    def get_name(self, name):
+        num_repeated = 0
+        max_num = 0
+        for spec in self.spectra:
+            if spec.name.startswith(name):
+                try:
+                    # Does it has already a suffix?
+                    num = int(spec.name.split("-")[-1])
+                    if num > max_num:
+                        max_num = num
+                except ValueError:
+                    pass
+                num_repeated += 1
+            
+        if num_repeated > 0: # There are repeated names
+            name = name + "-" + str(max_num+1) # Add identificator number + 1
+        return name
+        
     # regions should be a dictionary with 'continuum', 'lines' and 'segments' keys
     # filenames should be a dictionary with 'spectra', 'continuum', 'lines' and 'segments' keys
     def __init__(self, spectra=None, name=None, regions=None, filenames=None):
@@ -787,16 +972,17 @@ class SpectraFrame(wx.Frame):
         #self.ipython_thread.setDaemon(True)
         #self.ipython_thread.start()
         
-        self.spectra_color = ('#3100FF', '#0074FF', '#E49400', '#8b6914', '#00DEFF', '#02AA4D', '#49CD2E', '#A4DC3A', '#FF69D2',)
-        self.spectra_color_id = 0
+        self.spectra_colors = ('#0000FF', '#A52A2A', '#A020F0', '#FFA500', '#1E90FF', '#90EE90',  '#FFC0CB', '#7F7F7F', '#00FF00', '#000000',)
         
         if spectra == None:
             self.spectra = []
             self.active_spectrum = None
         else:
-            self.active_spectrum = Spectrum(spectra, name, path=filenames["spectra"], color=self.spectra_color[self.spectra_color_id])
-            self.spectra_color_id = (self.spectra_color_id + 1) % len(self.spectra_color)
-            self.spectra = [self.active_spectrum]
+            self.spectra = []
+            name = self.get_name(name) # If it already exists, add a suffix
+            color = self.get_color()
+            self.active_spectrum = Spectrum(spectra, name, path=filenames["spectra"], color=color)
+            self.spectra.append(self.active_spectrum)
         
         
         if regions == None:
@@ -833,13 +1019,29 @@ class SpectraFrame(wx.Frame):
         self.not_saved["lines"] = False
         self.not_saved["segments"] = False
         self.rv_limit = 200 # km/s
-        self.rv_step = 0.5 # km/s
+        self.rv_step = 2.0 # km/s
+        self.linelist_rv = None
         self.modeled_layers_pack = None # Synthesize spectrum (atmospheric models)
         
-        self.timeroff = None
+        # Barycentric velocity determination (default params)
+        self.day = 15
+        self.month = 2
+        self.year = 2012
+        self.hours = 0
+        self.minutes = 0
+        self.seconds = 0
+        self.ra_hours = 19
+        self.ra_minutes = 50
+        self.ra_seconds = 46.99
+        self.dec_degrees = 8
+        self.dec_minutes = 52
+        self.dec_seconds = 5.96
+        self.barycentric_vel = 0.0 # km/s
+        
+        self.operation_in_progress = False
         
         wx.Frame.__init__(self, None, -1, self.title)
-        self.icon = wx.Icon("input/SVE.ico", wx.BITMAP_TYPE_ICO)
+        self.icon = wx.Icon("images/SVE.ico", wx.BITMAP_TYPE_ICO)
         self.tbicon = wx.TaskBarIcon()
         self.tbicon.SetIcon(self.icon, "")
         wx.Frame.SetIcon(self, self.icon)
@@ -848,20 +1050,60 @@ class SpectraFrame(wx.Frame):
         self.create_menu()
         self.create_status_bar()
         self.create_main_panel()
+        self.timeroff = wx.Timer(self)
         self.draw_figure()
     
+    ####################################################################
+    def error(self, title, msg):
+        dlg_error = wx.MessageDialog(self, msg, title, wx.OK|wx.ICON_ERROR)
+        dlg_error.ShowModal()
+        dlg_error.Destroy()
     
-    def ask(self, text, title, default_value):
-            dlg = wx.TextEntryDialog(self, text, title)
+    def question(self, title, msg):
+        dlg_question = wx.MessageDialog(self, msg, title, wx.YES|wx.NO|wx.ICON_QUESTION)
+        answer_yes = (dlg_question.ShowModal() == wx.ID_YES)
+        dlg_question.Destroy()
+        if not answer_yes:
+            self.flash_status_message("Discarded")
+        return answer_yes
+    
+    def ask_value(self, text, title, default_value):
+        dlg_question = wx.TextEntryDialog(self, text, title)
+        
+        dlg_question.SetValue(default_value)
+        if dlg_question.ShowModal() == wx.ID_OK:
+            response = dlg_question.GetValue()
+        else:
+            response = None
             
-            dlg.SetValue(default_value)
-            if dlg.ShowModal() == wx.ID_OK:
-                response = dlg.GetValue()
-            else:
-                response = None
-                
-            dlg.Destroy()
-            return response
+        dlg_question.Destroy()
+        return response
+    ####################################################################
+    
+    def check_operation_in_progress(self):
+        if self.operation_in_progress:
+            msg = "This action cannot be done while there is another operation in progress"
+            title = "Operation in progress"
+            self.error(title, msg)
+            return True
+        return False
+    
+    def check_active_spectrum_exists(self):
+        if self.active_spectrum == None or len(self.active_spectrum.data['waveobs']) == 0:
+            msg = "There is no active spectrum"
+            title = "Spectrum not present"
+            self.error(title, msg)
+            return False
+        return True
+    
+    def check_continuum_model_exists(self):
+        if self.active_spectrum.continuum_model == None:
+            msg = "Please, execute a general continuum fit first"
+            title = "Continuum model not fitted"
+            self.error(title, msg)
+            return False
+        return True
+    ####################################################################
     
     def create_menu(self):
         self.menubar = wx.MenuBar()
@@ -917,6 +1159,13 @@ class SpectraFrame(wx.Frame):
         m_remove_fitted_lines = menu_edit.Append(-1, "Clear fitted lines", "Remove fitted lines")
         self.Bind(wx.EVT_MENU, self.on_remove_fitted_lines, m_remove_fitted_lines)
         self.spectrum_function_items.append(m_remove_fitted_lines)
+        
+        m_remove_continuum_regions = menu_edit.Append(-1, "Clear continuum regions", "Clear continuum regions")
+        self.Bind(wx.EVT_MENU, self.on_remove_continuum_regions, m_remove_continuum_regions)
+        m_remove_line_masks = menu_edit.Append(-1, "Clear line masks", "Clear line masks")
+        self.Bind(wx.EVT_MENU, self.on_remove_line_masks, m_remove_line_masks)
+        m_remove_segments = menu_edit.Append(-1, "Clear segments", "Clear segments")
+        self.Bind(wx.EVT_MENU, self.on_remove_segments, m_remove_segments)
         menu_edit.AppendSeparator()
         
         m_find_continuum = menu_edit.Append(-1, "&Find continuum regions", "Find continuum regions")
@@ -924,14 +1173,25 @@ class SpectraFrame(wx.Frame):
         self.spectrum_function_items.append(m_find_continuum)
         menu_edit.AppendSeparator()
         
-        m_determine_rv = menu_edit.Append(-1, "&Determine RV", "Determine radial velocity")
+        m_determine_barycentric_vel = menu_edit.Append(-1, "&Determine barycentric velocity", "Determine baricentryc velocity")
+        self.Bind(wx.EVT_MENU, self.on_determine_barycentric_vel, m_determine_barycentric_vel)
+        m_determine_rv = menu_edit.Append(-1, "&Determine radial velocity", "Determine radial velocity")
         self.Bind(wx.EVT_MENU, self.on_determine_rv, m_determine_rv)
         self.spectrum_function_items.append(m_determine_rv)
-        m_correct_rv = menu_edit.Append(-1, "&Correct RV", "Correct spectra by using its radial velocity")
-        menu_edit.AppendSeparator()
-        
+        m_correct_barycentric_vel = menu_edit.Append(-1, "Correct barycentric velocity", "Correct spectra by using its radial velocity")
+        self.Bind(wx.EVT_MENU, self.on_correct_barycentric_vel, m_correct_barycentric_vel)
+        self.spectrum_function_items.append(m_correct_barycentric_vel)
+        m_correct_rv = menu_edit.Append(-1, "&Correct radial velocity", "Correct spectra by using its radial velocity")
         self.Bind(wx.EVT_MENU, self.on_correct_rv, m_correct_rv)
         self.spectrum_function_items.append(m_correct_rv)
+        menu_edit.AppendSeparator()
+        
+        m_degrade_resolution = menu_edit.Append(-1, "Degrade resolution", "Degread spectrum resolution")
+        self.Bind(wx.EVT_MENU, self.on_degrade_resolution, m_degrade_resolution)
+        self.spectrum_function_items.append(m_degrade_resolution)
+        m_normalize_spectrum = menu_edit.Append(-1, "Continuum normalization", "Normalize spectrum")
+        self.Bind(wx.EVT_MENU, self.on_continuum_normalization, m_normalize_spectrum)
+        self.spectrum_function_items.append(m_normalize_spectrum)
         m_convert_to_nm = menu_edit.Append(-1, "Convert to nanometers", "Divide wavelength by 10")
         self.Bind(wx.EVT_MENU, self.on_convert_to_nm, m_convert_to_nm)
         self.spectrum_function_items.append(m_convert_to_nm)
@@ -1189,14 +1449,22 @@ class SpectraFrame(wx.Frame):
         
     
     def on_close(self, event):
+        if self.operation_in_progress:
+            msg = "There is an operation in progress, are you sure you want to exit anyway?"
+            title = "Changes not saved"
+            if not self.question(title, msg):
+                return
+        
+        # Check if there is any spectrum not saved
         spectra_not_saved = False
         for spec in self.spectra:
             if spec.not_saved:
                 spectra_not_saved = True
                 break
         if self.not_saved["continuum"] or self.not_saved["lines"] or self.not_saved["segments"] or spectra_not_saved:
-            dlg = wx.MessageDialog(self, 'Are you sure you want to exit without saving the regions/spectra?', 'Changes not saved', wx.YES|wx.NO|wx.ICON_QUESTION)
-            if dlg.ShowModal() == wx.ID_YES:
+            msg = "Are you sure you want to exit without saving the regions/spectra?"
+            title = "Changes not saved"
+            if self.question(title, msg):
                 self.tbicon.Destroy()
                 self.Destroy()
         else:
@@ -1255,13 +1523,16 @@ class SpectraFrame(wx.Frame):
         # Validate it is not in PAN or ZOOM mode
         if event.inaxes == None: return
         if event.inaxes.get_navigate_mode() != None: return
-        
+        if self.timeroff.IsRunning(): return
+        if self.operation_in_progress: return
         self.status_message("Cursor on wavelength %.4f" % event.xdata + " and flux %.4f" % event.ydata)
 
     def on_release(self, event):
         # Validate it is not in PAN or ZOOM mode
         if event.inaxes == None: return
         if event.inaxes.get_navigate_mode() != None: return
+        if self.check_operation_in_progress():
+            return
         
         new_halfwidth = 0.05
         # If the left button is clicked when action "create" is active, 
@@ -1358,11 +1629,7 @@ class SpectraFrame(wx.Frame):
         self.stats.SetStringItem(num_items, 1, str(v))
         
     def update_stats(self, region):
-        
-        if self.active_spectrum == None or len(self.active_spectrum.data['waveobs']) == 0:
-            dlg_error = wx.MessageDialog(self, "There is no loaded spectrum", 'Spectrum not present', wx.OK | wx.ICON_ERROR)
-            dlg_error.ShowModal()
-            dlg_error.Destroy()
+        if not self.check_active_spectrum_exists():
             return
         
         self.stats.DeleteAllItems()
@@ -1474,8 +1741,9 @@ class SpectraFrame(wx.Frame):
                         if self.active_spectrum != None and self.active_spectrum.plot_id != None:
                             self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
                         
-                        self.active_spectrum = Spectrum(new_spectra_data, path.split('/')[-1], path = path, color=self.spectra_color[self.spectra_color_id])
-                        self.spectra_color_id = (self.spectra_color_id + 1) % len(self.spectra_color)
+                        name = self.get_name(path.split('/')[-1]) # If it already exists, add a suffix
+                        color = self.get_color()
+                        self.active_spectrum = Spectrum(new_spectra_data, name, path = path, color=color)
                         
                         self.spectra.append(self.active_spectrum)
                         self.update_menu_active_spectrum()                        
@@ -1510,24 +1778,35 @@ class SpectraFrame(wx.Frame):
                 action_ended = True
     
     def on_open_spectra(self, event):
+        if self.check_operation_in_progress():
+            return
         self.open_file("spectra")
     
     def on_open_continuum(self, event):
+        if self.check_operation_in_progress():
+            return
         self.open_file("continuum")
     
     def on_open_lines(self, event):
+        if self.check_operation_in_progress():
+            return
         self.open_file("lines")
     
     def on_open_segments(self, event):
+        if self.check_operation_in_progress():
+            return
         self.open_file("segments")
     
     def on_close_spectrum(self, event):
-        if self.active_spectrum == None:
+        if not self.check_active_spectrum_exists():
+            return
+        if self.check_operation_in_progress():
             return
         
         if self.active_spectrum.not_saved:
-            dlg = wx.MessageDialog(self, 'Are you sure you want to close the spectrum without saving it?', 'Changes not saved', wx.YES|wx.NO|wx.ICON_QUESTION)
-            if dlg.ShowModal() == wx.ID_NO:
+            msg = "Are you sure you want to close the spectrum without saving it?"
+            title = "Changes not saved"
+            if not self.question(title, msg):
                 return
         
         self.spectra.remove(self.active_spectrum)
@@ -1542,7 +1821,6 @@ class SpectraFrame(wx.Frame):
                 region.continuum_base_level.remove(self.active_spectrum)
         if len(self.spectra) == 0:
             self.active_spectrum = None
-            self.spectra_color_id = 0
         else:
             self.active_spectrum = self.spectra[0]
         
@@ -1555,6 +1833,8 @@ class SpectraFrame(wx.Frame):
         self.flash_status_message("Spectrum closed.")
     
     def on_save_plot(self, event):
+        if self.check_operation_in_progress():
+            return
         file_choices = "PNG (*.png)|*.png"
         
         elements = "spectra"
@@ -1592,12 +1872,11 @@ class SpectraFrame(wx.Frame):
     
     
     def on_save_spectra(self, event):
+        if self.check_operation_in_progress():
+            return
         file_choices = "All|*"
         
-        if self.active_spectrum == None or len(self.active_spectrum.data['waveobs']) == 0:
-            dlg_error = wx.MessageDialog(self, "There is no spectrum to be saved", 'Spectrum not present', wx.OK | wx.ICON_ERROR)
-            dlg_error.ShowModal()
-            dlg_error.Destroy()
+        if not self.check_active_spectrum_exists():
             return
         
         if self.active_spectrum.path != None:
@@ -1728,12 +2007,18 @@ class SpectraFrame(wx.Frame):
     
     
     def on_save_continuum_regions(self, event):
+        if self.check_operation_in_progress():
+            return
         self.save_regions("continuum")
     
     def on_save_line_regions(self, event):
+        if self.check_operation_in_progress():
+            return
         self.save_regions("lines")
     
     def on_save_segments(self, event):
+        if self.check_operation_in_progress():
+            return
         self.save_regions("segments")
     
     def text2float(self, value, msg):
@@ -1748,18 +2033,124 @@ class SpectraFrame(wx.Frame):
         return result
     
     def on_remove_fitted_lines(self, event):
+        if self.check_operation_in_progress():
+            return
         self.remove_fitted_lines()
+        
+    def remove_regions(self, elements):
+        if self.not_saved[elements]:
+            msg = "Are you sure you want to remove this regions without saving them?"
+            title = "Changes not saved"
+            if not self.question(title, msg):
+                return
+        if elements == "continuum":
+            self.regions[elements] = np.zeros((0,), dtype=[('wave_base', '<f8'), ('wave_top', '<f8')])
+        elif elements == "lines":
+            self.regions[elements] = np.zeros((0,), dtype=[('wave_peak', '<f8'), ('wave_base', '<f8'), ('wave_top', '<f8')])
+        else:
+            self.regions[elements] = np.zeros((0,), dtype=[('wave_base', '<f8'), ('wave_top', '<f8')])
+        self.draw_regions(elements)
+        self.not_saved[elements] = False
+        self.update_title()
+        self.filenames[elements] = None
+        self.canvas.draw()
+    
+    def on_remove_continuum_regions(self, event):
+        if self.check_operation_in_progress():
+            return
+        elements = "continuum"
+        self.remove_regions(elements)
+        self.flash_status_message("Cleaned continuum regions")
+        
+    
+    def on_remove_line_masks(self, event):
+        if self.check_operation_in_progress():
+            return
+        elements = "lines"
+        self.remove_fitted_lines() # If they exist
+        self.remove_regions(elements)
+        self.flash_status_message("Cleaned line masks")
+    
+    def on_remove_segments(self, event):
+        if self.check_operation_in_progress():
+            return
+        elements = "segments"
+        self.remove_regions(elements)
+        self.flash_status_message("Cleaned segments")
+    
+    def on_degrade_resolution(self, event):
+        if not self.check_active_spectrum_exists():
+            return
+        if self.check_operation_in_progress():
+            return
+        
+        dlg = DegradeResolutionDialog(self, -1, "Degrade spectrum resolution", 47000, 10000)
+        dlg.ShowModal()
+        
+        if not dlg.action_accepted:
+            dlg.Destroy()
+            return
+        
+        from_resolution = self.text2float(dlg.from_resolution.GetValue(), 'Initial resolution value is not a valid one.')
+        to_resolution = self.text2float(dlg.to_resolution.GetValue(), 'Final resolution value is not a valid one.')
+        dlg.Destroy()
+        
+        if from_resolution == None or to_resolution == None or from_resolution <= to_resolution:
+            self.flash_status_message("Bad value.")
+            return
+        
+        convolved_spectra = degrade_spectra_resolution(self.active_spectrum.data, from_resolution, to_resolution)
+        self.active_spectrum.data = convolved_spectra
+        self.active_spectrum.not_saved = True
+        
+        # Remove current continuum from plot if exists
+        self.remove_drawn_continuum_spectra()
+        
+        # Remove current drawn fitted lines if they exist
+        self.remove_drawn_fitted_lines()
+        
+        self.draw_active_spectrum()
+        self.update_title()
+        self.canvas.draw()
+        self.flash_status_message("Spectrum degreaded from resolution %f to %f" % (from_resolution, to_resolution))
+        
+    def on_continuum_normalization(self, event):
+        if not self.check_active_spectrum_exists():
+            return
+        if not self.check_continuum_model_exists():
+            return
+        if self.check_operation_in_progress():
+            return
+        
+        msg = "This operation is going to divide all the fluxes of the active spectrum by the fitted continuum. Are you sure?"
+        title = "Confirmation"
+        if not self.question(title, msg):
+            return
+        
+        self.active_spectrum.data['flux'] /= self.active_spectrum.continuum_model(self.active_spectrum.data['waveobs'])
+        self.active_spectrum.not_saved = True
+        
+        # Remove current continuum from plot if exists
+        self.remove_drawn_continuum_spectra()
+        
+        # Remove current drawn fitted lines if they exist
+        self.remove_drawn_fitted_lines()
+        
+        self.draw_active_spectrum()
+        self.update_title()
+        # Autoscale
+        self.axes.relim()
+        self.axes.autoscale_view()
+        self.canvas.draw()
+        self.flash_status_message("Spectrum normalized")
+        pass
     
     def on_fit_lines(self, event):
-        if self.active_spectrum == None or len(self.active_spectrum.data['waveobs']) == 0:
-            dlg_error = wx.MessageDialog(self, "Spectra not loaded, there is nothing to fit.", 'Spectra not loaded', wx.OK | wx.ICON_ERROR)
-            dlg_error.ShowModal()
-            dlg_error.Destroy()
+        if not self.check_active_spectrum_exists():
             return
-        if self.active_spectrum.continuum_model == None:
-            dlg_error = wx.MessageDialog(self, "Please, execute a general continuum fit first.", 'Continuum model not fitted', wx.OK | wx.ICON_ERROR)
-            dlg_error.ShowModal()
-            dlg_error.Destroy()
+        if not self.check_continuum_model_exists():
+            return
+        if self.check_operation_in_progress():
             return
         
         # Remove drawd lines if they exist
@@ -1823,6 +2214,9 @@ class SpectraFrame(wx.Frame):
         self.canvas.draw()
     
     def on_change_active_spectrum(self, event):
+        if self.check_operation_in_progress():
+            return
+        
         # Remove current continuum from plot if exists
         self.remove_drawn_continuum_spectra()
         
@@ -1847,14 +2241,16 @@ class SpectraFrame(wx.Frame):
             i += 1
     
     def on_remove_fitted_continuum(self, event):
+        if self.check_operation_in_progress():
+            return
         self.remove_continuum_spectra()
     
     def on_fit_continuum(self, event):
-        if self.active_spectrum == None or len(self.active_spectrum.data['waveobs']) == 0:
-            dlg_error = wx.MessageDialog(self, "Spectra not loaded, there is nothing to fit.", 'Spectra not loaded', wx.OK | wx.ICON_ERROR)
-            dlg_error.ShowModal()
-            dlg_error.Destroy()
+        if not self.check_active_spectrum_exists():
             return
+        if self.check_operation_in_progress():
+            return
+        
         dlg = FitContinuumDialog(self, -1, "Properties for fitting continuum")
         dlg.ShowModal()
         
@@ -1872,6 +2268,7 @@ class SpectraFrame(wx.Frame):
             return
         
         self.update_progress(25)
+        self.operation_in_progress = True
         thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'in_continuum':in_continuum})
         thread.setDaemon(True)
         thread.start()
@@ -1902,24 +2299,21 @@ class SpectraFrame(wx.Frame):
     def on_fit_continuum_finish(self, nknots):
         self.draw_continuum_spectra()
         self.canvas.draw()
+        self.operation_in_progress = False
         self.flash_status_message("Continuum fitted with %s knots uniform Spline model." % str(nknots))
     
     def on_find_continuum(self, event):
-        if self.active_spectrum == None or len(self.active_spectrum.data['waveobs']) == 0:
-            dlg_error = wx.MessageDialog(self, "Spectra not loaded, there is nothing to find.", 'Spectra not loaded', wx.OK | wx.ICON_ERROR)
-            dlg_error.ShowModal()
-            dlg_error.Destroy()
+        if not self.check_active_spectrum_exists():
             return
-        if self.active_spectrum.continuum_model == None:
-            dlg_error = wx.MessageDialog(self, "Please, execute a general continuum fit first.", 'Continuum model not fitted', wx.OK | wx.ICON_ERROR)
-            dlg_error.ShowModal()
-            dlg_error.Destroy()
+        if not self.check_continuum_model_exists():
+            return
+        if self.check_operation_in_progress():
             return
         
         if self.not_saved["continuum"]:
-            dlg = wx.MessageDialog(self, 'Are you sure you want to find new continuum regions without saving the current ones?', 'Changes not saved', wx.YES|wx.NO|wx.ICON_QUESTION)
-            if dlg.ShowModal() != wx.ID_YES:
-                self.flash_status_message("Discarded.")
+            msg = "Are you sure you want to find new continuum regions without saving the current ones?"
+            title = "Changes not saved"
+            if not self.question(title, msg):
                 return
         
         dlg = FindContinuumDialog(self, -1, "Properties for finding continuum regions")
@@ -1943,7 +2337,8 @@ class SpectraFrame(wx.Frame):
         if in_segments and (self.region_widgets["segments"] == None or len(self.region_widgets["segments"]) == 0):
             wx.CallAfter(self.flash_status_message, "No segments found.")
             return
-    
+        
+        self.operation_in_progress = True
         thread = threading.Thread(target=self.on_find_continuum_thread, args=(resolution, sigma,), kwargs={'fixed_wave_step':fixed_wave_step, 'in_segments':in_segments, })
         thread.setDaemon(True)
         thread.start()
@@ -1988,26 +2383,71 @@ class SpectraFrame(wx.Frame):
         self.not_saved[elements] = True
         self.update_title()
         self.canvas.draw()
+        self.operation_in_progress = False
         self.flash_status_message("Automatic finding of continuum regions ended.")
-                    
+    
+    def on_determine_barycentric_vel(self, event):
+        dlg = DetermineBarycentricCorrectionDialog(self, -1, "Barycentric velocity determination", self.day, self.month, self.year, self.hours, self.minutes, self.seconds, self.ra_hours, self.ra_minutes, self.ra_seconds, self.dec_degrees, self.dec_minutes, self.dec_seconds)
+        dlg.ShowModal()
+        
+        if not dlg.action_accepted:
+            dlg.Destroy()
+            return
+        
+        day = self.text2float(dlg.day.GetValue(), 'Day value is not a valid one.')
+        month = self.text2float(dlg.month.GetValue(), 'Month value is not a valid one.')
+        year = self.text2float(dlg.year.GetValue(), 'Year value is not a valid one.')
+        
+        hours = self.text2float(dlg.hours.GetValue(), 'Hours value is not a valid one.')
+        minutes = self.text2float(dlg.minutes.GetValue(), 'Minutes value is not a valid one.')
+        seconds = self.text2float(dlg.seconds.GetValue(), 'Seconds value is not a valid one.')
+        
+        ra_hours = self.text2float(dlg.ra_hours.GetValue(), 'RA hours value is not a valid one.')
+        ra_minutes = self.text2float(dlg.ra_minutes.GetValue(), 'RA minutes value is not a valid one.')
+        ra_seconds = self.text2float(dlg.ra_seconds.GetValue(), 'RA seconds value is not a valid one.')
+        
+        dec_degrees = self.text2float(dlg.dec_degrees.GetValue(), 'DEC degrees value is not a valid one.')
+        dec_minutes = self.text2float(dlg.dec_minutes.GetValue(), 'DEC minutes value is not a valid one.')
+        dec_seconds = self.text2float(dlg.dec_seconds.GetValue(), 'DEC seconds value is not a valid one.')
+        
+        if None in [day, month, year, hours, minutes, seconds, ra_hours, ra_minutes, ra_seconds, dec_degrees, dec_minutes, dec_seconds]:
+            self.flash_status_message("Bad value.")
+            return
+        
+        self.day = day
+        self.month = month
+        self.year = year
+        self.hours = hours
+        self.minutes = minutes
+        self.seconds = seconds
+        self.ra_hours = ra_hours
+        self.ra_minutes = ra_minutes
+        self.ra_seconds = ra_seconds
+        self.dec_degrees = dec_degrees
+        self.dec_minutes = dec_minutes
+        self.dec_seconds = dec_seconds
+        
+        vh, vb = baryvel((year, month, day, hours, minutes, seconds))
+
+        ra = (ra_hours + ra_minutes/60 + ra_seconds/(60*60)) # hours
+        ra = ra * 360/24 # degrees
+        ra = ra * ((2*np.pi) / 360) # radians
+        dec = (dec_degrees + dec_minutes/60 + dec_seconds/(60*60)) # degrees
+        dec = dec * ((2*np.pi) / 360) # radians
+        
+        # Project velocity toward star
+        self.barycentric_vel = vb[0]*np.cos(dec)*np.cos(ra) + vb[1]*np.cos(dec)*np.sin(ra) + vb[2]*np.sin(dec) # km/s
+        self.barycentric_vel = np.round(self.barycentric_vel, 2) # km/s
+        
+        self.flash_status_message("Barycentric velocity determined: " + str(self.barycentric_vel) + " km/s")
+
+        
     def on_determine_rv(self, event):
-        if self.active_spectrum == None or len(self.active_spectrum.data['waveobs']) == 0:
-            dlg_error = wx.MessageDialog(self, "Spectra not loaded, there is nothing to determine.", 'Spectra not loaded', wx.OK | wx.ICON_ERROR)
-            dlg_error.ShowModal()
-            dlg_error.Destroy()
+        if not self.check_active_spectrum_exists():
             return
-        if self.active_spectrum.continuum_model == None:
-            dlg_error = wx.MessageDialog(self, "Please, execute a general continuum fit first.", 'Continuum model not fitted', wx.OK | wx.ICON_ERROR)
-            dlg_error.ShowModal()
-            dlg_error.Destroy()
+        if not self.check_continuum_model_exists():
             return
-        
-        self.update_numpy_arrays_from_widgets("lines")
-        
-        if len(self.regions["lines"]) == 0:
-            dlg_error = wx.MessageDialog(self, "Please, create or load a line list first.", 'Lines not present', wx.OK | wx.ICON_ERROR)
-            dlg_error.ShowModal()
-            dlg_error.Destroy()
+        if self.check_operation_in_progress():
             return
         
         dlg = DetermineRVDialog(self, -1, "Radial velocity determination", rv_limit=self.rv_limit, rv_step=self.rv_step)
@@ -2019,7 +2459,7 @@ class SpectraFrame(wx.Frame):
         
         rv_limit = self.text2float(dlg.rv_limit.GetValue(), 'Radial velocity limit is not a valid one.')
         rv_step = self.text2float(dlg.rv_step.GetValue(), 'Radial velocity step is not a valid one.')
-        renormalize = False #dlg.renormalize.GetValue()
+        renormalize = True #dlg.renormalize.GetValue()
         dlg.Destroy()
         
         if rv_limit == None or rv_step == None:
@@ -2028,30 +2468,82 @@ class SpectraFrame(wx.Frame):
         self.rv_limit = rv_limit
         self.rv_step = rv_step
         
+        self.operation_in_progress = True
         thread = threading.Thread(target=self.on_determine_rv_thread, args=(renormalize,))
         thread.setDaemon(True)
         thread.start()
 
     def on_determine_rv_thread(self, renormalize):
         wx.CallAfter(self.status_message, "Determining RV...")
-        xcoord, fluxes = build_radial_velocity_profile(self.active_spectrum.data, self.active_spectrum.continuum_model, self.regions["lines"], rv_limit=self.rv_limit, rv_step=self.rv_step, frame=self)
-        wx.CallAfter(self.on_determine_rv_finish, xcoord, fluxes, renormalize)
+        if self.linelist_rv == None:
+            self.linelist_rv = asciitable.read("input/rv/default.300_1100nm.rv.lst")
+        xcoord, fluxes, num_used_lines = build_radial_velocity_profile(self.active_spectrum.data, self.active_spectrum.continuum_model, self.linelist_rv, rv_limit=self.rv_limit, rv_step=self.rv_step, frame=self)
+        wx.CallAfter(self.on_determine_rv_finish, xcoord, fluxes, renormalize, num_used_lines)
     
-    def on_determine_rv_finish(self, xcoord, fluxes, renormalize):
+    def on_determine_rv_finish(self, xcoord, fluxes, renormalize, num_used_lines):
         # Modelize
-        model = model_radial_velocity_profile(xcoord, fluxes, renormalize=renormalize)
+        model, fluxes = model_radial_velocity_profile(xcoord, fluxes, renormalize=renormalize)
         self.active_spectrum.rv = np.round(model.mu, 2) # km/s
+        # A positive radial velocity indicates the distance between the objects is or was increasing;
+        # A negative radial velocity indicates the distance between the source and observer is or was decreasing.
         self.flash_status_message("Radial velocity determined: " + str(self.active_spectrum.rv) + " km/s")
+        self.operation_in_progress = False
         
-        dlg = RVProfileDialog(self, -1, "Radial velocity profile", xcoord, fluxes, model)
+        dlg = RVProfileDialog(self, -1, "Radial velocity profile", xcoord, fluxes, model, num_used_lines, self.rv_step)
         dlg.ShowModal()
 
-    def on_correct_rv(self, event):
-        if self.active_spectrum != None:
-            rv = self.active_spectrum.rv
+
+    def on_correct_barycentric_vel(self, event):
+        if not self.check_active_spectrum_exists():
+            return
+        if self.check_operation_in_progress():
+            return
+        
+        dlg = CorrectRVDialog(self, -1, "Barycentric velocity correction", self.barycentric_vel)
+        dlg.ShowModal()
+        
+        if not dlg.action_accepted:
+            dlg.Destroy()
+            return
+        
+        barycentric_vel = self.text2float(dlg.rv.GetValue(), 'Radial velocity value is not a valid one.')
+        in_regions = dlg.radio_button_regions.GetValue()
+        dlg.Destroy()
+        
+        if barycentric_vel == None:
+            self.flash_status_message("Bad value.")
+            return
+        
+        if in_regions:
+            for elements in ["lines", "continuum", "segments"]:
+                self.update_numpy_arrays_from_widgets(elements)
+                if len(self.regions[elements]) > 0:
+                    if elements == "lines":
+                        self.regions[elements] = correct_radial_velocity_regions(self.regions[elements], barycentric_vel, with_peak=True)
+                    else:
+                        self.regions[elements] = correct_radial_velocity_regions(self.regions[elements], barycentric_vel)
+                    self.draw_regions(elements)
+                    self.not_saved[elements] = False
         else:
-            rv = 0
-        dlg = CorrectRVDialog(self, -1, "Radial velocity correction", rv)
+            if not self.check_active_spectrum_exists():
+                return
+            self.active_spectrum.data = correct_radial_velocity(self.active_spectrum.data, barycentric_vel)
+            self.active_spectrum.not_saved = True
+            self.draw_active_spectrum()
+        self.remove_continuum_spectra()
+        self.remove_fitted_lines()
+        self.update_title()
+        self.canvas.draw()
+        self.flash_status_message("Applied a radial velocity correction of %s." % barycentric_vel)
+    
+    
+    def on_correct_rv(self, event):
+        if not self.check_active_spectrum_exists():
+            return
+        if self.check_operation_in_progress():
+            return
+        
+        dlg = CorrectRVDialog(self, -1, "Radial velocity correction", self.active_spectrum.rv)
         dlg.ShowModal()
         
         if not dlg.action_accepted:
@@ -2077,10 +2569,7 @@ class SpectraFrame(wx.Frame):
                     self.draw_regions(elements)
                     self.not_saved[elements] = False
         else:
-            if self.active_spectrum == None or len(self.active_spectrum.data['waveobs']) == 0:
-                dlg_error = wx.MessageDialog(self, "Spectra not loaded, there is nothing to determine.", 'Spectra not loaded', wx.OK | wx.ICON_ERROR)
-                dlg_error.ShowModal()
-                dlg_error.Destroy()
+            if not self.check_active_spectrum_exists():
                 return
             self.active_spectrum.data = correct_radial_velocity(self.active_spectrum.data, radial_vel)
             self.active_spectrum.not_saved = True
@@ -2091,10 +2580,17 @@ class SpectraFrame(wx.Frame):
         self.canvas.draw()
         self.flash_status_message("Applied a radial velocity correction of %s." % radial_vel)
     
-    
-    
-    
     def on_convert_to_nm(self, event):
+        if not self.check_active_spectrum_exists():
+            return
+        if self.check_operation_in_progress():
+            return
+        
+        msg = "This operation is going to divide all the wavelengths of the active spectrum by 10. Are you sure?"
+        title = "Confirmation"
+        if not self.question(title, msg):
+            return
+        
         self.active_spectrum.data['waveobs'] = self.active_spectrum.data['waveobs'] / 10
         self.active_spectrum.not_saved = True
         self.draw_active_spectrum()
@@ -2110,7 +2606,8 @@ class SpectraFrame(wx.Frame):
         self.flash_status_message("Wavelength divided by 10.")
     
     def on_synthesize(self, event):
-        
+        if self.check_operation_in_progress():
+            return
         if sys.modules.has_key('synthesizer'):
             if self.active_spectrum != None:
                 wave_base = np.round(np.min(self.active_spectrum.data['waveobs']), 2)
@@ -2219,7 +2716,7 @@ class SpectraFrame(wx.Frame):
             synth_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
             synth_spectra['waveobs'] = waveobs
             
-            synth_spectra['flux'] = synthesizer.spectrum(synth_spectra['waveobs']*10.0, atm_filename, linelist_file = "input/luke.300_1100nm.lst", abundances_file = "input/stdatom.dat", microturbulence_vel = microturbulence_vel, verbose=1)
+            synth_spectra['flux'] = synthesizer.spectrum(synth_spectra['waveobs']*10.0, atm_filename, linelist_file = "input/linelists/default.300_1100nm.lst", abundances_file = "input/abundances/SPECTRUM.stdatom.dat", microturbulence_vel = microturbulence_vel, verbose=1)
                 
             
             synth_spectra.sort(order='waveobs') # Make sure it is ordered by wavelength
@@ -2237,25 +2734,10 @@ class SpectraFrame(wx.Frame):
             if self.active_spectrum != None and self.active_spectrum.plot_id != None:
                 self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
             
-            # Count how many synthetic spectra there are with the same name and find the max identificator number
-            name = "Synth_" + str(teff) + "_" + str(logg) + "_"  + str(MH) + "_" + str(microturbulence_vel)
-            num_synthetic = 0
-            max_num = 0
-            for spec in self.spectra:
-                if spec.name.startswith(name):
-                    try:
-                        num = int(spec.name.split("-")[-1])
-                        if num > max_num:
-                            max_num = num
-                    except ValueError:
-                        pass
-                    num_synthetic += 1
-            
-            if num_synthetic > 0: # There are repeated names
-                name = name + "-" + str(max_num+1) # Add identificator number + 1
-            
-            self.active_spectrum = Spectrum(synth_spectra, name, color=self.spectra_color[self.spectra_color_id])
-            self.spectra_color_id = (self.spectra_color_id + 1) % len(self.spectra_color)
+            # Name: If it already exists, add a suffix
+            name = self.get_name("Synth_" + str(teff) + "_" + str(logg) + "_"  + str(MH) + "_" + str(microturbulence_vel))
+            color = self.get_color()
+            self.active_spectrum = Spectrum(synth_spectra, name, color=color)
             
             self.spectra.append(self.active_spectrum)
             self.active_spectrum.not_saved = True
@@ -2296,7 +2778,7 @@ along with Spectra Visual Editor.  If not, see <http://www.gnu.org/licenses/>.""
 
         info = wx.AboutDialogInfo()
 
-        info.SetIcon(wx.Icon('input/SVE.png', wx.BITMAP_TYPE_PNG))
+        info.SetIcon(wx.Icon('images/SVE.png', wx.BITMAP_TYPE_PNG))
         info.SetName('Spectra Visual Editor')
         info.SetVersion('2012.02.22')
         info.SetDescription(description)
@@ -2311,7 +2793,8 @@ along with Spectra Visual Editor.  If not, see <http://www.gnu.org/licenses/>.""
         wx.AboutBox(info)
     
     def flash_status_message(self, msg, flash_len_ms=3000, progress=True):
-        self.timeroff = wx.Timer(self)
+        if self.timeroff.IsRunning():
+            self.timeroff.Stop()
         
         self.statusbar.SetStatusText(msg)
         if progress:
@@ -2324,9 +2807,10 @@ along with Spectra Visual Editor.  If not, see <http://www.gnu.org/licenses/>.""
         self.timeroff.Start(flash_len_ms, oneShot=True)
         
     def status_message(self, msg):
-        if self.timeroff != None:
+        if self.timeroff.IsRunning():
             self.timeroff.Stop()
-            self.on_flash_status_off(None)
+            # Progress bar to zero
+            self.gauge.SetValue(pos=0)
         
         self.statusbar.SetStatusText(msg)
     
@@ -2334,7 +2818,6 @@ along with Spectra Visual Editor.  If not, see <http://www.gnu.org/licenses/>.""
         self.statusbar.SetStatusText('')
         # Progress bar to zero
         self.gauge.SetValue(pos=0)
-        self.timeroff = None
 
 
 ## Print usage

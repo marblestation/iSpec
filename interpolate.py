@@ -27,28 +27,30 @@ import matplotlib.pyplot as plt
 def get_flux(spectra, wavelength):
     # Objective wavelength
     objective_wavelength = wavelength
+    fluxes = spectra['flux']
+    waveobs = spectra['waveobs']
     
     # Find the index position of the first wave length equal or higher than the objective
-#    index = np.where(spectra['waveobs'] >= objective_wavelength)[0][0]
-    index = spectra['waveobs'].searchsorted(objective_wavelength)
+#    index = np.where(waveobs >= objective_wavelength)[0][0]
+    index = waveobs.searchsorted(objective_wavelength)
     
     total_points = len(spectra)
     if index == total_points:
         # DISCARD: Linear extrapolation using index-1 and index-2
-        # flux = spectra['flux'][index-1] + (objective_wavelength - spectra['waveobs'][index-1]) * ((spectra['flux'][index-1]-spectra['flux'][index-2])/(spectra['waveobs'][index-1]-spectra['waveobs'][index-2]))
+        # flux = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index-1]-fluxes[index-2])/(waveobs[index-1]-waveobs[index-2]))
         # JUST DUPLICATE:
-        flux = spectra['flux'][index-1]
+        flux = fluxes[index-1]
     elif index == 1 or index == total_points-1:
         # Linear interpolation between index and index-1
         # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
-        flux = spectra['flux'][index-1] + (objective_wavelength - spectra['waveobs'][index-1]) * ((spectra['flux'][index]-spectra['flux'][index-1])/(spectra['waveobs'][index]-spectra['waveobs'][index-1]))
-    elif index == 0 and spectra['waveobs'][index] != objective_wavelength:
+        flux = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index]-fluxes[index-1])/(waveobs[index]-waveobs[index-1]))
+    elif index == 0 and waveobs[index] != objective_wavelength:
         # DISCARD: Linear extrapolation using index+1 and index
-        # flux = spectra['flux'][index] + (objective_wavelength - spectra['waveobs'][index]) * ((spectra['flux'][index+1]-spectra['flux'][index])/(spectra['waveobs'][index+1]-spectra['waveobs'][index]))
+        # flux = fluxes[index] + (objective_wavelength - waveobs[index]) * ((fluxes[index+1]-fluxes[index])/(waveobs[index+1]-waveobs[index]))
         # JUST DUPLICATE:
-        flux = spectra['flux'][index]
-    elif spectra['waveobs'][index] == objective_wavelength:
-        flux = spectra['flux'][index]
+        flux = fluxes[index]
+    elif waveobs[index] == objective_wavelength:
+        flux = fluxes[index]
     else:
         # Bessel's Central-Difference Interpolation with 4 points
         #   p = [(x - x0) / (x1 - x0)]
@@ -63,18 +65,18 @@ def get_flux(spectra, wavelength):
         #  x2 = index + 1
         
         ## Array access optimization
-        flux_x_1 = spectra['flux'][index - 2]
-        wave_x0 = spectra['waveobs'][index-1]
-        flux_x0 = spectra['flux'][index - 1]
-        wave_x1 = spectra['waveobs'][index]
-        flux_x1 = spectra['flux'][index]
-        flux_x2 = spectra['flux'][index + 1]
+        flux_x_1 = fluxes[index - 2]
+        wave_x0 = waveobs[index-1]
+        flux_x0 = fluxes[index - 1]
+        wave_x1 = waveobs[index]
+        flux_x1 = fluxes[index]
+        flux_x2 = fluxes[index + 1]
         
         p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
         flux = flux_x0 + p * (flux_x1 - flux_x0) + (p * (p - 1) / 4) * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
         
         
-#    print flux, spectra['flux'][index], wavelength
+#    print flux, fluxes[index], wavelength
     return flux, index
 
 
