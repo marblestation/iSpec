@@ -67,7 +67,8 @@ cdef extern from "spectrum276e/spectrum.h":
         int flag
 
 cdef extern from "synthesizer_func.h":
-    int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, double microturbulence_vel, int verbose, int num_measures, double* waveobs, double *fluxes)
+    ctypedef void (*progressfunc)(double num, void *user_data)
+    int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, double microturbulence_vel, int verbose, int num_measures, double* waveobs, double *fluxes, progressfunc user_func, void *user_data)
     # Global variables
     cdef int Ntau
     cdef float **bkap
@@ -101,10 +102,17 @@ cdef extern from "synthesizer_func.h":
     cdef FILE *opout
     cdef linedata *oneline
 
+#### Callback
+def dummy_func(double num):
+    pass
+
+cdef void callback(double num, void *f):
+    (<object>f)(num)
+##############
 
 # waveobs in armstrong
 # microtturbulence velocity in km/s
-def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, char* atmosphere_model_file, char* linelist_file = "input/luke.lst", char* abundances_file = "input/stdatom.dat", double microturbulence_vel = 2.0, int verbose = 0):
+def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, char* atmosphere_model_file, char* linelist_file = "input/linelists/default.300_1100nm.lst", char* abundances_file = "input/abundances/default.stdatom.dat", double microturbulence_vel = 2.0, int verbose = 0, update_progress_func=None):
     if not os.path.exists(atmosphere_model_file):
         raise Exception("Atmosphere model file '%s' does not exists!" % atmosphere_model_file)
     if not os.path.exists(linelist_file):
@@ -146,16 +154,18 @@ def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, char* atmosphere_model_file
     mu = 1.0
     NI = 0
 
-    
-    
     cdef int num_measures = len(waveobs)
     cdef np.ndarray[np.double_t,ndim=1] fluxes = np.zeros(num_measures, dtype=float)
     if num_measures <= 1:
         # We need at least 2 wavelengths, if not return an zeroed result
         return fluxes
     
-    # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
-    synthesize_spectrum(atmosphere_model_file, linelist_file, abundances_file, microturbulence_vel, verbose, num_measures, <double*> waveobs.data, <double*> fluxes.data)
+    if update_progress_func==None:
+        # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
+        synthesize_spectrum(atmosphere_model_file, linelist_file, abundances_file, microturbulence_vel, verbose, num_measures, <double*> waveobs.data, <double*> fluxes.data, callback, <void*>dummy_func)
+    else:
+        # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
+        synthesize_spectrum(atmosphere_model_file, linelist_file, abundances_file, microturbulence_vel, verbose, num_measures, <double*> waveobs.data, <double*> fluxes.data, callback, <void*>update_progress_func)
     
     return fluxes
     

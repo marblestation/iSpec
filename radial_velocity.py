@@ -26,8 +26,16 @@ from pymodelfit import GaussianModel
 ## - For each point of each line region, get the spectra flux
 ## - The result of adding all these spectra fluxes will be a noisy base and a deep gaussian
 ## Return the radial velocity x coordenates and the normalized fluxes (relative intensities)
-def build_radial_velocity_profile(spectra, continuum, lines, rv_limit = 200, rv_step=0.5, frame=None):
+def build_radial_velocity_profile(spectra, continuum, lines, rv_lower_limit = -100, rv_upper_limit = 100, rv_step=0.5, frame=None):
     rv = 0 # km/s
+    
+    rv_lower_limit = int(rv_lower_limit)
+    rv_upper_limit = int(rv_upper_limit)
+    if rv_lower_limit >= rv_upper_limit:
+        raise Exception("Upper radial velocity limit should be greater than lower limit")
+    
+    if (np.abs(rv_lower_limit) + np.abs(rv_upper_limit)) <= 4*rv_step:
+        raise Exception("Radial velocity step too small for the established limits")
     
     min_wave = np.min(spectra['waveobs'])
     max_wave = np.max(spectra['waveobs'])
@@ -44,11 +52,12 @@ def build_radial_velocity_profile(spectra, continuum, lines, rv_limit = 200, rv_
     c = 299792458.0
     
     # Build a window with the maximum size as to store the biggest region
-    total_window = (2*rv_limit) / rv_step
+    total_window = (np.abs(rv_lower_limit)+np.abs(rv_upper_limit)) / rv_step
     total_window = int(np.ceil(total_window))
     fluxes = np.zeros(total_window)
     
-    delta_lambda = ((rv_limit*1000) / c)
+    lower_delta_lambda = ((rv_lower_limit*1000) / c)
+    upper_delta_lambda = ((rv_upper_limit*1000) / c)
     line_num = 0
     # For each point of each line region, get the flux of the spectra and sum it all
     for line in lines:
@@ -56,8 +65,8 @@ def build_radial_velocity_profile(spectra, continuum, lines, rv_limit = 200, rv_
         sindex = 0
         wave_peak = line['wave_peak']
         # Common sized window in km/s for all lines (but different in wavelength)
-        window_base = wave_peak + (wave_peak * -1*delta_lambda) # nm
-        window_top = wave_peak + (wave_peak * delta_lambda)   # nm
+        window_base = wave_peak + (wave_peak * lower_delta_lambda) # nm
+        window_top = wave_peak + (wave_peak * upper_delta_lambda)   # nm
         increment = (window_top - window_base) / total_window
         
         wavelength = window_base
@@ -81,7 +90,7 @@ def build_radial_velocity_profile(spectra, continuum, lines, rv_limit = 200, rv_
     
     #fluxes = fluxes/line_num # Average
     fluxes = fluxes/np.abs(np.sum(fluxes)) # Normalize (relative intensities)
-    xcoord = np.linspace( -1*rv_limit, rv_limit, total_window ) # z numbers from x to y
+    xcoord = np.linspace( rv_lower_limit, rv_upper_limit, total_window ) # z numbers from x to y
     
     return xcoord, fluxes, len(lines)
 

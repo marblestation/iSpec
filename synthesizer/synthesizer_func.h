@@ -51,5 +51,7 @@ memo reset;
 FILE *opout;
 linedata *oneline;
 
-int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, double microturbulence_vel, int verbose, int num_measures, const double waveobs[], double fluxes[]);
+typedef void (*progressfunc)(double num, void *user_data);
+
+int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, double microturbulence_vel, int verbose, int num_measures, const double waveobs[], double fluxes[], progressfunc user_func, void *user_data);
 

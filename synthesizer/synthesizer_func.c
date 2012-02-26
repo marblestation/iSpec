@@ -73,11 +73,12 @@ void setreset(int k);
 double dmax(double x, double y),dmin(double x, double y);
 int imax(int x, int y),imin(int x, int y);
 
-int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, double microturbulence_vel, int verbose, int num_measures, const double waveobs[], double fluxes[]) {
+int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, double microturbulence_vel, int verbose, int num_measures, const double waveobs[], double fluxes[], progressfunc user_func, void *user_data) {
     int i;
     int nline = 0;
     int nlist = 0;
-
+    
+    
     int flagw = verbose; // Verbose mode (1: True, 0: False)
     int flaga = 0;
     int flagG = 0;
@@ -266,6 +267,10 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
         
         fluxes[pos] = 1.0 - Depth;
         
+        if (pos % 100 == 0) {
+            user_func(((1.0*pos)/num_measures)*100.0, user_data);
+        }
+    
         pos++;        
     }
     fclose(qf);

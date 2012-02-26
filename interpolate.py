@@ -99,7 +99,7 @@ def generate_wavelength_grid(base_wave, top_wave, resolution, points_per_fwhm = 
 # Returns a new spectra with measures at the given xaxis wavelength
 # Interpolation is linear when there are not enough points and Bessel's 
 # Central-Difference Interpolation with 4 points for the rest
-def resample_spectra(spectra, xaxis):
+def resample_spectra(spectra, xaxis, frame=None):
     total_real_points = len(spectra)
     total_points = len(xaxis)
     
@@ -113,7 +113,11 @@ def resample_spectra(spectra, xaxis):
         if index > 4:
             from_index = index - 4
         if (i % 1000 == 0):
-            print "%.2f" % resampled_spectra['waveobs'][i]
+            if frame != None:
+                current_work_progress = (i*1.0 / total_points) * 100
+                frame.update_progress(current_work_progress)
+            else:
+                print "%.2f" % resampled_spectra['waveobs'][i]
     
     return resampled_spectra
 

@@ -19,11 +19,11 @@ import numpy as np
 import synthesizer
 from atmospheres import *
 
-modeled_layers_pack = load_modeled_layers_pack(filename='input/atmospheres/modeled_layers_pack.dump')
+modeled_layers_pack = load_modeled_layers_pack(filename='input/atmospheres/default.modeled_layers_pack.dump')
 
-teff_obj = 5725.0
+teff_obj = 5750.0
 logg_obj = 4.5
-MH_obj = 0.02
+MH_obj = 0.00
 
 valid_objective(modeled_layers_pack, teff_obj, logg_obj, MH_obj)
 layers = interpolate_atmosphere_layers(modeled_layers_pack, teff_obj, logg_obj, MH_obj)
@@ -31,8 +31,6 @@ atm_filename = write_atmosphere(teff_obj, logg_obj, MH_obj, layers)
 
 
 waveobs = np.arange(515.0, 520.0, 0.05)
-fluxes = synthesizer.spectrum(waveobs*10.0, atm_filename, verbose=1)
+fluxes = synthesizer.spectrum(waveobs*10.0, atm_filename, verbose=0)
 print fluxes
 os.remove(atm_filename)
-
-#1 eV = 8065.73 cm-1

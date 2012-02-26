@@ -42,13 +42,16 @@ def get_sigma(fwhm):
 #   1. Define a window based on the fwhm size
 #   2. Build a gaussian using the sigma value and the wavelength values of the spectra window
 #   3. Convolve the spectra window with the gaussian and save the convolved value
-def degrade_spectra_resolution(spectra, from_resolution, to_resolution):
+def degrade_spectra_resolution(spectra, from_resolution, to_resolution, frame=None):
     if from_resolution <= to_resolution:
         raise Exception("This method cannot deal with final resolutions that are equal or bigger than original")
 
     total_points = len(spectra['waveobs'])
     convolved_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
     convolved_spectra['waveobs'] = spectra['waveobs']
+    
+    if frame != None:
+        frame.update_progress(0)
     
     for i in np.arange(total_points):
         lambda_peak = spectra['waveobs'][i] # Current lambda (wavelength) to be modified
@@ -84,7 +87,11 @@ def degrade_spectra_resolution(spectra, from_resolution, to_resolution):
             convolved_spectra['flux'][i] = None
         
         if (i % 1000 == 0):
-            print "%.2f" % spectra['waveobs'][i]
+            if frame != None:
+                current_work_progress = (i*1.0 / total_points) * 100
+                frame.update_progress(current_work_progress)
+            else:
+                print "%.2f" % spectra['waveobs'][i]
         
     return convolved_spectra
 
