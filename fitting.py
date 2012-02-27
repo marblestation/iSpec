@@ -91,8 +91,9 @@ def fit_continuum(spectra, nknots=100):
     # Each point has different weigth depending on its error
     #~ weights = 1/spectra[filter_outliers]['err']
 
-    # Fit
+    # Fit aki
     continuum_model.fitData(spectra[filter_outliers]['waveobs'], spectra[filter_outliers]['flux'])
+    #continuum_model.fitData(spectra['waveobs'], spectra['flux'])
     
     return continuum_model
 

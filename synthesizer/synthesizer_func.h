@@ -15,41 +15,6 @@
     You should have received a copy of the GNU Affero General Public License
     along with Spectra.  If not, see <http://www.gnu.org/licenses/>.
 **/
-int Ntau;
-float **bkap;
-float **bkap2;
-float **bkap3;
-float **bkap4;
-double inc;
-
-int flagr;
-int flagc;
-int flagk;
-int flagg;
-int flagmgh;
-int flagI;
-int flagt;
-int flagp;
-int flagP;
-int flagu;
-int flagO;
-int flagC;
-int mghla;
-int mghlb;
-float *velgrad;
-double mu;
-int NI;
-// variables for isotopes
-double ra1H,ra2H,ra12C,ra13C,ra14N,ra15N,ra16O,ra17O,ra18O;
-double ra24Mg,ra25Mg,ra26Mg,ra28Si,ra29Si,ra30Si,ra40Ca,ra42Ca;
-double ra43Ca,ra44Ca,ra46Ca,ra48Ca,ra46Ti,ra47Ti,ra48Ti,ra49Ti;
-double ra50Ti;
-//memo reset;
-FILE *opout;
-//linedata *oneline;
-memo reset;
-FILE *opout;
-linedata *oneline;
 
 typedef void (*progressfunc)(double num, void *user_data);
 

@@ -69,38 +69,7 @@ cdef extern from "spectrum276e/spectrum.h":
 cdef extern from "synthesizer_func.h":
     ctypedef void (*progressfunc)(double num, void *user_data)
     int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, double microturbulence_vel, int verbose, int num_measures, double* waveobs, double *fluxes, progressfunc user_func, void *user_data)
-    # Global variables
-    cdef int Ntau
-    cdef float **bkap
-    cdef float **bkap2
-    cdef float **bkap3
-    cdef float **bkap4
-    cdef double inc
-    cdef int flagr
-    cdef int flagc
-    cdef int flagk
-    cdef int flagg
-    cdef int flagmgh
-    cdef int flagI
-    cdef int flagt
-    cdef int flagp
-    cdef int flagP
-    cdef int flagu
-    cdef int flagO
-    cdef int flagC
-    cdef int mghla
-    cdef int mghlb
-    cdef float *velgrad
-    cdef double mu
-    cdef int NI
-    # variables for isotopes
-    cdef double ra1H,ra2H,ra12C,ra13C,ra14N,ra15N,ra16O,ra17O,ra18O
-    cdef double ra24Mg,ra25Mg,ra26Mg,ra28Si,ra29Si,ra30Si,ra40Ca,ra42Ca
-    cdef double ra43Ca,ra44Ca,ra46Ca,ra48Ca,ra46Ti,ra47Ti,ra48Ti,ra49Ti
-    cdef double ra50Ti
-    cdef memo reset
-    cdef FILE *opout
-    cdef linedata *oneline
+    
 
 #### Callback
 def dummy_func(double num):

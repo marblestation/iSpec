@@ -32,8 +32,13 @@ import sys
 import getopt
 
 if os.path.exists("synthesizer.so"):
-    import synthesizer
-    from atmospheres import *
+    try:
+        import synthesizer
+        from atmospheres import *
+    except ImportError:
+        print "Spectra synthesizer not available"
+else:
+    print "Spectra synthesizer not available"
 
 
 # The recommended way to use wx with mpl is with the WXAgg backend.
@@ -1408,7 +1413,7 @@ class SpectraFrame(wx.Frame):
         self.Bind(wx.EVT_RADIOBUTTON, self.on_element_change, id=self.radio_button_segments.GetId())
 
         # Progress bar
-        self.gauge = wx.Gauge(self.panel, range=100)
+        self.gauge = wx.Gauge(self.panel, range=100, size=(100, 20), style=wx.GA_HORIZONTAL)
         
         self.stats = wx.ListCtrl(self.panel, -1, style=wx.LC_REPORT)
         self.stats.InsertColumn(0, 'Property')
@@ -1744,14 +1749,14 @@ class SpectraFrame(wx.Frame):
     def update_menu_active_spectrum(self):
         # Remove everything
         for i in np.arange(self.menu_active_spectrum.MenuItemCount):
-            self.menu_active_spectrum.Remove(i)
+            self.menu_active_spectrum.Remove(i+1)
         
         # Add as many options as spectra
         for i in np.arange(len(self.spectra)):
             if self.spectra[i] == None:
                 continue
             
-            spec_element = self.menu_active_spectrum.Append(i, self.spectra[i].name, kind=wx.ITEM_RADIO)
+            spec_element = self.menu_active_spectrum.Append(i+1, self.spectra[i].name, kind=wx.ITEM_RADIO)
             self.Bind(wx.EVT_MENU, self.on_change_active_spectrum, spec_element)
 
             if self.active_spectrum == self.spectra[i]:
@@ -1960,14 +1965,21 @@ class SpectraFrame(wx.Frame):
         
         self.spectra.remove(self.active_spectrum)
         self.axes.lines.remove(self.active_spectrum.plot_id)
+        
+        # Remove fitted continuum if it exists
+        if self.active_spectrum != None and self.active_spectrum.continuum_plot_id != None:
+            self.axes.lines.remove(self.active_spectrum.continuum_plot_id)
+            self.active_spectrum.continuum_plot_id = None
+            self.active_spectrum.continuum_model = None
+            self.active_spectrum.continuum_data = None
         # Remove fitted lines if they exist
         for region in self.region_widgets["lines"]:
-            if region.line_plot_id.has_key(self.active_spectrum):
+            if region.line_model.has_key(self.active_spectrum):
                 if region.line_plot_id[self.active_spectrum] != None:
                     self.axes.lines.remove(region.line_plot_id[self.active_spectrum])
-                region.line_plot_id.remove(self.active_spectrum)
-                region.line_model.remove(self.active_spectrum)
-                region.continuum_base_level.remove(self.active_spectrum)
+                del region.line_plot_id[self.active_spectrum]
+                del region.line_model[self.active_spectrum]
+                del region.continuum_base_level[self.active_spectrum]
         if len(self.spectra) == 0:
             self.active_spectrum = None
         else:
@@ -3133,7 +3145,7 @@ class SpectraFrame(wx.Frame):
         synth_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
         synth_spectra['waveobs'] = waveobs
         
-        synth_spectra['flux'] = synthesizer.spectrum(synth_spectra['waveobs']*10.0, atm_filename, linelist_file = "input/linelists/default.300_1100nm.lst", abundances_file = "input/abundances/default.stdatom.dat", microturbulence_vel = microturbulence_vel, verbose=0, update_progress_func=self.update_progress)
+        synth_spectra['flux'] = synthesizer.spectrum(synth_spectra['waveobs']*10.0, atm_filename, linelist_file = "input/linelists/default.300_1100nm.lst", abundances_file = "input/abundances/default.stdatom.dat", microturbulence_vel = microturbulence_vel, verbose=1, update_progress_func=self.update_progress)
             
         
         synth_spectra.sort(order='waveobs') # Make sure it is ordered by wavelength
@@ -3204,7 +3216,7 @@ along with Spectra Visual Editor.  If not, see <http://www.gnu.org/licenses/>.""
 
         info.SetIcon(wx.Icon('images/SVE.png', wx.BITMAP_TYPE_PNG))
         info.SetName('Spectra Visual Editor')
-        info.SetVersion('2012.02.22')
+        #info.SetVersion('2012.02.22')
         info.SetDescription(description)
         info.SetCopyright('(C) 2011 - 2012 Sergi Blanco Cuaresma')
         info.SetWebSite('http://www.marblestation.com')

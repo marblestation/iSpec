@@ -73,6 +73,43 @@ void setreset(int k);
 double dmax(double x, double y),dmin(double x, double y);
 int imax(int x, int y),imin(int x, int y);
 
+int Ntau;
+float **bkap;
+float **bkap2;
+float **bkap3;
+float **bkap4;
+double inc;
+
+int flagr;
+int flagc;
+int flagk;
+int flagg;
+int flagmgh;
+int flagI;
+int flagt;
+int flagp;
+int flagP;
+int flagu;
+int flagO;
+int flagC;
+int mghla;
+int mghlb;
+float *velgrad;
+double mu;
+int NI;
+// variables for isotopes
+double ra1H,ra2H,ra12C,ra13C,ra14N,ra15N,ra16O,ra17O,ra18O;
+double ra24Mg,ra25Mg,ra26Mg,ra28Si,ra29Si,ra30Si,ra40Ca,ra42Ca;
+double ra43Ca,ra44Ca,ra46Ca,ra48Ca,ra46Ti,ra47Ti,ra48Ti,ra49Ti;
+double ra50Ti;
+//memo reset;
+FILE *opout;
+//linedata *oneline;
+memo reset;
+FILE *opout;
+linedata *oneline;
+
+
 int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, double microturbulence_vel, int verbose, int num_measures, const double waveobs[], double fluxes[], progressfunc user_func, void *user_data) {
     int i;
     int nline = 0;
@@ -263,11 +300,12 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
         }
         taukap(wave,model,atom,line,nline,strgln,V,He,POP);
         Depth = depth(model,wave,Flux);
-        if(flagw == 1) printf("%9.3f %d %d\n",wave,nline,nlist);
+        
         
         fluxes[pos] = 1.0 - Depth;
         
         if (pos % 100 == 0) {
+            if(flagw == 1) printf("Wavelength %9.3f - Work completed %.2f\%\n", wave, ((1.0*pos)/num_measures)*100.0);
             user_func(((1.0*pos)/num_measures)*100.0, user_data);
         }
     

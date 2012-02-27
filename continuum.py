@@ -180,7 +180,7 @@ def find_continuum_on_regions(spectra, resolution, regions, log_filename=None, m
             
             
             if (i % 200 == 0):
-                print "%.2f" % wave_base
+                #print "%.2f" % wave_base
                 if frame != None:
                     current_work_progress = ((wave_base - min_wave) / total_work_progress) * 100
                     frame.update_progress(current_work_progress)
