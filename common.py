@@ -17,6 +17,7 @@
 """
 import asciitable
 from scipy.interpolate import UnivariateSpline
+import numpy.lib.recfunctions as rfn # Extra functions
 import numpy as np
 import matplotlib.pyplot as plt
 from astropysics import obstools
@@ -187,10 +188,55 @@ def read_spectra(spectra_filename):
                 spectra['err'] = np.zeros(len(spectra)) # Add a zeroed error column
         os.remove(tmp_spec)
     
+    # Filter invalid errors and fluxes
+    # TODO: Decide if we should request a valid 'error' column
+    #valid = (spectra['err'] > 0) & ~np.isnan(spectra['err']) & (spectra['flux'] > 0) & ~np.isnan(spectra['flux'])
+    #valid = (spectra['flux'] > 0) & ~np.isnan(spectra['flux'])
+    valid = ~np.isnan(spectra['flux'])
+
+    # Find duplicate wavelengths
+    dups, dups_index = find_duplicates(spectra, 'waveobs')
+
+    # Filter all duplicates except the first one
+    last_wave = None
+    for i in np.arange(len(dups)):
+        if last_wave == None:
+            last_wave = dups[i]['waveobs']
+            continue
+        if last_wave == dups[i]['waveobs']:
+            pos = dups_index[i]
+            valid[pos] = False
+        else:
+            # Do not filter the first duplicated value
+            last_wave = dups[i]['waveobs']
+
+    # Filter invalid and duplicated values
+    spectra = spectra[valid]
+
     spectra.sort(order='waveobs') # Make sure it is ordered by wavelength
-    
+
     return spectra
 
+# Find duplicates in a column of a recarray
+# This is a simplified version of:
+#   import numpy.lib.recfunctions as rfn 
+#   rfn.find_duplicates(...)
+def find_duplicates(a, key):
+    a = np.asanyarray(a).ravel()
+    # Get the sorting data (by selecting the corresponding field)
+    base = a[key]
+    # Get the sorting indices and the sorted data
+    sortidx = base.argsort()
+    sorteddata = base[sortidx]
+    # Compare the sorting data
+    flag = (sorteddata[:-1] == sorteddata[1:])
+    flag = np.concatenate(([False], flag))
+    # We need to take the point on the left as well (else we're missing it)
+    flag[:-1] = flag[:-1] + flag[1:]
+    duplicates = a[sortidx][flag]
+    duplicates_index = sortidx[flag]
+    return (duplicates, duplicates_index)
+    
 
 ## Write spectra to file
 def write_spectra(spectra, spectra_filename, compress=True):

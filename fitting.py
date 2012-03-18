@@ -78,24 +78,25 @@ def sigma_clip(data,sig=3,iters=1,varfunc=np.var,maout=False):
     else:
         return data[mask],mask.reshape(oldshape)
 
+### OLD version
+## Remove outliers and fits a uniform knot spline model with 100 knots
+## Returns the model
+#def fit_continuum(spectra, nknots=100):
+    ## Find outliers considering 3 sigma around the median
+    #flux_selected, filter_outliers = sigma_clip(spectra['flux'], sig=3, iters=10)
 
-# Remove outliers and fits a uniform knot spline model with 100 knots
-# Returns the model
-def fit_continuum(spectra, nknots=100):
-    # Find outliers considering 3 sigma around the median
-    flux_selected, filter_outliers = sigma_clip(spectra['flux'], sig=3, iters=10)
-
-    # Find continuum using a spline model with uniform knots and excluding outliers for the fit
-    continuum_model = UniformKnotSplineModel(nknots=nknots)
+    ## Find continuum using a spline model with uniform knots and excluding outliers for the fit
+    #continuum_model = UniformKnotSplineModel(nknots=nknots)
     
-    # Each point has different weigth depending on its error
-    #~ weights = 1/spectra[filter_outliers]['err']
+    ## Each point has different weigth depending on its error
+    ##~ weights = 1/spectra[filter_outliers]['err']
 
-    # Fit aki
-    continuum_model.fitData(spectra[filter_outliers]['waveobs'], spectra[filter_outliers]['flux'])
-    #continuum_model.fitData(spectra['waveobs'], spectra['flux'])
+    ## Fit aki
+    #continuum_model.fitData(spectra[filter_outliers]['waveobs'], spectra[filter_outliers]['flux'])
+    ##continuum_model.fitData(spectra['waveobs'], spectra['flux'])
     
-    return continuum_model
+    #return continuum_model
+
 
 # For a given point near the peak of a line, selects the window needed
 # for fitting a gaussian
@@ -145,7 +146,7 @@ def find_line_window(spectra, loc, smooth=2, window=1):
 # The continuum can be determined by multiplying per 2 the median and 
 # substracting the mean (the best aproximation tested)
 # or passing a previously calculated model
-def fit_line(spectra_slice, loc, continuum_model=21):
+def fit_line(spectra_slice, loc, sig=0.02, A=-0.025, continuum_model=21):
     model = GaussianModel()
     #~ cont = np.zeros(len(spectra_slice['waveobs']))
     #~ cont = continuum_model(spectra_slice['waveobs'])
@@ -156,8 +157,8 @@ def fit_line(spectra_slice, loc, continuum_model=21):
     conterr = 0
 
     model.mu = loc
-    model.sig = 0.02
-    model.A = -0.025
+    model.sig = sig
+    model.A = A
 
     #~ model.fitData(spectra_slice['waveobs'], spectra_slice['flux'] - cont, weights=1/spectra_slice['err'], fixedpars=['mu','sig','A'])
     model.fitData(spectra_slice['waveobs'], spectra_slice['flux'] - cont, fixedpars=[])

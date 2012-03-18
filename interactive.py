@@ -70,7 +70,7 @@ class FitContinuumDialog(wx.Dialog):
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
         
         self.text_nknots = wx.StaticText(self, -1, "Number of knots for a uniform spline fit: ", style=wx.ALIGN_LEFT)
-        self.nknots = wx.TextCtrl(self, -1, '20',  style=wx.TE_RIGHT)
+        self.nknots = wx.TextCtrl(self, -1, '1',  style=wx.TE_RIGHT)
         
         self.hbox.AddSpacer(10)
         self.hbox.Add(self.text_nknots, 0, border=3, flag=flags)
@@ -1057,7 +1057,7 @@ class SpectraFrame(wx.Frame):
         #self.ipython_thread.setDaemon(True)
         #self.ipython_thread.start()
         
-        self.spectra_colors = ('#0000FF', '#A52A2A', '#A020F0', '#FFA500', '#1E90FF', '#90EE90',  '#FFC0CB', '#7F7F7F', '#00FF00', '#000000',)
+        self.spectra_colors = ('#0000FF', '#A52A2A', '#A020F0', '#34764A', '#000000', '#90EE90', '#FFA500', '#1E90FF',   '#FFC0CB', '#7F7F7F', '#00FF00',)
         
         self.spectra = []
         self.active_spectrum = None
@@ -1335,7 +1335,7 @@ class SpectraFrame(wx.Frame):
         m_normalize_spectrum = menu_edit.Append(-1, "Continuum normalization", "Normalize spectrum")
         self.Bind(wx.EVT_MENU, self.on_continuum_normalization, m_normalize_spectrum)
         self.spectrum_function_items.append(m_normalize_spectrum)
-        m_cut_spectra = menu_edit.Append(-1, "Cut spectrum", "Reduce the wavelength range")
+        m_cut_spectra = menu_edit.Append(-1, "Wavelength range reduction", "Reduce the wavelength range")
         self.Bind(wx.EVT_MENU, self.on_cut_spectra, m_cut_spectra)
         self.spectrum_function_items.append(m_cut_spectra)
         m_convert_to_nm = menu_edit.Append(-1, "Convert to nanometers", "Divide wavelength by 10")
@@ -1820,14 +1820,14 @@ class SpectraFrame(wx.Frame):
             self.add_stats("Gaussian width (A)", "%.4f" % region.line_model[self.active_spectrum].A)
             self.add_stats("Gaussian standard deviation (sigma)", "%.4f" % region.line_model[self.active_spectrum].sig)
             self.add_stats("Gaussian base level (mean continuum)", "%.4f" % region.continuum_base_level[self.active_spectrum])
-            rms = np.mean(region.line_model[self.active_spectrum].residuals()) + np.std(region.line_model[self.active_spectrum].residuals())
+            rms = np.mean(np.abs(region.line_model[self.active_spectrum].residuals())) + np.std(np.abs(region.line_model[self.active_spectrum].residuals()))
             self.add_stats("Gaussian fit root mean squeare (RMS)", "%.4f" % rms)
         
         if self.active_spectrum.continuum_model != None:
             if num_points > 0:
                 mean_continuum = np.mean(self.active_spectrum.continuum_model(spectra_window['waveobs']))
                 self.add_stats("Continuum mean for the region", "%.4f" % mean_continuum)
-            rms = np.mean(self.active_spectrum.continuum_model.residuals()) + np.std(self.active_spectrum.continuum_model.residuals())
+            rms = np.mean(np.abs(self.active_spectrum.continuum_model.residuals())) + np.std(np.abs(self.active_spectrum.continuum_model.residuals()))
             self.add_stats("Continuum fit root mean square (RMS)", "%.4f" % rms)
             
         
@@ -2256,7 +2256,7 @@ class SpectraFrame(wx.Frame):
         to_resolution = self.text2float(dlg.to_resolution.GetValue(), 'Final resolution value is not a valid one.')
         dlg.Destroy()
         
-        if from_resolution == None or to_resolution == None or from_resolution <= to_resolution:
+        if from_resolution == None or to_resolution == None or from_resolution < to_resolution:
             self.flash_status_message("Bad value.")
             return
         
@@ -2274,7 +2274,7 @@ class SpectraFrame(wx.Frame):
     
     def on_degrade_resolution_thread(self, from_resolution, to_resolution):
         wx.CallAfter(self.status_message, "Degrading spectrum resolution...")
-        convolved_spectra = degrade_spectra_resolution(self.active_spectrum.data, from_resolution, to_resolution, frame=self)
+        convolved_spectra = convolve_spectra(self.active_spectrum.data, from_resolution, to_resolution, frame=self)
         wx.CallAfter(self.on_degrade_resolution_finnish, convolved_spectra, from_resolution, to_resolution)
     
     def on_degrade_resolution_finnish(self, convolved_spectra, from_resolution, to_resolution):
@@ -2300,7 +2300,7 @@ class SpectraFrame(wx.Frame):
         if self.check_operation_in_progress():
             return
         
-        dlg = CutSpectraDialog(self, -1, "Cut spectrum", np.round(np.min(self.active_spectrum.data['waveobs']), 2), np.round(np.max(self.active_spectrum.data['waveobs']), 2))
+        dlg = CutSpectraDialog(self, -1, "Wavelength range reduction", np.round(np.min(self.active_spectrum.data['waveobs']), 2), np.round(np.max(self.active_spectrum.data['waveobs']), 2))
         dlg.ShowModal()
         
         if not dlg.action_accepted:
@@ -2344,7 +2344,7 @@ class SpectraFrame(wx.Frame):
         if self.check_operation_in_progress():
             return
         
-        dlg = HomogenizeCombineSpectraDialog(self, -1, "Homogenize spectrum", np.round(np.min(self.active_spectrum.data['waveobs']), 2), np.round(np.max(self.active_spectrum.data['waveobs']), 2), self.active_spectrum.resolution)
+        dlg = HomogenizeCombineSpectraDialog(self, -1, "Homogenize & combine spectrum", np.round(np.min(self.active_spectrum.data['waveobs']), 2), np.round(np.max(self.active_spectrum.data['waveobs']), 2), self.active_spectrum.resolution)
         dlg.ShowModal()
         
         if not dlg.action_accepted:
@@ -2380,8 +2380,6 @@ class SpectraFrame(wx.Frame):
         thread.start()
         
     def on_combine_spectra_thread(self, wave_base, wave_top, resolution):
-        wx.CallAfter(self.status_message, "Determining RV...")
-        
         # Homogenize
         i = 0
         total = len(self.spectra)
@@ -3324,6 +3322,8 @@ if __name__ == '__main__':
     for path in filenames['spectra']:
         try:
             spectrum = read_spectra(path)
+            #wfilter = (spectrum['waveobs'] >= 516.0) & (spectrum['waveobs'] <= 519.0)
+            #spectrum = spectrum[wfilter]
         except Exception:
             print "Spectra file", path, "has an incompatible format!"
             sys.exit(2)
