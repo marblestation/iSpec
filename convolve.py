@@ -45,9 +45,11 @@ def get_sigma(fwhm):
 #   2. Build a gaussian using the sigma value and the wavelength values of the spectra window
 #   3. Convolve the spectra window with the gaussian and save the convolved value
 # If "to_resolution" is not specified or its equal to "from_resolution", then the spectra 
-# is convolved with the instrumental gaussian defined by "from_resolution"
+# is convolved with the instrumental gaussian defined by "from_resolution".
+# If "to_resolution" is specified, the convolution is made with the difference of
+# both resolutions in order to degrade the spectra.
 def convolve_spectra(spectra, from_resolution, to_resolution=None, frame=None):
-    if to_resolution != None and from_resolution < to_resolution:
+    if to_resolution != None and from_resolution <= to_resolution:
         raise Exception("This method cannot deal with final resolutions that are bigger than original")
 
     total_points = len(spectra)
@@ -75,7 +77,7 @@ def convolve_spectra(spectra, from_resolution, to_resolution=None, frame=None):
     bin_width = edges[1:] - edges[:-1]          # width per pixel
     
     # FWHM of the gaussian for the given resolution
-    if to_resolution == None or to_resolution == from_resolution:
+    if to_resolution == None:
         # Convolve using instrumental resolution (smooth but not degrade)
         fwhm = waveobs / from_resolution
     else:

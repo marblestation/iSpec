@@ -25,10 +25,10 @@ import numpy as np
 from multiprocessing import Pool
 from plotting import *
 from continuum import *
+from lines import *
 from common import *
 from radial_velocity import *
 from interpolate import *
-from fitting import *
 
 ## Homogenize spectra
 # - Corrects radial velocity

@@ -140,6 +140,228 @@ def prepare_output_dirs(selected_spectra):
         if not os.path.exists("output/" + spec['dirname']):
             mkdir_p("output/" + spec['dirname'])
 
+
+# Find duplicates in a column of a recarray
+# This is a simplified version of:
+#   import numpy.lib.recfunctions as rfn 
+#   rfn.find_duplicates(...)
+def find_duplicates(a, key):
+    a = np.asanyarray(a).ravel()
+    # Get the sorting data (by selecting the corresponding field)
+    base = a[key]
+    # Get the sorting indices and the sorted data
+    sortidx = base.argsort()
+    sorteddata = base[sortidx]
+    # Compare the sorting data
+    flag = (sorteddata[:-1] == sorteddata[1:])
+    flag = np.concatenate(([False], flag))
+    # We need to take the point on the left as well (else we're missing it)
+    flag[:-1] = flag[:-1] + flag[1:]
+    duplicates = a[sortidx][flag]
+    duplicates_index = sortidx[flag]
+    return (duplicates, duplicates_index)
+    
+
+# Reduces outliers considering the median value and 3 sigma (stdev), iterating several times 
+# From pymodelfit/utils/alg.py
+def sigma_clip(data,sig=3,iters=1,varfunc=np.var,meanfunc=np.mean,maout=False):
+    """
+    This performs the sigma clipping algorithm - i.e. the data will be iterated
+    over, each time rejecting points that are more than a specified number of
+    standard deviations discrepant.
+    
+    :param data: input data (will be flattened to 1D)
+    :type data: array-like
+    :param sig: 
+        The number of standard deviations to use as the clipping limit, or 
+        the square root of the variance limit.
+    :type sig: scalar
+    :param iters: 
+        The number of iterations to perform clipping for, or None to clip until
+        convergence is achieved
+    :param varfunc: 
+        The method to compute the variance about the mean. Should take a 1D array as
+        input and output a scalar. This will be compared to the square of the
+        data as if it is the variance.
+    :param meanfunc: 
+        The method to compute the mean. Should take a 1D array as
+        input and output a scalar. It can be used to select the median or the mean
+    :type varfunc: a callable
+    :param maout: If True, return a masked array (see return value for details).
+    :type maout: bool
+    
+    :returns: 
+        A :class:`numpy.ma.Maskedarray` with the rejected points masked, if
+        `maout` is True. If maout is False, a tuple (filtereddata,mask) is
+        returned where the mask is False for rejected points (and matches the
+        shape of the input).
+    
+    """
+    data = np.array(data,copy=False)
+    oldshape = data.shape
+    data = data.ravel()
+    
+    mask = np.ones(data.size,bool)
+    if iters is None:
+        lastrej = sum(mask)+1
+        while(sum(mask)!=lastrej):
+            lastrej = sum(mask)
+            do = data - meanfunc(data[mask])
+            mask = do*do <= varfunc(data[mask])*sig**2
+    else:
+        for i in range(iters):
+            do = data - meanfunc(data[mask])
+            mask = do*do <= varfunc(data[mask])*sig**2
+        
+    if maout:
+        return np.ma.MaskedArray(data,~mask,copy='maout'=='copy')
+    else:
+        return data[mask],mask.reshape(oldshape)
+
+
+# For an array of values, find local maximum values considering a window
+# of "span" elements
+def find_max_win(x, span=3):
+    ret = []
+    n = len(x)
+    dist = (span + 1) / 2;
+    m = 0;
+    for i in np.arange(n):
+        l_min = np.max([i-dist+1, 0])
+        l_max = i-1
+        r_min = i+1
+        r_max = np.min([i+dist-1, n-1])
+        is_max = 1;
+        # left side
+        j = l_min
+        while j <= l_max:
+            if (x[j] > x[i]):
+                is_max = 0;
+                break
+            j += 1
+        
+        # right side
+        if (is_max == 1):
+            j = r_min
+            while j <= r_max:
+                if (x[j] > x[i]):
+                    is_max = 0;
+                    break
+                j += 1
+        if (is_max == 1):
+            ret.append(i)
+    return np.asarray(ret)
+
+# For an array of values, find local minimum values considering a window
+# of "span" elements
+def find_min_win(x, span=3):
+    ret = []
+    n = len(x)
+    dist = (span + 1) / 2;
+    m = 0;
+    for i in np.arange(n):
+        l_min = np.max([i-dist+1, 0])
+        l_max = i-1
+        r_min = i+1
+        r_max = np.min([i+dist-1, n-1])
+        is_min = 1;
+        # left side
+        j = l_min
+        while j <= l_max:
+            if (x[j] < x[i]):
+                is_min = 0;
+                break
+            j += 1
+        
+        # right side
+        if (is_min == 1):
+            j = r_min
+            while j <= r_max:
+                if (x[j] < x[i]):
+                    is_min = 0;
+                    break
+                j += 1
+        if (is_min == 1):
+            ret.append(i)
+    return np.asarray(ret)
+
+
+# For an array of values, find the position of local maximum values considering only
+# the next and previous elements, except they have the same value.
+# In that case, the next/previous different value is checked. Therefore,
+# find_local_max([1,2,3,3,2,1,4,3]) would return [2, 3, 6]
+def find_local_max_values(x):
+    ret = []
+    n = len(x)
+    m = 0;
+    for i in np.arange(n):
+        l_min = np.max([i-1, 0])
+        #l_max = i-1
+        #r_min = i+1
+        #r_max = np.min([i+1, n-1])
+        r_min = np.min([i+1, n-1])
+        is_max = True
+        
+        # left side
+        j = l_min
+        # If value is equal, search for the last different value
+        while j >= 0 and x[j] == x[i]:
+            j -= 1
+        
+        if j < 0 or x[j] > x[i]:
+            is_max = False
+        
+        # right side
+        if is_max:
+            j = r_min
+            # If value is equal, search for the next different value
+            while j < n and x[j] == x[i]:
+                j += 1
+            if j >= n or x[j] > x[i]:
+                is_max = False
+        
+        if is_max:
+            ret.append(i)
+    return np.asarray(ret)
+
+# For an array of values, find the position of local maximum values considering only
+# the next and previous elements, except they have the same value.
+# In that case, the next/previous different value is checked. Therefore,
+# find_local_max([10,9,3,3,9,10,4,30]) would return [2, 3, 6]
+def find_local_min_values(x):
+    ret = []
+    n = len(x)
+    m = 0;
+    for i in np.arange(n):
+        l_min = np.max([i-1, 0])
+        #l_max = i-1
+        #r_min = i+1
+        #r_max = np.min([i+1, n-1])
+        r_min = np.min([i+1, n-1])
+        is_min = True
+        # left side
+        j = l_min
+        # If value is equal, search for the last different value
+        while j >= 0 and x[j] == x[i]:
+            j -= 1
+        
+        if j < 0 or x[j] < x[i]:
+            is_min = False
+        
+        # right side
+        if is_min:
+            j = r_min
+            # If value is equal, search for the next different value
+            while j < n and x[j] == x[i]:
+                j += 1
+            
+            if j >= n or x[j] < x[i]:
+                is_min = False
+        
+        if is_min:
+            ret.append(i)
+    return np.asarray(ret)
+
 ## Returns spectra from a filename:
 ## - if the file does not exists, checks if it exists a compressed version (gzip)
 ## - it the file exists, it can be automatically uncompressed (gzip)
@@ -149,11 +371,11 @@ def read_spectra(spectra_filename):
     if os.path.exists(spectra_filename) and spectra_filename[-3:] != ".gz":
         try:
             spectra = asciitable.read(table=spectra_filename, names=['waveobs', 'flux', 'err'])
-        except asciitable.core.InconsistentTableError, err:
+        except asciitable.core.InconsistentTableError as err:
             try:
                 # If it fails, try indicating that data starts at line 2 (original NARVAL spectra need this)
                 spectra = asciitable.read(table=spectra_filename, data_start=2, names=['waveobs', 'flux', 'err'])
-            except asciitable.core.InconsistentTableError, err:
+            except asciitable.core.InconsistentTableError as err:
                 # Try without error column
                 spectra_tmp = asciitable.read(table=spectra_filename, names=['waveobs', 'flux'])
                 spectra = np.recarray((len(spectra_tmp), ), dtype=[('waveobs', float),('flux', float),('err', float)])
@@ -175,11 +397,11 @@ def read_spectra(spectra_filename):
         
         try:
             spectra = asciitable.read(table=tmp_spec, names=['waveobs', 'flux', 'err'])
-        except asciitable.core.InconsistentTableError, err:
+        except asciitable.core.InconsistentTableError as err:
             try:
                 # If it fails, try indicating that data starts at line 2 (original NARVAL spectra need this)
                 spectra = asciitable.read(table=tmp_spec, data_start=2, names=['waveobs', 'flux', 'err'])
-            except asciitable.core.InconsistentTableError, err:
+            except asciitable.core.InconsistentTableError as err:
                 # Try without error column
                 spectra_tmp = asciitable.read(table=tmp_spec, names=['waveobs', 'flux'])
                 spectra = np.recarray((len(spectra_tmp), ), dtype=[('waveobs', float),('flux', float),('err', float)])
@@ -217,27 +439,6 @@ def read_spectra(spectra_filename):
 
     return spectra
 
-# Find duplicates in a column of a recarray
-# This is a simplified version of:
-#   import numpy.lib.recfunctions as rfn 
-#   rfn.find_duplicates(...)
-def find_duplicates(a, key):
-    a = np.asanyarray(a).ravel()
-    # Get the sorting data (by selecting the corresponding field)
-    base = a[key]
-    # Get the sorting indices and the sorted data
-    sortidx = base.argsort()
-    sorteddata = base[sortidx]
-    # Compare the sorting data
-    flag = (sorteddata[:-1] == sorteddata[1:])
-    flag = np.concatenate(([False], flag))
-    # We need to take the point on the left as well (else we're missing it)
-    flag[:-1] = flag[:-1] + flag[1:]
-    duplicates = a[sortidx][flag]
-    duplicates_index = sortidx[flag]
-    return (duplicates, duplicates_index)
-    
-
 ## Write spectra to file
 def write_spectra(spectra, spectra_filename, compress=True):
     #spectra_filename = "output/" + spectra_filename
@@ -270,11 +471,11 @@ def write_continuum_regions(continuum_regions, continuum_regions_filename):
 
 # Lines
 def read_line_regions(line_regions_filename):
-    line_regions = asciitable.read(table=line_regions_filename, comment='#', names=['wave_peak', 'wave_base', 'wave_top', 'note'])
+    line_regions = asciitable.read(table=line_regions_filename, comment='#', names=['wave_peak', 'wave_base', 'wave_top', 'note'], quotechar="\"")
     return line_regions
 
 def write_line_regions(line_regions, line_regions_filename):
-    asciitable.write(line_regions, output=line_regions_filename, delimiter='\t')
+    asciitable.write(line_regions, output=line_regions_filename, delimiter='\t', quotechar="\"")
 
 # Segments
 def read_segment_regions(segment_regions_filename):
@@ -285,6 +486,38 @@ def write_segment_regions(segment_regions, segment_regions_filename):
     asciitable.write(segment_regions, output=segment_regions_filename, delimiter='\t')
 
 
+
+def show_histogram(x, xlabel='Units', nbins=50):
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    # the histogram of the data
+    n, bins, patches = ax.hist(x, nbins, normed=0, facecolor='green', alpha=0.75)
+    # Mean
+    l = plt.axvline(x = np.mean(x), linewidth=1, color='red')
+    ax.annotate('Mean', xy=(np.mean(x), np.max(n)),  xycoords='data',
+        xytext=(10, 20), textcoords='offset points',
+        size=8,
+        bbox=dict(boxstyle="round", fc="0.8"),
+        arrowprops=dict(arrowstyle="->",
+                        connectionstyle="angle,angleA=0,angleB=90,rad=10",
+                        edgecolor='black'),
+        horizontalalignment='right', verticalalignment='top',
+        )
+    # Median
+    l = plt.axvline(x = np.median(x), linewidth=1, color='orange')
+    ax.annotate('Median', xy=(np.median(x), np.max(n)),  xycoords='data',
+        xytext=(10, 35), textcoords='offset points',
+        size=8,
+        bbox=dict(boxstyle="round", fc="0.8"),
+        arrowprops=dict(arrowstyle="->",
+                        connectionstyle="angle,angleA=0,angleB=90,rad=10",
+                        edgecolor='black'),
+        horizontalalignment='right', verticalalignment='top',
+        )
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel('Counts')
+    ax.grid(True)
+    plt.show()
 
 
 

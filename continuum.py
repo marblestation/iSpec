@@ -16,10 +16,117 @@
     along with Spectra.  If not, see <http://www.gnu.org/licenses/>.
 """
 #!/usr/bin/env python
-#import ipdb
+import ipdb
 import asciitable
 import numpy as np
 from plotting import *
+from common import *
+from convolve import *
+from pymodelfit import UniformCDFKnotSplineModel
+
+# Group the points in ranges of 1 nm (by default) and select the one with the maximum flux
+def find_max_value_per_wavelength_range(spectra, base_points, wave_range=1):
+    waveobs = spectra['waveobs']
+    flux = spectra['flux']    
+    wave_step = wave_range # nm
+    wave_base = np.min(waveobs)
+    wave_top = np.max(waveobs)
+    
+    # Group points in bins and use only the one with the higher flux
+    num_candidate_base_points = int((wave_top-wave_base)/wave_step) + 1
+    candidate_base_points = np.empty(num_candidate_base_points, dtype=int)
+    i = 0
+    while wave_base < wave_top:
+        positions = np.where((waveobs[base_points] >= wave_base) & (waveobs[base_points] <= wave_base + wave_step))[0]
+        
+        if len(positions) == 0:
+            candidate_base_points[i] = -9999.0
+        else:
+            # Find max for this bin
+            sortedi = np.argsort(flux[base_points[positions]])
+            candidate_base_points[i] = base_points[positions[sortedi[-1]]]
+        
+        #ipdb.set_trace()
+        wave_base += wave_step
+        i += 1
+    
+    candidate_base_points = candidate_base_points[candidate_base_points != -9999.0]
+    return candidate_base_points
+
+# Considering the diference in flux of the points with the next a previous, discard outliers (iterative process)
+# - Median value and 3*sigma is used as criteria for filtering
+def discard_outliers_for_continuum_candidates(spectra, candidate_base_points, sig=3, iters=10):
+    # The change between consecutive base points for continuum fitting should not be very strong,
+    # identify outliers (first and last base point are excluded in this operation):
+    flux_diff1 = (spectra['flux'][candidate_base_points][:-1] - spectra['flux'][candidate_base_points][1:]) / (spectra['waveobs'][candidate_base_points][:-1] - spectra['waveobs'][candidate_base_points][1:])
+    flux_diff2 = (spectra['flux'][candidate_base_points][1:] - spectra['flux'][candidate_base_points][:-1]) / (spectra['waveobs'][candidate_base_points][1:] - spectra['waveobs'][candidate_base_points][:-1])
+    # Recover first and last
+    flux_diff1 = np.asarray(flux_diff1.tolist() + [flux_diff2[-1]])
+    flux_diff2 = np.asarray([flux_diff1[0]] + flux_diff2.tolist())
+    # Identify outliers
+    flux_diff1_selected, not_outliers1 = sigma_clip(np.abs(flux_diff1), sig=sig, iters=iters, varfunc=np.var, meanfunc=np.median)
+    flux_diff2_selected, not_outliers2 = sigma_clip(np.abs(flux_diff2), sig=sig, iters=iters, varfunc=np.var, meanfunc=np.median)
+    outliers = np.logical_or(np.logical_not(not_outliers1), np.logical_not(not_outliers2))
+    # Ensure that first and last points are not filtered out in order to avoid
+    # having strange extrapolations in the edges of the spectrum because lack of points in the fit
+    outliers = np.asarray([False] + outliers[1:-1].tolist() + [False])
+    # Discard outliers
+    continuum_base_points = candidate_base_points[~outliers]
+    
+    return continuum_base_points
+
+# If no continuum points are specified for doing the fit:
+# 1) Determine max points by using a moving window of 3 elements (also used for line determination)
+# 2) Group the points in ranges of 1 nm and select the one with the maximum flux
+# 3) Considering the diference in flux of the points with the next a previous, discard outliers (iterative process)
+# 4) Fit a knot spline model with n knots, if it is not specified, there will be 1 knot every 10 nm
+#    - knots are located depending on the Cumulative Distribution Function, so there will be more
+#      where more continuum points exist
+# 5) Returns the fitted model
+def fit_continuum(spectra, nknots=None, continuum_base_points=None):
+    if continuum_base_points == None:
+        # Find max points in windows of 3 measures
+        candidate_base_points = find_local_max_values(spectra['flux'])
+        candidate_base_points = find_max_value_per_wavelength_range(spectra, candidate_base_points, wave_range=1)
+        candidate_base_points = discard_outliers_for_continuum_candidates(spectra, candidate_base_points, iters=10)
+        continuum_base_points = candidate_base_points
+    
+    if nknots == None:
+        # * 1 knot every 10 nm in average
+        nknots = np.max([1, int((np.max(spectra['waveobs']) - np.min(spectra['waveobs'])) / 10)])
+    
+    if len(spectra['waveobs'][continuum_base_points]) == 0:
+        raise Exception("Not enough points to fit")
+    
+    # UniformCDFKnotSplineModel:
+    # 1) Builds an histogram: # points in 2*nknots bins
+    #    - cdf: Number of points in that bin
+    #    - xcdf[n], xcdf[n+1]: Limits of a bin in wavelength
+    # 2) Filter bins with no points
+    # 3) Calculate the cumulative sum of # points and normalize it
+    # 4) Interpolate the wavelength in an homogeneus grid of normalized cumulative sum of points 
+    #    (from 0 to 1, divided in nknots)
+    #    - x=0.02 means wavelength where we reach the 2% of the total number of points
+    #    - x=0.98 means wavelength where we reach the 98% of the total number of points
+    # 5) Use those interpolated wavelengths for putting the knots, therefore we will have a knot
+    #    in those regions were there are an increment on the number of points (avoiding empty regions)
+    continuum_model = UniformCDFKnotSplineModel(nknots)
+    continuum_model.fitData(spectra['waveobs'][continuum_base_points], spectra['flux'][continuum_base_points])
+    
+    if np.any(np.isnan(continuum_model.residuals())):
+        raise Exception("Not enough points to fit")
+    
+    return continuum_model
+
+# Calculate flux for a wavelength grid using a given model
+def get_spectra_from_model(model, spectra_wave_grid):
+    total_points = len(spectra_wave_grid)
+    spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+    spectra['waveobs'] = spectra_wave_grid
+    spectra['flux'] = model(spectra['waveobs'])
+    spectra['err'] = np.zeros(total_points)
+    return spectra
+
 
 # Find regions of wavelengths where the fluxes seem to belong to the continuum.
 # - It analyses the spectra in regions

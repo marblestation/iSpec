@@ -18,7 +18,7 @@
 import numpy as np
 from common import *
 from interpolate import *
-from fitting import *
+from lines import *
 from pymodelfit import GaussianModel
 
 

@@ -31,14 +31,15 @@ import threading
 import sys
 import getopt
 
-if os.path.exists("synthesizer.so"):
+if os.path.exists("synthesizer.so") and os.path.exists("atmospheres.py"):
     try:
         import synthesizer
         from atmospheres import *
-    except ImportError:
+    except ImportError as e:
         print "Spectra synthesizer not available"
 else:
-    print "Spectra synthesizer not available"
+    #print "Spectra synthesizer not available"
+    pass
 
 
 # The recommended way to use wx with mpl is with the WXAgg backend.
@@ -51,13 +52,13 @@ from matplotlib.backends.backend_wxagg import \
 
 from common import *
 from continuum import *
-from fitting import *
+from lines import *
 from radial_velocity import *
 from convolve import *
 
 
 class FitContinuumDialog(wx.Dialog):
-    def __init__(self, parent, id, title):
+    def __init__(self, parent, id, title, nknots=1):
         wx.Dialog.__init__(self, parent, id, title)
         
         self.action_accepted = False
@@ -70,7 +71,7 @@ class FitContinuumDialog(wx.Dialog):
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
         
         self.text_nknots = wx.StaticText(self, -1, "Number of knots for a uniform spline fit: ", style=wx.ALIGN_LEFT)
-        self.nknots = wx.TextCtrl(self, -1, '1',  style=wx.TE_RIGHT)
+        self.nknots = wx.TextCtrl(self, -1, str(nknots),  style=wx.TE_RIGHT)
         
         self.hbox.AddSpacer(10)
         self.hbox.Add(self.text_nknots, 0, border=3, flag=flags)
@@ -430,6 +431,10 @@ class RVProfileDialog(wx.Dialog):
         num_items += 1
         self.stats.InsertStringItem(num_items, "FWHM (km/s)")
         self.stats.SetStringItem(num_items, 1, str(np.round(fwhm, 2)))
+        num_items += 1
+        self.stats.InsertStringItem(num_items, "Estimated resolution/resolving power (R)")
+        c = 299792458.0 # m/s
+        self.stats.SetStringItem(num_items, 1, str(np.int(c/(1000.0*np.round(fwhm, 2)))))
         num_items += 1
         self.stats.InsertStringItem(num_items, "Number of lines used")
         self.stats.SetStringItem(num_items, 1, str(num_used_lines))
@@ -1195,7 +1200,7 @@ class SpectraFrame(wx.Frame):
                 try:
                     rgba = matplotlib.colors.colorConverter.to_rgba(random_color)
                     good_color = True
-                except ValueError:
+                except ValueError as e:
                     pass
             
             free_color_found = random_color
@@ -1214,7 +1219,7 @@ class SpectraFrame(wx.Frame):
                     num = int(spec.name.split("-")[-1])
                     if num > max_num:
                         max_num = num
-                except ValueError:
+                except ValueError as e:
                     pass
                 num_repeated += 1
             
@@ -1922,7 +1927,7 @@ class SpectraFrame(wx.Frame):
                     self.canvas.draw()
                     self.flash_status_message("Opened file %s" % path)
                     action_ended = True
-                except Exception:
+                except Exception as e:
                     dlg_error = wx.MessageDialog(self, 'File %s does not have a compatible format.' % dlg.GetFilename(), 'File format incompatible', wx.OK | wx.ICON_ERROR)
                     dlg_error.ShowModal()
                     dlg_error.Destroy()
@@ -2186,7 +2191,7 @@ class SpectraFrame(wx.Frame):
         result = None
         try:
             result = float(value)
-        except ValueError:
+        except ValueError as e:
             dlg_error = wx.MessageDialog(self, msg, 'Bad value format', wx.OK | wx.ICON_ERROR)
             dlg_error.ShowModal()
             dlg_error.Destroy()
@@ -2256,7 +2261,7 @@ class SpectraFrame(wx.Frame):
         to_resolution = self.text2float(dlg.to_resolution.GetValue(), 'Final resolution value is not a valid one.')
         dlg.Destroy()
         
-        if from_resolution == None or to_resolution == None or from_resolution < to_resolution:
+        if from_resolution == None or to_resolution == None or from_resolution <= to_resolution:
             self.flash_status_message("Bad value.")
             return
         
@@ -2283,10 +2288,10 @@ class SpectraFrame(wx.Frame):
         self.active_spectrum.resolution = to_resolution
         
         # Remove current continuum from plot if exists
-        self.remove_drawn_continuum_spectra()
+        self.remove_continuum_spectra()
         
         # Remove current drawn fitted lines if they exist
-        self.remove_drawn_fitted_lines()
+        self.remove_fitted_lines()
         
         self.draw_active_spectrum()
         self.update_title()
@@ -2488,10 +2493,10 @@ class SpectraFrame(wx.Frame):
         self.active_spectrum.not_saved = True
         
         # Remove current continuum from plot if exists
-        self.remove_drawn_continuum_spectra()
+        self.remove_continuum_spectra()
         
         # Remove current drawn fitted lines if they exist
-        self.remove_drawn_fitted_lines()
+        self.remove_fitted_lines()
         
         self.draw_active_spectrum()
         self.update_title()
@@ -2525,7 +2530,7 @@ class SpectraFrame(wx.Frame):
         for region in self.region_widgets["lines"]:
             wave_base = region.get_wave_base()
             wave_top = region.get_wave_top()
-            loc = region.get_wave_peak()
+            mu = region.get_wave_peak()
             wave_filter = (self.active_spectrum.data['waveobs'] >= wave_base) & (self.active_spectrum.data['waveobs'] <= wave_top)
             spectra_window = self.active_spectrum.data[wave_filter]
         
@@ -2535,12 +2540,13 @@ class SpectraFrame(wx.Frame):
                 region.continuum_base_level[self.active_spectrum] = None
                 
                 # Fit
-                line_model, continuum_value, lineflux, ew = fit_line(spectra_window, loc, continuum_model=self.active_spectrum.continuum_model)
+                line_model = fit_line(spectra_window, self.active_spectrum.continuum_mode, mu)
+                continuum_value = continuum_model(spectra_window['waveobs'])
                 
                 # Save results
                 region.line_model[self.active_spectrum] = line_model
                 region.continuum_base_level[self.active_spectrum] = np.mean(continuum_value)
-            except Exception, e:
+            except Exception as e:
                 print "Error:", wave_base, wave_top, e
             
             current_work_progress = (i*1.0 / total_regions) * 100
@@ -2580,12 +2586,13 @@ class SpectraFrame(wx.Frame):
                 wave_filter = (self.active_spectrum.data['waveobs'] >= wave_base) & (self.active_spectrum.data['waveobs'] <= wave_top)
                 spectra_window = self.active_spectrum.data[wave_filter]
                 
-                spectra_line = get_spectra_from_model(region.line_model[self.active_spectrum], spectra_window['waveobs'])
+                # Get fluxes from model
+                line_fluxes = region.line_model[self.active_spectrum](spectra_window['waveobs'])
                 # Add the continuum base because the line_model has substracted it
-                spectra_line['flux'] += region.continuum_base_level[self.active_spectrum]
+                line_fluxes += region.continuum_base_level[self.active_spectrum]
                 
                 # zorder = 4, above the line region
-                line_plot_id = self.axes.plot(spectra_line['waveobs'], spectra_line['flux'], lw=1, color='red', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=4)[0]
+                line_plot_id = self.axes.plot(spectra_window['waveobs'], line_fluxes, lw=1, color='red', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=4)[0]
                 region.line_plot_id[self.active_spectrum] = line_plot_id
         self.canvas.draw()
     
@@ -2627,7 +2634,10 @@ class SpectraFrame(wx.Frame):
         if self.check_operation_in_progress():
             return
         
-        dlg = FitContinuumDialog(self, -1, "Properties for fitting continuum")
+        # Initial recommendation: 1 knot every 10 nm
+        nknots = np.max([1, int((np.max(self.active_spectrum.data['waveobs']) - np.min(self.active_spectrum.data['waveobs'])) / 10)])
+        
+        dlg = FitContinuumDialog(self, -1, "Properties for fitting continuum", nknots=nknots)
         dlg.ShowModal()
         
         if not dlg.action_accepted:
@@ -2668,10 +2678,15 @@ class SpectraFrame(wx.Frame):
             spectra_regions = self.active_spectrum.data
         
         if spectra_regions != None:
-            self.active_spectrum.continuum_model = fit_continuum(spectra_regions, nknots=nknots)
-            self.active_spectrum.continuum_data = get_spectra_from_model(self.active_spectrum.continuum_model, self.active_spectrum.data['waveobs'])
-            wx.CallAfter(self.on_fit_continuum_finish, nknots)
+            try:
+                self.active_spectrum.continuum_model = fit_continuum(spectra_regions, nknots=nknots)
+                self.active_spectrum.continuum_data = get_spectra_from_model(self.active_spectrum.continuum_model, self.active_spectrum.data['waveobs'])
+                wx.CallAfter(self.on_fit_continuum_finish, nknots)
+            except Exception as e:
+                self.operation_in_progress = False
+                wx.CallAfter(self.flash_status_message, "Not enough data points to fit, reduce the number of nknots or increase the spectra regions.")
         else:
+            self.operation_in_progress = False
             wx.CallAfter(self.flash_status_message, "No continuum regions found.")
     
     def on_fit_continuum_finish(self, nknots):
@@ -3189,8 +3204,10 @@ class SpectraFrame(wx.Frame):
         
     def on_about(self, event):
         description = """Spectra Visual Editor is a tool for the treatment of spectrum files in order to identify lines, continuum regions and determine radial velocities among other options.
-
-The generation of synthetic spectrum (if the corresponding module has been compiled) is done thanks to:
+"""
+        if sys.modules.has_key('synthesizer'):
+            description += """
+The generation of synthetic spectrum is done thanks to:
 
 SPECTRUM a Stellar Spectral Synthesis Program 
 (C) Richard O. Gray 1992 - 2010 Version 2.76e
@@ -3263,7 +3280,7 @@ def usage():
 def get_arguments():
     try:
         opts, args = getopt.getopt(sys.argv[1:], "cls", ["continuum=", "lines=", "segments="])
-    except getopt.GetoptError, err:
+    except getopt.GetoptError as err:
         print str(err)
         usage()
         sys.exit(2)
@@ -3324,7 +3341,7 @@ if __name__ == '__main__':
             spectrum = read_spectra(path)
             #wfilter = (spectrum['waveobs'] >= 516.0) & (spectrum['waveobs'] <= 519.0)
             #spectrum = spectrum[wfilter]
-        except Exception:
+        except Exception as e:
             print "Spectra file", path, "has an incompatible format!"
             sys.exit(2)
         spectra.append(spectrum)
@@ -3332,7 +3349,7 @@ if __name__ == '__main__':
     if filenames['continuum'] != None:
         try:
             continuum = read_continuum_regions(filenames['continuum'])
-        except Exception:
+        except Exception as e:
             print "Continuum file", filenames['continuum'], "has an incompatible format!"
             sys.exit(2)
         
@@ -3345,7 +3362,7 @@ if __name__ == '__main__':
     if filenames['lines'] != None:
         try:
             lines = read_line_regions(filenames['lines'])
-        except Exception:
+        except Exception as e:
             print "Lines file", filenames['lines'], "has an incompatible format!"
             sys.exit(2)
         
@@ -3365,7 +3382,7 @@ if __name__ == '__main__':
     if filenames['segments'] != None:
         try:
             segments = read_segment_regions(filenames['segments'])
-        except Exception:
+        except Exception as e:
             print "Segments file", filenames['segments'], "has an incompatible format!"
             sys.exit(2)
         
