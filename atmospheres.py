@@ -40,7 +40,6 @@ class ConstantValue:
 #                   mean_absorption_coeff = 4
 #                   radiation_preassure = 5
 #                   microturbulent_vel = 6 # In m/s
-#aki
 def read_stats_kurucz_atmospheres(atmosphere_models, required_layers=72):
     min_values_per_layer = 7
     read_atmosphere_data = False

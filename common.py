@@ -162,61 +162,28 @@ def find_duplicates(a, key):
     return (duplicates, duplicates_index)
     
 
-# Reduces outliers considering the median value and 3 sigma (stdev), iterating several times 
-# From pymodelfit/utils/alg.py
-def sigma_clip(data,sig=3,iters=1,varfunc=np.var,meanfunc=np.mean,maout=False):
-    """
-    This performs the sigma clipping algorithm - i.e. the data will be iterated
-    over, each time rejecting points that are more than a specified number of
-    standard deviations discrepant.
+# Reduces outliers considering the mean value and 3 sigma (3*stdev),
+# iterating until convergence
+def sigma_clipping(data, sig=3, meanfunc=np.mean):
+    last_total = len(data)
     
-    :param data: input data (will be flattened to 1D)
-    :type data: array-like
-    :param sig: 
-        The number of standard deviations to use as the clipping limit, or 
-        the square root of the variance limit.
-    :type sig: scalar
-    :param iters: 
-        The number of iterations to perform clipping for, or None to clip until
-        convergence is achieved
-    :param varfunc: 
-        The method to compute the variance about the mean. Should take a 1D array as
-        input and output a scalar. This will be compared to the square of the
-        data as if it is the variance.
-    :param meanfunc: 
-        The method to compute the mean. Should take a 1D array as
-        input and output a scalar. It can be used to select the median or the mean
-    :type varfunc: a callable
-    :param maout: If True, return a masked array (see return value for details).
-    :type maout: bool
-    
-    :returns: 
-        A :class:`numpy.ma.Maskedarray` with the rejected points masked, if
-        `maout` is True. If maout is False, a tuple (filtereddata,mask) is
-        returned where the mask is False for rejected points (and matches the
-        shape of the input).
-    
-    """
-    data = np.array(data,copy=False)
-    oldshape = data.shape
-    data = data.ravel()
-    
-    mask = np.ones(data.size,bool)
-    if iters is None:
-        lastrej = sum(mask)+1
-        while(sum(mask)!=lastrej):
-            lastrej = sum(mask)
-            do = data - meanfunc(data[mask])
-            mask = do*do <= varfunc(data[mask])*sig**2
-    else:
-        for i in range(iters):
-            do = data - meanfunc(data[mask])
-            mask = do*do <= varfunc(data[mask])*sig**2
+    # First iteration
+    stdev = np.std(data)
+    diff = data - meanfunc(data)
+    sfilter = np.abs(diff) < sig*stdev
+    current_total = len(data[sfilter])
+    # Continue iterating until convergence (no more points are removed)
+    while last_total > current_total:
+        #print current_total, stdev
+        last_total = current_total
         
-    if maout:
-        return np.ma.MaskedArray(data,~mask,copy='maout'=='copy')
-    else:
-        return data[mask],mask.reshape(oldshape)
+        stdev = np.std(data[sfilter])
+        diff = data - meanfunc(data[sfilter])
+        sfilter = np.abs(diff) < sig*stdev
+        
+        current_total = len(data[sfilter])
+    
+    return data[sfilter], sfilter
 
 
 # For an array of values, find local maximum values considering a window
@@ -484,7 +451,6 @@ def read_segment_regions(segment_regions_filename):
 
 def write_segment_regions(segment_regions, segment_regions_filename):
     asciitable.write(segment_regions, output=segment_regions_filename, delimiter='\t')
-
 
 
 def show_histogram(x, xlabel='Units', nbins=50):

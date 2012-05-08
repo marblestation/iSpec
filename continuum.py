@@ -26,6 +26,14 @@ from pymodelfit import UniformCDFKnotSplineModel
 
 # Group the points in ranges of 1 nm (by default) and select the one with the maximum flux
 def find_max_value_per_wavelength_range(spectra, base_points, wave_range=1):
+    return find_a_value_per_wavelength_range(spectra, base_points, wave_range=wave_range, median=False)
+
+# Group the points in ranges of 1 nm (by default) and select the one with the median flux
+def find_median_value_per_wavelength_range(spectra, base_points, wave_range=1):
+    return find_a_value_per_wavelength_range(spectra, base_points, wave_range=wave_range, median=True)
+
+# Group the points in ranges of 1 nm (by default) and select the one with the maximum (by default) or median flux
+def find_a_value_per_wavelength_range(spectra, base_points, wave_range=1, median=False):
     waveobs = spectra['waveobs']
     flux = spectra['flux']    
     wave_step = wave_range # nm
@@ -42,9 +50,15 @@ def find_max_value_per_wavelength_range(spectra, base_points, wave_range=1):
         if len(positions) == 0:
             candidate_base_points[i] = -9999.0
         else:
-            # Find max for this bin
-            sortedi = np.argsort(flux[base_points[positions]])
-            candidate_base_points[i] = base_points[positions[sortedi[-1]]]
+            if median:
+                # Find the median (instead of the max)
+                f = flux[base_points[positions]]
+                sortedi = np.argsort(np.abs(f - np.median(f))) # The smallest is the median (this is the best way to avoid floating-point imprecisions)
+                candidate_base_points[i] = base_points[positions[sortedi[0]]]
+            else:
+                # Find max for this bin
+                sortedi = np.argsort(flux[base_points[positions]])
+                candidate_base_points[i] = base_points[positions[sortedi[-1]]]
         
         #ipdb.set_trace()
         wave_base += wave_step
@@ -52,6 +66,7 @@ def find_max_value_per_wavelength_range(spectra, base_points, wave_range=1):
     
     candidate_base_points = candidate_base_points[candidate_base_points != -9999.0]
     return candidate_base_points
+
 
 # Considering the diference in flux of the points with the next a previous, discard outliers (iterative process)
 # - Median value and 3*sigma is used as criteria for filtering
@@ -63,10 +78,11 @@ def discard_outliers_for_continuum_candidates(spectra, candidate_base_points, si
     # Recover first and last
     flux_diff1 = np.asarray(flux_diff1.tolist() + [flux_diff2[-1]])
     flux_diff2 = np.asarray([flux_diff1[0]] + flux_diff2.tolist())
-    # Identify outliers
-    flux_diff1_selected, not_outliers1 = sigma_clip(np.abs(flux_diff1), sig=sig, iters=iters, varfunc=np.var, meanfunc=np.median)
-    flux_diff2_selected, not_outliers2 = sigma_clip(np.abs(flux_diff2), sig=sig, iters=iters, varfunc=np.var, meanfunc=np.median)
+    # Identify outliers    
+    flux_diff1_selected, not_outliers1 = sigma_clipping(flux_diff1, sig=sig, meanfunc=np.median)
+    flux_diff2_selected, not_outliers2 = sigma_clipping(flux_diff2, sig=sig, meanfunc=np.median)
     outliers = np.logical_or(np.logical_not(not_outliers1), np.logical_not(not_outliers2))
+    
     # Ensure that first and last points are not filtered out in order to avoid
     # having strange extrapolations in the edges of the spectrum because lack of points in the fit
     outliers = np.asarray([False] + outliers[1:-1].tolist() + [False])
@@ -75,21 +91,30 @@ def discard_outliers_for_continuum_candidates(spectra, candidate_base_points, si
     
     return continuum_base_points
 
-# If no continuum points are specified for doing the fit:
+
 # 1) Determine max points by using a moving window of 3 elements (also used for line determination)
-# 2) Group the points in ranges of 1 nm and select the one with the maximum flux
+# 2) Group the points:
+#     - In ranges of 0.1 nm and select the one with the median flux (usefull to avoid noisy peaks)
+#     - In ranges of 1 nm and select the one with the max flux (
 # 3) Considering the diference in flux of the points with the next a previous, discard outliers (iterative process)
-# 4) Fit a knot spline model with n knots, if it is not specified, there will be 1 knot every 10 nm
+def determine_continuum_base_points(spectra):
+    # Find max points in windows of 3 measures
+    candidate_base_points = find_local_max_values(spectra['flux'])
+    candidate_base_points = find_median_value_per_wavelength_range(spectra, candidate_base_points, wave_range=0.1)
+    candidate_base_points = find_max_value_per_wavelength_range(spectra, candidate_base_points, wave_range=1)
+    candidate_base_points = discard_outliers_for_continuum_candidates(spectra, candidate_base_points, iters=10)
+    continuum_base_points = candidate_base_points
+    return continuum_base_points
+
+
+# 1) If no continuum points are specified for doing the fit, they are determined
+# 2) Fit a knot spline model with n knots, if it is not specified, there will be 1 knot every 10 nm
 #    - knots are located depending on the Cumulative Distribution Function, so there will be more
 #      where more continuum points exist
-# 5) Returns the fitted model
+# 3) Returns the fitted model
 def fit_continuum(spectra, nknots=None, continuum_base_points=None):
     if continuum_base_points == None:
-        # Find max points in windows of 3 measures
-        candidate_base_points = find_local_max_values(spectra['flux'])
-        candidate_base_points = find_max_value_per_wavelength_range(spectra, candidate_base_points, wave_range=1)
-        candidate_base_points = discard_outliers_for_continuum_candidates(spectra, candidate_base_points, iters=10)
-        continuum_base_points = candidate_base_points
+        continuum_base_points = determine_continuum_base_points(spectra)
     
     if nknots == None:
         # * 1 knot every 10 nm in average
@@ -117,6 +142,47 @@ def fit_continuum(spectra, nknots=None, continuum_base_points=None):
         raise Exception("Not enough points to fit")
     
     return continuum_model
+
+# Interpolate continuum points from a given continuum spectra
+class MultiLinearInterpolationContinuumModel:
+    def __init__(self, continuum_spectra):
+        self.continuum_spectra = continuum_spectra
+    
+    def __call__(self, waveobs):
+        flux = np.interp(waveobs, self.continuum_spectra['waveobs'], self.continuum_spectra['flux'])
+        return flux
+
+
+# 1) If no continuum points are specified for doing the interpolation, they are determined
+# 2) Smooth (optional):
+#    - If resolution is specified, build a interpolated continuum spectra and smooth it and
+#      use those new points for the model
+# 3) Build a continuum model that will interpolate values using the specified points
+# 4) Returns the model
+def interpolate_continuum(spectra, continuum_base_points=None, smooth=True):
+    if continuum_base_points == None:
+        continuum_base_points = determine_continuum_base_points(spectra)
+    
+    if len(spectra['waveobs'][continuum_base_points]) == 0:
+        raise Exception("Not enough points to interpolate")
+    
+    if smooth:
+        from scipy.ndimage import gaussian_filter1d
+        
+        # In order to smooth, first we reproduce a complete continuum spectrum
+        # considering a uniform wavelength grid (separated by 1nm)
+        waveobs = np.arange(np.min(spectra['waveobs']), np.max(spectra['waveobs']), 1)
+        continuum_spectra = np.recarray((len(waveobs), ), dtype=[('waveobs', float),('flux', float),('err', float)])
+        continuum_spectra['waveobs'] = waveobs
+        # Linear interpolation
+        continuum_spectra['flux'] = np.interp(continuum_spectra['waveobs'], spectra[continuum_base_points]['waveobs'], spectra[continuum_base_points]['flux'])
+        continuum_spectra['err'] = 9999.9
+        
+        # Smooth (gaussian 1 sigma)
+        continuum_spectra['flux'] = gaussian_filter1d(continuum_spectra['flux'], 1, order=0)
+        return MultiLinearInterpolationContinuumModel(continuum_spectra)
+    else:
+        return MultiLinearInterpolationContinuumModel(spectra[continuum_base_points])
 
 # Calculate flux for a wavelength grid using a given model
 def get_spectra_from_model(model, spectra_wave_grid):
