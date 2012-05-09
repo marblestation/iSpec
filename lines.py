@@ -11,8 +11,10 @@ from radial_velocity import *
 from convolve import *
 import matplotlib.pyplot as plt
 from pymodelfit import UniformKnotSplineModel
-from pymodelfit import GaussianModel
-from pymodelfit import VoigtModel
+#from pymodelfit import GaussianModel
+#from pymodelfit import VoigtModel
+from mpfitmodels import GaussianModel
+from mpfitmodels import VoigtModel
 
 ########################################################################
 ## [START] LINE LISTS
@@ -248,35 +250,42 @@ def get_corrected_convolved_ew_snr(spectra, resolution):
 #      model.A < 0 and model.sig > 0
 #   The oposite indicates a potential bad fit
 # - model.mu outside the region used for the fitting it is also a symptom of bad fit
-def fit_gaussian(spectra_slice, continuum_model, mu, sig=0.02, A=-0.025, prioritize_deeper_fluxes=False):
+def fit_gaussian(spectra_slice, continuum_model, mu, sig=None, A=None, prioritize_deeper_fluxes=False):
     model = GaussianModel()
-    model.mu = mu
-    model.sig = sig
-    model.A = A
-    cont = continuum_model(spectra_slice['waveobs'])
-    conterr = 0
+    x = spectra_slice['waveobs']
+    y = spectra_slice['flux'] - continuum_model(spectra_slice['waveobs'])
+    min_flux = np.min(y)
+    
+    # Parameters estimators
+    if A == None:
+        A = min_flux
+    if sig == None:
+        sig = (x[-1] - x[0])/3.0
+
+    parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for i in np.arange(3)]
+    parinfo[0]['value'] = A # Only negative (absorption lines) and greater than the lowest point + 25%
+    parinfo[0]['limited'] = [True, True]
+    parinfo[0]['limits'] = [min_flux * 1.25, 0.]
+    parinfo[1]['value'] = sig # Only positives (absorption lines) and lower than the spectra slice
+    parinfo[1]['limited'] = [True, True]
+    parinfo[1]['limits'] = [0., x[-1] - x[0]]
+    parinfo[2]['value'] = mu # Peak only within the spectra slice
+    parinfo[2]['limited'] = [True, True]
+    parinfo[2]['limits'] = [x[0], x[-1]]
     
     if prioritize_deeper_fluxes:
         # More weight to the deeper fluxes
-        min_flux = np.min(spectra_slice['flux'])
         if min_flux < 0:
-            weights = spectra_slice['flux'] + -1*(min_flux) + 0.01 # Above zero
+            weights = y + -1*(min_flux) + 0.01 # Above zero
             weights = np.min(weights) / weights
         else:
-            weights = min_flux / spectra_slice['flux']
+            weights = min_flux / y
             
         # Priorizing deeper fluxes:
-        model.fitData(spectra_slice['waveobs'], spectra_slice['flux'] - cont, weights=weights, fixedpars=[])
+        model.fitData(x, y, weights=weights, parinfo=parinfo)
     else:
         # Without weigths:
-        model.fitData(spectra_slice['waveobs'], spectra_slice['flux'] - cont, fixedpars=[])
-    
-    # A gaussian with a positive A and a negative Sigma is exactly the same as the inverse
-    # - We inverse the signs since it is more intuitive for absorption lines (negative amplitudes)
-    #   and it will be easier to apply filtering rules after (such as, discard all gaussian/voigt with positive A)
-    if model.A > 0 and model.sig < 0:
-        model.A = -1 * model.A
-        model.sig = -1 * model.sig
+        model.fitData(x, y, parinfo=parinfo)
     
     return model
 
@@ -290,34 +299,44 @@ def fit_gaussian(spectra_slice, continuum_model, mu, sig=0.02, A=-0.025, priorit
 # - model.mu outside the region used for the fitting it is also a symptom of bad fit
 def fit_voigt(spectra_slice, continuum_model, mu, sig=0.02, A=-0.025, gamma=0.025, prioritize_deeper_fluxes=False):
     model = VoigtModel()
-    model.gamma = gamma
-    model.mu = mu
-    model.sig = sig
-    model.A = A
-    cont = continuum_model(spectra_slice['waveobs'])
-    conterr = 0
+    x = spectra_slice['waveobs']
+    y = spectra_slice['flux'] - continuum_model(spectra_slice['waveobs'])
+    min_flux = np.min(y)
+    
+    # Parameters estimators
+    if A == None:
+        A = min_flux
+    if sig == None:
+        sig = (x[-1] - x[0])/3.0
+    if gamma == None:
+        gamma = 0.025
+    
+    parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for i in np.arange(4)]
+    parinfo[0]['value'] = A # Only negative (absorption lines) and greater than the lowest point + 25%
+    parinfo[0]['limited'] = [True, True]
+    parinfo[0]['limits'] = [min_flux * 1.25, 0.]
+    parinfo[1]['value'] = sig # Only positives (absorption lines) and lower than the spectra slice
+    parinfo[1]['limited'] = [True, True]
+    parinfo[1]['limits'] = [0., x[-1] - x[0]]
+    parinfo[2]['value'] = mu # Peak only within the spectra slice
+    parinfo[2]['limited'] = [True, True]
+    parinfo[2]['limits'] = [x[0], x[-1]]
+    parinfo[3]['value'] = gamma # Only positives (absorption lines)
+    parinfo[3]['limited'] = [True, False]
+    parinfo[3]['limits'] = [0., 0.]
     
     if prioritize_deeper_fluxes:
         # More weight to the deeper fluxes
-        min_flux = np.min(spectra_slice['flux'])
         if min_flux < 0:
-            weights = spectra_slice['flux'] + -1*(min_flux) + 0.01 # Above zero
+            weights = y + -1*(min_flux) + 0.01 # Above zero
             weights = np.min(weights) / weights
         else:
-            weights = min_flux / spectra_slice['flux']
+            weights = min_flux / y
         # Priorizing deeper fluxes:
-        model.fitData(spectra_slice['waveobs'], spectra_slice['flux'] - cont, weights=weights, fixedpars=[])
+        model.fitData(x, y, weights=weights, parinfo=parinfo)
     else:
         # Without weigths:
-        model.fitData(spectra_slice['waveobs'], spectra_slice['flux'] - cont, fixedpars=[])
-    
-    # A voigt with a positive A, a negative Sigma and a negative gamma is exactly the same as the inverse
-    # - We inverse the signs since it is more intuitive for absorption lines (negative amplitudes)
-    #   and it will be easier to apply filtering rules after (such as, discard all gaussian/voigt with positive A)
-    if model.A > 0 and model.sig < 0 and model.gamma < 0:
-        model.A = -1 * model.A
-        model.sig = -1 * model.sig
-        model.gamma = -1 * model.gamma
+        model.fitData(x, y, parinfo=parinfo)
     
     return model
     
@@ -332,13 +351,15 @@ def fit_voigt(spectra_slice, continuum_model, mu, sig=0.02, A=-0.025, gamma=0.02
 #   The oposite indicates a potential bad fit
 # - For absorption lines fitted with voigt, model.gamma < 0 indicates strange wings and probably a bad fit
 # - model.mu outside the region used for the fitting it is also a symptom of bad fit
-def fit_line(spectra_slice, continuum_model, mu, sig=0.02, A=-0.025, gamma=0.025, discard_gaussian = False, discard_voigt = False, prioritize_deeper_fluxes=False):
+def fit_line(spectra_slice, continuum_model, mu, sig=None, A=None, gamma=None, discard_gaussian = False, discard_voigt = False, prioritize_deeper_fluxes=False):
     if not discard_gaussian:
         try:
             gaussian_model = fit_gaussian(spectra_slice, continuum_model, mu, sig=sig, A=A, prioritize_deeper_fluxes=prioritize_deeper_fluxes)
+            
             rms_gaussian = np.sqrt(np.sum(np.power(gaussian_model.residuals(), 2)) / len(gaussian_model.residuals()))
             mu_residual_gaussian = np.min([9999.0, calculate_mu_residual(spectra_slice, gaussian_model)]) # Use 9999.0 as maximum to avoid overflows
         except Exception as e:
+            print e.message
             rms_gaussian = 9999.0
             mu_residual_gaussian = 9999.0
             discard_gaussian = True
@@ -349,10 +370,12 @@ def fit_line(spectra_slice, continuum_model, mu, sig=0.02, A=-0.025, gamma=0.025
             rms_voigt = np.sqrt(np.sum(np.power(voigt_model.residuals(), 2)) / len(voigt_model.residuals()))
             mu_residual_voigt = np.min([9999.0, calculate_mu_residual(spectra_slice, voigt_model)]) # Use 9999.0 as maximum to avoid overflows
         except Exception as e:
+            print e.message
             rms_voigt = 9999.0
             mu_residual_voigt = 9999.0
             discard_voigt = True
-        
+    
+    
     # Mu (peak) inside the spectra region & Coherent parameters for an absorption line
     if not discard_gaussian and (gaussian_model.mu < spectra_slice['waveobs'][0] or gaussian_model.mu > spectra_slice['waveobs'][-1] or gaussian_model.A >= 0 or gaussian_model.sig < 0):
         discard_gaussian = True
@@ -360,6 +383,7 @@ def fit_line(spectra_slice, continuum_model, mu, sig=0.02, A=-0.025, gamma=0.025
     # Mu (peak) inside the spectra region & Coherent parameters for an absorption line
     if not discard_voigt and (voigt_model.mu < spectra_slice['waveobs'][0] or voigt_model.mu > spectra_slice['waveobs'][-1] or voigt_model.A >= 0 or voigt_model.sig < 0 or voigt_model.gamma < 0):
         discard_voigt = True
+    
     
     if (not discard_gaussian and not discard_voigt and rms_gaussian <= rms_voigt) or (not discard_gaussian and discard_voigt):
         return gaussian_model, rms_gaussian, mu_residual_gaussian
@@ -541,7 +565,7 @@ def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_dep
         fitting_not_possible = False
         if accepted_for_fitting[i]:
             try:
-                line_model, rms, mu_residual = fit_line(spectra[new_base:new_top+1], continuum_model, linemasks['wave_peak'][i], sig=0.02, A=-0.025, gamma=0.025, discard_gaussian = discard_gaussian, discard_voigt = discard_voigt, prioritize_deeper_fluxes = prioritize_deeper_fluxes)
+                line_model, rms, mu_residual = fit_line(spectra[new_base:new_top+1], continuum_model, linemasks['wave_peak'][i], discard_gaussian = discard_gaussian, discard_voigt = discard_voigt, prioritize_deeper_fluxes = prioritize_deeper_fluxes)
                 linemasks['mu'][i] = line_model.mu
                 linemasks['sig'][i] = line_model.sig
                 linemasks['A'][i] = line_model.A
@@ -563,7 +587,8 @@ def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_dep
                 linemasks['relative_depth_fit'][i] = ((continuum - (flux + flux_from_top_base_point_to_continuum)) / continuum)
                 
                 # Equivalent Width
-                linemasks['integrated_flux'][i] = -1 * line_model.integrate(spectra['waveobs'][new_base], spectra['waveobs'][new_top])
+                #linemasks['integrated_flux'][i] = -1 * line_model.integrate(spectra['waveobs'][new_base], spectra['waveobs'][new_top])
+                linemasks['integrated_flux'][i] = 1 # TODO: integrate method in mpfitmodels
                 linemasks['ew'][i] = linemasks['integrated_flux'][i] / np.mean(continuum_model(spectra['waveobs'][new_base:new_top+1]))
                 # RMS
                 linemasks['rms'][i] = rms
@@ -715,6 +740,7 @@ def build_fitted_spectrum(waveobs, continuum_model, lines):
     for line in lines:
         if (i % 100) == 0:
             print "%.2f%%" % (((i*1.0)/num_lines) * 100)
+        
         if line['gamma'] == 9999.0:
             mu = line['mu']
             A = line['A']
@@ -730,7 +756,7 @@ def build_fitted_spectrum(waveobs, continuum_model, lines):
             # Build the Voigt corresponding to the line
             if sig == 0:
                 # Equivalent to a Lorentzian model
-                line_flux = A*gamma/pi/(waveobs*waveobs - 2*waveobs*mu+mu*mu+gamma*gamma)
+                line_flux = A*gamma/np.pi/(waveobs*waveobs - 2*waveobs*mu+mu*mu+gamma*gamma)
             else:
                 # Voigt model (Gaussian and Lorentzian)
                 from scipy.special import wofz
@@ -900,7 +926,7 @@ if __name__ == '__main__':
     ### Line detection and fitting example:
     print "Reading spectrum..."
     #star, resolution = "/home/marble/Downloads/HD146233/Narval/narval_hd146233_100312.s", 75000
-    #star, resolution = "input/L082N03_spec_norm/05oct08/sp2_Normal/004_vesta_001.s", 75000
+    star, resolution = "input/L082N03_spec_norm/05oct08/sp2_Normal/004_vesta_001.s", 75000
     #star, resolution = "/home/marble/Downloads/HD146233/UVES/hd146233_uves.txt", 47000
     #star, resolution = "input/test/observed_arcturus.s.gz", 47000
     #star, resolution = "input/test/observed_mu_cas_a.s.gz", 47000
@@ -923,16 +949,16 @@ if __name__ == '__main__':
     find_continuum_by_spline_fitting = np.logical_not(find_continuum_by_interpolating_base_points)
     
     #############################
-    # Telluric lines: constant continuum at 1, no filtering
-    star, resolution = "input/telluric/standard_atm_air.s.gz", 100000
-    ## Smooth spectra using the instrumental resolution
-    normalize = False
-    smooth_spectra = False
-    nknots_factor = 3
+    ## Telluric lines: constant continuum at 1, no filtering
+    #star, resolution = "input/telluric/standard_atm_air.s.gz", 100000
+    ### Smooth spectra using the instrumental resolution
+    #normalize = False
+    #smooth_spectra = False
+    #nknots_factor = 3
     
-    find_continuum_by_interpolating_base_points = True
-    smooth_continuum_interpolation = False
-    find_continuum_by_spline_fitting = np.logical_not(find_continuum_by_interpolating_base_points)
+    #find_continuum_by_interpolating_base_points = True
+    #smooth_continuum_interpolation = False
+    #find_continuum_by_spline_fitting = np.logical_not(find_continuum_by_interpolating_base_points)
     #############################
     
     ## Reading spectra
@@ -1137,9 +1163,12 @@ if __name__ == '__main__':
             plt.plot(spectra['waveobs'], corrected_convolved_ew_snr) # green
             plt.show()
         else:
+            #fitted_spectra = build_fitted_spectrum(waveobs, continuum_model, linemasks[~discarded][0:180])
+            #fitted_spectra = build_fitted_spectrum(waveobs, continuum_model, linemasks[~discarded][183:184])
             fig = plt.figure()
             plt.plot(spectra['waveobs'], original_spectra['flux'])
             plt.plot(spectra['waveobs'], continuum_model(spectra['waveobs']))
+            #plt.plot(spectra['waveobs'][2451:2458], original_spectra['flux'][2451:2458])
             plt.plot(fitted_spectra['waveobs'], fitted_spectra['flux'])
             plt.scatter(spectra['waveobs'][peaks], original_spectra['flux'][peaks], c='red')
             plt.scatter(spectra['waveobs'][base_points], original_spectra['flux'][base_points], c='green')
@@ -1192,6 +1221,15 @@ if __name__ == '__main__':
     #trend.fitData(linemasks[~discarded]['wave_peak'], R[~discarded])
     #plt.scatter(linemasks[~discarded]['wave_peak'], R[~discarded], s=4)
     #plt.plot(linemasks[~discarded]['wave_peak'], trend(linemasks[~discarded]['wave_peak']), color="red", linewidth=3)
+    #plt.xlabel('Wavelength peak')
+    #plt.ylabel('Resolving power')
+    #plt.show()
+    
+    #from pymodelfit import LinearModel
+    #trend = LinearModel()
+    #trend.fitData(linemasks[~rejected_by_outlier_R]['wave_peak'], R[~rejected_by_outlier_R])
+    #plt.scatter(linemasks[~rejected_by_outlier_R]['wave_peak'], R[~rejected_by_outlier_R], s=4)
+    #plt.plot(linemasks[~rejected_by_outlier_R]['wave_peak'], trend(linemasks[~rejected_by_outlier_R]['wave_peak']), color="red", linewidth=3)
     #plt.xlabel('Wavelength peak')
     #plt.ylabel('Resolving power')
     #plt.show()
