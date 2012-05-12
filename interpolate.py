@@ -97,27 +97,43 @@ def generate_wavelength_grid(base_wave, top_wave, resolution, points_per_fwhm = 
     return xaxis
 
 # Returns a new spectra with measures at the given xaxis wavelength
-# Interpolation is linear when there are not enough points and Bessel's 
-# Central-Difference Interpolation with 4 points for the rest
-def resample_spectra(spectra, xaxis, frame=None):
-    total_real_points = len(spectra)
+# Interpolation is completely linear by default (fastest option) but a Bessel's 
+# Central-Difference Interpolation with 4 points can be activated by 
+# specifying "linear=False", in that case interpolation is linear only
+# when there are not enough points (i.e. beginning/end of spectra)
+def resample_spectra(spectra, xaxis, linear=True, frame=None):
     total_points = len(xaxis)
     
-    resampled_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-    resampled_spectra['waveobs'] = xaxis
-     
-    from_index = 0 # Optimization: discard regions already processed
-    for i in np.arange(total_points):
-        resampled_spectra['flux'][i], index = get_flux(spectra[from_index:], resampled_spectra['waveobs'][i])
-        resampled_spectra['err'][i] = -999.9 # TODO: Calculate errors (propagation or interpolation?)
-        if index > 4:
-            from_index = index - 4
-        if (i % 1000 == 0):
-            if frame != None:
-                current_work_progress = (i*1.0 / total_points) * 100
-                frame.update_progress(current_work_progress)
-            else:
-                print "%.2f" % resampled_spectra['waveobs'][i]
+    if linear:
+        if frame != None:
+            current_work_progress = 10.0
+            frame.update_progress(current_work_progress)
+        resampled_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+        resampled_spectra['waveobs'] = xaxis
+        resampled_spectra['flux'] = np.interp(xaxis, spectra['waveobs'], spectra['flux'])
+        if frame != None:
+            current_work_progress = 90.0
+            frame.update_progress(current_work_progress)
+    else:
+        resampled_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+        resampled_spectra['waveobs'] = xaxis
+         
+        from_index = 0 # Optimization: discard regions already processed
+        for i in np.arange(total_points):
+            resampled_spectra['flux'][i], index = get_flux(spectra[from_index:], resampled_spectra['waveobs'][i])
+            if index > 4:
+                from_index = index - 4
+            if (i % 1000 == 0):
+                if frame != None:
+                    current_work_progress = np.min([(i*1.0 / total_points) * 100, 90.0])
+                    frame.update_progress(current_work_progress)
+                else:
+                    print "%.2f" % resampled_spectra['waveobs'][i]
     
+    resampled_spectra['err'] = np.interp(xaxis, spectra['waveobs'], spectra['err'])
+    if frame != None:
+        current_work_progress = 100.0
+        frame.update_progress(current_work_progress)
     return resampled_spectra
+
 

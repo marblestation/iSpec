@@ -67,10 +67,25 @@ class FitContinuumDialog(wx.Dialog):
         
         flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
         
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.text_method = wx.StaticText(self, -1, "Method: ", style=wx.ALIGN_LEFT)
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_method, 0, border=3, flag=flags)
+        
+        self.vbox2 = wx.BoxSizer(wx.VERTICAL)
+        self.radio_button_splines = wx.RadioButton(self, -1, 'Splines fitting', style=wx.RB_GROUP)
+        self.vbox2.Add(self.radio_button_splines, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
+        self.radio_button_interpolation = wx.RadioButton(self, -1, 'Interpolation')
+        self.vbox2.Add(self.radio_button_interpolation, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
+        self.radio_button_splines.SetValue(True)
+        self.hbox.Add(self.vbox2, 0, border=3, flag=flags)
+        
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+        
         ### Standard deviation
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
         
-        self.text_nknots = wx.StaticText(self, -1, "Number of knots for a uniform spline fit: ", style=wx.ALIGN_LEFT)
+        self.text_nknots = wx.StaticText(self, -1, "Number of splines: ", style=wx.ALIGN_LEFT)
         self.nknots = wx.TextCtrl(self, -1, str(nknots),  style=wx.TE_RIGHT)
         
         self.hbox.AddSpacer(10)
@@ -163,8 +178,9 @@ class FindContinuumDialog(wx.Dialog):
         self.action_accepted = True
         self.Close()
 
-class CorrectRVDialog(wx.Dialog):
-    def __init__(self, parent, id, title, rv):
+class CorrectVelocityDialog(wx.Dialog):
+    def __init__(self, parent, id, vel_type, rv):
+        title = vel_type.capitalize() + " velocity correction"
         wx.Dialog.__init__(self, parent, id, title)
         
         self.action_accepted = False
@@ -176,7 +192,7 @@ class CorrectRVDialog(wx.Dialog):
         ### RV
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
         
-        self.text_rv = wx.StaticText(self, -1, "Radial velocity (km/s): ", style=wx.ALIGN_LEFT)
+        self.text_rv = wx.StaticText(self, -1, vel_type.capitalize() + " velocity (km/s): ", style=wx.ALIGN_LEFT)
         self.rv = wx.TextCtrl(self, -1, str(rv),  style=wx.TE_RIGHT)
         
         self.hbox.AddSpacer(10)
@@ -211,7 +227,7 @@ class CorrectRVDialog(wx.Dialog):
         self.action_accepted = True
         self.Close()
 
-class DetermineRVDialog(wx.Dialog):
+class DetermineVelocityDialog(wx.Dialog):
     def __init__(self, parent, id, title, rv_upper_limit, rv_lower_limit, rv_step):
         wx.Dialog.__init__(self, parent, id, title)
         
@@ -224,7 +240,7 @@ class DetermineRVDialog(wx.Dialog):
         ### RV lower limit
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
         
-        self.text_rv_lower_limit = wx.StaticText(self, -1, "Radial velocity lower limit (km/s): ", style=wx.ALIGN_LEFT)
+        self.text_rv_lower_limit = wx.StaticText(self, -1, "Velocity lower limit (km/s): ", style=wx.ALIGN_LEFT)
         self.rv_lower_limit = wx.TextCtrl(self, -1, str(int(rv_lower_limit)),  style=wx.TE_RIGHT)
         
         self.hbox.AddSpacer(10)
@@ -236,7 +252,7 @@ class DetermineRVDialog(wx.Dialog):
         ### RV upper limit
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
         
-        self.text_rv_upper_limit = wx.StaticText(self, -1, "Radial velocity upper limit (km/s): ", style=wx.ALIGN_LEFT)
+        self.text_rv_upper_limit = wx.StaticText(self, -1, "Velocity upper limit (km/s): ", style=wx.ALIGN_LEFT)
         self.rv_upper_limit = wx.TextCtrl(self, -1, str(int(rv_upper_limit)),  style=wx.TE_RIGHT)
         
         self.hbox.AddSpacer(10)
@@ -248,7 +264,7 @@ class DetermineRVDialog(wx.Dialog):
         ### RV step
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
         
-        self.text_rv_step = wx.StaticText(self, -1, "Radial velocity steps (km/s): ", style=wx.ALIGN_LEFT)
+        self.text_rv_step = wx.StaticText(self, -1, "Velocity steps (km/s): ", style=wx.ALIGN_LEFT)
         self.rv_step = wx.TextCtrl(self, -1, str(rv_step),  style=wx.TE_RIGHT)
         
         self.hbox.AddSpacer(10)
@@ -348,8 +364,8 @@ class DetermineBarycentricCorrectionDialog(wx.Dialog):
         self.Close()
 
 
-class RVProfileDialog(wx.Dialog):
-    def __init__(self, parent, id, title, xcoord, fluxes, model, num_used_lines, rv_step):
+class VelocityProfileDialog(wx.Dialog):
+    def __init__(self, parent, id, title, xcoord, fluxes, models, num_used_lines, rv_step):
         wx.Dialog.__init__(self, parent, id, title, size=(600, 600))
         
         self.recalculate = False
@@ -402,40 +418,43 @@ class RVProfileDialog(wx.Dialog):
         self.Bind(wx.EVT_BUTTON, self.on_no, id=wx.ID_NO)
         
         ## Draw
-        self.axes.plot(xcoord, fluxes+1, lw=1, color='b', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=1)
+        self.axes.plot(xcoord, fluxes, lw=1, color='b', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=1)
         if rv_step >= 0.1:
             xcoord_mod = np.arange(np.min(xcoord), np.max(xcoord), 0.1)
-            self.axes.plot(xcoord_mod, model(xcoord_mod)+1, lw=1, color='r', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='r', zorder=2)
+            for model in models:
+                self.axes.plot(xcoord_mod, model(xcoord_mod), lw=1, color='r', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='r', zorder=2)
         else:
-            self.axes.plot(xcoord, model(xcoord)+1, lw=1, color='r', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='r', zorder=2)
+            for model in models:
+                self.axes.plot(xcoord, model(xcoord), lw=1, color='r', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='r', zorder=2)
         
         self.axes.grid(True, which="both")
         self.axes.set_title("Profile", fontsize="10")
-        self.axes.set_xlabel("radial velocity (km/s)", fontsize="10")
+        self.axes.set_xlabel("velocity (km/s)", fontsize="10")
         self.axes.set_ylabel("relative intensity", fontsize="10")
         
         ## Stats
         num_items = self.stats.GetItemCount()
-        self.stats.InsertStringItem(num_items, "Mean (km/s)")
-        self.stats.SetStringItem(num_items, 1, str(np.round(model.mu, 2)))
-        num_items += 1
-        self.stats.InsertStringItem(num_items, "Min. error (+/- km/s)")
-        self.stats.SetStringItem(num_items, 1, str(np.round(rv_step, 2)))
-        num_items += 1
-        self.stats.InsertStringItem(num_items, "Sigma (km/s)")
-        self.stats.SetStringItem(num_items, 1, str(np.round(model.sig, 2)))
-        num_items += 1
-        self.stats.InsertStringItem(num_items, "A (rel. intensity)")
-        self.stats.SetStringItem(num_items, 1, str(np.round(model.A+1, 2)))
-        fwhm = model.sig * (2*np.sqrt(2*np.log(2)))
-        num_items += 1
-        self.stats.InsertStringItem(num_items, "FWHM (km/s)")
-        self.stats.SetStringItem(num_items, 1, str(np.round(fwhm, 2)))
-        num_items += 1
-        self.stats.InsertStringItem(num_items, "Estimated resolution/resolving power (R)")
-        c = 299792458.0 # m/s
-        self.stats.SetStringItem(num_items, 1, str(np.int(c/(1000.0*np.round(fwhm, 2)))))
-        num_items += 1
+        for model in models:
+            self.stats.InsertStringItem(num_items, "Mean (km/s)")
+            self.stats.SetStringItem(num_items, 1, str(np.round(model.mu(), 2)))
+            num_items += 1
+            self.stats.InsertStringItem(num_items, "Min. error (+/- km/s)")
+            self.stats.SetStringItem(num_items, 1, str(np.round(rv_step, 2)))
+            num_items += 1
+            self.stats.InsertStringItem(num_items, "Sigma (km/s)")
+            self.stats.SetStringItem(num_items, 1, str(np.round(model.sig(), 2)))
+            num_items += 1
+            self.stats.InsertStringItem(num_items, "A (rel. intensity)")
+            self.stats.SetStringItem(num_items, 1, str(np.round(model.A()+1, 2)))
+            num_items += 1
+            fwhm = model.sig() * (2*np.sqrt(2*np.log(2)))
+            self.stats.InsertStringItem(num_items, "FWHM (km/s)")
+            self.stats.SetStringItem(num_items, 1, str(np.round(fwhm, 2)))
+            num_items += 1
+            self.stats.InsertStringItem(num_items, "Resolving power (R)")
+            c = 299792458.0 # m/s
+            self.stats.SetStringItem(num_items, 1, str(np.int(c/(1000.0*np.round(fwhm, 2)))))
+            num_items += 1
         self.stats.InsertStringItem(num_items, "Number of lines used")
         self.stats.SetStringItem(num_items, 1, str(num_used_lines))
 
@@ -1026,7 +1045,7 @@ class CustomizableRegion:
     
 
 class Spectrum():
-    def __init__(self, data, name, color='b', not_saved=False, plot_id=None, continuum_model=None, continuum_data=None, continuum_plot_id=None, rv=0, path=None):
+    def __init__(self, data, name, color='b', not_saved=False, plot_id=None, continuum_model=None, continuum_data=None, continuum_plot_id=None, path=None):
         self.data = data
         self.name = name
         self.color = color
@@ -1035,13 +1054,19 @@ class Spectrum():
         self.continuum_model = continuum_model
         self.continuum_data = continuum_data
         self.continuum_plot_id = continuum_plot_id
-        self.rv = rv # Radial velocity (km/s)
+        self.velocity_atomic = 0.0 # Radial velocity (km/s)
+        self.velocity_telluric = 0.0 # Barycentric velocity (km/s)
         self.path = path
-        self.rv_profile_xcoord = None
-        self.rv_profile_fluxes = None
-        self.rv_profile_model = None
-        self.rv_profile_num_used_lines = None
-        self.rv_profile_rv_step = None
+        self.velocity_profile_atomic_xcoord = None
+        self.velocity_profile_atomic_fluxes = None
+        self.velocity_profile_atomic_models = None
+        self.velocity_profile_atomic_num_used_lines = None
+        self.velocity_profile_atomic_rv_step = None
+        self.velocity_profile_telluric_xcoord = None
+        self.velocity_profile_telluric_fluxes = None
+        self.velocity_profile_telluric_models = None
+        self.velocity_profile_telluric_num_used_lines = None
+        self.velocity_profile_telluric_rv_step = None
         self.resolution = 47000 # default
 
     
@@ -1111,10 +1136,14 @@ class SpectraFrame(wx.Frame):
         self.not_saved["continuum"] = False
         self.not_saved["lines"] = False
         self.not_saved["segments"] = False
-        self.rv_lower_limit = -200 # km/s
-        self.rv_upper_limit = 200 # km/s
-        self.rv_step = 5.0 # km/s
-        self.linelist_rv = None
+        self.velocity_telluric_lower_limit = -50 # km/s
+        self.velocity_telluric_upper_limit = 50 # km/s
+        self.velocity_telluric_step = 0.5 # km/s
+        self.velocity_atomic_lower_limit = -200 # km/s
+        self.velocity_atomic_upper_limit = 200 # km/s
+        self.velocity_atomic_step = 1.0 # km/s
+        self.linelist_atomic = None
+        self.linelist_telluric = None
         self.modeled_layers_pack = None # Synthesize spectrum (atmospheric models)
         
         # Barycentric velocity determination (default params)
@@ -1301,18 +1330,26 @@ class SpectraFrame(wx.Frame):
         self.spectrum_function_items.append(m_fit_lines)
         menu_edit.AppendSeparator()
         
-        m_remove_fitted_continuum = menu_edit.Append(-1, "Clear fitted continuum", "Remove the fitted continuum")
+        #####
+        menu_clear = wx.Menu()
+        m_expt = menu_edit.AppendMenu(-1, 'Clear...', menu_clear)
+        self.spectrum_function_items.append(m_expt)
+        
+        m_remove_fitted_continuum = menu_clear.Append(-1, "Fitted continuum", "Remove the fitted continuum")
         self.Bind(wx.EVT_MENU, self.on_remove_fitted_continuum, m_remove_fitted_continuum)
         self.spectrum_function_items.append(m_remove_fitted_continuum)
-        m_remove_fitted_lines = menu_edit.Append(-1, "Clear fitted lines", "Remove fitted lines")
+        
+        m_remove_fitted_lines = menu_clear.Append(-1, "Fitted lines", "Remove fitted lines")
         self.Bind(wx.EVT_MENU, self.on_remove_fitted_lines, m_remove_fitted_lines)
         self.spectrum_function_items.append(m_remove_fitted_lines)
         
-        m_remove_continuum_regions = menu_edit.Append(-1, "Clear continuum regions", "Clear continuum regions")
+        m_remove_continuum_regions = menu_clear.Append(-1, "Continuum regions", "Clear continuum regions")
         self.Bind(wx.EVT_MENU, self.on_remove_continuum_regions, m_remove_continuum_regions)
-        m_remove_line_masks = menu_edit.Append(-1, "Clear line masks", "Clear line masks")
+        
+        m_remove_line_masks = menu_clear.Append(-1, "Line masks", "Clear line masks")
         self.Bind(wx.EVT_MENU, self.on_remove_line_masks, m_remove_line_masks)
-        m_remove_segments = menu_edit.Append(-1, "Clear segments", "Clear segments")
+        
+        m_remove_segments = menu_clear.Append(-1, "Segments", "Clear segments")
         self.Bind(wx.EVT_MENU, self.on_remove_segments, m_remove_segments)
         menu_edit.AppendSeparator()
         
@@ -1321,17 +1358,34 @@ class SpectraFrame(wx.Frame):
         self.spectrum_function_items.append(m_find_continuum)
         menu_edit.AppendSeparator()
         
-        m_determine_barycentric_vel = menu_edit.Append(-1, "&Determine barycentric velocity", "Determine baricentryc velocity")
-        self.Bind(wx.EVT_MENU, self.on_determine_barycentric_vel, m_determine_barycentric_vel)
-        m_determine_rv = menu_edit.Append(-1, "&Determine radial velocity", "Determine radial velocity")
-        self.Bind(wx.EVT_MENU, self.on_determine_rv, m_determine_rv)
-        self.spectrum_function_items.append(m_determine_rv)
-        m_correct_barycentric_vel = menu_edit.Append(-1, "Correct barycentric velocity", "Correct spectra by using its radial velocity")
-        self.Bind(wx.EVT_MENU, self.on_correct_barycentric_vel, m_correct_barycentric_vel)
-        self.spectrum_function_items.append(m_correct_barycentric_vel)
-        m_correct_rv = menu_edit.Append(-1, "&Correct radial velocity", "Correct spectra by using its radial velocity")
+        #####
+        menu_determine_velocity = wx.Menu()
+        m_expt = menu_edit.AppendMenu(-1, 'Determine velocity relative to...', menu_determine_velocity)
+        self.spectrum_function_items.append(m_expt)
+        
+        m_determine_rv = menu_determine_velocity.Append(-1, "&Atomic lines (radial velocity)", "Determine radial velocity using atomic lines")
+        self.Bind(wx.EVT_MENU, self.on_determine_velocity_atomic, m_determine_rv)
+        
+        m_determine_rv = menu_determine_velocity.Append(-1, "&Telluric lines  (barycentric velocity)", "Determine radial/barycentric velocity using telluric lines")
+        self.Bind(wx.EVT_MENU, self.on_determine_velocity_telluric, m_determine_rv)
+        #####
+        #####
+        menu_correct_velocity = wx.Menu()
+        m_expt = menu_edit.AppendMenu(-1, 'Correct velocity...', menu_correct_velocity)
+        self.spectrum_function_items.append(m_expt)
+        
+        m_correct_rv = menu_correct_velocity.Append(-1, "&Radial velocity", "Correct spectra by using its radial velocity")
         self.Bind(wx.EVT_MENU, self.on_correct_rv, m_correct_rv)
         self.spectrum_function_items.append(m_correct_rv)
+        
+        m_correct_barycentric_vel = menu_correct_velocity.Append(-1, "Barycentric velocity", "Correct spectra by using its radial velocity")
+        self.Bind(wx.EVT_MENU, self.on_correct_barycentric_vel, m_correct_barycentric_vel)
+        self.spectrum_function_items.append(m_correct_barycentric_vel)
+        #####
+        
+        m_determine_barycentric_vel = menu_edit.Append(-1, "&Calculate barycentric velocity", "Calculate baricentryc velocity")
+        self.Bind(wx.EVT_MENU, self.on_determine_barycentric_vel, m_determine_barycentric_vel)
+        
         menu_edit.AppendSeparator()
         
         m_degrade_resolution = menu_edit.Append(-1, "Degrade resolution", "Degread spectrum resolution")
@@ -2647,6 +2701,7 @@ class SpectraFrame(wx.Frame):
         
         nknots = self.text2float(dlg.nknots.GetValue(), 'Number of knots value is not a valid one.')
         in_continuum = dlg.radio_button_continuum.GetValue()
+        find_continuum_by_fitting = dlg.radio_button_splines.GetValue()
         dlg.Destroy()
         
         if nknots == None:
@@ -2657,11 +2712,11 @@ class SpectraFrame(wx.Frame):
         self.operation_in_progress = True
         self.status_message("Fitting continuum...")
         self.update_progress(10)
-        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'in_continuum':in_continuum})
+        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'in_continuum':in_continuum, 'fitting_method':find_continuum_by_fitting})
         thread.setDaemon(True)
         thread.start()
         
-    def on_fit_continuum_thread(self, nknots, in_continuum=False):
+    def on_fit_continuum_thread(self, nknots, fitting_method=True, in_continuum=False):
         if in_continuum:
             # Select from the spectra the regions that should be used to fit the continuum
             spectra_regions = None
@@ -2679,7 +2734,10 @@ class SpectraFrame(wx.Frame):
         
         if spectra_regions != None:
             try:
-                self.active_spectrum.continuum_model = fit_continuum(spectra_regions, nknots=nknots)
+                if fitting_method:
+                    self.active_spectrum.continuum_model = fit_continuum(spectra_regions, nknots=nknots)
+                else:
+                    self.active_spectrum.continuum_model = interpolate_continuum(spectra_regions)
                 self.active_spectrum.continuum_data = get_spectra_from_model(self.active_spectrum.continuum_model, self.active_spectrum.data['waveobs'])
                 wx.CallAfter(self.on_fit_continuum_finish, nknots)
             except Exception as e:
@@ -2834,35 +2892,62 @@ class SpectraFrame(wx.Frame):
         
         self.flash_status_message("Barycentric velocity determined: " + str(self.barycentric_vel) + " km/s")
 
-        
-    def on_determine_rv(self, event, show_previous_results=True):
-        if not self.check_active_spectrum_exists():
-            return
-        
-        if self.active_spectrum.rv_profile_model != None and show_previous_results:
-            dlg = RVProfileDialog(self, -1, "Radial velocity profile", self.active_spectrum.rv_profile_xcoord, self.active_spectrum.rv_profile_fluxes, self.active_spectrum.rv_profile_model, self.active_spectrum.rv_profile_num_used_lines, self.active_spectrum.rv_profile_rv_step)
+    
+    def on_determine_velocity_atomic(self, event):
+        self.on_determine_velocity(event, relative_to_atomic_data = True)
+    
+    def on_determine_velocity_telluric(self, event):
+        self.on_determine_velocity(event, relative_to_atomic_data = False)
+    
+    def on_determine_velocity(self, event, relative_to_atomic_data = True, show_previous_results=True):
+        # Check if velocity has been previously determined and show those results
+        if show_previous_results and ((relative_to_atomic_data and self.active_spectrum.velocity_profile_atomic_models != None) or (not relative_to_atomic_data and self.active_spectrum.velocity_profile_telluric_models != None)) :
+            if relative_to_atomic_data:
+                xcoord = self.active_spectrum.velocity_profile_atomic_xcoord
+                fluxes = self.active_spectrum.velocity_profile_atomic_fluxes
+                models = self.active_spectrum.velocity_profile_atomic_models
+                num_used_lines = self.active_spectrum.velocity_profile_atomic_num_used_lines
+                velocity_step = self.active_spectrum.velocity_profile_atomic_rv_step
+                title = "Velocity profile relative to atomic lines"
+            else:
+                xcoord = self.active_spectrum.velocity_profile_telluric_xcoord
+                fluxes = self.active_spectrum.velocity_profile_telluric_fluxes
+                models = self.active_spectrum.velocity_profile_telluric_models
+                num_used_lines = self.active_spectrum.velocity_profile_telluric_num_used_lines
+                velocity_step = self.active_spectrum.velocity_profile_telluric_rv_step
+                title = "Velocity profile relative to telluric lines"
+                
+            dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, models, num_used_lines, velocity_step)
             dlg.ShowModal()
             recalculate = dlg.recalculate
             dlg.Destroy()
             if not recalculate:
                 return
         
-        if not self.check_continuum_model_exists():
-            return
         if self.check_operation_in_progress():
             return
         
-        dlg = DetermineRVDialog(self, -1, "Radial velocity determination", rv_lower_limit=self.rv_lower_limit, rv_upper_limit=self.rv_upper_limit, rv_step=self.rv_step)
+        if relative_to_atomic_data:
+            linelist = self.linelist_atomic
+            velocity_lower_limit = self.velocity_atomic_lower_limit
+            velocity_upper_limit = self.velocity_atomic_upper_limit
+            velocity_step = self.velocity_atomic_step
+        else:
+            linelist = self.linelist_telluric
+            velocity_lower_limit = self.velocity_telluric_lower_limit
+            velocity_upper_limit = self.velocity_telluric_upper_limit
+            velocity_step = self.velocity_telluric_step
+        
+        dlg = DetermineVelocityDialog(self, -1, "Velocity determination", rv_lower_limit=velocity_lower_limit, rv_upper_limit=velocity_upper_limit, rv_step=velocity_step)
         dlg.ShowModal()
         
         if not dlg.action_accepted:
             dlg.Destroy()
             return
         
-        rv_lower_limit = self.text2float(dlg.rv_lower_limit.GetValue(), 'Radial velocity lower limit is not a valid one.')
-        rv_upper_limit = self.text2float(dlg.rv_upper_limit.GetValue(), 'Radial velocity upper limit is not a valid one.')
-        rv_step = self.text2float(dlg.rv_step.GetValue(), 'Radial velocity step is not a valid one.')
-        renormalize = True #dlg.renormalize.GetValue()
+        rv_lower_limit = self.text2float(dlg.rv_lower_limit.GetValue(), 'Velocity lower limit is not a valid one.')
+        rv_upper_limit = self.text2float(dlg.rv_upper_limit.GetValue(), 'Velocity upper limit is not a valid one.')
+        rv_step = self.text2float(dlg.rv_step.GetValue(), 'Velocity step is not a valid one.')
         dlg.Destroy()
         
         if rv_lower_limit == None or rv_upper_limit == None or rv_step == None:
@@ -2870,70 +2955,120 @@ class SpectraFrame(wx.Frame):
             return
         
         if rv_lower_limit >= rv_upper_limit:
-            msg = "Upper radial velocity limit should be greater than lower limit"
-            title = "Radial velocity error"
+            msg = "Upper velocity limit should be greater than lower limit"
+            title = "Velocity error"
             self.error(title, msg)
             return
         
         if (np.abs(rv_lower_limit) + np.abs(rv_upper_limit)) <= 4*rv_step:
-            msg = "Radial velocity step too small for the established limits"
-            title = "Radial velocity error"
+            msg = "Velocity step too small for the established limits"
+            title = "Velocity error"
             self.error(title, msg)
             return
         
-        self.rv_lower_limit = rv_lower_limit
-        self.rv_upper_limit = rv_upper_limit
-        self.rv_step = rv_step
+        if relative_to_atomic_data:
+            self.velocity_atomic_lower_limit = rv_lower_limit
+            self.velocity_atomic_upper_limit = rv_upper_limit
+            self.velocity_atomic_step = rv_step
+        else:
+            self.velocity_telluric_lower_limit = rv_lower_limit
+            self.velocity_telluric_upper_limit = rv_upper_limit
+            self.velocity_telluric_step = rv_step
         
         self.operation_in_progress = True
-        thread = threading.Thread(target=self.on_determine_rv_thread, args=(renormalize,))
+        thread = threading.Thread(target=self.on_determine_velocity_thread, args=(relative_to_atomic_data,))
         thread.setDaemon(True)
         thread.start()
 
-    def on_determine_rv_thread(self, renormalize):
-        wx.CallAfter(self.status_message, "Determining RV...")
-        if self.linelist_rv == None:
-            self.linelist_rv = asciitable.read("input/rv/default.300_1100nm.rv.lst")
-        xcoord, fluxes, num_used_lines = build_radial_velocity_profile(self.active_spectrum.data, self.active_spectrum.continuum_model, self.linelist_rv, rv_lower_limit=self.rv_lower_limit, rv_upper_limit=self.rv_upper_limit, rv_step=self.rv_step, frame=self)
-        wx.CallAfter(self.on_determine_rv_finish, xcoord, fluxes, renormalize, num_used_lines)
+    def on_determine_velocity_thread(self, relative_to_atomic_data):
+        wx.CallAfter(self.status_message, "Determining velocity...")
+        
+        if relative_to_atomic_data:
+            if self.linelist_atomic == None:
+                #vald_linelist_file = "input/rv/default.300_1100nm.rv.lst" # Reduced
+                vald_linelist_file = "input/linelists/original/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
+                self.linelist_atomic = read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
+                ## Convert wavelengths from armstrong to nm
+                self.linelist_atomic['wave (A)'] = self.linelist_atomic['wave (A)'] / 10.0
+                self.linelist_atomic = rfn.rename_fields(self.linelist_atomic, {'wave (A)':'wave_peak',})
+                self.linelist_atomic.sort(order=['wave_peak'])
+            linelist = self.linelist_atomic
+            velocity_lower_limit = self.velocity_atomic_lower_limit
+            velocity_upper_limit = self.velocity_atomic_upper_limit
+            velocity_step = self.velocity_atomic_step
+        else:
+            if self.linelist_telluric == None:
+                telluric_lines_file = "input/telluric/standard_atm_air.txt"
+                self.linelist_telluric = read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)        
+            linelist = self.linelist_telluric
+            velocity_lower_limit = self.velocity_telluric_lower_limit
+            velocity_upper_limit = self.velocity_telluric_upper_limit
+            velocity_step = self.velocity_telluric_step
+        
+        xcoord, fluxes, num_used_lines = build_velocity_profile(self.active_spectrum.data, linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, frame=self)
+        wx.CallAfter(self.on_determine_velocity_finish, xcoord, fluxes, relative_to_atomic_data, num_used_lines)
     
-    def on_determine_rv_finish(self, xcoord, fluxes, renormalize, num_used_lines):
+    def on_determine_velocity_finish(self, xcoord, fluxes, relative_to_atomic_data, num_used_lines):
         # Modelize
-        model, fluxes = model_radial_velocity_profile(xcoord, fluxes, renormalize=renormalize)
-        self.active_spectrum.rv = np.round(model.mu, 2) # km/s
-        # A positive radial velocity indicates the distance between the objects is or was increasing;
-        # A negative radial velocity indicates the distance between the source and observer is or was decreasing.
-        self.flash_status_message("Radial velocity determined: " + str(self.active_spectrum.rv) + " km/s")
+        models = modelize_velocity_profile(xcoord, fluxes)
+        velocity = np.round(models[0].mu(), 2) # km/s
+        # A positive velocity indicates the distance between the objects is or was increasing;
+        # A negative velocity indicates the distance between the source and observer is or was decreasing.
+        self.flash_status_message("Velocity determined: " + str(velocity) + " km/s")
         self.operation_in_progress = False
         
-        self.active_spectrum.rv_profile_xcoord = xcoord
-        self.active_spectrum.rv_profile_fluxes = fluxes
-        self.active_spectrum.rv_profile_model = model
-        self.active_spectrum.rv_profile_num_used_lines = num_used_lines
-        self.active_spectrum.rv_profile_rv_step = self.rv_step
+        if relative_to_atomic_data:
+            self.active_spectrum.velocity_atomic = velocity
+            self.active_spectrum.velocity_profile_atomic_xcoord = xcoord
+            self.active_spectrum.velocity_profile_atomic_fluxes = fluxes
+            self.active_spectrum.velocity_profile_atomic_models = models
+            self.active_spectrum.velocity_profile_atomic_num_used_lines = num_used_lines
+            self.active_spectrum.velocity_profile_atomic_rv_step = self.velocity_atomic_step
+            velocity_step = self.velocity_atomic_step
+            title = "Velocity profile relative to atomic lines"
+        else:
+            self.active_spectrum.velocity_telluric = velocity
+            self.barycentric_vel = velocity # So it will appear in the barycentric vel. correction dialog
+            self.active_spectrum.velocity_profile_telluric_xcoord = xcoord
+            self.active_spectrum.velocity_profile_telluric_fluxes = fluxes
+            self.active_spectrum.velocity_profile_telluric_models = models
+            self.active_spectrum.velocity_profile_telluric_num_used_lines = num_used_lines
+            self.active_spectrum.velocity_profile_telluric_rv_step = self.velocity_atomic_step
+            velocity_step = self.velocity_telluric_step
+            title = "Velocity profile relative to telluric lines"
         
-        dlg = RVProfileDialog(self, -1, "Radial velocity profile", xcoord, fluxes, model, num_used_lines, self.rv_step)
+        dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, models, num_used_lines, velocity_step)
         dlg.ShowModal()
         recalculate = dlg.recalculate
         dlg.Destroy()
         if recalculate:
-            self.on_determine_rv(None, show_previous_results=False)
+            self.on_determine_velocity(None, relative_to_atomic_data=relative_to_atomic_data, show_previous_results=False)
 
 
+    def on_correct_rv(self, event):
+        vel_type = "radial"
+        default_vel = self.active_spectrum.velocity_atomic
+        self.on_correct_vel(event, vel_type, default_vel)
+        
     def on_correct_barycentric_vel(self, event):
+        vel_type = "barycentric"
+        default_vel = self.barycentric_vel
+        self.on_correct_vel(event, vel_type, default_vel)
+    
+    def on_correct_vel(self, event, vel_type, default_vel):
         if not self.check_active_spectrum_exists():
             return
         if self.check_operation_in_progress():
             return
         
-        dlg = CorrectRVDialog(self, -1, "Barycentric velocity correction", self.barycentric_vel)
+        dlg = CorrectVelocityDialog(self, -1, vel_type, default_vel)
         dlg.ShowModal()
         
         if not dlg.action_accepted:
             dlg.Destroy()
             return
         
-        barycentric_vel = self.text2float(dlg.rv.GetValue(), 'Radial velocity value is not a valid one.')
+        barycentric_vel = self.text2float(dlg.rv.GetValue(), vel_type.capitalize() + ' velocity value is not a valid one.')
         in_regions = dlg.radio_button_regions.GetValue()
         dlg.Destroy()
         
@@ -2941,73 +3076,28 @@ class SpectraFrame(wx.Frame):
             self.flash_status_message("Bad value.")
             return
         
-        self.status_message("Correcting barycentric velocity...")
+        self.status_message("Correcting " + vel_type + " velocity...")
         if in_regions:
             for elements in ["lines", "continuum", "segments"]:
                 self.update_numpy_arrays_from_widgets(elements)
                 if len(self.regions[elements]) > 0:
                     if elements == "lines":
-                        self.regions[elements] = correct_radial_velocity_regions(self.regions[elements], barycentric_vel, with_peak=True)
+                        self.regions[elements] = correct_velocity_regions(self.regions[elements], barycentric_vel, with_peak=True)
                     else:
-                        self.regions[elements] = correct_radial_velocity_regions(self.regions[elements], barycentric_vel)
+                        self.regions[elements] = correct_velocity_regions(self.regions[elements], barycentric_vel)
                     self.draw_regions(elements)
                     self.not_saved[elements] = False
         else:
             if not self.check_active_spectrum_exists():
                 return
-            self.active_spectrum.data = correct_radial_velocity(self.active_spectrum.data, barycentric_vel)
+            self.active_spectrum.data = correct_velocity(self.active_spectrum.data, barycentric_vel)
             self.active_spectrum.not_saved = True
             self.draw_active_spectrum()
         self.remove_continuum_spectra()
         self.remove_fitted_lines()
         self.update_title()
         self.canvas.draw()
-        self.flash_status_message("Applied a radial velocity correction of %s." % barycentric_vel)
-    
-    
-    def on_correct_rv(self, event):
-        if not self.check_active_spectrum_exists():
-            return
-        if self.check_operation_in_progress():
-            return
-        
-        dlg = CorrectRVDialog(self, -1, "Radial velocity correction", self.active_spectrum.rv)
-        dlg.ShowModal()
-        
-        if not dlg.action_accepted:
-            dlg.Destroy()
-            return
-        
-        radial_vel = self.text2float(dlg.rv.GetValue(), 'Radial velocity value is not a valid one.')
-        in_regions = dlg.radio_button_regions.GetValue()
-        dlg.Destroy()
-        
-        if radial_vel == None:
-            self.flash_status_message("Bad value.")
-            return
-        
-        self.status_message("Correcting radial velocity...")
-        if in_regions:
-            for elements in ["lines", "continuum", "segments"]:
-                self.update_numpy_arrays_from_widgets(elements)
-                if len(self.regions[elements]) > 0:
-                    if elements == "lines":
-                        self.regions[elements] = correct_radial_velocity_regions(self.regions[elements], radial_vel, with_peak=True)
-                    else:
-                        self.regions[elements] = correct_radial_velocity_regions(self.regions[elements], radial_vel)
-                    self.draw_regions(elements)
-                    self.not_saved[elements] = False
-        else:
-            if not self.check_active_spectrum_exists():
-                return
-            self.active_spectrum.data = correct_radial_velocity(self.active_spectrum.data, radial_vel)
-            self.active_spectrum.not_saved = True
-            self.draw_active_spectrum()
-        self.remove_continuum_spectra()
-        self.remove_fitted_lines()
-        self.update_title()
-        self.canvas.draw()
-        self.flash_status_message("Applied a radial velocity correction of %s." % radial_vel)
+        self.flash_status_message("Applied a " + vel_type + " velocity correction of %s." % barycentric_vel)
     
     def on_convert_to_nm(self, event):
         if not self.check_active_spectrum_exists():

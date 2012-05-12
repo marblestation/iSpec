@@ -19,164 +19,252 @@ import numpy as np
 from common import *
 from interpolate import *
 from lines import *
-from pymodelfit import GaussianModel
+from mpfitmodels import GaussianModel
 
+# If velocity_step is specified, create a mask uniformly spaced in terms of velocity:
+# - An increment in position (i => i+1) supposes a constant velocity increment (velocity_step)
+# - An increment in position (i => i+1) does not implies a constant wavelength increment
+# - On each wavelength position (i), the data_values with data_wave below the next wavelength position (i+1)
+#   are added up
+# - wave_grid is only used to identify the first and last wavelength
+# - Useful for building the cross correlate function used for determining the radial velocity of a star
+# If velocity_step is not specified, create a mask spaced in the same way of the wave_grid:
+# - If the wave_grid is uniformly spaced in wavelength, an increment in position (i => i+1) 
+#   supposes a constant wavelength increment
+# - Useful for cross correlate/compare one spectra with its radial velocity already corrected against
+#   a linelist
+def create_cross_correlation_mask(data_wave, data_value, wave_grid, velocity_step=None):
+    # Speed of light in m/s
+    c = 299792458.0
+    
+    total_points = len(wave_grid)
+    
+    if velocity_step != None:
+        wave_general_base = wave_grid[0]
+        wave_general_top = wave_grid[-1]
+        grid = []
+        i = 0
+        wave_base = wave_general_base
+        while wave_base < wave_general_top and i < total_points:
+            wave_top = wave_base + wave_base * ((velocity_step*1000) / c) # nm
+            while i < total_points and data_wave[i] < wave_base:
+                i += 1
+            mask_value = 0
+            while i < total_points and data_wave[i] >= wave_base and data_wave[i] < wave_top:
+                mask_value += data_value[i]
+                i += 1
+            grid.append((wave_base, mask_value))
+            wave_base = wave_top
+        
+        mask = np.array(grid, dtype=[('wave', float), ('value', float)])
+    else:
+        mask = np.recarray((total_points, ), dtype=[('wave', float), ('value', float)])
+        mask['wave'] = wave_grid
+        mask['value'] = np.zeros(total_points)
+            
+        mask_value = mask['value']
+        
+        max_j = len(data_wave)
+        j = 0
+        for i in np.arange(total_points-1):
+            wave_base = wave_grid[i]
+            wave_top = wave_grid[i+1]
+            while j < max_j and data_wave[j] < wave_base:
+                j += 1
+            while j < max_j and data_wave[j] >= wave_base and data_wave[j] < wave_top:
+                mask_value[i] += data_value[j]
+                j += 1
+            if j >= max_j:
+                break
+    return mask
 
-## Determines the radial velocity profile using the lines regions:
-## - For each point of each line region, get the spectra flux
-## - The result of adding all these spectra fluxes will be a noisy base and a deep gaussian
-## Return the radial velocity x coordenates and the normalized fluxes (relative intensities)
-def build_radial_velocity_profile(spectra, continuum, lines, rv_lower_limit = -100, rv_upper_limit = 100, rv_step=0.5, frame=None):
-    rv = 0 # km/s
-    
-    rv_lower_limit = int(rv_lower_limit)
-    rv_upper_limit = int(rv_upper_limit)
-    if rv_lower_limit >= rv_upper_limit:
-        raise Exception("Upper radial velocity limit should be greater than lower limit")
-    
-    if (np.abs(rv_lower_limit) + np.abs(rv_upper_limit)) <= 4*rv_step:
-        raise Exception("Radial velocity step too small for the established limits")
-    
-    min_wave = np.min(spectra['waveobs'])
-    max_wave = np.max(spectra['waveobs'])
-    
-    # Only use the lines that are on the spectra wavelength
-    wfilter = (lines['wave_peak'] >= min_wave) & (lines['wave_peak'] <= max_wave)
-    lines = lines[wfilter]
+# Calculates the cross correlation value between the spectra and the specified mask
+# by shifting the mask from lower to upper velocity
+# - The spectra and the mask should be uniformly spaced in terms of velocity (which
+#   implies non-uniformly distributed in terms of wavelength)
+# - The velocity step used for the construction of the mask should be the same
+#   as the one specified in this function
+# - The lower/upper/step velocity is only used to determine how many shifts
+#   should be done (in array positions) and return a velocity grid
+def cross_correlation_function(spectra, mask, lower_velocity_limit, upper_velocity_limit, velocity_step, frame=None):
     
     if frame != None:
         frame.update_progress(0)
-        total_lines = len(lines)
     
     # Speed of light in m/s
     c = 299792458.0
     
-    # Build a window with the maximum size as to store the biggest region
-    total_window = (np.abs(rv_lower_limit)+np.abs(rv_upper_limit)) / rv_step
-    total_window = int(np.ceil(total_window))
-    fluxes = np.zeros(total_window)
+    velocity = np.arange(lower_velocity_limit, upper_velocity_limit, velocity_step)
+    # 1 shift = 0.5 km/s (or the specified value)
+    shifts = np.int32(np.arange(lower_velocity_limit, upper_velocity_limit, velocity_step) / velocity_step)
     
-    lower_delta_lambda = ((rv_lower_limit*1000) / c)
-    upper_delta_lambda = ((rv_upper_limit*1000) / c)
-    line_num = 0
-    # For each point of each line region, get the flux of the spectra and sum it all
-    for line in lines:
-        i = 0
-        sindex = 0
-        wave_peak = line['wave_peak']
-        # Common sized window in km/s for all lines (but different in wavelength)
-        window_base = wave_peak + (wave_peak * lower_delta_lambda) # nm
-        window_top = wave_peak + (wave_peak * upper_delta_lambda)   # nm
-        increment = (window_top - window_base) / total_window
+    num_shifts = len(shifts)
+    # Cross-correlation function
+    ccf = np.zeros(num_shifts)
+    for shift, i in zip(shifts, np.arange(num_shifts)):
+        if shift == 0:
+            shifted_mask = mask['value']
+        elif shift > 0:
+            shifted_mask = np.hstack((shift*[0], mask['value'][:-1*shift]))
+        else:
+            shifted_mask = np.hstack((mask['value'][-1*shift:], -1*shift*[0]))
+        ccf[i] = np.correlate(spectra['flux'], shifted_mask)[0]
+        if (i % 100) == 0:
+            progress = ((i*1.0)/num_shifts) * 100
+            print "%.2f%%" % (progress)
+            if frame != None:
+                frame.update_progress(progress)
+    
+    ccf = ccf/np.max(ccf) # Normalize
+    
+    return velocity, ccf
+
+
+## Determines the velocity profile by cross-correlating the spectra with a mask
+## built from a line list.
+## Return the velocity coordenates and the normalized fluxes (relative intensities)
+def build_velocity_profile(spectra, lines, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, frame=None):
+    # Build a mask with non-uniform wavelength increments but constant in terms of velocity
+    linelist_mask = create_cross_correlation_mask(lines['wave_peak'], lines['depth'], spectra['waveobs'], velocity_step)
+    
+    # Resampling spectra to match the wavelength grid of the mask
+    # Speed of light in m/s
+    c = 299792458.0
+    interpolated_spectra = resample_spectra(spectra, linelist_mask['wave'])
+    
+    # Obtain the cross-correlate function by shifting the mask
+    velocity, ccf = cross_correlation_function(interpolated_spectra, linelist_mask, lower_velocity_limit = lower_velocity_limit, upper_velocity_limit =upper_velocity_limit, velocity_step = velocity_step, frame=frame)
+    
+    return velocity, ccf, len(lines)
+
+
+## Fits Gaussians to the deepest peaks in the velocity profile
+## Return an array of fitted models
+#  * For Radial Velocity profiles, more than 1 outlier peak implies that the star is a spectroscopic binary
+def modelize_velocity_profile(xcoord, fluxes):
+    # Finding peaks and base points
+    peaks, base_points = find_peaks_and_base_points(xcoord, fluxes)
+    
+    # Adjusting edges
+    base = base_points[:-1]
+    top = base_points[1:]
+    new_base = np.zeros(len(base), dtype=int)
+    new_top = np.zeros(len(base), dtype=int)
+    for i in np.arange(len(peaks)):
+        new_base[i], new_top[i] = improve_linemask_edges(xcoord, fluxes, base[i], top[i], peaks[i])
+    base = new_base
+    top = new_top
+    
+    # Identify peak outliers
+    fluxes_not_outliers, selected_fluxes_not_outliers = sigma_clipping(fluxes[peaks], sig=3, meanfunc=np.median)
+    selected_peaks_indices = np.arange(len(peaks))[~selected_fluxes_not_outliers]
+    
+    if len(selected_peaks_indices) == 0:
+        # If not outliers identified, just try with the deepest line
+        sorted_peak_indices = np.argsort(fluxes[peaks])
+        selected_peaks_indices = [sorted_peak_indices[0]]
+    
+    models = []
+    for i in np.asarray(selected_peaks_indices):
+        model = GaussianModel()
         
-        wavelength = window_base
-        from_index = 0 # Optimization: discard regions already processed
-        while wavelength <= window_top and i < total_window:
-            # Outside spectra
-            if wavelength > max_wave or wavelength < min_wave:
-                fluxes[i] += 0 # Outside spectra
-            else:
-                flux, sindex = get_flux(spectra[from_index:], wavelength)
-                fluxes[i] += flux - continuum(wavelength) # Normalize continuum
-            #print wavelength
-            if sindex > 4:
-                from_index = sindex - 4
-            wavelength += increment
-            i += 1
-        if frame != None:
-            current_work_progress = (line_num*1.0 / total_lines) * 100
-            frame.update_progress(current_work_progress)
-        line_num += 1
+        # Parameters estimators
+        baseline = np.mean(fluxes[base_points])
+        A = fluxes[peaks[i]] - baseline
+        sig = np.abs(xcoord[top[i]] - xcoord[base[i]])/3.0
+        mu = xcoord[peaks[i]]
+        
+        parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for j in np.arange(4)]
+        parinfo[0]['value'] = baseline # Continuum
+        parinfo[0]['fixed'] = True
+        parinfo[1]['value'] = A # Only negative (absorption lines) and greater than the lowest point + 25%
+        parinfo[1]['limited'] = [False, True]
+        parinfo[1]['limits'] = [0., 0.]
+        parinfo[2]['value'] = sig # Only positives (absorption lines) and lower than the xcoord slice
+        parinfo[2]['limited'] = [True, True]
+        parinfo[2]['limits'] = [0., np.abs(xcoord[top[i]] - xcoord[base[i]])]
+        parinfo[3]['value'] = mu # Peak only within the xcoord slice
+        parinfo[3]['limited'] = [True, True]
+        parinfo[3]['limits'] = [xcoord[base[i]], xcoord[top[i]]]
+        
+        f = fluxes[base[i]:top[i]+1]
+        min_flux = np.min(f)
+        # More weight to the deeper fluxes
+        if min_flux < 0:
+            weights = f + -1*(min_flux) + 0.01 # Above zero
+            weights = np.min(weights) / weights
+        else:
+            weights = min_flux / f
+        
+        model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=parinfo, weights=weights)
+        models.append(model)
     
-    #fluxes = fluxes/line_num # Average
-    fluxes = fluxes/np.abs(np.sum(fluxes)) # Normalize (relative intensities)
-    xcoord = np.linspace( rv_lower_limit, rv_upper_limit, total_window ) # z numbers from x to y
+    return models
+
+## Constructs the velocity profile, fits a Gaussian and returns the mean (km/s)
+## - If the lines are atomic lines, the radial velocity (RV) will be determined
+## - If the lines are telluric lines, the barycentric velocity [+ RV if already applied] will be determined
+def calculate_velocity(spectra, continuum, lines, rv_limit = 200, velocity_step=1.0, renormalize=False, frame=None):
+    xcoord, fluxes, num_used_lines = build_velocity_profile(self.active_spectrum.data, self.linelist_rv, lower_velocity_limit=self.rv_lower_limit, upper_velocity_limit=self.rv_upper_limit, velocity_step=self.rv_step, frame=self)
     
-    return xcoord, fluxes, len(lines)
-
-
-## Fits a Gaussian to the radial velocity profile
-## Return the fitted model
-def model_radial_velocity_profile(xcoord, fluxes, renormalize=False):
-    if renormalize:
-        # Renormalize continuum
-        #renorm_model = UniformKnotSplineModel(nknots=1)
-        #renorm_model.fitData(xcoord, fluxes)
-        #fluxes = fluxes - renorm_model(xcoord)
-        #cont = 2*np.median(fluxes) - 1*np.mean(fluxes)
-        cont = np.median(fluxes)
-        fluxes = fluxes - cont
+    xcoord, fluxes = build_radial_velocity_profile(spectra, lines, rv_limit=rv_limit, velocity_step=velocity_step, frame=frame)
+    models = modelize_velocity_profile(xcoord, fluxes)
     
-    # The added flux should have a big gaussian
-    model = GaussianModel()
-    
-    # First estimate for the gaussian mean: the place with the min flux
-    model.mu = xcoord[np.argmin(fluxes)]
-    model.sig = 20
-    model.A = -0.70
-    model.fitData(xcoord, fluxes, fixedpars=[])
-    
-    return model, fluxes # return fluxes just in case they have been renormalized
+    if len(models) == 0:
+        return 0
+    else:
+        # Velocity
+        return np.round(models[0].mu, 2)  # km/s
 
-## Constructs the radial velocity profile, fits a Gaussian and returns the mean (km/s)
-def calculate_radial_velocity(spectra, continuum, lines, rv_limit = 200, rv_step=0.5, renormalize=False, frame=None):
-    xcoord, fluxes = build_radial_velocity_profile(spectra, continuum, lines, rv_limit=rv_limit, rv_step=rv_step, frame=frame)
-    model = model_radial_velocity_profile(xcoord, fluxes, renormalize=renormalize)
-
-    rv = np.round(model.mu, 2)  # km/s
-    ##rms = np.mean(model.residuals()) + np.std(model.residuals())
-    ## Residual peak should be at least below 1 to be confident about the fit
-    #residual_peak = model(model.mu) - np.min(fluxes)
-    return rv
-
-# Radial vel in km/s
-def correct_radial_velocity(spectra, radial_vel):
+# Velocity in km/s
+def correct_velocity(spectra, velocity):
     # Speed of light in m/s
     c = 299792458.0
-    # Radial velocity from km/s to m/s
-    radial_vel = radial_vel * 1000
+    # Radial/barycentric velocity from km/s to m/s
+    velocity = velocity * 1000
 
     # Correct wavelength scale for radial velocity
-    spectra['waveobs'] = spectra['waveobs'] / ((radial_vel / c) + 1)
+    spectra['waveobs'] = spectra['waveobs'] / ((velocity / c) + 1)
     return spectra
 
-def correct_radial_velocity_regions(regions, radial_vel, with_peak=False):
+# Velocity in km/s
+def correct_velocity_regions(regions, velocity, with_peak=False):
     # Speed of light in m/s
     c = 299792458.0
-    # Radial velocity from km/s to m/s
-    radial_vel = radial_vel * 1000
+    # Radial/barycentric velocity from km/s to m/s
+    velocity = velocity * 1000
 
-    regions['wave_base'] = regions['wave_base'] / ((radial_vel / c) + 1)
-    regions['wave_top'] = regions['wave_top'] / ((radial_vel / c) + 1)
+    regions['wave_base'] = regions['wave_base'] / ((velocity / c) + 1)
+    regions['wave_top'] = regions['wave_top'] / ((velocity / c) + 1)
     if with_peak:
-        regions['wave_peak'] = regions['wave_peak'] / ((radial_vel / c) + 1)
+        regions['wave_peak'] = regions['wave_peak'] / ((velocity / c) + 1)
     return regions
 
-# Shift regions considering the known radial velocity of the star
-def correct_radial_velocity_regions_files(continuum_regions_filename, line_regions_filename, segment_regions_filename, continuum_regions_filename_out, line_regions_filename_out, segment_regions_filename_out, radial_vel):
+# Shift regions considering the known radial/barycentric velocity of the star
+def correct_velocity_regions_files(continuum_regions_filename, line_regions_filename, segment_regions_filename, continuum_regions_filename_out, line_regions_filename_out, segment_regions_filename_out, velocity):
     # Speed of light in m/s
     c = 299792458.0
-    # Radial velocity from km/s to m/s
-    radial_vel = radial_vel * 1000
+    # Radial/barycentric velocity from km/s to m/s
+    velocity = velocity * 1000
     # Oposite sense because we want to correct regions, not the spectra
-    radial_vel = radial_vel * -1
+    velocity = velocity * -1
 
     continuum_regions = read_continuum_regions(continuum_regions_filename)
-    continuum_regions['wave_base'] = continuum_regions['wave_base'] / ((radial_vel / c) + 1)
-    continuum_regions['wave_top'] = continuum_regions['wave_top'] / ((radial_vel / c) + 1)
+    continuum_regions['wave_base'] = continuum_regions['wave_base'] / ((velocity / c) + 1)
+    continuum_regions['wave_top'] = continuum_regions['wave_top'] / ((velocity / c) + 1)
     write_continuum_regions(continuum_regions, continuum_regions_filename_out)
      
 
     # Lines
     line_regions = read_line_regions(line_regions_filename)
-    line_regions['wave_base'] = line_regions['wave_base'] / ((radial_vel / c) + 1)
-    line_regions['wave_top'] = line_regions['wave_top'] / ((radial_vel / c) + 1)
-    line_regions['wave_peak'] = line_regions['wave_peak'] / ((radial_vel / c) + 1)
+    line_regions['wave_base'] = line_regions['wave_base'] / ((velocity / c) + 1)
+    line_regions['wave_top'] = line_regions['wave_top'] / ((velocity / c) + 1)
+    line_regions['wave_peak'] = line_regions['wave_peak'] / ((velocity / c) + 1)
     write_line_regions(line_regions, line_regions_filename_out)
 
     segment_regions = read_segment_regions(segment_regions_filename)
-    segment_regions['wave_base'] = segment_regions['wave_base'] / ((radial_vel / c) + 1)
-    segment_regions['wave_top'] = segment_regions['wave_top'] / ((radial_vel / c) + 1)
+    segment_regions['wave_base'] = segment_regions['wave_base'] / ((velocity / c) + 1)
+    segment_regions['wave_top'] = segment_regions['wave_top'] / ((velocity / c) + 1)
     write_segment_regions(segment_regions, segment_regions_filename_out)
 
 
@@ -466,7 +554,7 @@ corrected_rv = measured_rv + v
     #~ line_regions_filename_out = "input/LUMBA/UVES_MPD_mu_cas_a_Fe-linelist.txt"
     #~ segment_regions_filename_out = "input/LUMBA/UVES_MPD_mu_cas_a_segments.txt"
     #~ 
-    #~ correct_radial_velocity_regions_files(continuum_regions_filename, line_regions_filename, segment_regions_filename, continuum_regions_filename_out, line_regions_filename_out, segment_regions_filename_out, radial_vel)
+    #~ correct_velocity_regions_files(continuum_regions_filename, line_regions_filename, segment_regions_filename, continuum_regions_filename_out, line_regions_filename_out, segment_regions_filename_out, radial_vel)
 #~ 
     #~ radial_vel = 14.03 # km/s http://simbad.u-strasbg.fr/simbad/sim-basic?Ident=mu+leo
 #~ 
@@ -474,7 +562,7 @@ corrected_rv = measured_rv + v
     #~ line_regions_filename_out = "input/LUMBA/UVES_MRG_mu_leo_Fe-linelist.txt"
     #~ segment_regions_filename_out = "input/LUMBA/UVES_MRG_mu_leo_segments.txt"
     #~ 
-    #~ correct_radial_velocity_regions_files(continuum_regions_filename, line_regions_filename, segment_regions_filename, continuum_regions_filename_out, line_regions_filename_out, segment_regions_filename_out, radial_vel)
+    #~ correct_velocity_regions_files(continuum_regions_filename, line_regions_filename, segment_regions_filename, continuum_regions_filename_out, line_regions_filename_out, segment_regions_filename_out, radial_vel)
 #~ 
     #~ radial_vel = 0 # The original spectra for Arcturus has been corrected for radial velocity
     #~ #radial_vel = -5.19 # km/s http://simbad.u-strasbg.fr/simbad/sim-basic?Ident=arcturus
@@ -483,7 +571,7 @@ corrected_rv = measured_rv + v
     #~ line_regions_filename_out = "input/LUMBA/UVES_MPG_arcturus_Fe-linelist.txt"
     #~ segment_regions_filename_out = "input/LUMBA/UVES_MPG_arcturus_segments.txt"
     #~ 
-    #~ correct_radial_velocity_regions_files(continuum_regions_filename, line_regions_filename, segment_regions_filename, continuum_regions_filename_out, line_regions_filename_out, segment_regions_filename_out, radial_vel)
+    #~ correct_velocity_regions_files(continuum_regions_filename, line_regions_filename, segment_regions_filename, continuum_regions_filename_out, line_regions_filename_out, segment_regions_filename_out, radial_vel)
 
 
 
