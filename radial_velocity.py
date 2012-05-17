@@ -604,62 +604,108 @@ def telluric_fwhm_correction(linelist_telluric, wmin, wmax, use_already_fitted_d
 
 
 if __name__ == '__main__':
-    #~ continuum_regions_filename = "input/LUMBA/UVES_MRD_sun_cmask.txt"
-    #~ line_regions_filename = "input/LUMBA/UVES_MRD_sun_Fe-linelist.txt"
-    #~ segment_regions_filename = "input/LUMBA/UVES_MRD_sun_segments.txt"
+    #~ continuum_regions_filename = "input/LUMBA/UVES_MRD_sun_cmask.s.gz"
+    #~ line_regions_filename = "input/LUMBA/UVES_MRD_sun_Fe-linelist.s.gz"
+    #~ segment_regions_filename = "input/LUMBA/UVES_MRD_sun_segments.s.gz"
 #~ 
     #~ radial_vel = -97.2 # km/s http://simbad.u-strasbg.fr/simbad/sim-basic?Ident=mu+cas+a
 #~ 
-    #~ continuum_regions_filename_out = "input/LUMBA/UVES_MPD_mu_cas_a_cmask.txt"
-    #~ line_regions_filename_out = "input/LUMBA/UVES_MPD_mu_cas_a_Fe-linelist.txt"
-    #~ segment_regions_filename_out = "input/LUMBA/UVES_MPD_mu_cas_a_segments.txt"
+    #~ continuum_regions_filename_out = "input/LUMBA/UVES_MPD_mu_cas_a_cmask.s.gz"
+    #~ line_regions_filename_out = "input/LUMBA/UVES_MPD_mu_cas_a_Fe-linelist.s.gz"
+    #~ segment_regions_filename_out = "input/LUMBA/UVES_MPD_mu_cas_a_segments.s.gz"
     #~ 
     #~ correct_velocity_regions_files(continuum_regions_filename, line_regions_filename, segment_regions_filename, continuum_regions_filename_out, line_regions_filename_out, segment_regions_filename_out, radial_vel)
 #~ 
     #~ radial_vel = 14.03 # km/s http://simbad.u-strasbg.fr/simbad/sim-basic?Ident=mu+leo
 #~ 
-    #~ continuum_regions_filename_out = "input/LUMBA/UVES_MRG_mu_leo_cmask.txt"
-    #~ line_regions_filename_out = "input/LUMBA/UVES_MRG_mu_leo_Fe-linelist.txt"
-    #~ segment_regions_filename_out = "input/LUMBA/UVES_MRG_mu_leo_segments.txt"
+    #~ continuum_regions_filename_out = "input/LUMBA/UVES_MRG_mu_leo_cmask.s.gz"
+    #~ line_regions_filename_out = "input/LUMBA/UVES_MRG_mu_leo_Fe-linelist.s.gz"
+    #~ segment_regions_filename_out = "input/LUMBA/UVES_MRG_mu_leo_segments.s.gz"
     #~ 
     #~ correct_velocity_regions_files(continuum_regions_filename, line_regions_filename, segment_regions_filename, continuum_regions_filename_out, line_regions_filename_out, segment_regions_filename_out, radial_vel)
 #~ 
     #~ radial_vel = 0 # The original spectra for Arcturus has been corrected for radial velocity
     #~ #radial_vel = -5.19 # km/s http://simbad.u-strasbg.fr/simbad/sim-basic?Ident=arcturus
 #~ 
-    #~ continuum_regions_filename_out = "input/LUMBA/UVES_MPG_arcturus_cmask.txt"
-    #~ line_regions_filename_out = "input/LUMBA/UVES_MPG_arcturus_Fe-linelist.txt"
-    #~ segment_regions_filename_out = "input/LUMBA/UVES_MPG_arcturus_segments.txt"
+    #~ continuum_regions_filename_out = "input/LUMBA/UVES_MPG_arcturus_cmask.s.gz"
+    #~ line_regions_filename_out = "input/LUMBA/UVES_MPG_arcturus_Fe-linelist.s.gz"
+    #~ segment_regions_filename_out = "input/LUMBA/UVES_MPG_arcturus_segments.s.gz"
     #~ 
     #~ correct_velocity_regions_files(continuum_regions_filename, line_regions_filename, segment_regions_filename, continuum_regions_filename_out, line_regions_filename_out, segment_regions_filename_out, radial_vel)
     
-    #star, resolution = "input/instruments/elodie_hd146233_comparable.txt", 42000
-    #star, resolution = "input/instruments/giraffe_hd107328_comparable.txt", 16000
-    #star, resolution = "input/instruments/narval_hd146233_comparable.txt", 65000
-    #star, resolution = "input/instruments/uves_hd146233_comparable.txt", 47000
+    #star, resolution = "input/spectra/examples/espadons_mu_leo.s.gz", 80000
+    #star, resolution = "input/spectra/examples/espadons_mu_leo_norm.s.gz", 80000
+    #star, resolution = "input/spectra/examples/harps_procyon.s.gz", 115000
+    #star, resolution = "input/spectra/examples/harps_procyon_norm.s.gz", 115000
+    #star, resolution = "input/spectra/examples/narval_arcturus.s.gz", 80000
+    #star, resolution = "input/spectra/examples/narval_arcturus_norm.s.gz", 80000
+    #star, resolution = "input/spectra/examples/narval_mu_cas.s.gz", 80000
+    #star, resolution = "input/spectra/examples/narval_mu_cas_norm.s.gz", 80000
+    #star, resolution = "input/spectra/examples/narval_sun.s.gz", 80000 
+    #star, resolution = "input/spectra/examples/narval_sun_norm.s.gz", 80000
+    #star, resolution = "input/spectra/binaries/elodie_hd005516A_spectroscopic_binary.s.gz", 42000
+    #star, resolution = "input/spectra/binaries/elodie_hd085503_single_star.s.gz", 42000
+    #star, resolution = "input/spectra/instruments/elodie_hd146233_SN237_normalized.s.gz", 42000
+    #star, resolution = "input/spectra/instruments/elodie_hd146233_SN237.s.gz", 42000
+    #star, resolution = "input/spectra/instruments/giraffe_hd107328_normalized.s.gz", 16000
+    #star, resolution = "input/spectra/instruments/giraffe_hd107328.s.gz", 16000
+    #star, resolution = "input/spectra/instruments/narval_hd146233_normalized.s.gz", 80000
+    #star, resolution = "input/spectra/instruments/narval_hd146233.s.gz", 80000
+    #star, resolution = "input/spectra/instruments/uves_hd146233.s.gz", 47000
+    #star, resolution = "input/spectra/instruments/uves_hd146233_normalized.s.gz", 47000
+    #star, resolution = "input/spectra/instruments/espadons_hd85503.s.gz", 80000
+    #star, resolution = "input/spectra/instruments/harps_procyon.s.gz", 115000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr1567_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr2845_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr3492_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr3982_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr4828_002.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr708_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr7906_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr838_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr4182_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr5867_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr7235_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr8028_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr8976_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr4828_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr6629_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr7528_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr804_001.s.gz", 80000
+    #star, resolution = "input/spectra/synthetic/synth_LUMBA_Gustafsson_SME_arcturus.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_LUMBA_Gustafsson_SME_mu_cas_a.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_LUMBA_Gustafsson_SME_mu_leo.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_LUMBA_Gustafsson_SME_sun.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_kurucz_arcturus.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_kurucz_mu_cas_a.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_kurucz_mu_leo.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_kurucz_sun.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_kurucz_arcturus.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_kurucz_mu_cas_a.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_kurucz_mu_leo.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_kurucz_sun.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_castelli_arcturus.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_castelli_arcturus.s.gz", 200000  
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_castelli_mu_cas_a.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_castelli_mu_leo.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_castelli_sun.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_castelli_mu_cas_a.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_castelli_mu_leo.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_castelli_sun.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/telluric_standard_atm_air_model.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/telluric_standard_atm_air_model_norm.s.gz", 200000
     
-    #star, resolution = "input/instruments/elodie_hd146233_normalized.txt", 42000
-    #star, resolution = "input/instruments/ELODIE_HD005516A_spectroscopic_binary_SN86.txt", 42000
-    #star, resolution = "input/instruments/ELODIE_HD085503_single_star_SN61.txt", 42000
-    #star, resolution = "input/instruments/ELODIE_HD085503_single_star_SN183.txt", 42000
-    #star, resolution = "input/instruments/ELODIE_HD085503_single_star_SN220.txt", 42000
-    star, resolution = "input/instruments/elodie_procyon_SN460.txt", 42000
-    #star, resolution = "input/instruments/elodie_procyon_SN229.txt", 42000
-    #star, resolution = "input/instruments/elodie_HD190073_SN127.txt", 42000
-    #star, resolution = "input/instruments/elodie_HD190007_SN116.txt", 42000
+
     
-    #star, resolution = "input/instruments/giraffe_hd107328_normalized.txt", 16000
-    #star, resolution = "input/instruments/narval_hd146233_normalized.txt", 65000
-    #star, resolution = "input/L082N03_spec_norm/05oct08/sp2_Normal/004_vesta_001.s", 75000
-    
-    #star, resolution = "input/instruments/uves_hd146233_normalized.txt", 47000
-    #star, resolution = "input/instruments/uves_hd146233_segment1.txt", 47000
-    #star, resolution = "input/telluric_standards/hr1567_001_norm.s", 65000
-    #star, resolution = "input/telluric/standard_atm_air_norm.s.gz", 100000
     print "Reading spectrum..."
     spectra = read_spectra(star)
     wmin = spectra['waveobs'][0]
     wmax = spectra['waveobs'][-1]
+    
+    snr = estimate_snr(spectra)
+    print snr
+    import ipdb
+    ipdb.set_trace()
     
     ## Convolution test
     #from_resolution = 42000

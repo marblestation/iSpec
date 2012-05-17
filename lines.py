@@ -829,32 +829,67 @@ if __name__ == '__main__':
     #############################
     ## Stars' spectra
     #############################
-    
-    
-    ## LUMBA test 0.2
-    #star, resolution = "input/test/observed_arcturus.s.gz", 47000
-    #star, resolution = "input/test/observed_mu_cas_a.s.gz", 47000
-    #star, resolution = "input/test/observed_mu_leo.s.gz", 47000
-    #star, resolution = "input/test/observed_sun.s.gz", 47000
-    ## Narval SUN
-    #star, resolution = "input/L082N03_spec_norm/05oct08/sp2_Normal/004_vesta_001.s", 75000
-    ## Binary test (elodie)
-    #star, resolution = "input/test/ELODIE_HD005516A_spectroscopic_binary.s.gz", 42000
-    #star, resolution = "input/test/ELODIE_HD085503_single_star.s.gz", 42000
-    ## Instrumental comparison
-    #star, resolution = "input/instruments/elodie_hd146233_normalized.txt", 42000
-    #star, resolution = "input/instruments/giraffe_hd107328_normalized.txt", 16000
-    #star, resolution = "input/instruments/narval_hd146233_normalized.txt", 65000
-    #star, resolution = "input/instruments/uves_hd146233_normalized.txt", 47000
-    ## Telluric Standard
-    #star, resolution = "input/telluric_standards/hr1567_001_norm.s", 65000
-    
-
-    ## Test
-    #star, resolution = "/home/marble/Downloads/HD146233/Narval/narval_hd146233_100312_segment.s", 65000
-    #star, resolution = "input/test/observed_sun.s.gz", 47000
-    #star, resolution = "/home/marble/Downloads/HD146233/UVES/hd146233_uves_segment.txt", 47000
-    #star, resolution = "/home/marble/Downloads/HD146233/UVES/hd146233_uves_segment_not_normalized.txt", 47000
+    #star, resolution = "input/spectra/examples/espadons_mu_leo.s.gz", 80000
+    #star, resolution = "input/spectra/examples/espadons_mu_leo_norm.s.gz", 80000
+    #star, resolution = "input/spectra/examples/harps_procyon.s.gz", 115000
+    #star, resolution = "input/spectra/examples/harps_procyon_norm.s.gz", 115000
+    #star, resolution = "input/spectra/examples/narval_arcturus.s.gz", 80000
+    #star, resolution = "input/spectra/examples/narval_arcturus_norm.s.gz", 80000
+    #star, resolution = "input/spectra/examples/narval_mu_cas.s.gz", 80000
+    #star, resolution = "input/spectra/examples/narval_mu_cas_norm.s.gz", 80000
+    star, resolution = "input/spectra/examples/narval_sun.s.gz", 80000 
+    #star, resolution = "input/spectra/examples/narval_sun_norm.s.gz", 80000
+    #star, resolution = "input/spectra/binaries/elodie_hd005516A_spectroscopic_binary.s.gz", 42000
+    #star, resolution = "input/spectra/binaries/elodie_hd085503_single_star.s.gz", 42000
+    #star, resolution = "input/spectra/instruments/elodie_hd146233_SN237_normalized.s.gz", 42000
+    #star, resolution = "input/spectra/instruments/elodie_hd146233_SN237.s.gz", 42000
+    #star, resolution = "input/spectra/instruments/giraffe_hd107328_normalized.s.gz", 16000
+    #star, resolution = "input/spectra/instruments/giraffe_hd107328.s.gz", 16000
+    #star, resolution = "input/spectra/instruments/narval_hd146233_normalized.s.gz", 80000
+    #star, resolution = "input/spectra/instruments/narval_hd146233.s.gz", 80000
+    #star, resolution = "input/spectra/instruments/uves_hd146233.s.gz", 47000
+    #star, resolution = "input/spectra/instruments/uves_hd146233_normalized.s.gz", 47000
+    #star, resolution = "input/spectra/instruments/espadons_hd85503.s.gz", 80000
+    #star, resolution = "input/spectra/instruments/harps_procyon.s.gz", 115000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr1567_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr2845_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr3492_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr3982_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr4828_002.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr708_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr7906_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr838_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr4182_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr5867_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr7235_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr8028_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr8976_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr4828_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr6629_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr7528_001.s.gz", 80000
+    #star, resolution = "input/spectra/telluric_standards/narval_hr804_001.s.gz", 80000
+    #star, resolution = "input/spectra/synthetic/synth_LUMBA_Gustafsson_SME_arcturus.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_LUMBA_Gustafsson_SME_mu_cas_a.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_LUMBA_Gustafsson_SME_mu_leo.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_LUMBA_Gustafsson_SME_sun.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_kurucz_arcturus.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_kurucz_mu_cas_a.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_kurucz_mu_leo.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_kurucz_sun.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_kurucz_arcturus.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_kurucz_mu_cas_a.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_kurucz_mu_leo.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_kurucz_sun.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_castelli_arcturus.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_castelli_arcturus.s.gz", 200000  
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_castelli_mu_cas_a.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_castelli_mu_leo.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_SPEC_castelli_sun.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_castelli_mu_cas_a.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_castelli_mu_leo.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/synth_VALD_castelli_sun.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/telluric_standard_atm_air_model.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/telluric_standard_atm_air_model_norm.s.gz", 200000
     
     # Normalize spectra
     normalize = False
@@ -865,10 +900,10 @@ if __name__ == '__main__':
     
     #############################
     ## Synthetic telluric lines' spectra
-    #star, resolution = "input/telluric/synthetic/standard_atm_air.s.gz", 100000
-    star, resolution = "input/telluric/synthetic/standard_atm_air_norm.s.gz", 100000
+    #star, resolution = "input/spectra/synthetic/telluric_standard_atm_air_model.s.gz", 200000
+    #star, resolution = "input/spectra/synthetic/telluric_standard_atm_air_model_norm.s.gz", 200000
     # Do NOT smooth spectra using the instrumental resolution
-    smooth_spectra = True
+    #smooth_spectra = True
     #############################
     
     ### Fitting parameters

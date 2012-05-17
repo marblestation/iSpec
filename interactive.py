@@ -1089,6 +1089,7 @@ class Spectrum():
         self.velocity_profile_telluric_num_used_lines = None
         self.velocity_profile_telluric_rv_step = None
         self.velocity_profile_telluric_fwhm_correction = 0.0
+        self.snr = None
 
     
 class SpectraFrame(wx.Frame):
@@ -1200,6 +1201,11 @@ class SpectraFrame(wx.Frame):
     ####################################################################
     def error(self, title, msg):
         dlg_error = wx.MessageDialog(self, msg, title, wx.OK|wx.ICON_ERROR)
+        dlg_error.ShowModal()
+        dlg_error.Destroy()
+    
+    def info(self, title, msg):
+        dlg_error = wx.MessageDialog(self, msg, title, wx.OK|wx.ICON_INFORMATION)
         dlg_error.ShowModal()
         dlg_error.Destroy()
     
@@ -1406,6 +1412,10 @@ class SpectraFrame(wx.Frame):
         
         m_determine_barycentric_vel = menu_edit.Append(-1, "&Calculate barycentric velocity", "Calculate baricentryc velocity")
         self.Bind(wx.EVT_MENU, self.on_determine_barycentric_vel, m_determine_barycentric_vel)
+        
+        m_estimate_snr = menu_edit.Append(-1, "&Estimate SNR", "Estimate Signal-to-Noise Ratio")
+        self.Bind(wx.EVT_MENU, self.on_estimate_snr, m_estimate_snr)
+        self.spectrum_function_items.append(m_estimate_snr)
         
         menu_edit.AppendSeparator()
         
@@ -2921,6 +2931,33 @@ class SpectraFrame(wx.Frame):
         
         self.flash_status_message("Barycentric velocity determined: " + str(self.barycentric_vel) + " km/s")
 
+    def on_estimate_snr(self, event):
+        if self.check_operation_in_progress():
+            return
+        
+        if self.active_spectrum.snr != None:
+            msg = "Previous SNR: %.2f. Re-estimate again? " % self.active_spectrum.snr
+            title = "Signal-to-Noise Ratio"
+            if not self.question(title, msg):
+                return
+        
+        self.operation_in_progress = True
+        thread = threading.Thread(target=self.on_estimate_snr_thread)
+        thread.setDaemon(True)
+        thread.start()
+    
+    def on_estimate_snr_thread(self):
+        wx.CallAfter(self.status_message, "Estimating SNR...")
+        estimated_snr = estimate_snr(self.active_spectrum.data, frame=self)
+        wx.CallAfter(self.on_estimate_snr_finnish, estimated_snr)
+    
+    def on_estimate_snr_finnish(self, estimated_snr):
+        self.active_spectrum.snr = estimated_snr
+        msg = "Estimated SNR: %.2f" % self.active_spectrum.snr
+        title = "Signal-to-Noise Ratio"
+        self.info(title, msg)
+        self.flash_status_message(msg)
+        self.operation_in_progress = False
     
     def on_determine_velocity_atomic(self, event):
         self.on_determine_velocity(event, relative_to_atomic_data = True)
@@ -3028,7 +3065,7 @@ class SpectraFrame(wx.Frame):
             velocity_step = self.velocity_atomic_step
         else:
             if self.linelist_telluric == None:
-                telluric_lines_file = "input/telluric/linelist/standard_atm_air.lst"
+                telluric_lines_file = "input/linelists/telluric/standard_atm_air_model.lst"
                 self.linelist_telluric = read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)        
             linelist = self.linelist_telluric
             velocity_lower_limit = self.velocity_telluric_lower_limit
