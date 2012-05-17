@@ -172,7 +172,7 @@ def VALD_top_N_to_RV_format(vald_file, output_file, top=1, wave_step=10, data_en
     
     asciitable.write(selected, output=output_file, delimiter=",", quotechar="'")
 
-#VALD_top_N_to_RV_format("input/linelists/original/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", "input/rv/VALD.300_1100nm.rv.lst2", top=1, wave_step=10, data_end=None)
+#VALD_top_N_to_RV_format("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", "input/rv/VALD.300_1100nm.rv.lst2", top=1, wave_step=10, data_end=None)
 
 
 ########################################################################
@@ -385,22 +385,35 @@ def assert_structure(xcoord, yvalues, peaks, base_points):
             peaks = peaks
         elif len(base_points) - len(peaks) == 0:
             ## First feature found in spectra: base point
-            ## Last feature found in spectra: peak (this last one will be removed)
-            base_points = base_points
-            peaks = peaks[:-1]
+            ## Last feature found in spectra: peak
+            # - Remove last peak
+            #base_points = base_points
+            #peaks = peaks[:-1]
+            # - Add a base point (last point in the spectra)
+            base_points = np.hstack((base_points, [len(xcoord)-1]))
+            peaks = peaks
         else:
             raise Exception("This should not happen")
     else:
         if len(base_points) - len(peaks) == -1:
-            ## First feature found in spectra: peak (this first one will be removed)
-            ## Last feature found in spectra: peak (this last one will be removed)
-            base_points = base_points
-            peaks = peaks[1:-1]
+            ## First feature found in spectra: peak
+            ## Last feature found in spectra: peak
+            # - Remove first and last peaks
+            #base_points = base_points
+            #peaks = peaks[1:-1]
+            # - Add two base points (first and last point in the spectra)
+            base_points = np.hstack(([0], base_points))
+            base_points = np.hstack((base_points, [len(xcoord)-1]))
+            peaks = peaks
         elif len(base_points) - len(peaks) == 0:
-            ## First feature found in spectra: peak (this first one will be removed)
+            ## First feature found in spectra: peak
             ## Last feature found in spectra: base point
-            base_points = base_points
-            peaks = peaks[1:]
+            # - Remove first peak
+            #base_points = base_points
+            #peaks = peaks[1:]
+            # - Add a base point (first point in the spectra)
+            base_points = np.hstack(([0], base_points))
+            peaks = peaks
         else:
             raise Exception("This should not happen")
     
@@ -420,7 +433,7 @@ def assert_structure(xcoord, yvalues, peaks, base_points):
 # the rest of the information of the line will be conserved in the output
 # Returns a complete structure with all the necessary information to
 # determine if it is a line of interest
-def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_depth=None, maximum_depth=None, smoothed_spectra=None, vald_linelist_file="input/linelists/original/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", discard_gaussian = False, discard_voigt = False):
+def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_depth=None, maximum_depth=None, smoothed_spectra=None, vald_linelist_file="input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", discard_gaussian = False, discard_voigt = False):
     print "NOTICE: This method can generate overflow warnings due to the Least Square Algorithm"
     print "        used for the fitting process, but they can be ignored."
     if smoothed_spectra == None:
@@ -542,7 +555,7 @@ def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_dep
 
 # Cross-match linemasks with a VALD linelist in order to find
 # the nearest lines and copy the information into the linemasks structure
-def fill_with_VALD_info(linemasks, vald_linelist_file="input/linelists/original/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"):
+def fill_with_VALD_info(linemasks, vald_linelist_file="input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"):
         ## Load original VALD linelist
         vald_linelist = read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
         
@@ -754,7 +767,11 @@ def improve_linemask_edges(xcoord, yvalues, base, top, peak):
                     new_top = np.min([right_concave_pos[np.min(right_concave_edge_pos)] + base, original_top])
         
     else:
-        raise Exception("This should not happen")
+        # This will happen very rarely (only in peaks detected at the extreme of a spectra
+        # and one of its basepoints has been "artificially" added and it happens to be
+        # just next to the peak)
+        new_base = base
+        new_top = original_top
         #plt.plot(x, y)
         #l = plt.axvline(x = x[peak_relative_pos], linewidth=1, color='red')
         #print d2y_dx2, d2y_dx2[peak_relative_pos]
@@ -803,9 +820,9 @@ def print_linemasks_stats(linemasks, discarded):
 
 if __name__ == '__main__':
     ### VALD line list
-    #VALD_to_SPECTRUM_format("input/linelists/original/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", "input/linelists/VALD.300_1100nm.lst", minimum_depth=0.0)
+    #VALD_to_SPECTRUM_format("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", "input/linelists/VALD.300_1100nm.lst", minimum_depth=0.0)
 
-    #VALD_top_3_to_RV_format("input/linelists/original/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", "input/rv/VALD.300_1100nm.rv.lst", top=1, wave_step=10)
+    #VALD_top_3_to_RV_format("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", "input/rv/VALD.300_1100nm.rv.lst", top=1, wave_step=10)
     
     ### Line detection and fitting example:
     
@@ -848,8 +865,8 @@ if __name__ == '__main__':
     
     #############################
     ## Synthetic telluric lines' spectra
-    #star, resolution = "input/telluric/standard_atm_air.s.gz", 100000
-    star, resolution = "input/telluric/standard_atm_air_norm.s.gz", 100000
+    #star, resolution = "input/telluric/synthetic/standard_atm_air.s.gz", 100000
+    star, resolution = "input/telluric/synthetic/standard_atm_air_norm.s.gz", 100000
     # Do NOT smooth spectra using the instrumental resolution
     smooth_spectra = True
     #############################
@@ -895,7 +912,7 @@ if __name__ == '__main__':
     
     
     print "Generating linemasks, fitting gaussians/voigt and matching VALD lines..."
-    linemasks = generate_linemasks(original_spectra, peaks, base_points, continuum_model, minimum_depth=minimum_depth, maximum_depth=maximum_depth, smoothed_spectra=spectra ,vald_linelist_file="input/linelists/original/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", discard_gaussian = discard_gaussian, discard_voigt = discard_voigt)
+    linemasks = generate_linemasks(original_spectra, peaks, base_points, continuum_model, minimum_depth=minimum_depth, maximum_depth=maximum_depth, smoothed_spectra=spectra ,vald_linelist_file="input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", discard_gaussian = discard_gaussian, discard_voigt = discard_voigt)
     
     ####################################################################
     ##### FILTERS

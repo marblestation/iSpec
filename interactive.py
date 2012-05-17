@@ -67,20 +67,20 @@ class FitContinuumDialog(wx.Dialog):
         
         flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
         
-        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
-        self.text_method = wx.StaticText(self, -1, "Method: ", style=wx.ALIGN_LEFT)
-        self.hbox.AddSpacer(10)
-        self.hbox.Add(self.text_method, 0, border=3, flag=flags)
+        #self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        #self.text_method = wx.StaticText(self, -1, "Method: ", style=wx.ALIGN_LEFT)
+        #self.hbox.AddSpacer(10)
+        #self.hbox.Add(self.text_method, 0, border=3, flag=flags)
         
-        self.vbox2 = wx.BoxSizer(wx.VERTICAL)
-        self.radio_button_splines = wx.RadioButton(self, -1, 'Splines fitting', style=wx.RB_GROUP)
-        self.vbox2.Add(self.radio_button_splines, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
-        self.radio_button_interpolation = wx.RadioButton(self, -1, 'Interpolation')
-        self.vbox2.Add(self.radio_button_interpolation, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
-        self.radio_button_splines.SetValue(True)
-        self.hbox.Add(self.vbox2, 0, border=3, flag=flags)
+        #self.vbox2 = wx.BoxSizer(wx.VERTICAL)
+        #self.radio_button_splines = wx.RadioButton(self, -1, 'Splines fitting', style=wx.RB_GROUP)
+        #self.vbox2.Add(self.radio_button_splines, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
+        #self.radio_button_interpolation = wx.RadioButton(self, -1, 'Interpolation')
+        #self.vbox2.Add(self.radio_button_interpolation, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
+        #self.radio_button_splines.SetValue(True)
+        #self.hbox.Add(self.vbox2, 0, border=3, flag=flags)
         
-        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+        #self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
         
         ### Standard deviation
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
@@ -569,7 +569,7 @@ class HomogenizeCombineSpectraDialog(wx.Dialog):
         ### Resolution
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
         
-        self.text_resolution = wx.StaticText(self, -1, "Resolution of the current spectra: ", style=wx.ALIGN_LEFT)
+        self.text_resolution = wx.StaticText(self, -1, "Resolution (only affects the sampling): ", style=wx.ALIGN_LEFT)
         self.resolution = wx.TextCtrl(self, -1, str(resolution),  style=wx.TE_RIGHT)
         
         self.hbox.AddSpacer(10)
@@ -784,7 +784,6 @@ class CustomizableRegion:
         # Fit line properties, dictionary of spectrum (to vinculate to different spectra):
         self.line_plot_id = {}
         self.line_model = {}
-        self.continuum_base_level = {}
     
     def connect(self):
         # Connect to all the events
@@ -1897,18 +1896,20 @@ class SpectraFrame(wx.Frame):
             self.add_stats("Flux standard deviation", "%.6f" % np.std(spectra_window['flux']))
         
         if region.element_type == "lines" and region.line_plot_id.has_key(self.active_spectrum) and region.line_model[self.active_spectrum] != None:
-            self.add_stats("Gaussian mean (mu)", "%.4f" % region.line_model[self.active_spectrum].mu)
-            self.add_stats("Gaussian width (A)", "%.4f" % region.line_model[self.active_spectrum].A)
-            self.add_stats("Gaussian standard deviation (sigma)", "%.4f" % region.line_model[self.active_spectrum].sig)
-            self.add_stats("Gaussian base level (mean continuum)", "%.4f" % region.continuum_base_level[self.active_spectrum])
-            rms = np.mean(np.abs(region.line_model[self.active_spectrum].residuals())) + np.std(np.abs(region.line_model[self.active_spectrum].residuals()))
+            self.add_stats("Gaussian mean (mu)", "%.4f" % region.line_model[self.active_spectrum].mu())
+            self.add_stats("Gaussian width (A)", "%.4f" % region.line_model[self.active_spectrum].A())
+            self.add_stats("Gaussian standard deviation (sigma)", "%.4f" % region.line_model[self.active_spectrum].sig())
+            self.add_stats("Gaussian base level (mean continuum)", "%.4f" % region.line_model[self.active_spectrum].baseline())
+            residuals = np.abs(region.line_model[self.active_spectrum].residuals())
+            rms = np.mean(residuals) + np.std(residuals)
             self.add_stats("Gaussian fit root mean squeare (RMS)", "%.4f" % rms)
         
         if self.active_spectrum.continuum_model != None:
             if num_points > 0:
                 mean_continuum = np.mean(self.active_spectrum.continuum_model(spectra_window['waveobs']))
                 self.add_stats("Continuum mean for the region", "%.4f" % mean_continuum)
-            rms = np.mean(np.abs(self.active_spectrum.continuum_model.residuals())) + np.std(np.abs(self.active_spectrum.continuum_model.residuals()))
+            residuals = np.abs(self.active_spectrum.continuum_model.residuals())
+            rms = np.mean(residuals) + np.std(residuals)
             self.add_stats("Continuum fit root mean square (RMS)", "%.4f" % rms)
             
         
@@ -2060,7 +2061,6 @@ class SpectraFrame(wx.Frame):
                     self.axes.lines.remove(region.line_plot_id[self.active_spectrum])
                 del region.line_plot_id[self.active_spectrum]
                 del region.line_model[self.active_spectrum]
-                del region.continuum_base_level[self.active_spectrum]
         if len(self.spectra) == 0:
             self.active_spectrum = None
         else:
@@ -2342,7 +2342,7 @@ class SpectraFrame(wx.Frame):
         to_resolution = self.text2float(dlg.to_resolution.GetValue(), 'Final resolution value is not a valid one.')
         dlg.Destroy()
         
-        if from_resolution == None or to_resolution == None or from_resolution <= to_resolution:
+        if from_resolution == None or to_resolution == None or from_resolution <= to_resolution or from_resolution <= 0 or to_resolution <= 0:
             self.flash_status_message("Bad value.")
             return
         
@@ -2449,7 +2449,7 @@ class SpectraFrame(wx.Frame):
         resolution = self.text2float(dlg.resolution.GetValue(), 'Resolution value is not a valid one.')
         dlg.Destroy()
         
-        if wave_base == None or wave_top == None or wave_top <= wave_base:
+        if wave_base == None or wave_top == None or wave_top <= wave_base or resolution <= 0:
             self.flash_status_message("Bad value.")
             return
         # It is not necessary to check if base and top are out of the current spectra,
@@ -2491,7 +2491,6 @@ class SpectraFrame(wx.Frame):
                         self.axes.lines.remove(region.line_plot_id[spec])
                     region.line_plot_id.remove(spec)
                     region.line_model.remove(spec)
-                    region.continuum_base_level.remove(spec)
             i += 1
         
         # Combine
@@ -2625,15 +2624,13 @@ class SpectraFrame(wx.Frame):
             try:
                 # Remove old possible results
                 region.line_model[self.active_spectrum] = None
-                region.continuum_base_level[self.active_spectrum] = None
                 
-                # Fit
-                line_model = fit_line(spectra_window, self.active_spectrum.continuum_mode, mu)
-                continuum_value = continuum_model(spectra_window['waveobs'])
+                # Fit gaussian
+                line_model, rms = fit_line(spectra_window, self.active_spectrum.continuum_model, mu, discard_voigt = True)
+                continuum_value = self.active_spectrum.continuum_model(spectra_window['waveobs'])
                 
                 # Save results
                 region.line_model[self.active_spectrum] = line_model
-                region.continuum_base_level[self.active_spectrum] = np.mean(continuum_value)
             except Exception as e:
                 print "Error:", wave_base, wave_top, e
             
@@ -2664,7 +2661,6 @@ class SpectraFrame(wx.Frame):
             if region.line_model.has_key(self.active_spectrum):
                 del region.line_plot_id[self.active_spectrum]
                 del region.line_model[self.active_spectrum]
-                del region.continuum_base_level[self.active_spectrum]
     
     def draw_fitted_lines(self):
         for region in self.region_widgets["lines"]:
@@ -2676,8 +2672,6 @@ class SpectraFrame(wx.Frame):
                 
                 # Get fluxes from model
                 line_fluxes = region.line_model[self.active_spectrum](spectra_window['waveobs'])
-                # Add the continuum base because the line_model has substracted it
-                line_fluxes += region.continuum_base_level[self.active_spectrum]
                 
                 # zorder = 4, above the line region
                 line_plot_id = self.axes.plot(spectra_window['waveobs'], line_fluxes, lw=1, color='red', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=4)[0]
@@ -2735,7 +2729,8 @@ class SpectraFrame(wx.Frame):
         
         nknots = self.text2float(dlg.nknots.GetValue(), 'Number of knots value is not a valid one.')
         in_continuum = dlg.radio_button_continuum.GetValue()
-        find_continuum_by_fitting = dlg.radio_button_splines.GetValue()
+        #find_continuum_by_fitting = dlg.radio_button_splines.GetValue()
+        find_continuum_by_fitting = True
         dlg.Destroy()
         
         if nknots == None:
@@ -3021,7 +3016,7 @@ class SpectraFrame(wx.Frame):
         
         if relative_to_atomic_data:
             if self.linelist_atomic == None:
-                vald_linelist_file = "input/rv/default.300_1100nm.rv.lst"
+                vald_linelist_file = "input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
                 self.linelist_atomic = read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
                 ## Convert wavelengths from armstrong to nm
                 self.linelist_atomic['wave (A)'] = self.linelist_atomic['wave (A)'] / 10.0
@@ -3033,7 +3028,7 @@ class SpectraFrame(wx.Frame):
             velocity_step = self.velocity_atomic_step
         else:
             if self.linelist_telluric == None:
-                telluric_lines_file = "input/telluric/standard_atm_air.lst"
+                telluric_lines_file = "input/telluric/linelist/standard_atm_air.lst"
                 self.linelist_telluric = read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)        
             linelist = self.linelist_telluric
             velocity_lower_limit = self.velocity_telluric_lower_limit
@@ -3333,7 +3328,7 @@ class SpectraFrame(wx.Frame):
         synth_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
         synth_spectra['waveobs'] = waveobs
         
-        synth_spectra['flux'] = synthesizer.spectrum(synth_spectra['waveobs']*10.0, atm_filename, linelist_file = "input/linelists/default.300_1100nm.lst", abundances_file = "input/abundances/default.stdatom.dat", microturbulence_vel = microturbulence_vel, verbose=1, update_progress_func=self.update_progress)
+        synth_spectra['flux'] = synthesizer.spectrum(synth_spectra['waveobs']*10.0, atm_filename, linelist_file = "input/linelists/SPECTRUM/default.300_1100nm.lst", abundances_file = "input/abundances/default.stdatom.dat", microturbulence_vel = microturbulence_vel, verbose=1, update_progress_func=self.update_progress)
             
         
         synth_spectra.sort(order='waveobs') # Make sure it is ordered by wavelength
