@@ -365,7 +365,7 @@ class DetermineBarycentricCorrectionDialog(wx.Dialog):
 
 
 class VelocityProfileDialog(wx.Dialog):
-    def __init__(self, parent, id, title, xcoord, fluxes, models, num_used_lines, rv_step):
+    def __init__(self, parent, id, title, xcoord, fluxes, models, num_used_lines, rv_step, telluric_fwhm=0.0):
         wx.Dialog.__init__(self, parent, id, title, size=(600, 600))
         
         self.recalculate = False
@@ -441,19 +441,38 @@ class VelocityProfileDialog(wx.Dialog):
             self.stats.InsertStringItem(num_items, "Min. error (+/- km/s)")
             self.stats.SetStringItem(num_items, 1, str(np.round(rv_step, 2)))
             num_items += 1
+            self.stats.InsertStringItem(num_items, "Baseline")
+            self.stats.SetStringItem(num_items, 1, str(np.round(model.baseline(), 2)))
+            num_items += 1
+            self.stats.InsertStringItem(num_items, "A (rel. intensity)")
+            self.stats.SetStringItem(num_items, 1, str(np.round(model.A(), 2)))
+            num_items += 1
             self.stats.InsertStringItem(num_items, "Sigma (km/s)")
             self.stats.SetStringItem(num_items, 1, str(np.round(model.sig(), 2)))
             num_items += 1
-            self.stats.InsertStringItem(num_items, "A (rel. intensity)")
-            self.stats.SetStringItem(num_items, 1, str(np.round(model.A()+1, 2)))
-            num_items += 1
-            fwhm = model.sig() * (2*np.sqrt(2*np.log(2)))
+            fwhm = model.fwhm()[0] # km/s (because xcoord is already velocity)
             self.stats.InsertStringItem(num_items, "FWHM (km/s)")
             self.stats.SetStringItem(num_items, 1, str(np.round(fwhm, 2)))
             num_items += 1
+            if telluric_fwhm != 0:
+                self.stats.InsertStringItem(num_items, "Theoretical telluric FWHM (km/s)")
+                self.stats.SetStringItem(num_items, 1, str(np.round(telluric_fwhm, 2)))
+                num_items += 1
+                self.stats.InsertStringItem(num_items, "Corrected FWHM (km/s)")
+                self.stats.SetStringItem(num_items, 1, str(np.round(fwhm - telluric_fwhm, 2)))
+                num_items += 1
             self.stats.InsertStringItem(num_items, "Resolving power (R)")
             c = 299792458.0 # m/s
-            self.stats.SetStringItem(num_items, 1, str(np.int(c/(1000.0*np.round(fwhm, 2)))))
+            R = np.int(c/(1000.0*np.round(fwhm - telluric_fwhm, 2)))
+            self.stats.SetStringItem(num_items, 1, str(np.round(R, 2)))
+            num_items += 1
+            residuals = model.residuals()
+            rms = np.sqrt(np.sum(np.power(residuals, 2)) / len(residuals))
+            self.stats.InsertStringItem(num_items, "RMS")
+            self.stats.SetStringItem(num_items, 1, str(np.round(rms, 5)))
+            num_items += 1
+            self.stats.InsertStringItem(num_items, "-------------------------------------------------------")
+            self.stats.SetStringItem(num_items, 1, "---------------")
             num_items += 1
         self.stats.InsertStringItem(num_items, "Number of lines used")
         self.stats.SetStringItem(num_items, 1, str(num_used_lines))
@@ -1057,6 +1076,9 @@ class Spectrum():
         self.velocity_atomic = 0.0 # Radial velocity (km/s)
         self.velocity_telluric = 0.0 # Barycentric velocity (km/s)
         self.path = path
+        # Resolution power from the velocity profile relative to atomic and telluric lines
+        self.resolution_atomic = 0.0
+        self.resolution_telluric = 0.0
         self.velocity_profile_atomic_xcoord = None
         self.velocity_profile_atomic_fluxes = None
         self.velocity_profile_atomic_models = None
@@ -1067,7 +1089,7 @@ class Spectrum():
         self.velocity_profile_telluric_models = None
         self.velocity_profile_telluric_num_used_lines = None
         self.velocity_profile_telluric_rv_step = None
-        self.resolution = 47000 # default
+        self.velocity_profile_telluric_fwhm_correction = 0.0
 
     
 class SpectraFrame(wx.Frame):
@@ -1136,8 +1158,8 @@ class SpectraFrame(wx.Frame):
         self.not_saved["continuum"] = False
         self.not_saved["lines"] = False
         self.not_saved["segments"] = False
-        self.velocity_telluric_lower_limit = -50 # km/s
-        self.velocity_telluric_upper_limit = 50 # km/s
+        self.velocity_telluric_lower_limit = -100 # km/s
+        self.velocity_telluric_upper_limit = 100 # km/s
         self.velocity_telluric_step = 0.5 # km/s
         self.velocity_atomic_lower_limit = -200 # km/s
         self.velocity_atomic_upper_limit = 200 # km/s
@@ -2304,7 +2326,12 @@ class SpectraFrame(wx.Frame):
         if self.check_operation_in_progress():
             return
         
-        dlg = DegradeResolutionDialog(self, -1, "Degrade spectrum resolution", self.active_spectrum.resolution, 10000)
+        # Give priority to the resolution determined by the velocity profile relative to telluric lines
+        if self.active_spectrum.resolution_telluric == 0.0:
+            R = self.active_spectrum.resolution_atomic
+        else:
+            R = self.active_spectrum.resolution_telluric
+        dlg = DegradeResolutionDialog(self, -1, "Degrade spectrum resolution", R, R/2)
         dlg.ShowModal()
         
         if not dlg.action_accepted:
@@ -2339,7 +2366,8 @@ class SpectraFrame(wx.Frame):
     def on_degrade_resolution_finnish(self, convolved_spectra, from_resolution, to_resolution):
         self.active_spectrum.data = convolved_spectra
         self.active_spectrum.not_saved = True
-        self.active_spectrum.resolution = to_resolution
+        self.active_spectrum.resolution_telluric = to_resolution
+        self.active_spectrum.resolution_atomic = to_resolution
         
         # Remove current continuum from plot if exists
         self.remove_continuum_spectra()
@@ -2403,7 +2431,13 @@ class SpectraFrame(wx.Frame):
         if self.check_operation_in_progress():
             return
         
-        dlg = HomogenizeCombineSpectraDialog(self, -1, "Homogenize & combine spectrum", np.round(np.min(self.active_spectrum.data['waveobs']), 2), np.round(np.max(self.active_spectrum.data['waveobs']), 2), self.active_spectrum.resolution)
+        # Give priority to the resolution determined by the velocity profile relative to telluric lines
+        if self.active_spectrum.resolution_telluric == 0.0:
+            R = self.active_spectrum.resolution_atomic
+        else:
+            R = self.active_spectrum.resolution_telluric
+        
+        dlg = HomogenizeCombineSpectraDialog(self, -1, "Homogenize & combine spectrum", np.round(np.min(self.active_spectrum.data['waveobs']), 2), np.round(np.max(self.active_spectrum.data['waveobs']), 2), R)
         dlg.ShowModal()
         
         if not dlg.action_accepted:
@@ -2908,6 +2942,7 @@ class SpectraFrame(wx.Frame):
                 models = self.active_spectrum.velocity_profile_atomic_models
                 num_used_lines = self.active_spectrum.velocity_profile_atomic_num_used_lines
                 velocity_step = self.active_spectrum.velocity_profile_atomic_rv_step
+                telluric_fwhm = 0.0
                 title = "Velocity profile relative to atomic lines"
             else:
                 xcoord = self.active_spectrum.velocity_profile_telluric_xcoord
@@ -2915,9 +2950,10 @@ class SpectraFrame(wx.Frame):
                 models = self.active_spectrum.velocity_profile_telluric_models
                 num_used_lines = self.active_spectrum.velocity_profile_telluric_num_used_lines
                 velocity_step = self.active_spectrum.velocity_profile_telluric_rv_step
+                telluric_fwhm = self.active_spectrum.velocity_profile_telluric_fwhm_correction
                 title = "Velocity profile relative to telluric lines"
                 
-            dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, models, num_used_lines, velocity_step)
+            dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, models, num_used_lines, velocity_step, telluric_fwhm)
             dlg.ShowModal()
             recalculate = dlg.recalculate
             dlg.Destroy()
@@ -2985,8 +3021,7 @@ class SpectraFrame(wx.Frame):
         
         if relative_to_atomic_data:
             if self.linelist_atomic == None:
-                #vald_linelist_file = "input/rv/default.300_1100nm.rv.lst" # Reduced
-                vald_linelist_file = "input/linelists/original/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
+                vald_linelist_file = "input/rv/default.300_1100nm.rv.lst"
                 self.linelist_atomic = read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
                 ## Convert wavelengths from armstrong to nm
                 self.linelist_atomic['wave (A)'] = self.linelist_atomic['wave (A)'] / 10.0
@@ -2998,27 +3033,74 @@ class SpectraFrame(wx.Frame):
             velocity_step = self.velocity_atomic_step
         else:
             if self.linelist_telluric == None:
-                telluric_lines_file = "input/telluric/standard_atm_air.txt"
+                telluric_lines_file = "input/telluric/standard_atm_air.lst"
                 self.linelist_telluric = read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)        
             linelist = self.linelist_telluric
             velocity_lower_limit = self.velocity_telluric_lower_limit
             velocity_upper_limit = self.velocity_telluric_upper_limit
             velocity_step = self.velocity_telluric_step
+            # Light speed
+            c = 299792458.0 # m/s
+            ###### Select lines of interest
+            # Limit to region of interest
+            wmin = self.active_spectrum.data['waveobs'][0]
+            wmax = self.active_spectrum.data['waveobs'][-1]
+            delta_wmin = wmin * (velocity_lower_limit / (c/1000.0))
+            delta_wmax = wmax * (velocity_upper_limit / (c/1000.0))
+            wfilter = (linelist['wave_peak'] <= wmax + delta_wmax) & (linelist['wave_peak'] >= wmin + delta_wmin)
+            linelist = linelist[wfilter]
+            # Discard not fitted lines
+            rfilter = linelist['rms'] == 9999
+            linelist = linelist[~rfilter]
+            # Discard too deep or too small lines
+            rfilter = (linelist['depth'] <= 0.9) & (linelist['depth'] >= 0.01)
+            linelist = linelist[rfilter]
+            # Discard outliers FWHM in km/s (which is not wavelength dependent)
+            telluric_fwhm = (c / (linelist['wave_peak'] / linelist['fwhm'])) / 1000.0 # km/s
+            fwhm_selected, fwhm_selected_filter = sigma_clipping(telluric_fwhm, meanfunc=np.median)
+            linelist = linelist[fwhm_selected_filter]
         
         xcoord, fluxes, num_used_lines = build_velocity_profile(self.active_spectrum.data, linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, frame=self)
-        wx.CallAfter(self.on_determine_velocity_finish, xcoord, fluxes, relative_to_atomic_data, num_used_lines)
+        wx.CallAfter(self.on_determine_velocity_finish, xcoord, fluxes, relative_to_atomic_data, num_used_lines, linelist)
     
-    def on_determine_velocity_finish(self, xcoord, fluxes, relative_to_atomic_data, num_used_lines):
+    def on_determine_velocity_finish(self, xcoord, fluxes, relative_to_atomic_data, num_used_lines, linelist):
         # Modelize
-        models = modelize_velocity_profile(xcoord, fluxes)
-        velocity = np.round(models[0].mu(), 2) # km/s
-        # A positive velocity indicates the distance between the objects is or was increasing;
-        # A negative velocity indicates the distance between the source and observer is or was decreasing.
-        self.flash_status_message("Velocity determined: " + str(velocity) + " km/s")
+        if relative_to_atomic_data:
+            models = modelize_velocity_profile(xcoord, fluxes)
+        else:
+            models = modelize_velocity_profile(xcoord, fluxes, only_one_peak=True)
+        
+        if len(models) == 0:
+            fwhm = 0.0
+            telluric_fwhm = 0.0
+            R = 0.0
+            velocity = 0.0
+            self.flash_status_message("Velocity could not be determined!")
+        else:
+            # Resolving power
+            c = 299792458.0 # m/s
+            fwhm = models[0].fwhm()[0] # km/s (because xcoord is already velocity)
+            if relative_to_atomic_data:
+                telluric_fwhm = 0.0
+                R = np.int(c/(1000.0*np.round(fwhm, 2)))
+            else:
+                # If telluric lines have been used, we can substract its natural FWHM
+                # so that we get the real resolution of the instrument (based on the difference in FWHM)
+                c = 299792458.0 # m/s
+                telluric_fwhm = np.mean((c / (linelist['wave_peak'] / linelist['fwhm'])) / 1000.0) # km/s
+                R = np.int(c/(1000.0*np.round(fwhm - telluric_fwhm, 2)))
+            # Velocity
+            velocity = np.round(models[0].mu(), 2) # km/s
+            # A positive velocity indicates the distance between the objects is or was increasing;
+            # A negative velocity indicates the distance between the source and observer is or was decreasing.
+            self.flash_status_message("Velocity determined: " + str(velocity) + " km/s")
         self.operation_in_progress = False
         
         if relative_to_atomic_data:
             self.active_spectrum.velocity_atomic = velocity
+            # If the spe
+            if R != 0:
+                self.active_spectrum.resolution_atomic = R
             self.active_spectrum.velocity_profile_atomic_xcoord = xcoord
             self.active_spectrum.velocity_profile_atomic_fluxes = fluxes
             self.active_spectrum.velocity_profile_atomic_models = models
@@ -3029,15 +3111,18 @@ class SpectraFrame(wx.Frame):
         else:
             self.active_spectrum.velocity_telluric = velocity
             self.barycentric_vel = velocity # So it will appear in the barycentric vel. correction dialog
+            if R != 0:
+                self.active_spectrum.resolution_telluric = R
             self.active_spectrum.velocity_profile_telluric_xcoord = xcoord
             self.active_spectrum.velocity_profile_telluric_fluxes = fluxes
             self.active_spectrum.velocity_profile_telluric_models = models
             self.active_spectrum.velocity_profile_telluric_num_used_lines = num_used_lines
             self.active_spectrum.velocity_profile_telluric_rv_step = self.velocity_atomic_step
+            self.active_spectrum.velocity_profile_telluric_fwhm_correction = telluric_fwhm
             velocity_step = self.velocity_telluric_step
             title = "Velocity profile relative to telluric lines"
         
-        dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, models, num_used_lines, velocity_step)
+        dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, models, num_used_lines, velocity_step, telluric_fwhm=telluric_fwhm)
         dlg.ShowModal()
         recalculate = dlg.recalculate
         dlg.Destroy()

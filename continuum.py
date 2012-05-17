@@ -42,13 +42,13 @@ def find_a_value_per_wavelength_range(spectra, base_points, wave_range=1, median
     
     # Group points in bins and use only the one with the higher flux
     num_candidate_base_points = int((wave_top-wave_base)/wave_step) + 1
-    candidate_base_points = np.empty(num_candidate_base_points, dtype=int)
+    candidate_base_points = -9999 * np.ones(num_candidate_base_points, dtype=int)
     i = 0
     while wave_base < wave_top:
         positions = np.where((waveobs[base_points] >= wave_base) & (waveobs[base_points] <= wave_base + wave_step))[0]
         
         if len(positions) == 0:
-            candidate_base_points[i] = -9999.0
+            candidate_base_points[i] = -9999
         else:
             if median:
                 # Find the median (instead of the max)
@@ -64,13 +64,13 @@ def find_a_value_per_wavelength_range(spectra, base_points, wave_range=1, median
         wave_base += wave_step
         i += 1
     
-    candidate_base_points = candidate_base_points[candidate_base_points != -9999.0]
+    candidate_base_points = candidate_base_points[candidate_base_points != -9999]
     return candidate_base_points
 
 
 # Considering the diference in flux of the points with the next a previous, discard outliers (iterative process)
 # - Median value and 3*sigma is used as criteria for filtering
-def discard_outliers_for_continuum_candidates(spectra, candidate_base_points, sig=3, iters=10):
+def discard_outliers_for_continuum_candidates(spectra, candidate_base_points, sig=3):
     # The change between consecutive base points for continuum fitting should not be very strong,
     # identify outliers (first and last base point are excluded in this operation):
     flux_diff1 = (spectra['flux'][candidate_base_points][:-1] - spectra['flux'][candidate_base_points][1:]) / (spectra['waveobs'][candidate_base_points][:-1] - spectra['waveobs'][candidate_base_points][1:])
@@ -97,13 +97,16 @@ def discard_outliers_for_continuum_candidates(spectra, candidate_base_points, si
 #     - In ranges of 0.1 nm and select the one with the median flux (usefull to avoid noisy peaks)
 #     - In ranges of 1 nm and select the one with the max flux (
 # 3) Considering the diference in flux of the points with the next a previous, discard outliers (iterative process)
-def determine_continuum_base_points(spectra):
+def determine_continuum_base_points(spectra, discard_outliers=True):
     # Find max points in windows of 3 measures
     candidate_base_points = find_local_max_values(spectra['flux'])
     candidate_base_points = find_median_value_per_wavelength_range(spectra, candidate_base_points, wave_range=0.1)
     candidate_base_points = find_max_value_per_wavelength_range(spectra, candidate_base_points, wave_range=1)
-    candidate_base_points = discard_outliers_for_continuum_candidates(spectra, candidate_base_points, iters=10)
+    if discard_outliers:
+        candidate_base_points = discard_outliers_for_continuum_candidates(spectra, candidate_base_points)
     continuum_base_points = candidate_base_points
+    
+    
     return continuum_base_points
 
 
@@ -112,9 +115,8 @@ def determine_continuum_base_points(spectra):
 #    - knots are located depending on the Cumulative Distribution Function, so there will be more
 #      where more continuum points exist
 # 3) Returns the fitted model
-def fit_continuum(spectra, nknots=None, continuum_base_points=None):
-    if continuum_base_points == None:
-        continuum_base_points = determine_continuum_base_points(spectra)
+def fit_continuum(spectra, nknots=None):
+    continuum_base_points = determine_continuum_base_points(spectra)
     
     if nknots == None:
         # * 1 knot every 10 nm in average
@@ -136,10 +138,19 @@ def fit_continuum(spectra, nknots=None, continuum_base_points=None):
     # 5) Use those interpolated wavelengths for putting the knots, therefore we will have a knot
     #    in those regions were there are an increment on the number of points (avoiding empty regions)
     continuum_model = UniformCDFKnotSplineModel(nknots)
-    continuum_model.fitData(spectra['waveobs'][continuum_base_points], spectra['flux'][continuum_base_points])
+    fitting_error = False
+    try:
+        continuum_model.fitData(spectra['waveobs'][continuum_base_points], spectra['flux'][continuum_base_points])
+    except Exception, e:
+        fitting_error = True
     
-    if np.any(np.isnan(continuum_model.residuals())):
-        raise Exception("Not enough points to fit")
+    # If there is no fit (because too few points)
+    if fitting_error or np.any(np.isnan(continuum_model.residuals())):
+        # Try without discarding outliers:
+        continuum_base_points = determine_continuum_base_points(spectra, discard_outliers=False)
+        continuum_model.fitData(spectra['waveobs'][continuum_base_points], spectra['flux'][continuum_base_points])
+        if np.any(np.isnan(continuum_model.residuals())):
+            raise Exception("Not enough points to fit")
     
     return continuum_model
 
@@ -159,9 +170,8 @@ class MultiLinearInterpolationContinuumModel:
 #      use those new points for the model
 # 3) Build a continuum model that will interpolate values using the specified points
 # 4) Returns the model
-def interpolate_continuum(spectra, continuum_base_points=None, smooth=True):
-    if continuum_base_points == None:
-        continuum_base_points = determine_continuum_base_points(spectra)
+def interpolate_continuum(spectra, smooth=False):
+    continuum_base_points = determine_continuum_base_points(spectra)
     
     if len(spectra['waveobs'][continuum_base_points]) == 0:
         raise Exception("Not enough points to interpolate")

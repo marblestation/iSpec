@@ -57,6 +57,11 @@ def read_telluric_linelist(telluric_lines_file, minimum_depth=0.0):
         telluric_lines_limited = telluric_lines[telluric_lines['depth'] >= minimum_depth]
         return telluric_lines_limited
 
+#from lines import *
+#l = "input/linelists/original/lumba-gustafsson.lin"
+#o = "input/linelists/lumba-gustafsson.lin"
+#VALD_to_SPECTRUM_format(l, o, minimum_depth=0.0, data_end=None)
+
 # Convert a VALD linelist (short format) to a format that can be used with SPECTRUM
 # - minimum_depth: filter out all the lines with a depth less than this percentage (0.05 = 5%)
 # - data_end can be negative in order to ignore the last nth rows (VALD usually 
@@ -72,6 +77,13 @@ def VALD_to_SPECTRUM_format(vald_file, output_file, minimum_depth=0.0, data_end=
     
     # Periodic table
     table = asciitable.read("input/abundances/chemical_elements_symbols.dat", delimiter="\t")
+    # Some molecular symbols
+    # - For diatomic molecules, the atomic_num specifies the atomic makeup of the molecule.
+    #   Thus, H2 is 101.0, the two ``1''s referring to the two hydrogens, CH is 106.0, 
+    #   CO 608.0, MgH 112.0, TiO 822.0, etc. 
+    # - The lightest element always comes first in the code, so that 608.0 cannot be 
+    #   confused with NdO, which would be written 860.0.
+    molecule = asciitable.read("input/abundances/molecular_symbols.dat", delimiter="\t")
 
     # Prepare resulting structure
     linelist = np.recarray((len(vald_limited), ), dtype=[('wave (A)', '<f8'), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('log(gf)', '<f8'), ('fudge factor', '<f8'),('transition type', '|S10'), ('note', '|S100')])
@@ -91,7 +103,17 @@ def VALD_to_SPECTRUM_format(vald_file, output_file, minimum_depth=0.0, data_end=
         ionization = str(int(element[1]) - 1)
         
         tfilter = (table['symbol'] == symbol)
-        linelist[i]['species'] = str(table[tfilter]["atomic_num"][0]) + "." + ionization
+        if len(table[tfilter]["atomic_num"]) == 0:
+            # Symbol not found, maybe it is a molecule
+            mfilter = (molecule['symbol'] == symbol)
+            if len(molecule[mfilter]["atomic_num"]) == 0:            
+                linelist[i]['species'] = "Discard"
+                i += 1
+                continue
+            else:
+                linelist[i]['species'] = str(molecule[mfilter]["atomic_num"][0]) + "." + ionization
+        else:
+            linelist[i]['species'] = str(table[tfilter]["atomic_num"][0]) + "." + ionization
         
         #print linelist[i]['species']
         linelist[i]['lower state (cm^-1)'] = int(line['lower state (eV)'] * 8065.73) #cm-1
@@ -109,7 +131,9 @@ def VALD_to_SPECTRUM_format(vald_file, output_file, minimum_depth=0.0, data_end=
         linelist[i]['transition type'] = "99"
         linelist[i]['note'] = line["element"].replace(" ", "_")
         i += 1
-
+    
+    # Filter discarded:
+    linelist = linelist[linelist['species'] != "Discard"]
     asciitable.write(linelist, output=output_file, Writer=asciitable.FixedWidthNoHeader, delimiter=None, bookend=False, formats={'wave (A)': '%4.3f', })
 
 
@@ -788,16 +812,26 @@ if __name__ == '__main__':
     #############################
     ## Stars' spectra
     #############################
-    #star, resolution = "/home/marble/Downloads/HD146233/Narval/narval_hd146233_100312.s", 75000
-    #star, resolution = "input/L082N03_spec_norm/05oct08/sp2_Normal/004_vesta_001.s", 75000
-    #star, resolution = "input/telluric_standards/hr708_001_cutted2.s", 75000
-    #star, resolution = "/home/marble/Downloads/HD146233/UVES/hd146233_uves.txt", 47000
+    
+    
+    ## LUMBA test 0.2
     #star, resolution = "input/test/observed_arcturus.s.gz", 47000
     #star, resolution = "input/test/observed_mu_cas_a.s.gz", 47000
     #star, resolution = "input/test/observed_mu_leo.s.gz", 47000
     #star, resolution = "input/test/observed_sun.s.gz", 47000
-    star, resolution = "input/test/ELODIE_HD005516A_spectroscopic_binary.s.gz", 42000
-    star, resolution = "input/test/ELODIE_HD085503_single_star.s.gz", 42000
+    ## Narval SUN
+    #star, resolution = "input/L082N03_spec_norm/05oct08/sp2_Normal/004_vesta_001.s", 75000
+    ## Binary test (elodie)
+    #star, resolution = "input/test/ELODIE_HD005516A_spectroscopic_binary.s.gz", 42000
+    #star, resolution = "input/test/ELODIE_HD085503_single_star.s.gz", 42000
+    ## Instrumental comparison
+    #star, resolution = "input/instruments/elodie_hd146233_normalized.txt", 42000
+    #star, resolution = "input/instruments/giraffe_hd107328_normalized.txt", 16000
+    #star, resolution = "input/instruments/narval_hd146233_normalized.txt", 65000
+    #star, resolution = "input/instruments/uves_hd146233_normalized.txt", 47000
+    ## Telluric Standard
+    #star, resolution = "input/telluric_standards/hr1567_001_norm.s", 65000
+    
 
     ## Test
     #star, resolution = "/home/marble/Downloads/HD146233/Narval/narval_hd146233_100312_segment.s", 65000
@@ -814,9 +848,10 @@ if __name__ == '__main__':
     
     #############################
     ## Synthetic telluric lines' spectra
-    star, resolution = "input/telluric/standard_atm_air.s.gz", 100000
+    #star, resolution = "input/telluric/standard_atm_air.s.gz", 100000
+    star, resolution = "input/telluric/standard_atm_air_norm.s.gz", 100000
     # Do NOT smooth spectra using the instrumental resolution
-    smooth_spectra = False
+    smooth_spectra = True
     #############################
     
     ### Fitting parameters
@@ -841,8 +876,7 @@ if __name__ == '__main__':
     
     if normalize:
         print "Continuum normalization..."
-        continuum_base_points = determine_continuum_base_points(spectra)
-        continuum_model_for_normalization = interpolate_continuum(spectra, continuum_base_points, smooth_continuum_interpolation)
+        continuum_model_for_normalization = interpolate_continuum(spectra, smooth_continuum_interpolation)
         spectra['flux'] /= continuum_model_for_normalization(spectra['waveobs'])
     
     
@@ -857,8 +891,7 @@ if __name__ == '__main__':
     
     # Determine continuum
     print "Determining continuum..."
-    continuum_base_points = determine_continuum_base_points(spectra)
-    continuum_model = interpolate_continuum(spectra, continuum_base_points, smooth_continuum_interpolation)
+    continuum_model = interpolate_continuum(spectra, smooth_continuum_interpolation)
     
     
     print "Generating linemasks, fitting gaussians/voigt and matching VALD lines..."
@@ -1033,14 +1066,14 @@ if __name__ == '__main__':
     #plt.ylabel('FWHM (km/s)')
     #plt.show()
     
-    #from pymodelfit import LinearModel
-    #trend = LinearModel()
-    #trend.fitData(linemasks[~discarded]['wave_peak'], linemasks['R'][~discarded])
-    #plt.scatter(linemasks[~discarded]['wave_peak'], linemasks['R'][~discarded], s=4)
-    #plt.plot(linemasks[~discarded]['wave_peak'], trend(linemasks[~discarded]['wave_peak']), color="red", linewidth=3)
-    #plt.xlabel('Wavelength peak')
-    #plt.ylabel('Resolving power')
-    #plt.show()
+    from pymodelfit import LinearModel
+    trend = LinearModel()
+    trend.fitData(linemasks[~discarded]['wave_peak'], linemasks['R'][~discarded])
+    plt.scatter(linemasks[~discarded]['wave_peak'], linemasks['R'][~discarded], s=4)
+    plt.plot(linemasks[~discarded]['wave_peak'], trend(linemasks[~discarded]['wave_peak']), color="red", linewidth=3)
+    plt.xlabel('Wavelength peak')
+    plt.ylabel('Resolving power')
+    plt.show()
     
     #from pymodelfit import LinearModel
     #trend = LinearModel()
