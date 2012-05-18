@@ -365,7 +365,7 @@ class DetermineBarycentricCorrectionDialog(wx.Dialog):
 
 
 class VelocityProfileDialog(wx.Dialog):
-    def __init__(self, parent, id, title, xcoord, fluxes, models, num_used_lines, rv_step, telluric_fwhm=0.0):
+    def __init__(self, parent, id, title, xcoord, fluxes, models, num_used_lines, rv_step, telluric_fwhm=0.0, snr=0.0):
         wx.Dialog.__init__(self, parent, id, title, size=(600, 600))
         
         self.recalculate = False
@@ -434,6 +434,10 @@ class VelocityProfileDialog(wx.Dialog):
         
         ## Stats
         num_items = self.stats.GetItemCount()
+        if snr != 0:
+            self.stats.InsertStringItem(num_items, "Estimated local SNR")
+            self.stats.SetStringItem(num_items, 1, str(np.round(snr, 2)))
+            num_items += 1
         for model in models:
             self.stats.InsertStringItem(num_items, "Mean (km/s)")
             self.stats.SetStringItem(num_items, 1, str(np.round(model.mu(), 2)))
@@ -1083,6 +1087,7 @@ class Spectrum():
         self.velocity_profile_atomic_models = None
         self.velocity_profile_atomic_num_used_lines = None
         self.velocity_profile_atomic_rv_step = None
+        self.velocity_profile_atomic_snr = 0.0
         self.velocity_profile_telluric_xcoord = None
         self.velocity_profile_telluric_fluxes = None
         self.velocity_profile_telluric_models = None
@@ -1413,7 +1418,7 @@ class SpectraFrame(wx.Frame):
         m_determine_barycentric_vel = menu_edit.Append(-1, "&Calculate barycentric velocity", "Calculate baricentryc velocity")
         self.Bind(wx.EVT_MENU, self.on_determine_barycentric_vel, m_determine_barycentric_vel)
         
-        m_estimate_snr = menu_edit.Append(-1, "&Estimate SNR", "Estimate Signal-to-Noise Ratio")
+        m_estimate_snr = menu_edit.Append(-1, "&Estimate global SNR", "Estimate Signal-to-Noise Ratio using the whole spectrum")
         self.Bind(wx.EVT_MENU, self.on_estimate_snr, m_estimate_snr)
         self.spectrum_function_items.append(m_estimate_snr)
         
@@ -2936,7 +2941,7 @@ class SpectraFrame(wx.Frame):
             return
         
         if self.active_spectrum.snr != None:
-            msg = "Previous SNR: %.2f. Re-estimate again? " % self.active_spectrum.snr
+            msg = "Previous global SNR: %.2f. Re-estimate again? " % self.active_spectrum.snr
             title = "Signal-to-Noise Ratio"
             if not self.question(title, msg):
                 return
@@ -2947,14 +2952,14 @@ class SpectraFrame(wx.Frame):
         thread.start()
     
     def on_estimate_snr_thread(self):
-        wx.CallAfter(self.status_message, "Estimating SNR...")
-        estimated_snr = estimate_snr(self.active_spectrum.data, frame=self)
+        wx.CallAfter(self.status_message, "Estimating SNR for the whole spectrum...")
+        estimated_snr = estimate_snr(self.active_spectrum.data['flux'], frame=self)
         wx.CallAfter(self.on_estimate_snr_finnish, estimated_snr)
     
     def on_estimate_snr_finnish(self, estimated_snr):
         self.active_spectrum.snr = estimated_snr
-        msg = "Estimated SNR: %.2f" % self.active_spectrum.snr
-        title = "Signal-to-Noise Ratio"
+        msg = "Estimated global SNR: %.2f" % self.active_spectrum.snr
+        title = "Global Signal-to-Noise Ratio"
         self.info(title, msg)
         self.flash_status_message(msg)
         self.operation_in_progress = False
@@ -2975,6 +2980,7 @@ class SpectraFrame(wx.Frame):
                 num_used_lines = self.active_spectrum.velocity_profile_atomic_num_used_lines
                 velocity_step = self.active_spectrum.velocity_profile_atomic_rv_step
                 telluric_fwhm = 0.0
+                snr = self.active_spectrum.velocity_profile_atomic_snr
                 title = "Velocity profile relative to atomic lines"
             else:
                 xcoord = self.active_spectrum.velocity_profile_telluric_xcoord
@@ -2983,9 +2989,10 @@ class SpectraFrame(wx.Frame):
                 num_used_lines = self.active_spectrum.velocity_profile_telluric_num_used_lines
                 velocity_step = self.active_spectrum.velocity_profile_telluric_rv_step
                 telluric_fwhm = self.active_spectrum.velocity_profile_telluric_fwhm_correction
+                snr = 0.0
                 title = "Velocity profile relative to telluric lines"
                 
-            dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, models, num_used_lines, velocity_step, telluric_fwhm)
+            dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, models, num_used_lines, velocity_step, telluric_fwhm, snr=snr)
             dlg.ShowModal()
             recalculate = dlg.recalculate
             dlg.Destroy()
@@ -3107,6 +3114,7 @@ class SpectraFrame(wx.Frame):
             telluric_fwhm = 0.0
             R = 0.0
             velocity = 0.0
+            snr = 0.0
             self.flash_status_message("Velocity could not be determined!")
         else:
             # Resolving power
@@ -3115,12 +3123,31 @@ class SpectraFrame(wx.Frame):
             if relative_to_atomic_data:
                 telluric_fwhm = 0.0
                 R = np.int(c/(1000.0*np.round(fwhm, 2)))
+                ##### Estimate SNR for the lines and nearby regions
+                ##### It is only of interest in case of atomic lines
+                # Build the fluxes for the composite models
+                first_time = True
+                for model in models:
+                    if first_time:
+                        line_fluxes = model(xcoord)
+                        first_time = False
+                        continue
+                    
+                    current_line_fluxes = model(xcoord)
+                    wfilter = line_fluxes > current_line_fluxes
+                    line_fluxes[wfilter] = current_line_fluxes[wfilter]
+                # Substract the line models conserving the base level
+                base_level = np.median(fluxes)
+                corrected_fluxes = base_level + fluxes - line_fluxes
+                # Estimate SNR for the lines and nearby regions
+                snr = np.mean(corrected_fluxes) / np.std(corrected_fluxes)
             else:
                 # If telluric lines have been used, we can substract its natural FWHM
                 # so that we get the real resolution of the instrument (based on the difference in FWHM)
                 c = 299792458.0 # m/s
                 telluric_fwhm = np.mean((c / (linelist['wave_peak'] / linelist['fwhm'])) / 1000.0) # km/s
                 R = np.int(c/(1000.0*np.round(fwhm - telluric_fwhm, 2)))
+                snr = 0.0
             # Velocity
             velocity = np.round(models[0].mu(), 2) # km/s
             # A positive velocity indicates the distance between the objects is or was increasing;
@@ -3138,6 +3165,7 @@ class SpectraFrame(wx.Frame):
             self.active_spectrum.velocity_profile_atomic_models = models
             self.active_spectrum.velocity_profile_atomic_num_used_lines = num_used_lines
             self.active_spectrum.velocity_profile_atomic_rv_step = self.velocity_atomic_step
+            self.active_spectrum.velocity_profile_atomic_snr = snr
             velocity_step = self.velocity_atomic_step
             title = "Velocity profile relative to atomic lines"
         else:
@@ -3154,7 +3182,7 @@ class SpectraFrame(wx.Frame):
             velocity_step = self.velocity_telluric_step
             title = "Velocity profile relative to telluric lines"
         
-        dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, models, num_used_lines, velocity_step, telluric_fwhm=telluric_fwhm)
+        dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, models, num_used_lines, velocity_step, telluric_fwhm=telluric_fwhm, snr=snr)
         dlg.ShowModal()
         recalculate = dlg.recalculate
         dlg.Destroy()

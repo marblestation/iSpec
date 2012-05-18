@@ -702,11 +702,6 @@ if __name__ == '__main__':
     wmin = spectra['waveobs'][0]
     wmax = spectra['waveobs'][-1]
     
-    snr = estimate_snr(spectra)
-    print snr
-    import ipdb
-    ipdb.set_trace()
-    
     ## Convolution test
     #from_resolution = 42000
     #to_resolution = 20000

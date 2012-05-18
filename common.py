@@ -31,12 +31,12 @@ import os, errno
 import random
 
 # Estimate the Signal-to-Noise ratio for a given spectrum
-def estimate_snr(spectra, frame=None):
+def estimate_snr(flux, frame=None):
     snr = []
     num_points = 3
-    total_num_blocks = len(spectra)-num_points
+    total_num_blocks = len(flux)-num_points
     for i in np.arange(total_num_blocks):
-        values = spectra['flux'][i:i+num_points]
+        values = flux[i:i+num_points]
         stdev = np.std(values)
         if stdev != 0:
             # Only register SNR that are not infinite (division by 0)
@@ -48,9 +48,11 @@ def estimate_snr(spectra, frame=None):
                 frame.update_progress(progress)
     snr = np.asarray(snr)
     # Discard outliers around the mean value
-    s, f = sigma_clipping(snr, sig=4)
-    estimated_snr = np.mean(snr[f])
+    #s, f = sigma_clipping(snr, sig=4)
+    #estimated_snr = np.mean(snr[f])
+    estimated_snr = np.mean(snr)
     return estimated_snr
+
 
 ## Select spectra with identified file path doing a inner join between narval.vr and liste_spectre.
 ## - It uses the name of the star, the date (true and previous day) and the SNR similarity
