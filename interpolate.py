@@ -1,7 +1,7 @@
 """
     This file is part of Spectra.
     Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
-    
+
     Spectra is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -29,11 +29,11 @@ def get_flux(spectra, wavelength):
     objective_wavelength = wavelength
     fluxes = spectra['flux']
     waveobs = spectra['waveobs']
-    
+
     # Find the index position of the first wave length equal or higher than the objective
 #    index = np.where(waveobs >= objective_wavelength)[0][0]
     index = waveobs.searchsorted(objective_wavelength)
-    
+
     total_points = len(spectra)
     if index == total_points:
         # DISCARD: Linear extrapolation using index-1 and index-2
@@ -57,13 +57,13 @@ def get_flux(spectra, wavelength):
         #   f(x) = f(x0) + p ( f(x1) - f(x0) ) + [ p ( p - 1 ) / 4 ] ( f(x2) - f(x1) - f(x0) + f(x-1) )
         # where x-1 < x0 < objective_wavelength = x < x1 < x2 and f() is the flux
         #   http://physics.gmu.edu/~amin/phys251/Topics/NumAnalysis/Approximation/polynomialInterp.html
-        
+
         #  x-1= index - 2
         #  x0 = index - 1
-        #  x  = objective_wavelength 
+        #  x  = objective_wavelength
         #  x1 = index
         #  x2 = index + 1
-        
+
         ## Array access optimization
         flux_x_1 = fluxes[index - 2]
         wave_x0 = waveobs[index-1]
@@ -71,11 +71,11 @@ def get_flux(spectra, wavelength):
         wave_x1 = waveobs[index]
         flux_x1 = fluxes[index]
         flux_x2 = fluxes[index + 1]
-        
+
         p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
         flux = flux_x0 + p * (flux_x1 - flux_x0) + (p * (p - 1) / 4) * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
-        
-        
+
+
 #    print flux, fluxes[index], wavelength
     return flux, index
 
@@ -91,33 +91,33 @@ def generate_wavelength_grid(base_wave, top_wave, resolution, points_per_fwhm = 
         wave_step = fwhm / points_per_fwhm
         for j in np.arange(points_per_fwhm):
             xaxis.append(current_wave)
-            current_wave += wave_step 
+            current_wave += wave_step
     xaxis = np.array(xaxis)
-    
+
     return xaxis
 
 # Returns a new spectra with measures at the given xaxis wavelength
-# Interpolation is completely linear by default (fastest option) but a Bessel's 
-# Central-Difference Interpolation with 4 points can be activated by 
+# Interpolation is completely linear by default (fastest option) but a Bessel's
+# Central-Difference Interpolation with 4 points can be activated by
 # specifying "linear=False", in that case interpolation is linear only
 # when there are not enough points (i.e. beginning/end of spectra)
 def resample_spectra(spectra, xaxis, linear=True, frame=None):
     total_points = len(xaxis)
-    
+
     if linear:
         if frame != None:
             current_work_progress = 10.0
             frame.update_progress(current_work_progress)
         resampled_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
         resampled_spectra['waveobs'] = xaxis
-        resampled_spectra['flux'] = np.interp(xaxis, spectra['waveobs'], spectra['flux'])
+        resampled_spectra['flux'] = np.interp(xaxis, spectra['waveobs'], spectra['flux'], left=0.0, right=0.0) # No extrapolation, just returns zeros
         if frame != None:
             current_work_progress = 90.0
             frame.update_progress(current_work_progress)
     else:
         resampled_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
         resampled_spectra['waveobs'] = xaxis
-         
+
         from_index = 0 # Optimization: discard regions already processed
         for i in np.arange(total_points):
             resampled_spectra['flux'][i], index = get_flux(spectra[from_index:], resampled_spectra['waveobs'][i])
@@ -129,7 +129,7 @@ def resample_spectra(spectra, xaxis, linear=True, frame=None):
                     frame.update_progress(current_work_progress)
                 else:
                     print "%.2f" % resampled_spectra['waveobs'][i]
-    
+
     resampled_spectra['err'] = np.interp(xaxis, spectra['waveobs'], spectra['err'])
     if frame != None:
         current_work_progress = 100.0

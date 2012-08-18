@@ -22,12 +22,12 @@ echo "Enter the spectra number you want to use : "
 read i;
 
 case $i in
-1) python interactive.py input/spectra/examples/harps_procyon_norm.s.gz ;;
-2) python interactive.py input/spectra/examples/narval_sun_norm.s.gz ;;
-3) python interactive.py input/spectra/examples/narval_mu_cas_norm.s.gz ;;
-4) python interactive.py input/spectra/examples/narval_arcturus_norm.s.gz ;;
-5) python interactive.py input/spectra/examples/espadons_mu_leo_norm.s.gz ;;
-6) python interactive.py input/spectra/examples/harps_procyon_norm.s.gz input/spectra/examples/narval_sun_norm.s.gz input/spectra/examples/narval_mu_cas_norm.s.gz input/spectra/examples/narval_arcturus_norm.s.gz input/spectra/examples/espadons_mu_leo_norm.s.gz ;;
-7) python interactive.py --continuum=input/regions/continuum_regions.txt --lines=input/regions/line_masks.txt --segments=input/regions/segments.txt input/spectra/examples/narval_sun_norm.s.gz ;;
+1) python interactive.py input/spectra/examples/harps_procyon.s.gz ;;
+2) python interactive.py input/spectra/examples/narval_sun.s.gz ;;
+3) python interactive.py input/spectra/examples/narval_mu_cas.s.gz ;;
+4) python interactive.py input/spectra/examples/narval_arcturus.s.gz ;;
+5) python interactive.py input/spectra/examples/espadons_mu_leo.s.gz ;;
+6) python interactive.py input/spectra/examples/espadons_mu_leo.s.gz input/spectra/examples/narval_arcturus.s.gz input/spectra/examples/harps_procyon.s.gz input/spectra/examples/narval_mu_cas.s.gz input/spectra/examples/narval_sun.s.gz ;;
+7) python interactive.py --continuum=input/regions/continuum_regions.txt --lines=input/regions/line_masks.txt --segments=input/regions/segments.txt input/spectra/examples/narval_sun.s.gz ;;
 8) exit
 esac

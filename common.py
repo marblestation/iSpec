@@ -1,7 +1,7 @@
 """
     This file is part of Spectra.
     Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
-    
+
     Spectra is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -31,25 +31,29 @@ import os, errno
 import random
 
 # Estimate the Signal-to-Noise ratio for a given spectrum
-def estimate_snr(flux, frame=None):
-    snr = []
-    num_points = 3
-    total_num_blocks = len(flux)-num_points
-    for i in np.arange(total_num_blocks):
-        values = flux[i:i+num_points]
-        stdev = np.std(values)
-        if stdev != 0:
-            # Only register SNR that are not infinite (division by 0)
-            snr.append(np.mean(values) / stdev)
-        if i % 2000 == 0:
-            progress = ((i*1.0 / total_num_blocks) * 100.0)
-            print "%.2f%%" % progress
-            if frame != None:
-                frame.update_progress(progress)
-    snr = np.asarray(snr)
-    # Discard outliers around the mean value
-    #s, f = sigma_clipping(snr, sig=4)
-    #estimated_snr = np.mean(snr[f])
+# - If the spectra is normalized, we can estimate the SNR by considering
+#   fluxes near the continuum
+def estimate_snr(flux, num_points=10, frame=None):
+    # Avoid negative values and outliers
+    flux = flux[flux > 0.0]
+    #flux, f = sigma_clipping(flux, sig=3, meanfunc=np.median)
+    if num_points == 1:
+        snr = np.mean(flux) / np.std(flux)
+    else:
+        snr = []
+        total_num_blocks = len(flux)-num_points
+        for i in np.arange(total_num_blocks):
+            values = flux[i:i+num_points]
+            stdev = np.std(values)
+            if stdev != 0:
+                snr.append(np.mean(values) / stdev)
+            if i % 2000 == 0:
+                progress = ((i*1.0 / total_num_blocks) * 100.0)
+                print "%.2f%%" % progress
+                if frame != None:
+                    frame.update_progress(progress)
+        snr = np.asarray(snr)
+    snr, s = sigma_clipping(snr, sig=3, meanfunc=np.median)
     estimated_snr = np.mean(snr)
     return estimated_snr
 
@@ -75,7 +79,7 @@ def select_and_create_spectra_list(rv_name = "input/narval.vr", spectra_list_nam
     for i in np.arange(len(rv)):
         # Transform from julian to normal python dates
         d = obstools.jd_to_calendar(rv['julian_date'][i])
-        
+
         # Transform date to format: 05oct07
         date_string1 = "%.2i" % d.day + month_num2name[d.month] + str(d.year)[2:]
         date_string2 = "%.2i" % (int(d.day)-1) + month_num2name[d.month] + str(d.year)[2:]
@@ -111,12 +115,12 @@ def select_and_create_spectra_list(rv_name = "input/narval.vr", spectra_list_nam
             filename_length = len(filename)
             dirname = path[:-filename_length]
             selected_spectra.append((rv['name'][i], date_string1, str(d), rv['radial_velocity'][i], rv['err'][i], rv['snr'][i], dirname, filename))
-    
+
 
     if output_file != None:
         asciitable.write(selected_spectra, output=output_file, delimiter='\t', names=['name', 'date', 'datetime', 'radial_velocity', 'err', 'snr', 'dirname', 'filename'])
         asciitable.write(discarded_spectra, output=output_file+".discard", delimiter='\t', names=['name', 'date', 'datetime', 'radial_velocity', 'err', 'snr'])
-    
+
     return np.array(selected_spectra, dtype=[('name', '|S20'), ('date', '|S8'), ('datetime', '|S26'), ('radial_velocity', float), ('err', float), ('snr', int), ('dirname', '|S100'), ('filename', '|S100')])
 
 
@@ -132,7 +136,7 @@ def mkdir_p(path):
     except OSError as exc: # Python >2.5
         if exc.errno == errno.EEXIST:
             pass
-        else: 
+        else:
             raise
 
 ## Copy and optionally compress the selected spectra to the current working directory,
@@ -143,15 +147,15 @@ def copy_input_spectra(selected_spectra, compress = True, base_path = "/m2a/soub
         # Ignore if the file has been already copied and compressed
         if os.path.exists("input/" + spec['dirname'] + spec['filename'] + ".gz"):
             continue
-        
+
         if not os.path.exists("input/" + spec['dirname']):
             mkdir_p("input/" + spec['dirname'])
-        
+
         print base_path + spec['dirname'] + spec['filename'], "=>", "input/" + spec['dirname']
-        
+
         if not compress:
             shutil.copy(base_path + spec['dirname'] + spec['filename'], "input/" + spec['dirname'])
-        else: 
+        else:
             f_in = open(base_path + spec['dirname'] + spec['filename'], 'rb')
             f_out = gzip.open("input/" + spec['dirname'] + spec['filename'] + ".gz", 'wb')
             f_out.writelines(f_in)
@@ -167,7 +171,7 @@ def prepare_output_dirs(selected_spectra):
 
 # Find duplicates in a column of a recarray
 # This is a simplified version of:
-#   import numpy.lib.recfunctions as rfn 
+#   import numpy.lib.recfunctions as rfn
 #   rfn.find_duplicates(...)
 def find_duplicates(a, key):
     a = np.asanyarray(a).ravel()
@@ -184,13 +188,13 @@ def find_duplicates(a, key):
     duplicates = a[sortidx][flag]
     duplicates_index = sortidx[flag]
     return (duplicates, duplicates_index)
-    
+
 
 # Reduces outliers considering the mean value and 3 sigma (3*stdev),
 # iterating until convergence
 def sigma_clipping(data, sig=3, meanfunc=np.mean):
     last_total = len(data)
-    
+
     # First iteration
     stdev = np.std(data)
     diff = data - meanfunc(data)
@@ -200,13 +204,13 @@ def sigma_clipping(data, sig=3, meanfunc=np.mean):
     while last_total > current_total:
         #print current_total, stdev
         last_total = current_total
-        
+
         stdev = np.std(data[sfilter])
         diff = data - meanfunc(data[sfilter])
         sfilter = np.abs(diff) < sig*stdev
-        
+
         current_total = len(data[sfilter])
-    
+
     return data[sfilter], sfilter
 
 
@@ -230,7 +234,7 @@ def find_max_win(x, span=3):
                 is_max = 0;
                 break
             j += 1
-        
+
         # right side
         if (is_max == 1):
             j = r_min
@@ -263,7 +267,7 @@ def find_min_win(x, span=3):
                 is_min = 0;
                 break
             j += 1
-        
+
         # right side
         if (is_min == 1):
             j = r_min
@@ -292,16 +296,16 @@ def find_local_max_values(x):
         #r_max = np.min([i+1, n-1])
         r_min = np.min([i+1, n-1])
         is_max = True
-        
+
         # left side
         j = l_min
         # If value is equal, search for the last different value
         while j >= 0 and x[j] == x[i]:
             j -= 1
-        
+
         if j < 0 or x[j] > x[i]:
             is_max = False
-        
+
         # right side
         if is_max:
             j = r_min
@@ -310,7 +314,7 @@ def find_local_max_values(x):
                 j += 1
             if j >= n or x[j] > x[i]:
                 is_max = False
-        
+
         if is_max:
             ret.append(i)
     return np.asarray(ret)
@@ -335,20 +339,20 @@ def find_local_min_values(x):
         # If value is equal, search for the last different value
         while j >= 0 and x[j] == x[i]:
             j -= 1
-        
+
         if j < 0 or x[j] < x[i]:
             is_min = False
-        
+
         # right side
         if is_min:
             j = r_min
             # If value is equal, search for the next different value
             while j < n and x[j] == x[i]:
                 j += 1
-            
+
             if j >= n or x[j] < x[i]:
                 is_min = False
-        
+
         if is_min:
             ret.append(i)
     return np.asarray(ret)
@@ -356,7 +360,7 @@ def find_local_min_values(x):
 ## Returns spectra from a filename:
 ## - if the file does not exists, checks if it exists a compressed version (gzip)
 ## - it the file exists, it can be automatically uncompressed (gzip)
-def read_spectra(spectra_filename):    
+def read_spectra(spectra_filename, estimate_errors_if_not_present=False):
     #spectra_filename = "input/" + spectra_filename
     # If it is not compressed
     if os.path.exists(spectra_filename) and spectra_filename[-3:] != ".gz":
@@ -372,12 +376,17 @@ def read_spectra(spectra_filename):
                 spectra = np.recarray((len(spectra_tmp), ), dtype=[('waveobs', float),('flux', float),('err', float)])
                 spectra['waveobs'] = spectra_tmp['waveobs']
                 spectra['flux'] = spectra_tmp['flux']
-                spectra['err'] = np.zeros(len(spectra)) # Add a zeroed error column
-            
+                if estimate_errors_if_not_present:
+                    print "Estimating errors based on estimated SNR..."
+                    snr = estimate_snr(spectra['flux'])
+                    spectra['err'] = spectra['flux'] / snr
+                else:
+                    spectra['err'] = np.zeros(len(spectra)) # Add a zeroed error column
+
     elif (os.path.exists(spectra_filename) and spectra_filename[-3:] == ".gz") or (os.path.exists(spectra_filename + ".gz")):
         if spectra_filename[-3:] != ".gz":
             spectra_filename = spectra_filename + ".gz"
-        
+
         tmp_spec = tempfile.mktemp() + str(int(random.random() * 100000000))
         # Uncompress to a temporary file
         f_out = open(tmp_spec, 'wb')
@@ -385,7 +394,7 @@ def read_spectra(spectra_filename):
         f_out.writelines(f_in)
         f_out.close()
         f_in.close()
-        
+
         try:
             spectra = asciitable.read(table=tmp_spec, names=['waveobs', 'flux', 'err'])
         except asciitable.core.InconsistentTableError as err:
@@ -398,9 +407,12 @@ def read_spectra(spectra_filename):
                 spectra = np.recarray((len(spectra_tmp), ), dtype=[('waveobs', float),('flux', float),('err', float)])
                 spectra['waveobs'] = spectra_tmp['waveobs']
                 spectra['flux'] = spectra_tmp['flux']
-                spectra['err'] = np.zeros(len(spectra)) # Add a zeroed error column
+                print "Estimating errors based on estimated SNR..."
+                snr = estimate_snr(spectra['flux'])
+                spectra['err'] = spectra['flux'] / snr
+                #spectra['err'] = np.zeros(len(spectra)) # Add a zeroed error column
         os.remove(tmp_spec)
-    
+
     # Filter invalid errors and fluxes
     # TODO: Decide if we should request a valid 'error' column
     #valid = (spectra['err'] > 0) & ~np.isnan(spectra['err']) & (spectra['flux'] > 0) & ~np.isnan(spectra['flux'])
@@ -436,10 +448,10 @@ def write_spectra(spectra, spectra_filename, compress=True):
     if compress:
         if spectra_filename[-3:] != ".gz":
             spectra_filename = spectra_filename + ".gz"
-        
+
         tmp_spec = tempfile.mktemp() + str(int(random.random() * 100000000))
         asciitable.write(spectra, output=tmp_spec, delimiter='\t')
-        
+
         # Compress the temporary file
         f_in = open(tmp_spec, 'rb')
         f_out = gzip.open(spectra_filename, 'wb')

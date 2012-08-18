@@ -1,7 +1,7 @@
 """
     This file is part of Spectra.
     Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
-    
+
     Spectra is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -44,7 +44,7 @@ def get_sigma(fwhm):
 #   2. For each point, identify the window segment to convolve by using the bin widths and the FWHM
 #   2. Build a gaussian using the sigma value and the wavelength values of the spectra window
 #   3. Convolve the spectra window with the gaussian and save the convolved value
-# If "to_resolution" is not specified or its equal to "from_resolution", then the spectra 
+# If "to_resolution" is not specified or its equal to "from_resolution", then the spectra
 # is convolved with the instrumental gaussian defined by "from_resolution".
 # If "to_resolution" is specified, the convolution is made with the difference of
 # both resolutions in order to degrade the spectra.
@@ -56,11 +56,12 @@ def convolve_spectra(spectra, from_resolution, to_resolution=None, frame=None):
     convolved_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
     convolved_spectra['waveobs'] = spectra['waveobs']
     convolved_spectra['err'] = spectra['err']
-    
+
     if frame != None:
         frame.update_progress(0)
-    
+
     flux = spectra['flux']
+    err = spectra['err']
     # Consider the wavelength of the measurements as the center of the bins
     waveobs = spectra['waveobs']
     # Calculate the wavelength distance between the center of each bin
@@ -72,10 +73,10 @@ def convolve_spectra(spectra, from_resolution, to_resolution=None, frame=None):
     last_edge = waveobs[-1] + 0.5*wave_distance[-1]
     # Build the final edges array
     edges = np.array([first_edge] + edges_tmp.tolist() + [last_edge])
-    
+
     # Bin width
     bin_width = edges[1:] - edges[:-1]          # width per pixel
-    
+
     # FWHM of the gaussian for the given resolution
     if to_resolution == None:
         # Convolve using instrumental resolution (smooth but not degrade)
@@ -86,45 +87,50 @@ def convolve_spectra(spectra, from_resolution, to_resolution=None, frame=None):
     sigma = get_sigma(fwhm)
     # Convert from wavelength units to bins
     fwhm_bin = fwhm / bin_width
-    
+
     # Round number of bins per FWHM
     nbins = np.ceil(fwhm_bin) #npixels
-    
+
     # Number of measures
     nwaveobs = len(waveobs)
-    
+
     # In theory, len(nbins) == len(spectra)
     for i in np.arange(len(nbins)):
         current_nbins = 2 * nbins[i] # Each side
         current_center = waveobs[i] # Center
         current_sigma = sigma[i]
-        
+
         # Find lower and uper index for the gaussian, taking care of the current spectra limits
         lower_pos = int(max(0, i - current_nbins))
         upper_pos = int(min(nwaveobs, i + current_nbins + 1))
-        
+
         # Select only the flux values for the segment that we are going to convolve
         flux_segment = flux[lower_pos:upper_pos+1]
+        err_segment = err[lower_pos:upper_pos+1]
         waveobs_segment = waveobs[lower_pos:upper_pos+1]
-        
+
         nsegments = len(flux_segment)
-        
+
         # Build the gaussian corresponding to the instrumental spread function
         gaussian = np.exp(- ((waveobs_segment - current_center)**2) / (2*current_sigma**2)) / np.sqrt(2*np.pi*current_sigma**2)
         gaussian = gaussian / np.sum(gaussian)
-        
+
         # Convolve the current position by using the segment and the gaussian
         weighted_flux = flux_segment * gaussian
         current_convolved_flux = weighted_flux.sum()
-        
+        # Error propagation considering that measures are independent
+        weighted_err = err_segment * gaussian
+        current_convolved_err = np.sqrt(np.power(weighted_err, 2).sum())
+
         convolved_spectra['flux'][i] = current_convolved_flux
-        
+        convolved_spectra['err'][i] = current_convolved_err
+
         if (i % 1000 == 0):
             if frame != None:
                 current_work_progress = (i*1.0 / total_points) * 100
                 frame.update_progress(current_work_progress)
-                #print "%.2f" % convolved_spectra['waveobs'][i]                
-    
+                #print "%.2f" % convolved_spectra['waveobs'][i]
+
     return convolved_spectra
 
 ## Degradation of the spectra resolution. Procedure for each flux value:
@@ -139,14 +145,14 @@ def degrade_spectra_resolution(spectra, from_resolution, to_resolution, frame=No
     total_points = len(spectra['waveobs'])
     convolved_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
     convolved_spectra['waveobs'] = spectra['waveobs']
-    
+
     if frame != None:
         frame.update_progress(0)
-    
+
     for i in np.arange(total_points):
         lambda_peak = spectra['waveobs'][i] # Current lambda (wavelength) to be modified
         fwhm = get_fwhm(lambda_peak, from_resolution, to_resolution) # Calculate the needed fwhm for this wavelength
-        
+
         # Only work with a limited window considering 3 times the fwhm in each side of the current
         # position to be modified and saved in the convolved spectra
         wave_filter = (spectra['waveobs'] >= lambda_peak - 3*fwhm) & (spectra['waveobs'] <= lambda_peak + 3*fwhm)
@@ -155,34 +161,34 @@ def degrade_spectra_resolution(spectra, from_resolution, to_resolution, frame=No
         max = np.max(spectra_window['waveobs'])
         # Find the index position of the current lambda peak in the window
         lambda_peak_win_index = spectra_window['waveobs'].searchsorted(lambda_peak)
-        
+
         # Check that the window is large enough (i.e. in the edges of the original spectra, maybe we do not have enough)
         # At least it should be 3 times FWHM in total
         if np.round(max - min, 2) >= np.round(3*fwhm, 2):
             sigma = get_sigma(fwhm)
-            
+
             # Construct the gaussian
             gaussian = np.exp(- ((spectra_window['waveobs'] - lambda_peak)**2) / (2*sigma**2)) / np.sqrt(2*np.pi*sigma**2)
             gaussian = gaussian / np.sum(gaussian)
-            
+
             # Convolve the current position
             convolved_value = 0
             for j in np.arange(len(spectra_window)):
                 convolved_value += spectra_window['flux'][j] * gaussian[j]
-            
+
             convolved_spectra['flux'][i] = convolved_value
             #~ print i, spectra['flux'][i], "\t", convolved_value
         else:
             print "Not enough points for", lambda_peak, "(window = ", np.round(max - min, 2), "< 3*fwhm =", np.round(3*fwhm, 2), ")"
             convolved_spectra['flux'][i] = None
-        
+
         if (i % 1000 == 0):
             if frame != None:
                 current_work_progress = (i*1.0 / total_points) * 100
                 frame.update_progress(current_work_progress)
             else:
                 print "%.2f" % spectra['waveobs'][i]
-        
+
     return convolved_spectra
 
 
@@ -355,7 +361,7 @@ if __name__ == '__main__':
     write_spectra(sun_official, "output/LUMBA/UVES_sun_official.s.gz", compress=True)
     write_spectra(muleo_official, "output/LUMBA/UVES_mu_leo_official.s.gz", compress=True)
     write_spectra(mucas_official, "output/LUMBA/UVES_mu_cas_a_official.s.gz", compress=True)
-    
+
     #~ plot_spectra([arcturus_spectra, arcturus_official])
     #~ plot_spectra([sun_spectra, sun_official])
     #~ plot_spectra([muleo_spectra, muleo_official])

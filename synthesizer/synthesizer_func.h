@@ -20,3 +20,10 @@ typedef void (*progressfunc)(double num, void *user_data);
 
 int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, double microturbulence_vel, int verbose, int num_measures, const double waveobs[], double fluxes[], progressfunc user_func, void *user_data);
 
+int macroturbulence_spectrum(const double waveobs[], double fluxes[], int num_measures, double macroturbulence, int verbose, progressfunc user_func, void *user_data);
+
+int rotation_spectrum(const double waveobs[], double fluxes[], int num_measures, double vsini, double limb_darkening_coeff, int verbose, progressfunc user_func, void *user_data);
+
+int resolution_spectrum(const double waveobs[], double fluxes[], int num_measures, int R, int verbose, progressfunc user_func, void *user_data);
+
+
