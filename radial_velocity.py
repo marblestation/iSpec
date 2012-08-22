@@ -146,11 +146,18 @@ def build_velocity_profile(spectra, lines, lower_velocity_limit = -200, upper_ve
 ## Return an array of fitted models
 #  * For Radial Velocity profiles, more than 1 outlier peak implies that the star is a spectroscopic binary
 def modelize_velocity_profile(xcoord, fluxes, only_one_peak=False):
+    models = []
+    if len(xcoord) == 0 or len(fluxes) == 0:
+        return models
+
     # Smooth flux
     sig = 1
     smoothed_fluxes = scipy.ndimage.filters.gaussian_filter1d(fluxes, sig)
     # Finding peaks and base points
     peaks, base_points = find_peaks_and_base_points(xcoord, smoothed_fluxes)
+
+    if len(peaks) == 0:
+        return models
 
     # Fit continuum to normalize
     nknots = 2
@@ -202,7 +209,6 @@ def modelize_velocity_profile(xcoord, fluxes, only_one_peak=False):
         top = len(xcoord) - 1
         selected_peaks_indices = [0]
 
-    models = []
     for i in np.asarray(selected_peaks_indices):
         model = GaussianModel()
 
@@ -252,6 +258,10 @@ def modelize_velocity_profile(xcoord, fluxes, only_one_peak=False):
     return np.asarray(models)
 
 def find_confident_models(models, xcoord, fluxes):
+    accept = []
+    if len(models) == 0:
+        return accept
+
     ## We want to calculate the mean and standard deviation of the velocity profile
     ## but discounting the effect of the deepest detected lines:
     # Build the fluxes for the composite models but ONLY for lines deeper than 0.97
@@ -274,7 +284,6 @@ def find_confident_models(models, xcoord, fluxes):
     ## Finally, calculate the mean and standard deviation
     check_mean = np.mean(values)
     check_std = np.std(values)
-    accept = []
     for (i, model) in enumerate(models):
         mu = model.mu()
         peak = model(mu)

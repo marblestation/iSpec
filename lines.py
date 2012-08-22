@@ -757,26 +757,29 @@ def fill_with_VALD_info(linemasks, vald_linelist_file="input/linelists/VALD/VALD
 # Works better with a smoothed spectra (i.e. convolved using 2*resolution)
 def find_peaks_and_base_points(xcoord, yvalues):
     if len(yvalues[~np.isnan(yvalues)]) == 0 or len(yvalues[~np.isnan(xcoord)]) == 0:
-        raise Exception("Not enough data for finding peaks and base points")
+        #raise Exception("Not enough data for finding peaks and base points")
+        print "WARNING: Not enough data for finding peaks and base points"
+        peaks = []
+        base_points = []
+    else:
+        # Determine peaks and base points (also known as continuum points)
+        peaks = find_local_min_values(yvalues)
+        base_points = find_local_max_values(yvalues)
 
-    # Determine peaks and base points (also known as continuum points)
-    peaks = find_local_min_values(yvalues)
-    base_points = find_local_max_values(yvalues)
+        # WARNING: Due to three or more consecutive values with exactly the same flux
+        # find_local_max_values or find_local_min_values will identify all of them as peaks or bases,
+        # where only one of the should be marked as peak or base.
+        # These cases break the necessary condition of having the same number of
+        # peaks and base_points +/-1
+        # It is necessary to find those "duplicates" and remove them:
+        peaks = remove_consecutives_features(peaks)
+        base_points = remove_consecutives_features(base_points)
 
-    # WARNING: Due to three or more consecutive values with exactly the same flux
-    # find_local_max_values or find_local_min_values will identify all of them as peaks or bases,
-    # where only one of the should be marked as peak or base.
-    # These cases break the necessary condition of having the same number of
-    # peaks and base_points +/-1
-    # It is necessary to find those "duplicates" and remove them:
-    peaks = remove_consecutives_features(peaks)
-    base_points = remove_consecutives_features(base_points)
+        if not (len(peaks) - len(base_points)) in [-1, 0, 1]:
+            raise Exception("This should not happen")
 
-    if not (len(peaks) - len(base_points)) in [-1, 0, 1]:
-        raise Exception("This should not happen")
-
-    # Make sure that
-    peaks, base_points = assert_structure(xcoord, yvalues, peaks, base_points)
+        # Make sure that
+        peaks, base_points = assert_structure(xcoord, yvalues, peaks, base_points)
 
     return peaks, base_points
 
