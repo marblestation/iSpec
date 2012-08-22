@@ -29,8 +29,9 @@ def read_VALD_linelist(vald_file, minimum_depth=0.0, data_end=None):
         vald = asciitable.read(vald_file, delimiter=",", quotechar="'", data_start=3, data_end=data_end, names=["element", "wave (A)", "lower state (eV)", "Vmic (km/s)", "log(gf)", "Rad", "Stark", "Waals", "factor", "depth", "Reference"], exclude_names=["Vmic (km/s)", "Rad", "Stark", "Waals", "factor", "Reference"], guess=False)
 
     ## Convert wavelengths from armstrong to nm
-    vald['wave (A)'] = vald['wave (A)'] / 10.0
-    vald = rfn.rename_fields(vald, {'wave (A)':'wave_peak',})
+    #vald['wave (A)'] = vald['wave (A)'] / 10.0
+    #vald = rfn.rename_fields(vald, {'wave (A)':'wave_peak',})
+    vald = rfn.append_fields(vald, "wave_peak", dtypes=float, data=vald['wave (A)'] / 10.0)
     vald.sort(order=['wave_peak'])
 
     if minimum_depth <= 0.0:
@@ -65,81 +66,101 @@ def read_telluric_linelist(telluric_lines_file, minimum_depth=0.0):
 #from lines import *
 #l = "input/linelists/original/lumba-gustafsson.lin"
 #o = "input/linelists/lumba-gustafsson.lin"
-#VALD_to_SPECTRUM_format(l, o, minimum_depth=0.0, data_end=None)
+# Original VALD linelist
+#vald_linelist = read_VALD_linelist(l, minimum_depth=0.0, data_end=None)
+#linelist = VALD_to_SPECTRUM_format(vald_linelist)
+# Filter discarded:
+#linelist = linelist[linelist['species'] != "Discard"]
+#asciitable.write(linelist, output=o, Writer=asciitable.FixedWidthNoHeader, delimiter=None, bookend=False, formats={'wave (A)': '%4.3f', })
 
-# Convert a VALD linelist (short format) to a format that can be used with SPECTRUM
-# - minimum_depth: filter out all the lines with a depth less than this percentage (0.05 = 5%)
-# - data_end can be negative in order to ignore the last nth rows (VALD usually
-#            adds references to the end of the file that should be ignored)
-def VALD_to_SPECTRUM_format(vald_file, output_file, minimum_depth=0.0, data_end=None):
+# Convert element names type "Fe 1" or "Fe 2" to species code form by the atomic number + "." + ionization state
+# Returns "Discard" if not found
+def get_specie(chemical_elements, molecules, element_name):
+    element = element_name.split() # Do not specify " " to avoid problems with elements with double spaces like "V  1"
+
+    # Element not present or with a bad format, skip
+    if element_name == "" or len(element) != 2:
+        return "Discard"
+
+    symbol = element[0]
+    try:
+        element.remove('') # Make sure there are not additional spaces between the symbol and the ionization state
+        element.remove('')
+        element.remove('')
+    except ValueError as e:
+        pass
+    ionization = str(int(element[1]) - 1)
+
+    tfilter = (chemical_elements['symbol'] == symbol)
+    if len(chemical_elements[tfilter]["atomic_num"]) == 0:
+        # Symbol not found, maybe it is a molecule
+        mfilter = (molecules['symbol'] == symbol)
+        if len(molecules[mfilter]["atomic_num"]) == 0:
+            specie = "Discard"
+        else:
+            specie = str(molecules[mfilter]["atomic_num"][0]) + "." + ionization
+    else:
+        specie = str(chemical_elements[tfilter]["atomic_num"][0]) + "." + ionization
+    return specie
+
+
+## Calculate upper exciation level from lower and wavelength
+# Units: eV for lower excitation level
+#        nm for wavelength
+def get_upper_state(lower_state, wavelength):
     # Planck constant
     h = 6.626068 * 10e-34 # m^2 kg / s
     # Light speed in vacuum
     c = 299792458.0 # m/s
 
-    # Original VALD linelist
-    vald_limited = read_VALD_linelist(vald_file, minimum_depth=minimum_depth, data_end=data_end)
+    # Wavelength
+    l = wavelength * 10e-9 # m
+    # Frequency
+    f = c/l # Hz
+    # Energy
+    E = h * f # Joules
+    E = E * 6.24150974e18 # electron Volt (eV)
+    return lower_state + E # eV
 
+# Units transformation from eV to cm^-1
+def eV_to_inverse_cm(value):
+    return value * 8065.73 # cm^-1
+
+
+# Convert a VALD linelist (short format) to a format that can be used with SPECTRUM
+def VALD_to_SPECTRUM_format(vald_linelist):
     # Periodic table
-    table = asciitable.read("input/abundances/chemical_elements_symbols.dat", delimiter="\t")
+    chemical_elements = asciitable.read("input/abundances/chemical_elements_symbols.dat", delimiter="\t")
     # Some molecular symbols
     # - For diatomic molecules, the atomic_num specifies the atomic makeup of the molecule.
     #   Thus, H2 is 101.0, the two ``1''s referring to the two hydrogens, CH is 106.0,
     #   CO 608.0, MgH 112.0, TiO 822.0, etc.
     # - The lightest element always comes first in the code, so that 608.0 cannot be
     #   confused with NdO, which would be written 860.0.
-    molecule = asciitable.read("input/abundances/molecular_symbols.dat", delimiter="\t")
+    molecules = asciitable.read("input/abundances/molecular_symbols.dat", delimiter="\t")
 
     # Prepare resulting structure
-    linelist = np.recarray((len(vald_limited), ), dtype=[('wave (A)', '<f8'), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('log(gf)', '<f8'), ('fudge factor', '<f8'),('transition type', '|S10'), ('note', '|S100')])
+    linelist = np.recarray((len(vald_linelist), ), dtype=[('wave (A)', '<f8'), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('log(gf)', '<f8'), ('fudge factor', '<f8'),('transition type', '|S10'), ('note', '|S100')])
+    linelist['species'] = ""
+    linelist['fudge factor'] = 1.0
+    linelist['transition type'] = "99"
+    linelist['note'] = ""
+
+    linelist['wave (A)'] = vald_linelist['wave (A)']
+    linelist['upper state (cm^-1)'] = (eV_to_inverse_cm(get_upper_state(vald_linelist['lower_state(eV)'], vald_linelist[ "wave (A)"] / 10.))).astype(int)
+    linelist['lower state (cm^-1)'] = (eV_to_inverse_cm(vald_linelist['lower_state(eV)'])).astype(int)
+    linelist['fudge factor'] = 1.0
+    linelist['log(gf)'] = vald_linelist['log(gf)']
+    linelist['transition type'] = "99"
 
     i = 0
-    for line in vald_limited:
-        linelist[i]['wave (A)'] = line['wave (A)']
-
-        element = line['element'].split(" ")
-        symbol = element[0]
-        try:
-            element.remove('') # Make sure there are not additional spaces between the symbol and the ionization state
-            element.remove('')
-            element.remove('')
-        except ValueError as e:
-            pass
-        ionization = str(int(element[1]) - 1)
-
-        tfilter = (table['symbol'] == symbol)
-        if len(table[tfilter]["atomic_num"]) == 0:
-            # Symbol not found, maybe it is a molecule
-            mfilter = (molecule['symbol'] == symbol)
-            if len(molecule[mfilter]["atomic_num"]) == 0:
-                linelist[i]['species'] = "Discard"
-                i += 1
-                continue
-            else:
-                linelist[i]['species'] = str(molecule[mfilter]["atomic_num"][0]) + "." + ionization
-        else:
-            linelist[i]['species'] = str(table[tfilter]["atomic_num"][0]) + "." + ionization
-
-        #print linelist[i]['species']
-        linelist[i]['lower state (cm^-1)'] = int(line['lower state (eV)'] * 8065.73) #cm-1
-        # Wavelength
-        l = (line[ "wave (A)"] / 10) * 10e-9 # m
-        # Frequency
-        f = c/l # Hz
-        # Energy
-        E = h * f # Joules
-        E = E * 6.24150974e18 # electron Volt (eV)
-        E = E * 8065.73 #cm-1
-        linelist[i]['upper state (cm^-1)'] = int(linelist[i]['lower state (cm^-1)'] + E)
-        linelist[i]['log(gf)'] = line['log(gf)'] *1.5
-        linelist[i]['fudge factor'] = 1.0
-        linelist[i]['transition type'] = "99"
-        linelist[i]['note'] = line["element"].replace(" ", "_")
+    for line in vald_linelist:
+        linelist[i]['species'] = get_specie(chemical_elements, molecules, line["element"])
+        linelist[i]['note'] = "_".join(line["element"].split())
         i += 1
 
-    # Filter discarded:
-    linelist = linelist[linelist['species'] != "Discard"]
-    asciitable.write(linelist, output=output_file, Writer=asciitable.FixedWidthNoHeader, delimiter=None, bookend=False, formats={'wave (A)': '%4.3f', })
+    return linelist
+
 
 
 # Convert a VALD linelist (short format) to a format that can be used to measure radial velocities
@@ -465,7 +486,7 @@ def assert_structure(xcoord, yvalues, peaks, base_points):
 # the rest of the information of the line will be conserved in the output
 # Returns a complete structure with all the necessary information to
 # determine if it is a line of interest
-def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_depth=None, maximum_depth=None, smoothed_spectra=None, vald_linelist_file="input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", telluric_linelist_file = "input/linelists/telluric/standard_atm_air_model.lst", discard_gaussian = False, discard_voigt = False):
+def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_depth=None, maximum_depth=None, smoothed_spectra=None, vald_linelist_file=None, telluric_linelist_file = None, discard_gaussian = False, discard_voigt = False, vel_atomic=0.0, vel_telluric=0.0, frame=None):
     print "NOTICE: This method can generate overflow warnings due to the Least Square Algorithm"
     print "        used for the fitting process, but they can be ignored."
     if smoothed_spectra == None:
@@ -487,8 +508,11 @@ def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_dep
     # the rest of the information of the line will be conserved in the output
     accepted_for_fitting = np.logical_and(depth >= minimum_depth, depth <= maximum_depth)
 
+    if frame != None:
+        frame.update_progress(0)
+
     num_peaks = len(peaks)
-    linemasks = np.recarray((num_peaks, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('peak', int), ('base', int), ('top', int), ('depth', float), ('relative_depth', float), ('wave_base_fit', float), ('wave_top_fit', float), ('base_fit', int), ('top_fit', int), ('mu', float), ('sig', float), ('A', float), ('baseline', float), ('gamma', float), ('fwhm', float), ('fwhm_kms', float), ('R', float), ('depth_fit', float), ('relative_depth_fit', float), ('integrated_flux', float), ('ew', float), ('rms', float), ('VALD_wave_peak', float), ('element', '|S4'), ('lower_state(eV)', float), ('log(gf)', float), ('telluric_wave_peak', float), ('telluric_fwhm', float), ('telluric_R', float), ('telluric_depth', float), ('solar_depth', float), ('discarded', bool)])
+    linemasks = np.recarray((num_peaks, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('peak', int), ('base', int), ('top', int), ('depth', float), ('relative_depth', float), ('wave_base_fit', float), ('wave_top_fit', float), ('base_fit', int), ('top_fit', int), ('mu', float), ('sig', float), ('A', float), ('baseline', float), ('gamma', float), ('fwhm', float), ('fwhm_kms', float), ('R', float), ('depth_fit', float), ('relative_depth_fit', float), ('integrated_flux', float), ('ew', float), ('rms', float), ('VALD_wave_peak', float), ('element', '|S4'), ('lower_state(eV)', float), ('log(gf)', float), ('telluric_wave_peak', float), ('telluric_fwhm', float), ('telluric_R', float), ('telluric_depth', float), ('solar_depth', float), ('discarded', bool), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('fudge factor', float), ('transition type', '|S10')])
 
     linemasks['discarded'] = False
     # Line mask
@@ -532,6 +556,11 @@ def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_dep
     linemasks['integrated_flux'] = 0.0
     linemasks['ew'] = 0.0
     linemasks['rms'] = 9999.0
+    linemasks["species"] = ""
+    linemasks["lower state (cm^-1)"] = 0
+    linemasks["upper state (cm^-1)"] = 0
+    linemasks["fudge factor"] = 0
+    linemasks["transition type"] = ""
 
     # To save computation time, exclude false positives and noise from the fitting process
     rejected_by_noise = detect_false_positives_and_noise(spectra, linemasks)
@@ -588,118 +617,140 @@ def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_dep
 
 
         if (i % 100) == 0:
-            print "%.2f%%" % (((i*1.0)/num_peaks) * 100)
+            current_work_progress = ((i*1.0)/num_peaks) * 100
+            print "%.2f%%" % (current_work_progress)
+            if frame != None:
+                frame.update_progress(current_work_progress)
 
-    linemasks = fill_with_VALD_info(linemasks, vald_linelist_file=vald_linelist_file, diff_limit=0.005)
-    linemasks = fill_with_telluric_info(linemasks, telluric_linelist_file=telluric_linelist_file, diff_limit=0.005)
+
+    if vald_linelist_file != None:
+        linemasks = fill_with_VALD_info(linemasks, vald_linelist_file=vald_linelist_file, diff_limit=0.005, vel_atomic=vel_atomic)
+    if telluric_linelist_file != None:
+        linemasks = fill_with_telluric_info(linemasks, telluric_linelist_file=telluric_linelist_file, vel_telluric=vel_telluric)
 
     return linemasks
 
-def fill_with_telluric_info(linemasks, telluric_linelist_file = "input/linelists/telluric/standard_atm_air_model.lst", diff_limit=0.005):
-    telluric_linelist = read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
-    telluric_linelist = telluric_linelist[telluric_linelist['discarded'] != True]
+# Adds info to those linemasks that can be affected by tellurics
+# Different nearby linemasks can be affected by the same telluric line
+def fill_with_telluric_info(linemasks, telluric_linelist_file = "input/linelists/telluric/standard_atm_air_model.lst", vel_telluric=0.0):
+    # Sort before treating
+    linemasks.sort(order=['wave_peak'])
 
-    if telluric_linelist['wave_peak'][0] > linemasks['wave_peak'][0] or telluric_linelist['wave_peak'][-1] < linemasks['wave_peak'][-1]:
+    if vel_telluric != 0:
+        # Speed of light in m/s
+        c = 299792458.0
+        # Radial/barycentric velocity from km/s to m/s
+        vel_telluric = vel_telluric * 1000
+
+        # Correct wavelength scale for radial velocity
+        original_wave_peak = linemasks['wave_peak'].copy()
+        original_mu = linemasks['mu'].copy()
+        linemasks['wave_peak'] = linemasks['wave_peak'] / ((vel_telluric / c) + 1)
+        linemasks['mu'] = linemasks['mu'] / ((vel_telluric / c) + 1)
+
+    # Discard very small lines (lesser than 1% of the continuum)
+    telluric_linelist = read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
+    # The discarded flag is not a good one because there are clear lines mark as true (i.e. 628.0392 nm)
+    #telluric_linelist = telluric_linelist[telluric_linelist['discarded'] != True]
+    # It is better to clear the not fitted telluric lines:
+    telluric_linelist = telluric_linelist[telluric_linelist['rms'] < 9999]
+    telluric_linelist.sort(order=['wave_peak'])
+
+    clean_linemasks = linemasks[linemasks['wave_peak'] != 0]
+    max_wave_peak = np.max(clean_linemasks['wave_peak'])
+    min_wave_peak = np.min(clean_linemasks['wave_peak'])
+
+    if telluric_linelist['wave_peak'][0] > min_wave_peak or telluric_linelist['wave_peak'][-1] < max_wave_peak:
         print "WARNING: Telluric linelist does not cover the whole linemask wavelength range"
         print "- Telluric range from", telluric_linelist['wave_peak'][0], "to", telluric_linelist['wave_peak'][-1], "nm"
-        print "- Linemask range from", linemasks['wave_peak'][0], "to", linemasks['wave_peak'][-1], "nm"
+        print "- Linemask range from", min_wave_peak, "to", max_wave_peak, "nm"
 
-    wfilter = (telluric_linelist['wave_peak'] >= linemasks['wave_peak'][0]) & (telluric_linelist['wave_peak'] <= linemasks['wave_peak'][-1])
+    diff_limit = np.max(telluric_linelist["fwhm"])
+    wfilter = (telluric_linelist['wave_peak'] >= min_wave_peak - diff_limit) & (telluric_linelist['wave_peak'] <= max_wave_peak + diff_limit)
     telluric_linelist = telluric_linelist[wfilter]
 
-    for j in np.arange(len(telluric_linelist)):
-        # Find index of the nearest line
-        diff = linemasks['mu'] - telluric_linelist['wave_peak'][j]
-        i = np.argmin(np.abs(diff))
-        # Save the information
-        if diff[i] <= diff_limit:
-            linemasks["telluric_wave_peak"][i] = telluric_linelist['wave_peak'][j]
-            linemasks["telluric_depth"][i] = telluric_linelist["depth"][j]
-            linemasks["telluric_fwhm"][i] = telluric_linelist["fwhm"][j]
-            linemasks['telluric_R'][i] = linemasks['mu'][i] / (linemasks['fwhm'][i] - linemasks['telluric_fwhm'][i]) # Resolving power
+    if len(telluric_linelist) > 0:
+        for j in np.arange(len(linemasks)):
+            if linemasks['mu'][j] == 0:
+                # This lines has not been fitted correctly, it will be discarded
+                continue
+            # Find index of the nearest line
+            diff = telluric_linelist['wave_peak'] - linemasks['mu'][j]
+            diff_limit = np.max((linemasks["fwhm"][j], 0.005)) # At least 0.005
+            abs_diff = np.abs(diff)
+            i = np.argmin(abs_diff)
+            ### Save the information
+            if abs_diff[i] <= diff_limit:
+                linemasks["telluric_wave_peak"][j] = telluric_linelist['wave_peak'][i]
+                linemasks["telluric_depth"][j] = telluric_linelist["depth"][i]
+                linemasks["telluric_fwhm"][j] = telluric_linelist["fwhm"][i]
+                linemasks['telluric_R'][j] = linemasks['mu'][j] / (linemasks['fwhm'][j] - linemasks['telluric_fwhm'][j]) # Resolving power
+
+    if vel_telluric != 0:
+        linemasks['wave_peak'] = original_wave_peak
+        linemasks['mu'] = original_mu
 
     return linemasks
 
 
 # Cross-match linemasks with a VALD linelist in order to find
 # the nearest lines and copy the information into the linemasks structure
-def fill_with_VALD_info(linemasks, vald_linelist_file="input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", diff_limit=0.005):
-    ## Load original VALD linelist
-    vald_linelist = read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
+def fill_with_VALD_info(linemasks, vald_linelist_file="input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", diff_limit=0.005, vel_atomic=0.0):
+    # Sort before treating
+    linemasks.sort(order=['wave_peak'])
 
-    ## Detect duplicates
+    if vel_atomic != 0:
+        # Speed of light in m/s
+        c = 299792458.0
+        # Radial/barycentric velocity from km/s to m/s
+        vel_atomic = vel_atomic * 1000
+
+        # Correct wavelength scale for radial velocity
+        original_wave_peak = linemasks['wave_peak'].copy()
+        original_mu = linemasks['mu'].copy()
+        linemasks['wave_peak'] = linemasks['wave_peak'] / ((vel_atomic / c) + 1)
+        linemasks['mu'] = linemasks['mu'] / ((vel_atomic / c) + 1)
+
+
+    ## Load original VALD linelist
+    # Discard very small lines (lesser than 1% of the continuum)
+    vald_linelist = read_VALD_linelist(vald_linelist_file, minimum_depth=0.01)
+
     # Sort by wave_peak and descending depth (for that we create a temporary field)
     vald_linelist = rfn.append_fields(vald_linelist, "reverse_depth", dtypes=float, data=1-vald_linelist['depth'])
     vald_linelist.sort(order=['wave_peak', 'reverse_depth'])
     vald_linelist = rfn.drop_fields(vald_linelist, ['reverse_depth'])
-    # Find duplicates
-    dups, dups_index = find_duplicates(vald_linelist, 'wave_peak')
-    # Filter all duplicates except the first one (which corresponds to the biggest depth)
-    valid = ~np.isnan(vald_linelist['wave_peak'])
-    last_wave = None
-    for i in np.arange(len(dups)):
-        current_wave = dups[i]['wave_peak']
-        if last_wave == None:
-            last_wave = current_wave
-            continue
-        if last_wave == current_wave:
-            pos = dups_index[i]
-            valid[pos] = False
-        else:
-            # Do not filter the first duplicated value
-            last_wave = dups[i]['wave_peak']
-    # Remove duplicates, leaving only those with the biggest depth
-    vald_linelist = vald_linelist[valid]
 
-    if vald_linelist['wave_peak'][0] > linemasks['wave_peak'][0] or vald_linelist['wave_peak'][-1] < linemasks['wave_peak'][-1]:
+    clean_linemasks = linemasks[linemasks['wave_peak'] != 0]
+    max_wave_peak = np.max(clean_linemasks['wave_peak'])
+    min_wave_peak = np.min(clean_linemasks['wave_peak'])
+
+    if vald_linelist['wave_peak'][0] > min_wave_peak or vald_linelist['wave_peak'][-1] < max_wave_peak:
         print "WARNING: VALD linelist does not cover the whole linemask wavelength range"
         print "- VALD range from", vald_linelist['wave_peak'][0], "to", vald_linelist['wave_peak'][-1], "nm"
-        print "- Linemask range from", linemasks['wave_peak'][0], "to", linemasks['wave_peak'][-1], "nm"
+        print "- Linemask range from", min_wave_peak, "to", max_wave_peak, "nm"
 
-    wfilter = (vald_linelist['wave_peak'] >= linemasks['wave_peak'][0]) & (vald_linelist['wave_peak'] <= linemasks['wave_peak'][-1])
+    wfilter = (vald_linelist['wave_peak'] >= min_wave_peak - diff_limit) & (vald_linelist['wave_peak'] <= max_wave_peak + diff_limit)
     vald_linelist = vald_linelist[wfilter]
 
-    for j in np.arange(len(vald_linelist)):
-        # Find index of the nearest line
-        diff = linemasks['mu'] - vald_linelist['wave_peak'][j]
-        i = np.argmin(np.abs(diff))
-        # Save the information
-        if diff[i] <= diff_limit:
-            linemasks["VALD_wave_peak"][i] = vald_linelist["wave_peak"][j-1]
-            linemasks["element"][i] = vald_linelist["element"][j-1]
-            linemasks["lower_state(eV)"][i] = vald_linelist["lower state (eV)"][j-1]
-            linemasks["log(gf)"][i] = vald_linelist["log(gf)"][j-1]
-            linemasks["solar_depth"][i] = vald_linelist["depth"][j-1]
+    if len(vald_linelist) > 0:
+        for j in np.arange(len(linemasks)):
+            # Find index of the nearest line
+            diff = vald_linelist['wave_peak'] - linemasks['mu'][j]
+            #diff = vald_linelist['wave_peak'] - linemasks['wave_peak'][j]
+            abs_diff = np.abs(diff)
+            i = np.argmin(abs_diff)
+            # Save the information
+            if abs_diff[i] <= diff_limit:
+                linemasks["VALD_wave_peak"][j] = vald_linelist["wave_peak"][i]
+                linemasks["element"][j] = vald_linelist["element"][i]
+                linemasks["lower_state(eV)"][j] = vald_linelist["lower state (eV)"][i]
+                linemasks["log(gf)"][j] = vald_linelist["log(gf)"][i]
+                linemasks["solar_depth"][j] = vald_linelist["depth"][i]
 
-    # Cross-match the linemask with the VALD linelist by finding the closest line
-    ## - There is no need to sort, linemask is already sorted by wavelength because of the way it is created
-    ##linemasks.sort(order=['wave_peak'])
-    #last_diff = None
-    #i = 0
-    #j = 0
-    #while i < len(linemasks) and j < len(vald_linelist):
-        #if linemasks['rms'][i] == 9999.0:
-            #i += 1
-            #continue
-        ##diff = linemasks['wave_peak'][i] - vald_linelist['wave_peak'][j]
-        #diff = linemasks['mu'][i] - vald_linelist['wave_peak'][j]
-        #if last_diff == None:
-            #last_diff = diff
-            #j += 1
-            #continue
-        #if np.abs(last_diff) < np.abs(diff):
-            ## Save the information
-            #linemasks["VALD_wave_peak"][i] = vald_linelist["wave_peak"][j-1]
-            #linemasks["element"][i] = vald_linelist["element"][j-1]
-            #linemasks["lower_state(eV)"][i] = vald_linelist["lower state (eV)"][j-1]
-            #linemasks["log(gf)"][i] = vald_linelist["log(gf)"][j-1]
-            #linemasks["solar_depth"][i] = vald_linelist["depth"][j-1]
-            #last_diff = None
-            #i += 1 # Next line in the linemask
-            #j = np.max([0, j-10]) # Jump back in the VALD linelist, just in case
-        #else:
-            #last_diff = diff
-            #j += 1
+    if vel_atomic != 0:
+        linemasks['wave_peak'] = original_wave_peak
+        linemasks['mu'] = original_mu
 
     return linemasks
 
@@ -899,7 +950,15 @@ def print_linemasks_stats(linemasks, discarded):
 
 if __name__ == '__main__':
     ### VALD line list
-    #VALD_to_SPECTRUM_format("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", "input/linelists/VALD.300_1100nm.lst", minimum_depth=0.0)
+    # Original VALD linelist
+    #vald_file = "input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
+    #output_file = "input/linelists/VALD.300_1100nm.lst"
+    #minimum_depth = 0.0
+    #vald_linelist = read_VALD_linelist(vald_file, minimum_depth=minimum_depth)
+    #linelist = VALD_to_SPECTRUM_format(vald_linelist)
+    # Filter discarded:
+    #linelist = linelist[linelist['species'] != "Discard"]
+    #asciitable.write(linelist, output=output_file, Writer=asciitable.FixedWidthNoHeader, delimiter=None, bookend=False, formats={'wave (A)': '%4.3f', })
 
     #VALD_top_3_to_RV_format("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", "input/rv/VALD.300_1100nm.rv.lst", top=1, wave_step=10)
 
