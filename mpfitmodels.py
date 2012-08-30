@@ -13,16 +13,17 @@ class MPFitModel(object):
         self.x = None
         self.y = None
         self.weights = None
-    
+        self.rms = None
+
     def __call__(self, x):
         return self._model_function(x)
-    
+
     def _model_function(self, x, p=None):
         pass
-    
+
     def _model_evaluation_function(self, p, fjac=None):
         # Function that return the weighted deviates
-       
+
         # Parameter values are passed in "p"
         # If fjac==None then partial derivatives should not be
         # computed.  It will always be None if MPFIT is called with default
@@ -35,40 +36,43 @@ class MPFitModel(object):
             return([status, (self.y - model)*self.weights])
         else:
             return([status, (self.y - model)])
-            
+
     def fitData(self, x, y, weights=None, parinfo=None):
         self.x = x
         self.y = y
         self.weights = weights
-        
+
         # Parameters' constraints
         if parinfo != None:
             self._parinfo = parinfo
-        
+
         m = mpfit.mpfit(self._model_evaluation_function, parinfo=self._parinfo, quiet=True)
-        
-        if (m.status <= 0): 
+
+        if (m.status <= 0):
            raise Exception(m.errmsg)
         else:
             for i in np.arange(len(m.params)):
                 self._parinfo[i]['value'] = m.params[i]
             # Num iterations: m.niter
             # Uncertainties: m.perror
-    
+        # Save RMS
+        residuals = np.abs(self.residuals())
+        self.rms = np.mean(residuals) + np.std(residuals)
+
     def residuals(self):
         model = self._model_function(self.x)
         return((self.y - model))
-    
+
     def integrate(self):
         raise NotImplementedError()
-    
+
 
 class GaussianModel(MPFitModel):
     # WARNING: Dot not modify attributes A, sig or mu directly from outside the class!
     def __init__(self, baseline=0, A=-0.025, sig=0.25, mu=0):
         p = [baseline, A, sig, mu]
         super(GaussianModel, self).__init__(p)
-    
+
     def _model_function(self, x, p=None):
         # The model function with parameters p required by mpfit library
         if p != None:
@@ -78,38 +82,38 @@ class GaussianModel(MPFitModel):
             self._parinfo[2]['value'] = p[2]
             self._parinfo[3]['value'] = p[3]
         return self.baseline() + ((self.A()*1.)/np.sqrt(2*np.pi*self.sig()**2))*np.exp(-(x-self.mu())**2/(2*self.sig()**2))
-    
+
     def fitData(self, x, y, weights=None, parinfo=None):
         if len(self._parinfo) != 4:
             raise Exception("Wrong number of parameters!")
         super(GaussianModel, self).fitData(x, y, weights, parinfo)
-    
+
     def baseline(self): return self._parinfo[0]['value']
     def A(self): return self._parinfo[1]['value']
     def sig(self): return self._parinfo[2]['value']
     def mu(self): return self._parinfo[3]['value']
-    
+
     def _make_gauss(self):
         k = self.A() / (self.sig() * np.sqrt(2*np.pi))
         s = -1.0 / (2 * self.sig() * self.sig())
         def f(x):
             return k * np.exp(s * (x - self.mu())*(x - self.mu()))
         return f
-        
+
     def integrate(self, from_x=None, to_x=None):
         # Define range: Include 99.97% of the gaussian area
         if from_x == None:
             from_x = self.mu() - 3*self.sig()
         if to_x == None:
             to_x = self.mu() + 3*self.sig()
-        
+
         if self.x == None:
             return 0
         else:
             from scipy.integrate import quad
             integral, estimated_error = quad(self._make_gauss(), from_x, to_x)
             return integral
-    
+
     # Returns fwhm in nm and kms
     def fwhm(self):
         # Light speed in vacuum
@@ -117,11 +121,11 @@ class GaussianModel(MPFitModel):
         fwhm = self.sig() * (2*np.sqrt(2*np.log(2))) # nm
         fwhm_kms = (c / (self.mu() / fwhm)) / 1000.0 # km/s
         return fwhm, fwhm_kms
-    
+
     def resolution(self):
         fwhm, fwhm_kms = self.fwhm()
         return self.mu() / fwhm
-    
+
 
 
 class VoigtModel(MPFitModel):
@@ -129,7 +133,7 @@ class VoigtModel(MPFitModel):
     def __init__(self, baseline=0, A=-0.025, sig=0.25, mu=0, gamma=0.025):
         p = [baseline, A, sig, mu, gamma]
         super(VoigtModel, self).__init__(p)
-    
+
     def _model_function(self, x, p=None):
         # The model function with parameters p required by mpfit library
         if p != None:
@@ -148,19 +152,19 @@ class VoigtModel(MPFitModel):
             w = wofz(((x - self.mu()) + 1j*self.gamma())* 2**-0.5/self.sig())
             voigt_result = self.baseline() + (self.A() * w.real*(2*np.pi)**-0.5/self.sig())
         return voigt_result
-    
+
     def fitData(self, x, y, weights=None, parinfo=None):
         if len(self._parinfo) != 5:
             raise Exception("Wrong number of parameters!")
         super(VoigtModel, self).fitData(x, y, weights, parinfo)
-        
-    
+
+
     def baseline(self): return self._parinfo[0]['value']
     def A(self): return self._parinfo[1]['value']
     def sig(self): return self._parinfo[2]['value']
     def mu(self): return self._parinfo[3]['value']
     def gamma(self): return self._parinfo[4]['value']
-    
+
     def _make_voigt(self):
         if self.sig == 0:
             # Equivalent to a Lorentzian model
@@ -175,64 +179,64 @@ class VoigtModel(MPFitModel):
             def f(x):
                 from scipy.special import wofz
                 return k * wofz(((x - self.mu()) + 1j*self.gamma())*s).real
-        
+
         return f
-        
+
     def integrate(self, from_x=None, to_x=None):
         # Define range: Include 99.97% of the gaussian area
         if from_x == None:
             from_x = self.mu() - 3*self.sig()
         if to_x == None:
             to_x = self.mu() + 3*self.sig()
-        
+
         if self.x == None:
             return 0
         else:
             from scipy.integrate import quad
             integral, estimated_error = quad(self._make_voigt(), from_x, to_x)
             return integral
-    
+
     # Returns fwhm in nm and kms
     def fwhm(self):
         # FWHM for voigt
         # http://en.wikipedia.org/wiki/Voigt_profile#The_width_of_the_Voigt_profile
-        
+
         # Light speed in vacuum
         c = 299792458.0 # m/s
         fwhm_gaussian = self.sig() * (2*np.sqrt(2*np.log(2))) # nm
         fwhm_lorentzian = 2*self.gamma()
         phi = fwhm_lorentzian / fwhm_gaussian
-        
+
         c0 = 2.0056
         c1 = 1.0593
         fwhm = fwhm_gaussian * (1 - c0*c1 + np.sqrt(np.power(phi, 2) + 2*c1*phi + c0*c0*c1*c1)) # nm
         fwhm_kms = (c / (self.mu() / fwhm)) / 1000.0 # km/s
         return fwhm, fwhm_kms
-    
+
     def resolution(self):
         fwhm, fwhm_kms = self.fwhm()
         return self.mu() / fwhm
-    
+
     # Returns fwhm in nm and kms
     def fwhm_olivero(self):
         # FWHM for voigt
         # Formula from Olivero et al (1977) "Empirical fits to the Voigt line width: A brief review"
         # http://www.sciencedirect.com/science/article/pii/0022407377901613
         # http://en.wikipedia.org/wiki/Voigt_profile#The_width_of_the_Voigt_profile
-        
+
         # Light speed in vacuum
         c = 299792458.0 # m/s
         fwhm_gaussian = self.sig() * (2*np.sqrt(2*np.log(2))) # nm
         fwhm_lorentzian = 2*self.gamma()
-        
+
         fwhm = 0.5346*(2*fwhm_lorentzian) + np.sqrt(0.2166*np.power(fwhm_lorentzian, 2) + np.power(fwhm_gaussian, 2)) # nm
         fwhm_kms = (c / (self.mu() / fwhm)) / 1000.0 # km/s
         return fwhm, fwhm_kms
-    
+
     def resolution_olivero(self):
         fwhm, fwhm_kms = self.fwhm_olivero()
         return self.mu() / fwhm
-    
+
 
 if __name__ == '__main__':
     ### Full range
@@ -260,7 +264,7 @@ if __name__ == '__main__':
     err = np.ones(len(x))
 
     gaussian_model.fitData(x, y)
-    
+
 
     print "Fitted pars: "
     print "\tBase:\t", gaussian_model.baseline()

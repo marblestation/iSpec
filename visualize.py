@@ -1,7 +1,7 @@
 """
     This file is part of Spectra.
     Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
-    
+
     Spectra is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -25,7 +25,7 @@ import asciitable
 import numpy as np
 import wx
 import wx.lib.sheet as sheet
-import ipdb
+#import ipdb
 
 class MySheet(sheet.CSheet):
     def __init__(self, parent, num_rows, num_cols):
@@ -46,11 +46,11 @@ class Notebook(wx.Frame):
         wx.EVT_MENU(self, 101, self.OnQuit)
 
         nb = wx.Notebook(self, -1, style=wx.NB_BOTTOM)
-        
+
         self.sheet1 = self.create_sheet(nb, data)
-        
+
         nb.AddPage(self.sheet1, 'Sheet1')
-        
+
         self.sheet1.SetFocus()
         self.StatusBar()
         self.Centre()
@@ -65,25 +65,25 @@ class Notebook(wx.Frame):
             return self.create_sheet_from_record(nb, data)
         else:
             raise Exception("Type %s not suported" % type(data))
-    
+
     # Numpy records
     def create_sheet_from_record(self, nb, data):
         num_rows = len(data)
         num_cols = len(data.dtype.names)
-        
+
         sheet = MySheet(nb, num_rows, num_cols)
-        
+
         # Fill the spreadsheet with data
         for row in np.arange(num_rows):
             for col in np.arange(num_cols):
                 sheet.SetCellValue(row, col, str(data[row][col]))
-        ipdb.set_trace() 
+        ipdb.set_trace()
         # Column names
         for i in np.arange(num_cols):
             sheet.SetColLabelValue(i, data.dtype.names[i])
-        
+
         return sheet
-    
+
     # Numpy array
     def create_sheet_from_array(self, nb, data):
         num_rows = data.shape[0]
@@ -92,14 +92,14 @@ class Notebook(wx.Frame):
             num_cols = 1
         else:
             num_cols = data.shape[1]
-        
+
         sheet = MySheet(nb, num_rows, num_cols)
-        
+
         # Fill the spreadsheet with data
         for row in np.arange(num_rows):
             for col in np.arange(num_cols):
                 sheet.SetCellValue(row, col, str(data[row][col]))
-        
+
         return sheet
 
     def StatusBar(self):
@@ -114,9 +114,9 @@ if __name__ == '__main__':
 #    regions = np.array([(1,2,3), (3,4,5)], dtype=np.dtype([('x', 'int32'), ('y', 'int32'), ('z', 'int32')]))
 #    regions = np.array([[1,2,3], [3,4,5]])
 #    regions = [[1,2,3], [3,4,5]]
-   
+
 #    app = wx.PySimpleApp()
     app = wx.App()
     n = Notebook(None, -1, 'visualize.py', regions)
     app.MainLoop()
-    
+

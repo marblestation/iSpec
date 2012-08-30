@@ -4,7 +4,7 @@ import numpy.lib.recfunctions as rfn # Extra functions
 import cPickle as pickle
 import gzip
 import os
-import ipdb
+#import ipdb
 from common import *
 from continuum import *
 from radial_velocity import *
@@ -24,9 +24,9 @@ from mpfitmodels import VoigtModel
 def read_VALD_linelist(vald_file, minimum_depth=0.0, data_end=None):
     # Original VALD linelist
     if data_end == None:
-        vald = asciitable.read(vald_file, delimiter=",", quotechar="'", data_start=3, names=["element", "wave (A)", "lower state (eV)", "Vmic (km/s)", "log(gf)", "Rad", "Stark", "Waals", "factor", "depth", "Reference"], exclude_names=["Vmic (km/s)", "Rad", "Stark", "Waals", "factor", "Reference"], guess=False)
+        vald = asciitable.read(vald_file, delimiter=",", quotechar="'", data_start=3, names=["element", "wave (A)", "lower state (eV)", "Vmic (km/s)", "log(gf)", "rad", "stark", "waals", "factor", "depth", "Reference"], exclude_names=["Vmic (km/s)", "factor", "Reference"], guess=False)
     else:
-        vald = asciitable.read(vald_file, delimiter=",", quotechar="'", data_start=3, data_end=data_end, names=["element", "wave (A)", "lower state (eV)", "Vmic (km/s)", "log(gf)", "Rad", "Stark", "Waals", "factor", "depth", "Reference"], exclude_names=["Vmic (km/s)", "Rad", "Stark", "Waals", "factor", "Reference"], guess=False)
+        vald = asciitable.read(vald_file, delimiter=",", quotechar="'", data_start=3, data_end=data_end, names=["element", "wave (A)", "lower state (eV)", "Vmic (km/s)", "log(gf)", "rad", "stark", "waals", "factor", "depth", "Reference"], exclude_names=["Vmic (km/s)", "factor", "Reference"], guess=False)
 
     ## Convert wavelengths from armstrong to nm
     #vald['wave (A)'] = vald['wave (A)'] / 10.0
@@ -140,18 +140,33 @@ def VALD_to_SPECTRUM_format(vald_linelist):
     molecules = asciitable.read("input/abundances/molecular_symbols.dat", delimiter="\t")
 
     # Prepare resulting structure
-    linelist = np.recarray((len(vald_linelist), ), dtype=[('wave (A)', '<f8'), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('log(gf)', '<f8'), ('fudge factor', '<f8'),('transition type', '|S10'), ('note', '|S100')])
+    linelist = np.recarray((len(vald_linelist), ), dtype=[('wave (A)', '<f8'), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('log(gf)', '<f8'), ('fudge factor', '<f8'),('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), ('note', '|S100')])
     linelist['species'] = ""
     linelist['fudge factor'] = 1.0
     linelist['transition type'] = "99"
     linelist['note'] = ""
 
     linelist['wave (A)'] = vald_linelist['wave (A)']
-    linelist['upper state (cm^-1)'] = (eV_to_inverse_cm(get_upper_state(vald_linelist['lower_state(eV)'], vald_linelist[ "wave (A)"] / 10.))).astype(int)
-    linelist['lower state (cm^-1)'] = (eV_to_inverse_cm(vald_linelist['lower_state(eV)'])).astype(int)
-    linelist['fudge factor'] = 1.0
+    linelist['upper state (cm^-1)'] = (eV_to_inverse_cm(get_upper_state(vald_linelist['lower state (eV)'], vald_linelist[ "wave (A)"] / 10.))).astype(int)
+    linelist['lower state (cm^-1)'] = (eV_to_inverse_cm(vald_linelist['lower state (eV)'])).astype(int)
     linelist['log(gf)'] = vald_linelist['log(gf)']
-    linelist['transition type'] = "99"
+    #linelist['transition type'] = "99"
+    linelist['transition type'] = "GA"
+    linelist['rad'] = vald_linelist['rad']
+    linelist['stark'] = vald_linelist['stark']
+    linelist['waals'] = vald_linelist['waals']
+    # Van der Waals should be zero or negative
+    fwaals = vald_linelist['waals'] > 0
+    linelist['waals'][fwaals] = 0
+    # TODO: Consider AO
+    #if ():
+        ## Anstee-O'Mara theory
+        #linelist['transition type'] = "AO"
+        #linelist['sig.alpha'] = vald_linelist['Waals']
+        #linelist['rad'] = vald_linelist['Waals']
+        #linelist['rad'] = 0
+        #linelist['stark'] = -999 # Mark to remove manually after
+        #linelist['waals'] = -999 # Mark to remove manually after
 
     i = 0
     for line in vald_linelist:
@@ -512,7 +527,7 @@ def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_dep
         frame.update_progress(0)
 
     num_peaks = len(peaks)
-    linemasks = np.recarray((num_peaks, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('peak', int), ('base', int), ('top', int), ('depth', float), ('relative_depth', float), ('wave_base_fit', float), ('wave_top_fit', float), ('base_fit', int), ('top_fit', int), ('mu', float), ('sig', float), ('A', float), ('baseline', float), ('gamma', float), ('fwhm', float), ('fwhm_kms', float), ('R', float), ('depth_fit', float), ('relative_depth_fit', float), ('integrated_flux', float), ('ew', float), ('rms', float), ('VALD_wave_peak', float), ('element', '|S4'), ('lower_state(eV)', float), ('log(gf)', float), ('telluric_wave_peak', float), ('telluric_fwhm', float), ('telluric_R', float), ('telluric_depth', float), ('solar_depth', float), ('discarded', bool), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('fudge factor', float), ('transition type', '|S10')])
+    linemasks = np.recarray((num_peaks, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('peak', int), ('base', int), ('top', int), ('depth', float), ('relative_depth', float), ('wave_base_fit', float), ('wave_top_fit', float), ('base_fit', int), ('top_fit', int), ('mu', float), ('sig', float), ('A', float), ('baseline', float), ('gamma', float), ('fwhm', float), ('fwhm_kms', float), ('R', float), ('depth_fit', float), ('relative_depth_fit', float), ('integrated_flux', float), ('ew', float), ('rms', float), ('VALD_wave_peak', float), ('element', '|S4'), ('lower state (eV)', float), ('log(gf)', float), ('telluric_wave_peak', float), ('telluric_fwhm', float), ('telluric_R', float), ('telluric_depth', float), ('solar_depth', float), ('discarded', bool), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('fudge factor', float), ('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8')])
 
     linemasks['discarded'] = False
     # Line mask
@@ -532,7 +547,7 @@ def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_dep
     # Default values for line identification
     linemasks['VALD_wave_peak'] = 0
     linemasks['element'] = ""
-    linemasks['lower_state(eV)'] = 0
+    linemasks['lower state (eV)'] = 0
     linemasks['log(gf)'] = 0
     linemasks['telluric_wave_peak'] = 0
     linemasks['telluric_fwhm'] = 0
@@ -744,9 +759,12 @@ def fill_with_VALD_info(linemasks, vald_linelist_file="input/linelists/VALD/VALD
             if abs_diff[i] <= diff_limit:
                 linemasks["VALD_wave_peak"][j] = vald_linelist["wave_peak"][i]
                 linemasks["element"][j] = vald_linelist["element"][i]
-                linemasks["lower_state(eV)"][j] = vald_linelist["lower state (eV)"][i]
+                linemasks["lower state (eV)"][j] = vald_linelist["lower state (eV)"][i]
                 linemasks["log(gf)"][j] = vald_linelist["log(gf)"][i]
                 linemasks["solar_depth"][j] = vald_linelist["depth"][i]
+                linemasks["rad"][j] = vald_linelist["rad"][i]
+                linemasks["stark"][j] = vald_linelist["stark"][i]
+                linemasks["waals"][j] = vald_linelist["waals"][i]
 
     if vel_atomic != 0:
         linemasks['wave_peak'] = original_wave_peak
@@ -952,16 +970,19 @@ def print_linemasks_stats(linemasks, discarded):
 
 
 if __name__ == '__main__':
-    ### VALD line list
-    # Original VALD linelist
+    #### VALD line list
+    ## Original VALD linelist
     #vald_file = "input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
+    ##vald_file = "input/linelists/uves_linelist_mpa_v3.sme"
     #output_file = "input/linelists/VALD.300_1100nm.lst"
     #minimum_depth = 0.0
     #vald_linelist = read_VALD_linelist(vald_file, minimum_depth=minimum_depth)
     #linelist = VALD_to_SPECTRUM_format(vald_linelist)
-    # Filter discarded:
+    ## Filter discarded:
     #linelist = linelist[linelist['species'] != "Discard"]
     #asciitable.write(linelist, output=output_file, Writer=asciitable.FixedWidthNoHeader, delimiter=None, bookend=False, formats={'wave (A)': '%4.3f', })
+    #import ipdb
+    #ipdb.set_trace()
 
     #VALD_top_3_to_RV_format("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", "input/rv/VALD.300_1100nm.rv.lst", top=1, wave_step=10)
 
@@ -1441,14 +1462,14 @@ if __name__ == '__main__':
     #plt.ylabel('log(gf)')
     #plt.show()
 
-    #plt.scatter(linemasks[~discarded]['depth'], linemasks[~discarded]['lower_state(eV)'], s=4)
+    #plt.scatter(linemasks[~discarded]['depth'], linemasks[~discarded]['lower state (eV)'], s=4)
     #plt.xlabel('Depth')
-    #plt.ylabel('lower_state(eV)')
+    #plt.ylabel('lower state (eV)')
     #plt.show()
 
-    #plt.scatter(linemasks[~discarded]['log(gf)'], linemasks[~discarded]['lower_state(eV)'], s=4)
+    #plt.scatter(linemasks[~discarded]['log(gf)'], linemasks[~discarded]['lower state (eV)'], s=4)
     #plt.xlabel('log(gf)')
-    #plt.ylabel('lower_state(eV)')
+    #plt.ylabel('lower state (eV)')
     #plt.show()
 
     #fig = plt.figure()
@@ -1460,7 +1481,7 @@ if __name__ == '__main__':
     #from mpl_toolkits.mplot3d import axes3d, Axes3D #<-- Note the capitalization!
     #fig = plt.figure()
     #ax = Axes3D(fig) #<-- Note the difference from your original code...
-    #X, Y, Z = linemasks[~discarded]['log(gf)'], linemasks[~discarded]['lower_state(eV)'], linemasks[~discarded]['depth']
+    #X, Y, Z = linemasks[~discarded]['log(gf)'], linemasks[~discarded]['lower state (eV)'], linemasks[~discarded]['depth']
     #cset = ax.contour(X, Y, Z, 16, extend3d=True)
     #ax.clabel(cset, fontsize=9, inline=1)
     #plt.show()

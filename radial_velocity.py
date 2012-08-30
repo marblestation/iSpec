@@ -463,7 +463,8 @@ v = vb[0]*np.cos(dec)*np.cos(ra) + vb[1]*np.cos(dec)*np.sin(ra) + vb[2]*np.sin(d
 measured_rv = -45.0 # Radial velocity measured from a spectrum
 corrected_rv = measured_rv + v
     """
-    dje = obstools.calendar_to_jd(datetime) # Julian ephemeris date.
+    #dje = astropysics.obstools.calendar_to_jd(datetime) # Julian ephemeris date.
+    dje = calendar_to_jd(datetime) # Julian ephemeris date
 
     #Define constants
     dc2pi = 2 * np.pi

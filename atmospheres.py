@@ -9,7 +9,7 @@ from scipy import interpolate
 import matplotlib.pyplot as plt
 import tempfile
 import cPickle as pickle
-import ipdb
+#import ipdb
 
 # SPECTRUM is compatible only with the plane-parallel atmospheres.
 # The first layer represents the surface.

@@ -19,8 +19,19 @@
 #################
 # Run with ipython -pdb -c "%run interactive.py"
 #################
-import ipdb
+#import ipdb
+
 import os
+import sys
+
+## PyInstaller resource access
+def resource_path(relative):
+    if getattr(sys, 'frozen', None):
+        basedir = sys._MEIPASS
+    else:
+        basedir = os.path.dirname(__file__)
+    return os.path.join(basedir, relative)
+
 import pprint
 import random
 import wx
@@ -28,10 +39,9 @@ import asciitable
 import numpy as np
 
 import threading
-import sys
 import getopt
 
-if os.path.exists("synthesizer.so") and os.path.exists("atmospheres.py"):
+if os.path.exists(resource_path("synthesizer.so")):
     try:
         import synthesizer
         from atmospheres import *
@@ -673,8 +683,7 @@ class VelocityProfileDialog(wx.Dialog):
             R = np.int(c/(1000.0*np.round(fwhm - telluric_fwhm, 2)))
             self.stats.SetStringItem(num_items, 1, str(np.round(R, 2)))
             num_items += 1
-            residuals = model.residuals()
-            rms = np.sqrt(np.sum(np.power(residuals, 2)) / len(residuals))
+            rms = model.rms
             self.stats.InsertStringItem(num_items, "RMS")
             self.stats.SetStringItem(num_items, 1, str(np.round(rms, 5)))
             num_items += 1
@@ -1281,6 +1290,11 @@ class CustomizableRegion:
         ## Line region specific properties:
         self.mark = mark
         self.note = note
+        if mark != None:
+            self.mark_position = self.mark.get_xdata()
+        else:
+            self.mark_position = None
+
         # Fit line properties, dictionary of spectrum (to vinculate to different spectra):
         self.line_plot_id = {}
         self.line_model = {}
@@ -1347,6 +1361,7 @@ class CustomizableRegion:
                 x[0] = event.xdata
                 x[1] = event.xdata
                 self.mark.set_xdata(x)
+                self.mark_position = self.mark.get_xdata()
                 if self.note != None:
                     self.note.xy = (event.xdata, 1)
                 self.frame.status_message("Moving mark to %.4f" % x[0])
@@ -1367,9 +1382,10 @@ class CustomizableRegion:
             # Set
             if self.note == None:
                 # Position of the mark
-                x = self.mark.get_xdata()
+                x = self.mark_position[0]
+
                 # New
-                self.note = self.frame.axes.annotate(note_text, xy=([0], 1),  xycoords=("data", 'axes fraction'),
+                self.note = self.frame.axes.annotate(note_text, xy=(x, 1),  xycoords=("data", 'axes fraction'),
                     xytext=(-10, 20), textcoords='offset points',
                     size=8,
                     bbox=dict(boxstyle="round", fc="0.8"),
@@ -1386,6 +1402,16 @@ class CustomizableRegion:
             # Remove
             self.note.set_visible(False)
             self.note = None
+
+    def show_mark(self):
+        if self.mark == None:
+            self.mark = self.frame.axes.axvline(x = self.mark_position[0], linewidth=1, color='orange')
+            pass
+
+    def hide_mark(self):
+        if self.mark != None:
+            self.mark.remove()
+            self.mark = None
 
 
     def on_press(self, event):
@@ -1697,7 +1723,7 @@ class SpectraFrame(wx.Frame):
         self.operation_in_progress = False
 
         wx.Frame.__init__(self, None, -1, self.title)
-        self.icon = wx.Icon("images/SVE.ico", wx.BITMAP_TYPE_ICO)
+        self.icon = wx.Icon(resource_path("images/SVE.ico"), wx.BITMAP_TYPE_ICO)
         self.tbicon = wx.TaskBarIcon()
         self.tbicon.SetIcon(self.icon, "")
         wx.Frame.SetIcon(self, self.icon)
@@ -1874,7 +1900,6 @@ class SpectraFrame(wx.Frame):
         #####
         menu_clear = wx.Menu()
         m_expt = menu_edit.AppendMenu(-1, 'Clear...', menu_clear)
-        self.spectrum_function_items.append(m_expt)
 
         m_remove_fitted_continuum = menu_clear.Append(-1, "Fitted continuum", "Remove the fitted continuum")
         self.Bind(wx.EVT_MENU, self.on_remove_fitted_continuum, m_remove_fitted_continuum)
@@ -2157,6 +2182,9 @@ class SpectraFrame(wx.Frame):
             # zorder = 1, always in the background
             spec.errors_plot_id1 = self.axes.plot(spec.data['waveobs'], spec.data['flux'] + spec.data['err'], lw=1, color=spec.color, linestyle='-.', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=1)[0]
             spec.errors_plot_id2 = self.axes.plot(spec.data['waveobs'], spec.data['flux'] - spec.data['err'], lw=1, color=spec.color, linestyle='-.', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=1)[0]
+            # More beautiful but slower:
+            #x = self.axes.fill_between(spec.data['waveobs'], spec.data['flux'] - spec.data['err'], spec.data['flux'] + spec.data['err'], color='#CCCCCC',zorder=1)
+
         self.canvas.draw()
 
     def draw_continuum_spectra(self):
@@ -2170,6 +2198,17 @@ class SpectraFrame(wx.Frame):
         # zorder = 1, always in the background
         if self.active_spectrum.continuum_data != None:
             self.active_spectrum.continuum_plot_id = self.axes.plot(self.active_spectrum.continuum_data['waveobs'], self.active_spectrum.continuum_data['flux'], lw=1, color='green', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=1)[0]
+
+
+    def show_marks(self):
+        elements = "lines"
+        for r in self.region_widgets[elements]:
+            r.show_mark()
+
+    def hide_marks(self):
+        elements = "lines"
+        for r in self.region_widgets[elements]:
+            r.hide_mark()
 
     # Draw all elements in regions array and creates widgets in regions widget array
     # Elements cann be "continuum", "lines" or "segments"
@@ -2236,6 +2275,8 @@ class SpectraFrame(wx.Frame):
         self.canvas.draw()
 
     def update_scale(self):
+        # If there are line marks, hide them or they will affect the autoscale
+        self.hide_marks()
         # Autoscale
         self.axes.relim()
         #self.axes.autoscale_view(tight=None, scalex=False, scaley=True)
@@ -2246,6 +2287,8 @@ class SpectraFrame(wx.Frame):
         self.axes.autoscale(enable=True, axis='both', tight=None)
         self.toolbar.update() # Reset history and consider this view as the default one when 'home' is pressed
         self.toolbar.push_current() # Save the view in the history
+        # Recover the line marks in case they existed before
+        self.show_marks()
         # Recover initial view
       	self.axes.set_ylim(ylim)
       	self.axes.set_xlim(xlim)
@@ -2506,8 +2549,7 @@ class SpectraFrame(wx.Frame):
             self.add_stats("Gaussian amplitude (A)", "%.4f" % region.line_model[self.active_spectrum].A())
             self.add_stats("Gaussian standard deviation (sigma)", "%.4f" % region.line_model[self.active_spectrum].sig())
             self.add_stats("Gaussian base level (mean continuum)", "%.4f" % region.line_model[self.active_spectrum].baseline())
-            residuals = np.abs(region.line_model[self.active_spectrum].residuals())
-            rms = np.mean(residuals) + np.std(residuals)
+            rms = region.line_model[self.active_spectrum].rms
             self.add_stats("Gaussian fit root mean squeare (RMS)", "%.4f" % rms)
             wave_base = region.get_wave_base()
             wave_top = region.get_wave_top()
@@ -2515,15 +2557,18 @@ class SpectraFrame(wx.Frame):
             ew = integrated_flux / region.line_model[self.active_spectrum].baseline()
             self.add_stats("Gaussian fit Equivalent Width (EW)", "%.4f" % ew)
 
-        if region.element_type == "lines" and region.line_extra[self.active_spectrum] != None:
+        if region.element_type == "lines" and region.line_extra.has_key(self.active_spectrum) and region.line_extra[self.active_spectrum] != None:
             # Extras (all in string format separated by ;)
-            VALD_wave_peak, species, lower_state, upper_state, loggf, fudge_factor, transition_type, ew, element, telluric_wave_peak, telluric_depth = region.line_extra[self.active_spectrum].split(";")
+            VALD_wave_peak, species, lower_state, upper_state, loggf, fudge_factor, transition_type, rad, stark, waals, ew, element, telluric_wave_peak, telluric_depth = region.line_extra[self.active_spectrum].split(";")
             self.add_stats("VALD element", element)
             self.add_stats("VALD line wavelength", VALD_wave_peak)
             self.add_stats("VALD lower state (cm^-1)", lower_state)
             self.add_stats("VALD upper state (cm^-1)", upper_state)
             self.add_stats("VALD log(gf)", loggf)
-            if telluric_wave_peak != "":
+            self.add_stats("VALD radiative damping constant", rad)
+            self.add_stats("VALD stark damping constant", stark)
+            self.add_stats("VALD van der Waals damping constant", waals)
+            if telluric_wave_peak != "" and float(telluric_wave_peak) != 0:
                 self.add_stats("Tellurics: possibly affected by line at (nm)", telluric_wave_peak)
                 self.add_stats("Tellurics: typical line depth", "%.4f" % float(telluric_depth))
             else:
@@ -2587,76 +2632,76 @@ class SpectraFrame(wx.Frame):
 
             if dlg.ShowModal() == wx.ID_OK:
 
-                try:
-                    if elements == "spectra":
-                        paths = dlg.GetPaths()
-                        filenames = dlg.GetFilenames()
-                        some_does_not_exists = False
-                        for i, path in enumerate(paths):
-                            if not os.path.exists(path):
-                                msg = 'File %s does not exist.' % filenames[i]
-                                title = 'File does not exist'
-                                self.error(title, msg)
-                                some_does_not_exists = True
-                                break
-                        if some_does_not_exists:
-                            continue # Give the oportunity to select another file name
-
-                        # Remove current continuum from plot if exists
-                        self.remove_drawn_continuum_spectra()
-
-                        # Remove current drawn fitted lines if they exist
-                        self.remove_drawn_fitted_lines()
-
-                        for path in paths:
-                            # Remove "[A]  " from spectra name (legend) if it exists
-                            if self.active_spectrum != None and self.active_spectrum.plot_id != None:
-                                self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
-                            new_spectra_data = read_spectra(path)
-                            name = self.get_name(path.split('/')[-1]) # If it already exists, add a suffix
-                            color = self.get_color()
-                            self.active_spectrum = Spectrum(new_spectra_data, name, path = path, color=color)
-                            self.spectra.append(self.active_spectrum)
-                            self.update_menu_active_spectrum()
-                            self.draw_active_spectrum()
-                        self.update_scale()
-
-                        if len(paths) == 1:
-                            self.flash_status_message("Opened file %s" % paths[0])
-                        else:
-                            self.flash_status_message("Opened %i spectra files" % len(paths))
-                    else:
-                        path = dlg.GetPath()
+                #try:
+                if elements == "spectra":
+                    paths = dlg.GetPaths()
+                    filenames = dlg.GetFilenames()
+                    some_does_not_exists = False
+                    for i, path in enumerate(paths):
                         if not os.path.exists(path):
-                            msg = 'File %s does not exist.' % dlg.GetFilename()
+                            msg = 'File %s does not exist.' % filenames[i]
                             title = 'File does not exist'
                             self.error(title, msg)
-                            continue # Give the oportunity to select another file name
-                        if elements == "continuum":
-                            self.regions[elements] = read_continuum_regions(path)
-                            self.draw_regions(elements)
-                            self.not_saved[elements] = False
-                            self.update_title()
-                        elif elements == "lines":
-                            self.regions[elements] = read_line_regions(path)
-                            self.draw_regions(elements)
-                            self.not_saved[elements] = False
-                            self.update_title()
-                        else:
-                            # 'segments'
-                            self.regions[elements] = read_segment_regions(path)
-                            self.draw_regions(elements)
-                            self.not_saved[elements] = False
-                            self.update_title()
-                        self.flash_status_message("Opened file %s" % path)
-                    self.filenames[elements] = path
-                    self.canvas.draw()
-                    action_ended = True
-                except Exception as e:
-                    msg = 'A file does not have a compatible format.'
-                    title = 'File formatincompatible'
-                    self.error(title, msg)
-                    continue
+                            some_does_not_exists = True
+                            break
+                    if some_does_not_exists:
+                        continue # Give the oportunity to select another file name
+
+                    # Remove current continuum from plot if exists
+                    self.remove_drawn_continuum_spectra()
+
+                    # Remove current drawn fitted lines if they exist
+                    self.remove_drawn_fitted_lines()
+
+                    for path in paths:
+                        # Remove "[A]  " from spectra name (legend) if it exists
+                        if self.active_spectrum != None and self.active_spectrum.plot_id != None:
+                            self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
+                        new_spectra_data = read_spectra(path)
+                        name = self.get_name(path.split('/')[-1]) # If it already exists, add a suffix
+                        color = self.get_color()
+                        self.active_spectrum = Spectrum(new_spectra_data, name, path = path, color=color)
+                        self.spectra.append(self.active_spectrum)
+                        self.update_menu_active_spectrum()
+                        self.draw_active_spectrum()
+                    self.update_scale()
+
+                    if len(paths) == 1:
+                        self.flash_status_message("Opened file %s" % paths[0])
+                    else:
+                        self.flash_status_message("Opened %i spectra files" % len(paths))
+                else:
+                    path = dlg.GetPath()
+                    if not os.path.exists(path):
+                        msg = 'File %s does not exist.' % dlg.GetFilename()
+                        title = 'File does not exist'
+                        self.error(title, msg)
+                        continue # Give the oportunity to select another file name
+                    if elements == "continuum":
+                        self.regions[elements] = read_continuum_regions(path)
+                        self.draw_regions(elements)
+                        self.not_saved[elements] = False
+                        self.update_title()
+                    elif elements == "lines":
+                        self.regions[elements] = read_line_regions(path)
+                        self.draw_regions(elements)
+                        self.not_saved[elements] = False
+                        self.update_title()
+                    else:
+                        # 'segments'
+                        self.regions[elements] = read_segment_regions(path)
+                        self.draw_regions(elements)
+                        self.not_saved[elements] = False
+                        self.update_title()
+                    self.flash_status_message("Opened file %s" % path)
+                self.filenames[elements] = path
+                self.canvas.draw()
+                action_ended = True
+                #except Exception as e:
+                    #msg = 'A file does not have a compatible format.'
+                    #title = 'File formatincompatible'
+                    #self.error(title, msg)
+                    #continue
             else:
                 self.flash_status_message("Discarded.")
                 action_ended = True
@@ -3490,7 +3535,7 @@ class SpectraFrame(wx.Frame):
 
         ### Container:
         # Array needed to fill info about the peak position (initial and fitted mu), VALD data and SPECTRUM compatible data
-        linemasks = np.recarray((total_regions, ), dtype=[('wave_peak', float), ('mu', float), ('fwhm', float), ('ew', float), ('telluric_wave_peak', float), ('telluric_depth', float), ('telluric_fwhm', float), ('telluric_R', float), ('VALD_wave_peak', float), ('element', '|S4'), ('lower_state(eV)', float), ('log(gf)', float), ('solar_depth', float), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('fudge factor', float), ('transition type', '|S10'), ('i', int)])
+        linemasks = np.recarray((total_regions, ), dtype=[('wave_peak', float), ('mu', float), ('fwhm', float), ('ew', float), ('telluric_wave_peak', float), ('telluric_depth', float), ('telluric_fwhm', float), ('telluric_R', float), ('VALD_wave_peak', float), ('element', '|S4'), ('lower state (eV)', float), ('log(gf)', float), ('solar_depth', float), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('fudge factor', float), ('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), ('i', int)])
         # Default values
         linemasks['wave_peak'] = 0
         linemasks['mu'] = 0.0
@@ -3502,7 +3547,7 @@ class SpectraFrame(wx.Frame):
         linemasks['telluric_R'] = 0
         linemasks['VALD_wave_peak'] = 0
         linemasks['element'] = ""
-        linemasks['lower_state(eV)'] = 0
+        linemasks['lower state (eV)'] = 0
         linemasks['log(gf)'] = 0
         linemasks['solar_depth'] = 0.0
         linemasks["species"] = ""
@@ -3510,6 +3555,9 @@ class SpectraFrame(wx.Frame):
         linemasks["upper state (cm^-1)"] = 0
         linemasks["fudge factor"] = 0
         linemasks["transition type"] = ""
+        linemasks["rad"] = 0
+        linemasks["stark"] = 0
+        linemasks["waals"] = 0
         linemasks["i"] = 0
 
         self.operation_in_progress = True
@@ -3562,10 +3610,10 @@ class SpectraFrame(wx.Frame):
 
         wx.CallAfter(self.status_message, "Cross-match with VALD data...")
 
-        telluric_linelist_file = "input/linelists/telluric/standard_atm_air_model.lst"
+        telluric_linelist_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
         linemasks = fill_with_telluric_info(linemasks, telluric_linelist_file=telluric_linelist_file, vel_telluric=vel_telluric)
         ## Cross-match with VALD data
-        linemasks = fill_with_VALD_info(linemasks, vald_linelist_file="input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", diff_limit=0.005, vel_atomic=vel_atomic)
+        linemasks = fill_with_VALD_info(linemasks, vald_linelist_file=resource_path("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"), diff_limit=0.005, vel_atomic=vel_atomic)
         ## Calculate line data that is compatible with SPECTRUM
         linemasks = rfn.append_fields(linemasks, "wave (A)", dtypes=float, data=linemasks['VALD_wave_peak'] * 10.0)
         linemasks = linemasks.data
@@ -3576,6 +3624,9 @@ class SpectraFrame(wx.Frame):
         linemasks["upper state (cm^-1)"] = SPECTRUM_linelist["upper state (cm^-1)"]
         linemasks["fudge factor"] = SPECTRUM_linelist["fudge factor"]
         linemasks["transition type"] = SPECTRUM_linelist["transition type"]
+        linemasks["rad"] = SPECTRUM_linelist["rad"]
+        linemasks["stark"] = SPECTRUM_linelist["stark"]
+        linemasks["waals"] = SPECTRUM_linelist["waals"]
 
         wx.CallAfter(self.on_fit_lines_finnish, linemasks, write_note)
 
@@ -3586,7 +3637,9 @@ class SpectraFrame(wx.Frame):
             line_extra = str(line['VALD_wave_peak']) + ";" + str(line['species']) + ";"
             line_extra = line_extra + str(line['lower state (cm^-1)']) + ";" + str(line['upper state (cm^-1)']) + ";"
             line_extra = line_extra + str(line['log(gf)']) + ";" + str(line['fudge factor']) + ";"
-            line_extra = line_extra + str(line['transition type']) + ";" + str(line['ew']) + ";" + line['element'] + ";"
+            line_extra = line_extra + str(line['transition type']) + ";" + str(line['rad']) + ";"
+            line_extra = line_extra + str(line['stark']) + ";" + str(line['waals']) + ";"
+            line_extra = line_extra + str(line['ew']) + ";" + line['element'] + ";"
             line_extra = line_extra + str(line['telluric_wave_peak']) + ";" + str(line['telluric_depth'])
             self.region_widgets["lines"][i].line_extra[self.active_spectrum] = line_extra
             if write_note:
@@ -3923,8 +3976,8 @@ max_wave_range=max_wave_range)
 
         wx.CallAfter(self.status_message, "Generating line masks, fitting gaussians and matching VALD lines...")
         print "Generating line masks, fitting gaussians and matching VALD lines..."
-        telluric_linelist_file = "input/linelists/telluric/standard_atm_air_model.lst"
-        linemasks = generate_linemasks(spectra, peaks, base_points, self.active_spectrum.continuum_model, minimum_depth=min_depth, maximum_depth=max_depth, smoothed_spectra=smoothed_spectra ,vald_linelist_file="input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", telluric_linelist_file = telluric_linelist_file, discard_gaussian = False, discard_voigt = True, vel_atomic=vel_atomic, vel_telluric=vel_telluric, frame=self)
+        telluric_linelist_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
+        linemasks = generate_linemasks(spectra, peaks, base_points, self.active_spectrum.continuum_model, minimum_depth=min_depth, maximum_depth=max_depth, smoothed_spectra=smoothed_spectra ,vald_linelist_file=resource_path("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"), telluric_linelist_file = telluric_linelist_file, discard_gaussian = False, discard_voigt = True, vel_atomic=vel_atomic, vel_telluric=vel_telluric, frame=self)
 
         print "Applying filters to discard bad line masks..."
         wx.CallAfter(self.status_message, "Applying filters to discard bad line masks...")
@@ -3998,6 +4051,9 @@ max_wave_range=max_wave_range)
         linemasks["upper state (cm^-1)"] = SPECTRUM_linelist["upper state (cm^-1)"]
         linemasks["fudge factor"] = SPECTRUM_linelist["fudge factor"]
         linemasks["transition type"] = SPECTRUM_linelist["transition type"]
+        linemasks["rad"] = SPECTRUM_linelist["rad"]
+        linemasks["stark"] = SPECTRUM_linelist["stark"]
+        linemasks["waals"] = SPECTRUM_linelist["waals"]
 
         # Save the data in the note, separated by commas (only the first element will be shown in the GUI)
         line_models = []
@@ -4007,10 +4063,14 @@ max_wave_range=max_wave_range)
             line_extra = str(line['VALD_wave_peak']) + ";" + str(line['species']) + ";"
             line_extra = line_extra + str(line['lower state (cm^-1)']) + ";" + str(line['upper state (cm^-1)']) + ";"
             line_extra = line_extra + str(line['log(gf)']) + ";" + str(line['fudge factor']) + ";"
-            line_extra = line_extra + str(line['transition type']) + ";" + str(line['ew']) + ";" + line['element'] + ";"
+            line_extra = line_extra + str(line['transition type']) + ";" + str(line['rad']) + ";"
+            line_extra = line_extra + str(line['stark']) + ";" + str(line['waals']) + ";"
+            line_extra = line_extra + str(line['ew']) + ";" + line['element'] + ";"
             line_extra = line_extra + str(line['telluric_wave_peak']) + ";" + str(line['telluric_depth'])
             line_extras.append(line_extra)
-            line_models.append(GaussianModel(baseline=line['baseline'], A=line['A'], sig=line['sig'], mu=line['mu']))
+            line_model = GaussianModel(baseline=line['baseline'], A=line['A'], sig=line['sig'], mu=line['mu'])
+            line_model.rms = line['rms']
+            line_models.append(line_model)
             if line["telluric_wave_peak"] != 0:
                 line_regions['note'][i] += "*"
             i += 1
@@ -4299,7 +4359,7 @@ max_wave_range=max_wave_range)
 
         if relative_to_atomic_data:
             if self.linelist_atomic == None:
-                vald_linelist_file = "input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
+                vald_linelist_file = resource_path("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst")
                 self.linelist_atomic = read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
             linelist = self.linelist_atomic
             velocity_lower_limit = self.velocity_atomic_lower_limit
@@ -4307,7 +4367,7 @@ max_wave_range=max_wave_range)
             velocity_step = self.velocity_atomic_step
         else:
             if self.linelist_telluric == None:
-                telluric_lines_file = "input/linelists/telluric/standard_atm_air_model.lst"
+                telluric_lines_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
                 self.linelist_telluric = read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
             velocity_lower_limit = self.velocity_telluric_lower_limit
             velocity_upper_limit = self.velocity_telluric_upper_limit
@@ -4516,8 +4576,8 @@ max_wave_range=max_wave_range)
                 wave_base = 515.0 # Magnesium triplet region
                 wave_top = 525.0
                 wave_top = 517.0
-            teff = 5770.0
-            logg = 4.40
+            teff = 5777.0
+            logg = 4.44
             MH = 0.02
             macroturbulence = 0.0
             vsini = 2.0
@@ -4555,7 +4615,7 @@ max_wave_range=max_wave_range)
             if self.modeled_layers_pack == None:
                 print "Loading modeled atmospheres..."
                 self.status_message("Loading modeled atmospheres...")
-                self.modeled_layers_pack = load_modeled_layers_pack(filename='input/atmospheres/default.modeled_layers_pack.dump')
+                self.modeled_layers_pack = load_modeled_layers_pack(filename=resource_path('input/atmospheres/default.modeled_layers_pack.dump'))
 
             if not valid_objective(self.modeled_layers_pack, teff, logg, MH):
                 msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of theatmospheric models."
@@ -4633,7 +4693,7 @@ max_wave_range=max_wave_range)
         synth_spectra['waveobs'] = waveobs
 
         # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
-        synth_spectra['flux'] = synthesizer.spectrum(synth_spectra['waveobs']*10.0, atm_filename, linelist_file = "input/linelists/SPECTRUM/default.300_1100nm.lst", abundances_file = "input/abundances/default.stdatom.dat", microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, verbose=1, update_progress_func=self.update_progress)
+        synth_spectra['flux'] = synthesizer.spectrum(synth_spectra['waveobs']*10.0, atm_filename, linelist_file = resource_path("input/linelists/SPECTRUM/default.300_1100nm.lst"), abundances_file = resource_path("input/abundances/default.stdatom.dat"), microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, verbose=1, update_progress_func=self.update_progress)
 
 
         synth_spectra.sort(order='waveobs') # Make sure it is ordered by wavelength
@@ -4665,9 +4725,9 @@ max_wave_range=max_wave_range)
         self.spectra.append(self.active_spectrum)
         self.active_spectrum.not_saved = True
         self.update_title()
-        self.update_scale()
         self.update_menu_active_spectrum()
         self.draw_active_spectrum()
+        self.update_scale()
 
         self.canvas.draw()
 

@@ -16,7 +16,7 @@
     along with Spectra.  If not, see <http://www.gnu.org/licenses/>.
 """
 #!/usr/bin/env python
-import ipdb
+#import ipdb
 import asciitable
 import numpy as np
 from plotting import *
