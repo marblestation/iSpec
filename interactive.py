@@ -152,7 +152,7 @@ class FitContinuumDialog(wx.Dialog):
 
     def on_ok(self, event):
         self.action_accepted = True
-        self.Close()
+        self.EndModal(wx.ID_OK)
 
 class EstimateSNRDialog(wx.Dialog):
     def __init__(self, parent, id, title, num_points=10):
@@ -199,7 +199,7 @@ class EstimateSNRDialog(wx.Dialog):
 
     def on_ok(self, event):
         self.action_accepted = True
-        self.Close()
+        self.EndModal(wx.ID_OK)
 
 
 class FindContinuumDialog(wx.Dialog):
@@ -271,7 +271,7 @@ class FindContinuumDialog(wx.Dialog):
 
     def on_ok(self, event):
         self.action_accepted = True
-        self.Close()
+        self.EndModal(wx.ID_OK)
 
 class FindLinesDialog(wx.Dialog):
     def __init__(self, parent, id, title, min_depth=0.05, max_depth=1.0, vel_atomic=0.0, vel_telluric=0.0, resolution=300000, elements="Fe 1, Fe 2"):
@@ -384,7 +384,7 @@ class FindLinesDialog(wx.Dialog):
 
     def on_ok(self, event):
         self.action_accepted = True
-        self.Close()
+        self.EndModal(wx.ID_OK)
 
 class CorrectVelocityDialog(wx.Dialog):
     def __init__(self, parent, id, vel_type, rv):
@@ -433,7 +433,7 @@ class CorrectVelocityDialog(wx.Dialog):
 
     def on_ok(self, event):
         self.action_accepted = True
-        self.Close()
+        self.EndModal(wx.ID_OK)
 
 class DetermineVelocityDialog(wx.Dialog):
     def __init__(self, parent, id, title, rv_upper_limit, rv_lower_limit, rv_step):
@@ -489,7 +489,7 @@ class DetermineVelocityDialog(wx.Dialog):
 
     def on_ok(self, event):
         self.action_accepted = True
-        self.Close()
+        self.EndModal(wx.ID_OK)
 
 class DetermineBarycentricCorrectionDialog(wx.Dialog):
     def __init__(self, parent, id, title, day, month, year, hours, minutes, seconds, ra_hours, ra_minutes, ra_seconds, dec_degrees, dec_minutes, dec_seconds):
@@ -569,7 +569,7 @@ class DetermineBarycentricCorrectionDialog(wx.Dialog):
 
     def on_ok(self, event):
         self.action_accepted = True
-        self.Close()
+        self.EndModal(wx.ID_OK)
 
 
 class VelocityProfileDialog(wx.Dialog):
@@ -695,11 +695,11 @@ class VelocityProfileDialog(wx.Dialog):
 
     def on_no(self, event):
         self.recalculate = False
-        self.Close()
+        self.EndModal(wx.ID_NO)
 
     def on_yes(self, event):
         self.recalculate = True
-        self.Close()
+        self.EndModal(wx.ID_YES)
 
 class CleanSpectraDialog(wx.Dialog):
     def __init__(self, parent, id, title, flux_base, flux_top, err_base, err_top):
@@ -770,7 +770,7 @@ class CleanSpectraDialog(wx.Dialog):
 
     def on_ok(self, event):
         self.action_accepted = True
-        self.Close()
+        self.EndModal(wx.ID_OK)
 
 
 class CutSpectraDialog(wx.Dialog):
@@ -818,7 +818,7 @@ class CutSpectraDialog(wx.Dialog):
 
     def on_ok(self, event):
         self.action_accepted = True
-        self.Close()
+        self.EndModal(wx.ID_OK)
 
 class ResampleSpectraDialog(wx.Dialog):
     def __init__(self, parent, id, title, wave_base, wave_top, wave_step):
@@ -877,7 +877,7 @@ class ResampleSpectraDialog(wx.Dialog):
 
     def on_ok(self, event):
         self.action_accepted = True
-        self.Close()
+        self.EndModal(wx.ID_OK)
 
 class CombineSpectraDialog(wx.Dialog):
     def __init__(self, parent, id, title, wave_base, wave_top, wave_step):
@@ -957,7 +957,7 @@ class CombineSpectraDialog(wx.Dialog):
 
     def on_ok(self, event):
         self.action_accepted = True
-        self.Close()
+        self.EndModal(wx.ID_OK)
 
 
 
@@ -1132,7 +1132,7 @@ class SyntheticSpectrumDialog(wx.Dialog):
 
     def on_ok(self, event):
         self.action_accepted = True
-        self.Close()
+        self.EndModal(wx.ID_OK)
 
 class DegradeResolutionDialog(wx.Dialog):
     def __init__(self, parent, id, title, from_resolution, to_resolution):
@@ -1181,7 +1181,7 @@ class DegradeResolutionDialog(wx.Dialog):
 
     def on_ok(self, event):
         self.action_accepted = True
-        self.Close()
+        self.EndModal(wx.ID_OK)
 
 
 class EstimateErrorsDialog(wx.Dialog):
@@ -1217,7 +1217,7 @@ class EstimateErrorsDialog(wx.Dialog):
 
     def on_ok(self, event):
         self.action_accepted = True
-        self.Close()
+        self.EndModal(wx.ID_OK)
 
 
 class FitLinesDialog(wx.Dialog):
@@ -1273,7 +1273,7 @@ class FitLinesDialog(wx.Dialog):
 
     def on_ok(self, event):
         self.action_accepted = True
-        self.Close()
+        self.EndModal(wx.ID_OK)
 
 
 class CustomizableRegion:
@@ -1622,6 +1622,75 @@ class Spectrum():
         self.velocity_profile_telluric_fwhm_correction = 0.0
         self.snr = None
 
+class SVETaskBarIcon(wx.TaskBarIcon):
+    TBMENU_RESTORE = wx.NewId()
+    TBMENU_CLOSE   = wx.NewId()
+    TBMENU_CHANGE  = wx.NewId()
+    TBMENU_REMOVE  = wx.NewId()
+
+    def __init__(self, frame):
+        #version = wx.version().split()[0].split(".")
+        #version = map(int, version)
+        #if version[0] == 2 and version[1] == 9 and version[2] > 2:
+            #wx.TaskBarIcon.__init__(self, iconType=wx.TBI_DOCK)
+        #else:
+            #wx.TaskBarIcon.__init__(self)
+        try:
+            # Only from wxPython 2.9.2.0, the argument iconType exists
+            wx.TaskBarIcon.__init__(self, iconType=wx.TBI_DOCK)
+        except Exception:
+            wx.TaskBarIcon.__init__(self)
+
+        self.frame = frame
+
+        # Set the image
+        icon = wx.Icon(resource_path("images/SVE.ico"), wx.BITMAP_TYPE_ICO)
+        self.SetIcon(icon, "SVE")
+        self.imgidx = 1
+
+        # bind some events
+        self.Bind(wx.EVT_TASKBAR_LEFT_DCLICK, self.OnTaskBarActivate)
+        self.Bind(wx.EVT_MENU, self.OnTaskBarActivate, id=self.TBMENU_RESTORE)
+        self.Bind(wx.EVT_MENU, self.OnTaskBarClose, id=self.TBMENU_CLOSE)
+
+    def CreatePopupMenu(self):
+        """
+        This method is called by the base class when it needs to popup
+        the menu for the default EVT_RIGHT_DOWN event.  Just create
+        the menu how you want it and return it from this function,
+        the base class takes care of the rest.
+        """
+        menu = wx.Menu()
+        #menu.Append(self.TBMENU_RESTORE, "Restore")
+        #menu.Append(self.TBMENU_CLOSE,   "Close")
+        return menu
+
+
+    def MakeIcon(self, img):
+        """
+        The various platforms have different requirements for the
+        icon size...
+        """
+        if "wxMSW" in wx.PlatformInfo:
+            img = img.Scale(16, 16)
+        elif "wxGTK" in wx.PlatformInfo:
+            img = img.Scale(22, 22)
+        # wxMac can be any size upto 128x128, so leave the source img alone....
+        icon = wx.IconFromBitmap(img.ConvertToBitmap() )
+        return icon
+
+
+    def OnTaskBarActivate(self, evt):
+        if self.frame.IsIconized():
+            self.frame.Iconize(False)
+        if not self.frame.IsShown():
+            self.frame.Show(True)
+        self.frame.Raise()
+
+
+    def OnTaskBarClose(self, evt):
+        wx.CallAfter(self.frame.Close)
+
 
 class SpectraFrame(wx.Frame):
     title = 'Spectra Visual Editor '
@@ -1723,9 +1792,8 @@ class SpectraFrame(wx.Frame):
         self.operation_in_progress = False
 
         wx.Frame.__init__(self, None, -1, self.title)
+        self.tbicon = SVETaskBarIcon(self)
         self.icon = wx.Icon(resource_path("images/SVE.ico"), wx.BITMAP_TYPE_ICO)
-        self.tbicon = wx.TaskBarIcon()
-        self.tbicon.SetIcon(self.icon, "")
         wx.Frame.SetIcon(self, self.icon)
 
         self.Bind(wx.EVT_CLOSE, self.on_close)
@@ -4947,7 +5015,7 @@ if __name__ == '__main__':
         }
     os.environ['LANG'] = locales[u'en'][1]
 
-    app = wx.PySimpleApp()
+    app = wx.App(False) # False to avoid additional windows for stdout/stderr
     app.frame = SpectraFrame(spectra, regions, filenames)
     app.frame.Show()
     app.MainLoop()

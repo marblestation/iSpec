@@ -5,3 +5,6 @@ output/*
 *.o
 synthesizer/build/*
 synthesizer/synthesizer.c
+pyinstaller*/*
+*.h5
+tests/*
