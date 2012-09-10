@@ -8,3 +8,4 @@ synthesizer/synthesizer.c
 pyinstaller*/*
 *.h5
 tests/*
+sve/docs/*

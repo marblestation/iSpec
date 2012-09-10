@@ -19,6 +19,8 @@ import asciitable
 from scipy.interpolate import UnivariateSpline
 import numpy as np
 import matplotlib.pyplot as plt
+import log
+import logging
 
 # Get flux for a given spectra and wavelength, interpolating if needed
 # For interpolation it considers:
@@ -103,16 +105,20 @@ def generate_wavelength_grid(base_wave, top_wave, resolution, points_per_fwhm = 
 # when there are not enough points (i.e. beginning/end of spectra)
 def resample_spectra(spectra, xaxis, linear=True, frame=None):
     total_points = len(xaxis)
+    last_reported_progress = -1
 
     if linear:
+        current_work_progress = 10.0
+        logging.info("%.2f%%" % current_work_progress)
         if frame != None:
-            current_work_progress = 10.0
             frame.update_progress(current_work_progress)
         resampled_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
         resampled_spectra['waveobs'] = xaxis
         resampled_spectra['flux'] = np.interp(xaxis, spectra['waveobs'], spectra['flux'], left=0.0, right=0.0) # No extrapolation, just returns zeros
+
+        current_work_progress = 90.0
+        logging.info("%.2f%%" % current_work_progress)
         if frame != None:
-            current_work_progress = 90.0
             frame.update_progress(current_work_progress)
     else:
         resampled_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
@@ -123,17 +129,14 @@ def resample_spectra(spectra, xaxis, linear=True, frame=None):
             resampled_spectra['flux'][i], index = get_flux(spectra[from_index:], resampled_spectra['waveobs'][i])
             if index > 4:
                 from_index = index - 4
-            if (i % 1000 == 0):
+            current_work_progress = np.min([(i*1.0 / total_points) * 100, 90.0])
+            if report_progress(current_work_progress, last_reported_progress):
+                last_reported_progress = current_work_progress
+                logging.info("%.2f%%" % current_work_progress)
                 if frame != None:
-                    current_work_progress = np.min([(i*1.0 / total_points) * 100, 90.0])
                     frame.update_progress(current_work_progress)
-                else:
-                    print "%.2f" % resampled_spectra['waveobs'][i]
 
     resampled_spectra['err'] = np.interp(xaxis, spectra['waveobs'], spectra['err'])
-    if frame != None:
-        current_work_progress = 100.0
-        frame.update_progress(current_work_progress)
     return resampled_spectra
 
 

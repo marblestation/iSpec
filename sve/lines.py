@@ -30,6 +30,8 @@ import matplotlib.pyplot as plt
 from pymodelfit import UniformKnotSplineModel
 from mpfitmodels import GaussianModel
 from mpfitmodels import VoigtModel
+import log
+import logging
 
 ########################################################################
 ## [START] LINE LISTS
@@ -540,6 +542,7 @@ def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_dep
     # the rest of the information of the line will be conserved in the output
     accepted_for_fitting = np.logical_and(depth >= minimum_depth, depth <= maximum_depth)
 
+    last_reported_progress = -1
     if frame != None:
         frame.update_progress(0)
 
@@ -648,12 +651,12 @@ def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_dep
                 fitting_not_possible = True
 
 
-        if (i % 100) == 0:
-            current_work_progress = ((i*1.0)/num_peaks) * 100
-            print "%.2f%%" % (current_work_progress)
+        current_work_progress = ((i*1.0)/num_peaks) * 100
+        if report_progress(current_work_progress, last_reported_progress):
+            last_reported_progress = current_work_progress
+            logging.info("%.2f%%" % current_work_progress)
             if frame != None:
                 frame.update_progress(current_work_progress)
-
 
     if vald_linelist_file != None:
         linemasks = fill_with_VALD_info(linemasks, vald_linelist_file=vald_linelist_file, diff_limit=0.005, vel_atomic=vel_atomic)

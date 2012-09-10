@@ -66,3 +66,37 @@ def plot_spectra(spectra, filename=None, continuum=None, grid = True, title = No
         else:
             plt.savefig(filename+".png")
 
+
+def show_histogram(x, xlabel='Units', nbins=50):
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    # the histogram of the data
+    n, bins, patches = ax.hist(x, nbins, normed=0, facecolor='green', alpha=0.75)
+    # Mean
+    l = plt.axvline(x = np.mean(x), linewidth=1, color='red')
+    ax.annotate('Mean', xy=(np.mean(x), np.max(n)),  xycoords='data',
+        xytext=(10, 20), textcoords='offset points',
+        size=8,
+        bbox=dict(boxstyle="round", fc="0.8"),
+        arrowprops=dict(arrowstyle="->",
+                        connectionstyle="angle,angleA=0,angleB=90,rad=10",
+                        edgecolor='black'),
+        horizontalalignment='right', verticalalignment='top',
+        )
+    # Median
+    l = plt.axvline(x = np.median(x), linewidth=1, color='orange')
+    ax.annotate('Median', xy=(np.median(x), np.max(n)),  xycoords='data',
+        xytext=(10, 35), textcoords='offset points',
+        size=8,
+        bbox=dict(boxstyle="round", fc="0.8"),
+        arrowprops=dict(arrowstyle="->",
+                        connectionstyle="angle,angleA=0,angleB=90,rad=10",
+                        edgecolor='black'),
+        horizontalalignment='right', verticalalignment='top',
+        )
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel('Counts')
+    ax.grid(True)
+    plt.show()
+
+

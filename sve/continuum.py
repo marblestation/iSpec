@@ -23,6 +23,8 @@ from plotting import *
 from common import *
 from convolve import *
 from pymodelfit import UniformCDFKnotSplineModel
+import log
+import logging
 
 # Group the points in ranges of 1 nm (by default) and select the one with the maximum flux
 def find_max_value_per_wavelength_range(spectra, base_points, wave_range=1):
@@ -216,7 +218,7 @@ def get_spectra_from_model(model, spectra_wave_grid):
 #         * The continuum model can be a fixed flux value or a fitted model (preferable)
 #     b) and the standard deviation is less than a given maximum
 #   the region is selected
-def find_continuum(spectra, resolution, log_filename=None, max_std_continuum = 0.002, continuum_model = 0.95, max_continuum_diff=0.01, fixed_wave_step=None, frame=None):
+def find_continuum(spectra, resolution, max_std_continuum = 0.002, continuum_model = 0.95, max_continuum_diff=0.01, fixed_wave_step=None, frame=None):
 
     min_wave = np.min(spectra['waveobs'])
     max_wave = np.max(spectra['waveobs'])
@@ -228,13 +230,10 @@ def find_continuum(spectra, resolution, log_filename=None, max_std_continuum = 0
     wave_top = wave_base + wave_increment
     dirty_continuum_regions = []
 
+    last_reported_progress = -1
     if frame != None:
         frame.update_progress(0)
         total_work_progress = max_wave - min_wave
-
-    if log_filename != None:
-        log = open(log_filename, "w")
-        log.write("wave_base\twave_top\tnum_measures\tmean_flux\tstd_flux\n")
 
     i = 0
     max_limit = np.max(spectra['waveobs'])
@@ -266,8 +265,6 @@ def find_continuum(spectra, resolution, log_filename=None, max_std_continuum = 0
         else:
             last_accepted = False
             #~ print "Discarded (std = " + str(std_flux) + ", mean = " + str(mean_flux) + ")"
-            if log_filename != None:
-                log.write(str(wave_base) + "\t" + str(wave_top) + "\t" + str(num_measures) + "\t" + str(mean_flux) + "\t" + str(std_flux) + "\n")
 
         # Go to next region
         wave_base = wave_top
@@ -279,18 +276,17 @@ def find_continuum(spectra, resolution, log_filename=None, max_std_continuum = 0
             wave_increment = wave_increment / 2 # Half increase
         wave_top = wave_base + wave_increment
 
-        if (i % 200 == 0):
-            print "%.2f" % wave_base
+        current_work_progress = ((wave_base - min_wave) / total_work_progress) * 100
+        if report_progress(current_work_progress, last_reported_progress):
+            last_reported_progress = current_work_progress
+            logging.info("%.2f%%" % current_work_progress)
             if frame != None:
-                current_work_progress = ((wave_base - min_wave) / total_work_progress) * 100
                 frame.update_progress(current_work_progress)
 
         i += 1
 
-    if log_filename != None:
-        log.close()
-
     continuum_regions = np.array(dirty_continuum_regions,  dtype=[('wave_base', float), ('wave_top', float), ('num_measures', int), ('mean_flux', float), ('std_flux', float)])
+    logging.info("Found %i continuum regions" % len(continuum_regions))
 
     return continuum_regions
 
@@ -305,19 +301,16 @@ def find_continuum(spectra, resolution, log_filename=None, max_std_continuum = 0
 #         * The continuum model can be a fixed flux value or a fitted model (preferable)
 #     b) and the standard deviation is less than a given maximum
 #   the region is selected
-def find_continuum_on_regions(spectra, resolution, regions, log_filename=None, max_std_continuum = 0.002, continuum_model = 0.95, max_continuum_diff=0.01, fixed_wave_step=None, frame=None):
+def find_continuum_on_regions(spectra, resolution, regions, max_std_continuum = 0.002, continuum_model = 0.95, max_continuum_diff=0.01, fixed_wave_step=None, frame=None):
 
     min_wave = np.min(spectra['waveobs'])
     max_wave = np.max(spectra['waveobs'])
 
+    last_reported_progress = -1
     if frame != None:
         frame.update_progress(0)
         total_work_progress = max_wave - min_wave
 
-
-    if log_filename != None:
-        log = open(log_filename, "w")
-        log.write("wave_base\twave_top\tnum_measures\tmean_flux\tstd_flux\n")
 
     dirty_continuum_regions = []
 
@@ -359,8 +352,6 @@ def find_continuum_on_regions(spectra, resolution, regions, log_filename=None, m
             else:
                 last_accepted = False
                 #~ print "Discarded (std = " + str(std_flux) + ", mean = " + str(mean_flux) + ", cont_diff=" + str(cont_diff) + ")"
-                if log_filename != None:
-                    log.write(str(wave_base) + "\t" + str(wave_top) + "\t" + str(num_measures) + "\t" + str(mean_flux) + "\t" + str(std_flux) + "\n")
 
             # Go to next region
             wave_base = wave_top
@@ -373,18 +364,17 @@ def find_continuum_on_regions(spectra, resolution, regions, log_filename=None, m
             wave_top = wave_base + wave_increment
 
 
-            if (i % 200 == 0):
-                #print "%.2f" % wave_base
+            current_work_progress = ((wave_base - min_wave) / total_work_progress) * 100
+            if report_progress(current_work_progress, last_reported_progress):
+                last_reported_progress = current_work_progress
+                logging.info("%.2f%%" % current_work_progress)
                 if frame != None:
-                    current_work_progress = ((wave_base - min_wave) / total_work_progress) * 100
                     frame.update_progress(current_work_progress)
 
             i += 1
 
-    if log_filename != None:
-        log.close()
-
     continuum_regions = np.array(dirty_continuum_regions,  dtype=[('wave_base', float), ('wave_top', float), ('num_measures', int), ('mean_flux', float), ('std_flux', float)])
+    logging.info("Found %i continuum regions" % len(continuum_regions))
 
     return continuum_regions
 

@@ -15,22 +15,34 @@
     You should have received a copy of the GNU Affero General Public License
     along with SVE. If not, see <http://www.gnu.org/licenses/>.
 """
-import numpy as np
-import synthesizer
-from atmospheres import *
+from __future__ import division
 
-modeled_layers_pack = load_modeled_layers_pack(filename='input/atmospheres/default.modeled_layers_pack.dump')
+import os
+import sys
 
-teff_obj = 5750.0
-logg_obj = 4.5
-MH_obj = 0.00
+if sys.hexversion < 0x02050000:
+    raise RuntimeError("SVE requires at least Python 2.5")
 
-valid_objective(modeled_layers_pack, teff_obj, logg_obj, MH_obj)
-layers = interpolate_atmosphere_layers(modeled_layers_pack, teff_obj, logg_obj, MH_obj)
-atm_filename = write_atmosphere(teff_obj, logg_obj, MH_obj, layers)
+## PyInstaller resource access
+def resource_path(relative):
+    if getattr(sys, 'frozen', None):
+        basedir = sys._MEIPASS
+    else:
+        basedir = os.path.dirname(__file__)
+    return os.path.join(basedir, relative)
 
-
-waveobs = np.arange(515.0, 520.0, 0.05)
-fluxes = synthesizer.spectrum(waveobs*10.0, atm_filename, verbose=0)
-print fluxes
-os.remove(atm_filename)
+if os.path.exists(resource_path("synthesizer.so")):
+    try:
+        from atmospheres import *
+        from synth import *
+    except ImportError as e:
+        pass
+from common import *
+from continuum import *
+from convolve import *
+from interpolate import *
+from lines import *
+from radial_velocity import *
+from mpfitmodels import GaussianModel, VoigtModel
+import log
+import logging

@@ -24,6 +24,8 @@ from convolve import *
 from lines import *
 from mpfitmodels import GaussianModel
 from pymodelfit import UniformCDFKnotSplineModel
+import log
+import logging
 
 # If velocity_step is specified, create a mask uniformly spaced in terms of velocity:
 # - An increment in position (i => i+1) supposes a constant velocity increment (velocity_step)
@@ -92,6 +94,7 @@ def create_cross_correlation_mask(data_wave, data_value, wave_grid, velocity_ste
 #   should be done (in array positions) and return a velocity grid
 def cross_correlation_function(spectra, mask, lower_velocity_limit, upper_velocity_limit, velocity_step, frame=None):
 
+    last_reported_progress = -1
     if frame != None:
         frame.update_progress(0)
 
@@ -114,11 +117,12 @@ def cross_correlation_function(spectra, mask, lower_velocity_limit, upper_veloci
         else:
             shifted_mask = np.hstack((mask['value'][-1*shift:], -1*shift*[0]))
         ccf[i] = np.correlate(spectra['flux'], shifted_mask)[0]
-        if (i % 100) == 0:
-            progress = ((i*1.0)/num_shifts) * 100
-            print "%.2f%%" % (progress)
+        current_work_progress = ((i*1.0)/num_shifts) * 100
+        if report_progress(current_work_progress, last_reported_progress):
+            last_reported_progress = current_work_progress
+            logging.info("%.2f%%" % current_work_progress)
             if frame != None:
-                frame.update_progress(progress)
+                frame.update_progress(current_work_progress)
 
     ccf = ccf/np.max(ccf) # Normalize
 

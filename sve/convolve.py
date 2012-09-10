@@ -22,6 +22,8 @@ from interpolate import *
 from plotting import *
 from common import *
 from radial_velocity import *
+import log
+import logging
 
 # Calculate the FWHM of the gaussian needed to convert
 # a spectra from one resolution to another
@@ -57,6 +59,7 @@ def convolve_spectra(spectra, from_resolution, to_resolution=None, frame=None):
     convolved_spectra['waveobs'] = spectra['waveobs']
     convolved_spectra['err'] = spectra['err']
 
+    last_reported_progress = -1
     if frame != None:
         frame.update_progress(0)
 
@@ -125,11 +128,13 @@ def convolve_spectra(spectra, from_resolution, to_resolution=None, frame=None):
         convolved_spectra['flux'][i] = current_convolved_flux
         convolved_spectra['err'][i] = current_convolved_err
 
-        if (i % 1000 == 0):
+        current_work_progress = (i*1.0 / total_points) * 100
+        if report_progress(current_work_progress, last_reported_progress):
+            last_reported_progress = current_work_progress
+            logging.info("%.2f%%" % current_work_progress)
             if frame != None:
-                current_work_progress = (i*1.0 / total_points) * 100
                 frame.update_progress(current_work_progress)
-                #print "%.2f" % convolved_spectra['waveobs'][i]
+    logging.info("Spectra convolved!")
 
     return convolved_spectra
 
@@ -146,6 +151,7 @@ def degrade_spectra_resolution(spectra, from_resolution, to_resolution, frame=No
     convolved_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
     convolved_spectra['waveobs'] = spectra['waveobs']
 
+    last_reported_progress = -1
     if frame != None:
         frame.update_progress(0)
 
@@ -182,12 +188,12 @@ def degrade_spectra_resolution(spectra, from_resolution, to_resolution, frame=No
             print "Not enough points for", lambda_peak, "(window = ", np.round(max - min, 2), "< 3*fwhm =", np.round(3*fwhm, 2), ")"
             convolved_spectra['flux'][i] = None
 
-        if (i % 1000 == 0):
+        current_work_progress = (i*1.0 / total_points) * 100
+        if report_progress(current_work_progress, last_reported_progress):
+            last_reported_progress = current_work_progress
+            logging.info("%.2f%%" % current_work_progress)
             if frame != None:
-                current_work_progress = (i*1.0 / total_points) * 100
                 frame.update_progress(current_work_progress)
-            else:
-                print "%.2f" % spectra['waveobs'][i]
 
     return convolved_spectra
 

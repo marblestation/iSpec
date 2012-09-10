@@ -1,25 +1,24 @@
-"""
-    This file is part of Spectra Visual Editor (SVE).
-    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
-
-    SVE is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    SVE is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with SVE. If not, see <http://www.gnu.org/licenses/>.
-"""
+#
+#    This file is part of Spectra Visual Editor (SVE).
+#    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
+#
+#    SVE is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    SVE is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
+#
+#    You should have received a copy of the GNU Affero General Public License
+#    along with SVE. If not, see <http://www.gnu.org/licenses/>.
+#
 import asciitable
 from scipy.interpolate import UnivariateSpline
 import numpy.lib.recfunctions as rfn # Extra functions
 import numpy as np
-import matplotlib.pyplot as plt
 import calendar
 import re
 import shutil
@@ -29,15 +28,43 @@ import os, errno
 #import ipdb
 import random
 import sys
+import log
+import logging
+
+# Condition to report progress
+def report_progress(current_work_progress, last_reported_progress):
+    return (int(current_work_progress) % 10 == 0 and current_work_progress - last_reported_progress > 10) or last_reported_progress < 0 or current_work_progress == 100
 
 
 # Estimate the Signal-to-Noise ratio for a given spectrum
 # - If the spectra is normalized, we can estimate the SNR by considering
 #   fluxes near the continuum
 def estimate_snr(flux, num_points=10, frame=None):
+    """
+    Estimate the Signal-to-Noise ratio for a given spectrum
+        - If the spectra is normalized, we can estimate the SNR by considering
+          fluxes near the continuum
+
+    :param flux:
+        The Julian Date at which to compute the calendar date/time, a sequence
+        of JDs, or None for the current date/time at the moment the function is
+        called.
+    :type flux: scalar, array-like, or None
+
+    :returns:
+        The calendar date and time in a format determined by the `output`
+        parameter (see above).
+
+    **Examples**
+
+    >>> jd_to_calendar(2451545)
+    datetime.datetime(2000, 1, 1, 12, 0, tzinfo=tzutc())
+
+    """
     # Avoid negative values and outliers
     flux = flux[flux > 0.0]
     #flux, f = sigma_clipping(flux, sig=3, meanfunc=np.median)
+    last_reported_progress = -1
     if num_points == 1:
         snr = np.mean(flux) / np.std(flux)
     else:
@@ -48,14 +75,17 @@ def estimate_snr(flux, num_points=10, frame=None):
             stdev = np.std(values)
             if stdev != 0:
                 snr.append(np.mean(values) / stdev)
-            if i % 2000 == 0:
-                progress = ((i*1.0 / total_num_blocks) * 100.0)
-                print "%.2f%%" % progress
+
+            current_work_progress = ((i*1.0 / total_num_blocks) * 100.0)
+            if report_progress(current_work_progress, last_reported_progress):
+                last_reported_progress = current_work_progress
+                logging.info("%.2f%%" % current_work_progress)
                 if frame != None:
-                    frame.update_progress(progress)
+                    frame.update_progress(current_work_progress)
         snr = np.asarray(snr)
     snr, s = sigma_clipping(snr, sig=3, meanfunc=np.median)
     estimated_snr = np.median(snr)
+    logging.info("SNR = %.2f" % estimated_snr)
     return estimated_snr
 
 
@@ -490,37 +520,6 @@ def write_segment_regions(segment_regions, segment_regions_filename):
     asciitable.write(segment_regions, output=segment_regions_filename, delimiter='\t')
 
 
-def show_histogram(x, xlabel='Units', nbins=50):
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    # the histogram of the data
-    n, bins, patches = ax.hist(x, nbins, normed=0, facecolor='green', alpha=0.75)
-    # Mean
-    l = plt.axvline(x = np.mean(x), linewidth=1, color='red')
-    ax.annotate('Mean', xy=(np.mean(x), np.max(n)),  xycoords='data',
-        xytext=(10, 20), textcoords='offset points',
-        size=8,
-        bbox=dict(boxstyle="round", fc="0.8"),
-        arrowprops=dict(arrowstyle="->",
-                        connectionstyle="angle,angleA=0,angleB=90,rad=10",
-                        edgecolor='black'),
-        horizontalalignment='right', verticalalignment='top',
-        )
-    # Median
-    l = plt.axvline(x = np.median(x), linewidth=1, color='orange')
-    ax.annotate('Median', xy=(np.median(x), np.max(n)),  xycoords='data',
-        xytext=(10, 35), textcoords='offset points',
-        size=8,
-        bbox=dict(boxstyle="round", fc="0.8"),
-        arrowprops=dict(arrowstyle="->",
-                        connectionstyle="angle,angleA=0,angleB=90,rad=10",
-                        edgecolor='black'),
-        horizontalalignment='right', verticalalignment='top',
-        )
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel('Counts')
-    ax.grid(True)
-    plt.show()
 
 
 
