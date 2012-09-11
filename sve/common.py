@@ -31,137 +31,21 @@ import sys
 import log
 import logging
 
-# Condition to report progress
 def report_progress(current_work_progress, last_reported_progress):
+    """
+
+    :returns:
+
+        True every 10% of progress.
+
+    """
     return (int(current_work_progress) % 10 == 0 and current_work_progress - last_reported_progress > 10) or last_reported_progress < 0 or current_work_progress == 100
 
 
-# Estimate the Signal-to-Noise ratio for a given spectrum
-# - If the spectra is normalized, we can estimate the SNR by considering
-#   fluxes near the continuum
-def estimate_snr(flux, num_points=10, frame=None):
-    """
-    Estimate the Signal-to-Noise ratio for a given spectrum
-        - If the spectra is normalized, we can estimate the SNR by considering
-          fluxes near the continuum
-
-    :param flux:
-        The Julian Date at which to compute the calendar date/time, a sequence
-        of JDs, or None for the current date/time at the moment the function is
-        called.
-    :type flux: scalar, array-like, or None
-
-    :returns:
-        The calendar date and time in a format determined by the `output`
-        parameter (see above).
-
-    **Examples**
-
-    >>> jd_to_calendar(2451545)
-    datetime.datetime(2000, 1, 1, 12, 0, tzinfo=tzutc())
-
-    """
-    # Avoid negative values and outliers
-    flux = flux[flux > 0.0]
-    #flux, f = sigma_clipping(flux, sig=3, meanfunc=np.median)
-    last_reported_progress = -1
-    if num_points == 1:
-        snr = np.mean(flux) / np.std(flux)
-    else:
-        snr = []
-        total_num_blocks = len(flux)-num_points
-        for i in np.arange(total_num_blocks):
-            values = flux[i:i+num_points]
-            stdev = np.std(values)
-            if stdev != 0:
-                snr.append(np.mean(values) / stdev)
-
-            current_work_progress = ((i*1.0 / total_num_blocks) * 100.0)
-            if report_progress(current_work_progress, last_reported_progress):
-                last_reported_progress = current_work_progress
-                logging.info("%.2f%%" % current_work_progress)
-                if frame != None:
-                    frame.update_progress(current_work_progress)
-        snr = np.asarray(snr)
-    snr, s = sigma_clipping(snr, sig=3, meanfunc=np.median)
-    estimated_snr = np.median(snr)
-    logging.info("SNR = %.2f" % estimated_snr)
-    return estimated_snr
-
-
-## Select spectra with identified file path doing a inner join between narval.vr and liste_spectre.
-## - It uses the name of the star, the date (true and previous day) and the SNR similarity
-## - Writes the result to a txt file
-## - Returns a numpy array with the selection
-def select_and_create_spectra_list(rv_name = "input/narval.vr", spectra_list_name = "input/liste_spectres", output_file = "output/spectra_list.txt"):
-    # Dictionaries for month transformation
-    month_name2num = dict((v.lower(),k) for k,v in enumerate(calendar.month_abbr))
-    month_num2name = dict((k,v.lower()) for k,v in enumerate(calendar.month_abbr))
-
-    # Read radial velocity file and spectra paths file
-    rv = asciitable.read(rv_name, names=['name', 'julian_date', 'radial_velocity', 'err', 'snr'])
-    spectra_list = asciitable.read(spectra_list_name, names=['name', 'file', 'snr', 'ignore1', 'ignore2'], exclude_names=['ignore1', 'ignore2'])
-
-    # Join the information of radial velocity with the path where the spectra is located
-    # by using the star's name and the date (which correspond to a subdirectory of the file's path)
-    selected_spectra = []
-    discarded_spectra = []
-    already_matched_paths = []
-    for i in np.arange(len(rv)):
-        # Transform from julian to normal python dates
-        d = jd_to_calendar(rv['julian_date'][i])
-
-        # Transform date to format: 05oct07
-        date_string1 = "%.2i" % d.day + month_num2name[d.month] + str(d.year)[2:]
-        date_string2 = "%.2i" % (int(d.day)-1) + month_num2name[d.month] + str(d.year)[2:]
-        path = ""
-        min_diff_snr = 9999.9
-        # For every spectra with the same name
-        for spec in spectra_list[spectra_list['name'] == rv['name'][i]]:
-            # Ignore already matched paths
-            if spec['file'] in already_matched_paths:
-                continue
-            # Match the date looking inside the file's path
-            match1 = re.search(".*/%s/.*/.*\.s" % date_string1, spec['file']) != None
-            # Some of them are in a directory named with the previous day
-            match2 = re.search(".*/%s/.*/.*\.s" % date_string2, spec['file']) != None
-            diff_snr = abs(float(spec['snr'] - rv['snr'][i]) / spec['snr'])
-            if (match1 or match2):
-                # If there is more than one match, get the one with a smaller snr difference
-                # - I do not know why, but SNR are not identical in narval.vr and liste_spectres
-                if diff_snr < min_diff_snr:
-                    min_diff_snr = diff_snr
-                    path = spec['file']
-
-        # If min_diff_snr has not been set, there is no match for this entry
-        if min_diff_snr == 9999.9:
-            #print "File path not found:", "\t", rv['name'][i], "\t", date_string1
-            discarded_spectra.append([rv['name'][i], date_string1, str(d), rv['radial_velocity'][i], rv['err'][i], rv['snr'][i]])
-        else:
-            if min_diff_snr > 0.05:
-                print "Warning: File matched but with 5% of difference in SNR\n", "\t", rv['name'][i], "\t", date_string1, "%.2f" % min_diff_snr
-            already_matched_paths.append(path)
-            # Separate filename from dirname
-            filename = path.split('/')[-1]
-            filename_length = len(filename)
-            dirname = path[:-filename_length]
-            selected_spectra.append((rv['name'][i], date_string1, str(d), rv['radial_velocity'][i], rv['err'][i], rv['snr'][i], dirname, filename))
-
-
-    if output_file != None:
-        asciitable.write(selected_spectra, output=output_file, delimiter='\t', names=['name', 'date', 'datetime', 'radial_velocity', 'err', 'snr', 'dirname', 'filename'])
-        asciitable.write(discarded_spectra, output=output_file+".discard", delimiter='\t', names=['name', 'date', 'datetime', 'radial_velocity', 'err', 'snr'])
-
-    return np.array(selected_spectra, dtype=[('name', '|S20'), ('date', '|S8'), ('datetime', '|S26'), ('radial_velocity', float), ('err', float), ('snr', int), ('dirname', '|S100'), ('filename', '|S100')])
-
-
-## Read the selected spectra list
-def read_spectra_list(input_file = "output/spectra_list.txt"):
-    return asciitable.read(input_file, delimiter='\t', names=['name', 'date', 'datetime', 'radial_velocity', 'err', 'snr', 'dirname', 'filename'])
-
-
-## Make dir (mkdir -p)
 def mkdir_p(path):
+    """
+    Creates a directory. Same behaviour as 'mkdir -p'.
+    """
     try:
         os.makedirs(path)
     except OSError as exc: # Python >2.5
@@ -170,41 +54,14 @@ def mkdir_p(path):
         else:
             raise
 
-## Copy and optionally compress the selected spectra to the current working directory,
-## respecting the subdirectory structure.
-## - It should be executed in vanoise
-def copy_input_spectra(selected_spectra, compress = True, base_path = "/m2a/soubiran/SPECTRES/NARVAL/"):
-    for spec in selected_spectra:
-        # Ignore if the file has been already copied and compressed
-        if os.path.exists("input/" + spec['dirname'] + spec['filename'] + ".gz"):
-            continue
-
-        if not os.path.exists("input/" + spec['dirname']):
-            mkdir_p("input/" + spec['dirname'])
-
-        print base_path + spec['dirname'] + spec['filename'], "=>", "input/" + spec['dirname']
-
-        if not compress:
-            shutil.copy(base_path + spec['dirname'] + spec['filename'], "input/" + spec['dirname'])
-        else:
-            f_in = open(base_path + spec['dirname'] + spec['filename'], 'rb')
-            f_out = gzip.open("input/" + spec['dirname'] + spec['filename'] + ".gz", 'wb')
-            f_out.writelines(f_in)
-            f_out.close()
-            f_in.close()
-
-## Create output dir structure
-def prepare_output_dirs(selected_spectra):
-    for spec in selected_spectra:
-        if not os.path.exists("output/" + spec['dirname']):
-            mkdir_p("output/" + spec['dirname'])
-
-
-# Find duplicates in a column of a recarray
-# This is a simplified version of:
-#   import numpy.lib.recfunctions as rfn
-#   rfn.find_duplicates(...)
 def find_duplicates(a, key):
+    """
+    Find duplicates in a column of a recarray. This is a simplified version of:
+    ::
+
+        import numpy.lib.recfunctions as rfn
+        rfn.find_duplicates(...)
+    """
     a = np.asanyarray(a).ravel()
     # Get the sorting data (by selecting the corresponding field)
     base = a[key]
@@ -221,9 +78,11 @@ def find_duplicates(a, key):
     return (duplicates, duplicates_index)
 
 
-# Reduces outliers considering the mean value and 3 sigma (3*stdev),
-# iterating until convergence
 def sigma_clipping(data, sig=3, meanfunc=np.mean):
+    """
+    Identify outliers considering the mean (if meanfunc=np.mean) or median (if meanfunc=np.median) value and 3 sigma (3*stdev),
+    iterating until convergence.
+    """
     last_total = len(data)
 
     # First iteration
@@ -245,9 +104,11 @@ def sigma_clipping(data, sig=3, meanfunc=np.mean):
     return data[sfilter], sfilter
 
 
-# For an array of values, find local maximum values considering a window
-# of "span" elements
 def find_max_win(x, span=3):
+    """
+    For an array of values, find local maximum values considering a window
+    of "span" elements.
+    """
     ret = []
     n = len(x)
     dist = (span + 1) / 2;
@@ -278,9 +139,11 @@ def find_max_win(x, span=3):
             ret.append(i)
     return np.asarray(ret)
 
-# For an array of values, find local minimum values considering a window
-# of "span" elements
 def find_min_win(x, span=3):
+    """
+    For an array of values, find local minimum values considering a window
+    of "span" elements.
+    """
     ret = []
     n = len(x)
     dist = (span + 1) / 2;
@@ -312,11 +175,20 @@ def find_min_win(x, span=3):
     return np.asarray(ret)
 
 
-# For an array of values, find the position of local maximum values considering only
-# the next and previous elements, except they have the same value.
-# In that case, the next/previous different value is checked. Therefore,
-# find_local_max([1,2,3,3,2,1,4,3]) would return [2, 3, 6]
 def find_local_max_values(x):
+    """
+    For an array of values, find the position of local maximum values considering only
+    the next and previous elements, except they have the same value.
+    In that case, the next/previous different value is checked. Therefore,
+    ::
+
+        find_local_max([1,2,3,3,2,1,4,3])
+
+    would return:
+    ::
+
+        [2, 3, 6]
+    """
     ret = []
     n = len(x)
     m = 0;
@@ -350,11 +222,20 @@ def find_local_max_values(x):
             ret.append(i)
     return np.asarray(ret)
 
-# For an array of values, find the position of local maximum values considering only
-# the next and previous elements, except they have the same value.
-# In that case, the next/previous different value is checked. Therefore,
-# find_local_max([10,9,3,3,9,10,4,30]) would return [2, 3, 6]
 def find_local_min_values(x):
+    """
+    For an array of values, find the position of local maximum values considering only
+    the next and previous elements, except they have the same value.
+    In that case, the next/previous different value is checked. Therefore,
+    ::
+
+        find_local_max([10,9,3,3,9,10,4,30])
+
+    would return:
+    ::
+
+        [2, 3, 6]
+    """
     ret = []
     n = len(x)
     m = 0;
@@ -388,209 +269,241 @@ def find_local_min_values(x):
             ret.append(i)
     return np.asarray(ret)
 
-## Returns spectra from a filename:
-## - if the file does not exists, checks if it exists a compressed version (gzip)
-## - it the file exists, it can be automatically uncompressed (gzip)
-def read_spectra(spectra_filename, estimate_errors_if_not_present=False):
-    #spectra_filename = "input/" + spectra_filename
-    # If it is not compressed
-    if os.path.exists(spectra_filename) and spectra_filename[-3:] != ".gz":
-        try:
-            spectra = asciitable.read(table=spectra_filename, names=['waveobs', 'flux', 'err'])
-        except asciitable.core.InconsistentTableError as err:
-            try:
-                # If it fails, try indicating that data starts at line 2 (original NARVAL spectra need this)
-                spectra = asciitable.read(table=spectra_filename, data_start=2, names=['waveobs', 'flux', 'err'])
-            except asciitable.core.InconsistentTableError as err:
-                # Try without error column
-                spectra_tmp = asciitable.read(table=spectra_filename, names=['waveobs', 'flux'])
-                spectra = np.recarray((len(spectra_tmp), ), dtype=[('waveobs', float),('flux', float),('err', float)])
-                spectra['waveobs'] = spectra_tmp['waveobs']
-                spectra['flux'] = spectra_tmp['flux']
-                if estimate_errors_if_not_present:
-                    print "Estimating errors based on estimated SNR..."
-                    snr = estimate_snr(spectra['flux'])
-                    spectra['err'] = spectra['flux'] / snr
-                else:
-                    spectra['err'] = np.zeros(len(spectra)) # Add a zeroed error column
+############## [start] Barycentric vel
+def __precession_matrix(equinox1, equinox2, fk4=False):
+    """
+    Return the precession matrix needed to go from EQUINOX1 (i.e. 1950.0) to EQUINOX2 (i.e. 1975.0).
+    The code has been copied from: `astrolib <http://code.google.com/p/astrolibpy/source/browse/trunk/astrolib/>`_
+    """
 
-    elif (os.path.exists(spectra_filename) and spectra_filename[-3:] == ".gz") or (os.path.exists(spectra_filename + ".gz")):
-        if spectra_filename[-3:] != ".gz":
-            spectra_filename = spectra_filename + ".gz"
+    deg_to_rad = pi / 180.0e0
+    sec_to_rad = deg_to_rad / 3600.e0
 
-        tmp_spec = tempfile.mktemp() + str(int(random.random() * 100000000))
-        # Uncompress to a temporary file
-        f_out = open(tmp_spec, 'wb')
-        f_in = gzip.open(spectra_filename, 'rb')
-        f_out.writelines(f_in)
-        f_out.close()
-        f_in.close()
+    t = 0.001e0 * (equinox2 - equinox1)
 
-        try:
-            spectra = asciitable.read(table=tmp_spec, names=['waveobs', 'flux', 'err'])
-        except asciitable.core.InconsistentTableError as err:
-            try:
-                # If it fails, try indicating that data starts at line 2 (original NARVAL spectra need this)
-                spectra = asciitable.read(table=tmp_spec, data_start=2, names=['waveobs', 'flux', 'err'])
-            except asciitable.core.InconsistentTableError as err:
-                # Try without error column
-                spectra_tmp = asciitable.read(table=tmp_spec, names=['waveobs', 'flux'])
-                spectra = np.recarray((len(spectra_tmp), ), dtype=[('waveobs', float),('flux', float),('err', float)])
-                spectra['waveobs'] = spectra_tmp['waveobs']
-                spectra['flux'] = spectra_tmp['flux']
-                print "Estimating errors based on estimated SNR..."
-                snr = estimate_snr(spectra['flux'])
-                spectra['err'] = spectra['flux'] / snr
-                #spectra['err'] = np.zeros(len(spectra)) # Add a zeroed error column
-        os.remove(tmp_spec)
-
-    # Filter invalid errors and fluxes
-    # TODO: Decide if we should request a valid 'error' column
-    #valid = (spectra['err'] > 0) & ~np.isnan(spectra['err']) & (spectra['flux'] > 0) & ~np.isnan(spectra['flux'])
-    #valid = (spectra['flux'] > 0) & ~np.isnan(spectra['flux'])
-    valid = ~np.isnan(spectra['flux'])
-
-    # Find duplicate wavelengths
-    dups, dups_index = find_duplicates(spectra, 'waveobs')
-
-    # Filter all duplicates except the first one
-    last_wave = None
-    for i in np.arange(len(dups)):
-        if last_wave == None:
-            last_wave = dups[i]['waveobs']
-            continue
-        if last_wave == dups[i]['waveobs']:
-            pos = dups_index[i]
-            valid[pos] = False
-        else:
-            # Do not filter the first duplicated value
-            last_wave = dups[i]['waveobs']
-
-    # Filter invalid and duplicated values
-    spectra = spectra[valid]
-
-    spectra.sort(order='waveobs') # Make sure it is ordered by wavelength
-
-    return spectra
-
-## Write spectra to file
-def write_spectra(spectra, spectra_filename, compress=True):
-    #spectra_filename = "output/" + spectra_filename
-    if compress:
-        if spectra_filename[-3:] != ".gz":
-            spectra_filename = spectra_filename + ".gz"
-
-        tmp_spec = tempfile.mktemp() + str(int(random.random() * 100000000))
-        asciitable.write(spectra, output=tmp_spec, delimiter='\t')
-
-        # Compress the temporary file
-        f_in = open(tmp_spec, 'rb')
-        f_out = gzip.open(spectra_filename, 'wb')
-        f_out.writelines(f_in)
-        f_out.close()
-        f_in.close()
-        os.remove(tmp_spec)
+    if not fk4:
+        st = 0.001e0 * (equinox1 - 2000.e0)
+        #  Compute 3 rotation angles
+        a = sec_to_rad * t * (23062.181e0 + st * (139.656e0 + 0.0139e0 * st) + t * (30.188e0 - 0.344e0 * st + 17.998e0 * t))
+        b = sec_to_rad * t * t * (79.280e0 + 0.410e0 * st + 0.205e0 * t) + a
+        c = sec_to_rad * t * (20043.109e0 - st * (85.33e0 + 0.217e0 * st) + t * (-42.665e0 - 0.217e0 * st - 41.833e0 * t))
     else:
-        asciitable.write(spectra, output=spectra_filename, delimiter='\t')
+        st = 0.001e0 * (equinox1 - 1900.e0)
+        #  Compute 3 rotation angles
+        a = sec_to_rad * t * (23042.53e0 + st * (139.75e0 + 0.06e0 * st) + t * (30.23e0 - 0.27e0 * st + 18.0e0 * t))
+        b = sec_to_rad * t * t * (79.27e0 + 0.66e0 * st + 0.32e0 * t) + a
+        c = sec_to_rad * t * (20046.85e0 - st * (85.33e0 + 0.37e0 * st) + t * (-42.67e0 - 0.37e0 * st - 41.8e0 * t))
+
+    sina = np.sin(a)
+    sinb = np.sin(b)
+    sinc = np.sin(c)
+    cosa = np.cos(a)
+    cosb = np.cos(b)
+    cosc = np.cos(c)
+
+    r = np.zeros((3, 3))
+    r[0,:] = np.array([cosa * cosb * cosc - sina * sinb, sina * cosb + cosa * sinb * cosc, cosa * sinc])
+    r[1,:] = np.array([-cosa * sinb - sina * cosb * cosc, cosa * cosb - sina * sinb * cosc, -sina * sinc])
+    r[2,:] = np.array([-cosb * sinc, -sinb * sinc, cosc])
+
+    return r
+
+def calculate_barycentric_velocity(datetime, deq=0):
+    """
+    Calculates barycentric velocity components of Earth.
+    The code has been copied from: `astrolib <http://code.google.com/p/astrolibpy/source/browse/trunk/astrolib/>`_
+    """
+    #dje = astropysics.obstools.calendar_to_jd(datetime) # Julian ephemeris date.
+    dje = calendar_to_jd(datetime) # Julian ephemeris date
+
+    #Define constants
+    dc2pi = 2 * np.pi
+    cc2pi = 2 * np.pi
+    dc1 = 1.0e0
+    dcto = 2415020.0e0
+    dcjul = 36525.0e0                            #days in Julian year
+    dcbes = 0.313e0
+    dctrop = 365.24219572e0                    #days in tropical year (...572 insig)
+    dc1900 = 1900.0e0
+    au = 1.4959787e8
+
+    #Constants dcfel(i,k) of fast changing elements.
+    dcfel = np.array([1.7400353e00, 6.2833195099091e02, 5.2796e-6, 6.2565836e00, 6.2830194572674e02, -2.6180e-6, 4.7199666e00, 8.3997091449254e03, -1.9780e-5, 1.9636505e-1, 8.4334662911720e03, -5.6044e-5, 4.1547339e00, 5.2993466764997e01, 5.8845e-6, 4.6524223e00, 2.1354275911213e01, 5.6797e-6, 4.2620486e00, 7.5025342197656e00, 5.5317e-6, 1.4740694e00, 3.8377331909193e00, 5.6093e-6])
+    dcfel = np.reshape(dcfel, (8, 3))
+
+    #constants dceps and ccsel(i,k) of slowly changing elements.
+    dceps = np.array([4.093198e-1, -2.271110e-4, -2.860401e-8])
+    ccsel = np.array([1.675104e-2, -4.179579e-5, -1.260516e-7, 2.220221e-1, 2.809917e-2, 1.852532e-5, 1.589963e00, 3.418075e-2, 1.430200e-5, 2.994089e00, 2.590824e-2, 4.155840e-6, 8.155457e-1, 2.486352e-2, 6.836840e-6, 1.735614e00, 1.763719e-2, 6.370440e-6, 1.968564e00, 1.524020e-2, -2.517152e-6, 1.282417e00, 8.703393e-3, 2.289292e-5, 2.280820e00, 1.918010e-2, 4.484520e-6, 4.833473e-2, 1.641773e-4, -4.654200e-7, 5.589232e-2, -3.455092e-4, -7.388560e-7, 4.634443e-2, -2.658234e-5, 7.757000e-8, 8.997041e-3, 6.329728e-6, -1.939256e-9, 2.284178e-2, -9.941590e-5, 6.787400e-8, 4.350267e-2, -6.839749e-5, -2.714956e-7, 1.348204e-2, 1.091504e-5, 6.903760e-7, 3.106570e-2, -1.665665e-4, -1.590188e-7])
+    ccsel = np.reshape(ccsel, (17, 3))
+
+    #Constants of the arguments of the short-period perturbations.
+    dcargs = np.array([5.0974222e0, -7.8604195454652e2, 3.9584962e0, -5.7533848094674e2, 1.6338070e0, -1.1506769618935e3, 2.5487111e0, -3.9302097727326e2, 4.9255514e0, -5.8849265665348e2, 1.3363463e0, -5.5076098609303e2, 1.6072053e0, -5.2237501616674e2, 1.3629480e0, -1.1790629318198e3, 5.5657014e0, -1.0977134971135e3, 5.0708205e0, -1.5774000881978e2, 3.9318944e0, 5.2963464780000e1, 4.8989497e0, 3.9809289073258e1, 1.3097446e0, 7.7540959633708e1, 3.5147141e0, 7.9618578146517e1, 3.5413158e0, -5.4868336758022e2])
+    dcargs = np.reshape(dcargs, (15, 2))
+
+    #Amplitudes ccamps(n,k) of the short-period perturbations.
+    ccamps = np.array([-2.279594e-5, 1.407414e-5, 8.273188e-6, 1.340565e-5, -2.490817e-7, -3.494537e-5, 2.860401e-7, 1.289448e-7, 1.627237e-5, -1.823138e-7, 6.593466e-7, 1.322572e-5, 9.258695e-6, -4.674248e-7, -3.646275e-7, 1.140767e-5, -2.049792e-5, -4.747930e-6, -2.638763e-6, -1.245408e-7, 9.516893e-6, -2.748894e-6, -1.319381e-6, -4.549908e-6, -1.864821e-7, 7.310990e-6, -1.924710e-6, -8.772849e-7, -3.334143e-6, -1.745256e-7, -2.603449e-6, 7.359472e-6, 3.168357e-6, 1.119056e-6, -1.655307e-7, -3.228859e-6, 1.308997e-7, 1.013137e-7, 2.403899e-6, -3.736225e-7, 3.442177e-7, 2.671323e-6, 1.832858e-6, -2.394688e-7, -3.478444e-7, 8.702406e-6, -8.421214e-6, -1.372341e-6, -1.455234e-6, -4.998479e-8, -1.488378e-6, -1.251789e-5, 5.226868e-7, -2.049301e-7, 0.e0, -8.043059e-6, -2.991300e-6, 1.473654e-7, -3.154542e-7, 0.e0, 3.699128e-6, -3.316126e-6, 2.901257e-7, 3.407826e-7, 0.e0, 2.550120e-6, -1.241123e-6, 9.901116e-8, 2.210482e-7, 0.e0, -6.351059e-7, 2.341650e-6, 1.061492e-6, 2.878231e-7, 0.e0])
+    ccamps = np.reshape(ccamps, (15, 5))
+
+    #Constants csec3 and ccsec(n,k) of the secular perturbations in longitude.
+    ccsec3 = -7.757020e-8
+    ccsec = np.array([1.289600e-6, 5.550147e-1, 2.076942e00, 3.102810e-5, 4.035027e00, 3.525565e-1, 9.124190e-6, 9.990265e-1, 2.622706e00, 9.793240e-7, 5.508259e00, 1.559103e01])
+    ccsec = np.reshape(ccsec, (4, 3))
+
+    #Sidereal rates.
+    dcsld = 1.990987e-7                         #sidereal rate in longitude
+    ccsgd = 1.990969e-7                         #sidereal rate in mean anomaly
+
+    #Constants used in the calculation of the lunar contribution.
+    cckm = 3.122140e-5
+    ccmld = 2.661699e-6
+    ccfdi = 2.399485e-7
+
+    #Constants dcargm(i,k) of the arguments of the perturbations of the motion
+    # of the moon.
+    dcargm = np.array([5.1679830e0, 8.3286911095275e3, 5.4913150e0, -7.2140632838100e3, 5.9598530e0, 1.5542754389685e4])
+    dcargm = np.reshape(dcargm, (3, 2))
+
+    #Amplitudes ccampm(n,k) of the perturbations of the moon.
+    ccampm = np.array([1.097594e-1, 2.896773e-7, 5.450474e-2, 1.438491e-7, -2.223581e-2, 5.083103e-8, 1.002548e-2, -2.291823e-8, 1.148966e-2, 5.658888e-8, 8.249439e-3, 4.063015e-8])
+    ccampm = np.reshape(ccampm, (3, 4))
+
+    #ccpamv(k)=a*m*dl,dt (planets), dc1mme=1-mass(earth+moon)
+    ccpamv = np.array([8.326827e-11, 1.843484e-11, 1.988712e-12, 1.881276e-12])
+    dc1mme = 0.99999696e0
+
+    #Time arguments.
+    dt = (dje - dcto) / dcjul
+    tvec = np.array([1e0, dt, dt * dt])
+
+    #Values of all elements for the instant(aneous?) dje.
+    temp = (np.transpose(np.dot(np.transpose(tvec), np.transpose(dcfel)))) % dc2pi
+    dml = temp[0]
+    forbel = temp[1:8]
+    g = forbel[0]                                 #old fortran equivalence
+
+    deps = (tvec * dceps).sum() % dc2pi
+    sorbel = (np.transpose(np.dot(np.transpose(tvec), np.transpose(ccsel)))) % dc2pi
+    e = sorbel[0]                                 #old fortran equivalence
+
+    #Secular perturbations in longitude.
+    dummy = np.cos(2.0)
+    sn = np.sin((np.transpose(np.dot(np.transpose(tvec[0:2]), np.transpose(ccsec[:,1:3])))) % cc2pi)
+
+    #Periodic perturbations of the emb (earth-moon barycenter).
+    pertl = (ccsec[:,0] * sn).sum() + dt * ccsec3 * sn[2]
+    pertld = 0.0
+    pertr = 0.0
+    pertrd = 0.0
+    for k in range(0, 15):
+        a = (dcargs[k,0] + dt * dcargs[k,1]) % dc2pi
+        cosa = np.cos(a)
+        sina = np.sin(a)
+        pertl = pertl + ccamps[k,0] * cosa + ccamps[k,1] * sina
+        pertr = pertr + ccamps[k,2] * cosa + ccamps[k,3] * sina
+        if k < 11:
+            pertld = pertld + (ccamps[k,1] * cosa - ccamps[k,0] * sina) * ccamps[k,4]
+            pertrd = pertrd + (ccamps[k,3] * cosa - ccamps[k,2] * sina) * ccamps[k,4]
+
+    #Elliptic part of the motion of the emb.
+    phi = (e * e / 4e0) * (((8e0 / e) - e) * np.sin(g) + 5 * np.sin(2 * g) + (13 / 3e0) * e * np.sin(3 * g))
+    f = g + phi
+    sinf = np.sin(f)
+    cosf = np.cos(f)
+    dpsi = (dc1 - e * e) / (dc1 + e * cosf)
+    phid = 2 * e * ccsgd * ((1 + 1.5 * e * e) * cosf + e * (1.25 - 0.5 * sinf * sinf))
+    psid = ccsgd * e * sinf / np.sqrt(dc1 - e * e)
+
+    #Perturbed heliocentric motion of the emb.
+    d1pdro = dc1 + pertr
+    drd = d1pdro * (psid + dpsi * pertrd)
+    drld = d1pdro * dpsi * (dcsld + phid + pertld)
+    dtl = (dml + phi + pertl) % dc2pi
+    dsinls = np.sin(dtl)
+    dcosls = np.cos(dtl)
+    dxhd = drd * dcosls - drld * dsinls
+    dyhd = drd * dsinls + drld * dcosls
+
+    #Influence of eccentricity, evection and variation on the geocentric
+    # motion of the moon.
+    pertl = 0.0
+    pertld = 0.0
+    pertp = 0.0
+    pertpd = 0.0
+    for k in range(0, 3):
+        a = (dcargm[k,0] + dt * dcargm[k,1]) % dc2pi
+        sina = np.sin(a)
+        cosa = np.cos(a)
+        pertl = pertl + ccampm[k,0] * sina
+        pertld = pertld + ccampm[k,1] * cosa
+        pertp = pertp + ccampm[k,2] * cosa
+        pertpd = pertpd - ccampm[k,3] * sina
+
+    #Heliocentric motion of the earth.
+    tl = forbel[1] + pertl
+    sinlm = np.sin(tl)
+    coslm = np.cos(tl)
+    sigma = cckm / (1.0 + pertp)
+    a = sigma * (ccmld + pertld)
+    b = sigma * pertpd
+    dxhd = dxhd + a * sinlm + b * coslm
+    dyhd = dyhd - a * coslm + b * sinlm
+    dzhd = -sigma * ccfdi * np.cos(forbel[2])
+
+    #Barycentric motion of the earth.
+    dxbd = dxhd * dc1mme
+    dybd = dyhd * dc1mme
+    dzbd = dzhd * dc1mme
+    for k in range(0, 4):
+        plon = forbel[k + 3]
+        pomg = sorbel[k + 1]
+        pecc = sorbel[k + 9]
+        tl = (plon + 2.0 * pecc * np.sin(plon - pomg)) % cc2pi
+        dxbd = dxbd + ccpamv[k] * (np.sin(tl) + pecc * np.sin(pomg))
+        dybd = dybd - ccpamv[k] * (np.cos(tl) + pecc * np.cos(pomg))
+        dzbd = dzbd - ccpamv[k] * sorbel[k + 13] * np.cos(plon - sorbel[k + 5])
 
 
-#### Read & write regions
-# Continuum
-def read_continuum_regions(continuum_regions_filename):
-    continuum_regions = asciitable.read(table=continuum_regions_filename, comment='#', names=['wave_base', 'wave_top'])
-    return continuum_regions
+    #Transition to mean equator of date.
+    dcosep = np.cos(deps)
+    dsinep = np.sin(deps)
+    dyahd = dcosep * dyhd - dsinep * dzhd
+    dzahd = dsinep * dyhd + dcosep * dzhd
+    dyabd = dcosep * dybd - dsinep * dzbd
+    dzabd = dsinep * dybd + dcosep * dzbd
 
-def write_continuum_regions(continuum_regions, continuum_regions_filename):
-    asciitable.write(continuum_regions, output=continuum_regions_filename, delimiter='\t')
+    #Epoch of mean equinox (deq) of zero implies that we should use
+    # Julian ephemeris date (dje) as epoch of mean equinox.
+    if deq == 0:
+        dvelh = au * (np.array([dxhd, dyahd, dzahd]))
+        dvelb = au * (np.array([dxbd, dyabd, dzabd]))
+        return (dvelh,dvelb)
 
-# Lines
-def read_line_regions(line_regions_filename):
-    line_regions = asciitable.read(table=line_regions_filename, comment='#', names=['wave_peak', 'wave_base', 'wave_top', 'note'], quotechar="\"")
-    return line_regions
+    #General precession from epoch dje to deq.
+    deqdat = (dje - dcto - dcbes) / dctrop + dc1900
+    prema = __precession_matrix(deqdat, deq, fk4=True)
 
-def write_line_regions(line_regions, line_regions_filename):
-    asciitable.write(line_regions, output=line_regions_filename, delimiter='\t', quotechar="\"")
+    dvelh = au * (np.transpose(np.dot(np.transpose(prema), np.transpose(np.array([dxhd, dyahd, dzahd])))))
+    dvelb = au * (np.transpose(np.dot(np.transpose(prema), np.transpose(np.array([dxbd, dyabd, dzabd])))))
 
-# Segments
-def read_segment_regions(segment_regions_filename):
-    segment_regions = asciitable.read(table=segment_regions_filename, comment='#', names=['wave_base', 'wave_top'])
-    return segment_regions
-
-def write_segment_regions(segment_regions, segment_regions_filename):
-    asciitable.write(segment_regions, output=segment_regions_filename, delimiter='\t')
-
+    return (dvelh, dvelb)
 
 
 
 
+############## [end] Barycentric vel
 
 ################################################################################
 #### [start] Copied from astropysics.obsutils (if not, pyinstaller fails)
 # http://packages.python.org/Astropysics/
 # https://github.com/eteq/astropysics/blob/master/astropysics/obstools.py
-"""
-Offset between Julian Date and Modified Julian Date - e.g. mjd = jd - mjdoffset
-"""
 
 def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None,mjd=False):
     """
     Converts a julian date to a calendar date and time.
+    This piece of code has been copied from astropysics.obsutils:
 
-    :param jd:
-        The Julian Date at which to compute the calendar date/time, a sequence
-        of JDs, or None for the current date/time at the moment the function is
-        called.
-    :type jd: scalar, array-like, or None
-    :param rounding:
-        If non-0, Performs a fix for floating-point errors. It specifies the
-        number of milliseconds by which to round the result to the nearest
-        second. If 1000000 (one second), no milliseconds are recorded. If
-        larger, a ValueError is raised.
-    :type rounding: scalar
-    :param output:
-        Determines the format of the returned object and can be:
-
-            * 'datetime'
-                A list of :class:`datetime.datetime` objects in UTC will be
-                returned. If the input is a scalar, a single object will be
-                returned.
-            * 'array'
-                A Nx7 array will be returned of the form
-                [(year,month,day,hr,min,sec,msec),...] unless the input was a
-                scalar, in which case it will be a length-7 array.
-            * 'fracarray'
-                An Nx3 array (year,month,day) where day includes the decimal
-                portion.
-
-    :param gregorian:
-        If True, the output will be in the Gregorian calendar. Otherwise, it
-        will be Julian. If None, it will be assumed to switch over on October
-        4/15 1582.
-    :type gregorian: bool or None
-    :param bool mjd:
-        If True, the input is interpreted as a modified julian date instead of a
-        standard julian date.
-
-    :returns:
-        The calendar date and time in a format determined by the `output`
-        parameter (see above).
-
-    :except ValueError:
-        If `rounding` is larger than one second, or `output` is invalid.
-
-
-    **Examples**
-
-    >>> jd_to_calendar(2451545)
-    datetime.datetime(2000, 1, 1, 12, 0, tzinfo=tzutc())
-    >>> jd_to_calendar(2305812.5)
-    datetime.datetime(1600, 12, 31, 0, 0, tzinfo=tzutc())
-    >>> jd_to_calendar([2415020.5,2305447.5],output='array')
-    array([[1900,    1,    1,    0,    0,    0,    0],
-           [1600,    1,    1,    0,    0,    0,    0]])
-    >>> jd_to_calendar(0.0,output='fracarray')
-    array([[ -4.71200000e+03,   1.00000000e+00,   1.50000000e+00]])
-
+    * `Astropysics <http://packages.python.org/Astropysics/>`_
+    * `obstools module <https://github.com/eteq/astropysics/blob/master/astropysics/obstools.py>`_
     """
     import datetime
     from dateutil import tz
@@ -702,71 +615,14 @@ def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None,mjd=Fals
 
 
 def calendar_to_jd(caltime,tz=None,gregorian=True,mjd=False):
-
     """
     Convert a calendar date and time to julian date.
+    This piece of code has been copied from astropysics.obsutils:
 
-    :param caltime:
-        The date and time to compute the JD.  Can be in one of these forms:
-
-            * A sequence of floats in the order (yr,month,day,[hr,min,sec]).
-            * A sequence in the order (yr,month,day,[hr,min,sec]) where at least
-               one of the elements is a sequence (a sequence will be returned).
-            * A :class:`datetime.datetime` or :class:`datetime.date` object
-            * A sequence of :class:`datetime.datetime` or :class:`datetime.date`
-              objects (a sequence will be returned).
-            * None : returns the JD at the moment the function is called.
-
-        If the time is unspecified, it is taken to be noon (i.e. Julian Date =
-        Julian Day Number)
-
-    :param tz:
-        Sets the time zone to assume for the inputs for conversion to UTC. Can
-        be any of the following:
-
-            * None
-                No time zone conversion will occur unless `caltime` is given as
-                :class:`datetime.datetime` or :class:`datetime.date` objects
-                with `tzinfo`, in which case they will be converted to UTC using
-                their own `tzinfo`.
-            * a string
-                Specifies a timezone name (resolved into a timezone using the
-                :func:`dateutil.tz.gettz` function).
-            * a scalar
-                The hour offset of the timezone.
-            * a :class:`datetime.tzinfo` object,
-                This object will be used for timezone information.
-
-    :param gregorian:
-        If True, the input will be interpreted as in the Gregorian calendar.
-        Otherwise, it will be Julian. If None, it will be assumed to switch over
-        on October 4/15, 1582.
-    :type gregorian: bool or None
-    :param bool mjd:
-        If True, a modified julian date is returned instead of the standard
-        julian date.
-
-    :returns: JD as a float, or a sequence of JDs if sequences were input.
-
-
-    **Examples**
-
-    >>> import datetime,dateutil
-    >>> calendar_to_jd((2010,1,1))
-    2455198.0
-    >>> calendar_to_jd(datetime.datetime(2000,12,21,3,0,0))
-    2451899.625
-    >>> calendar_to_jd([2004,3,(5,6)])
-    array([ 2453070.,  2453071.])
-    >>> dates = [datetime.datetime(2004,3,5),datetime.datetime(2004,3,9)]
-    >>> calendar_to_jd(dates)
-    array([ 2453069.5,  2453073.5])
-    >>> tz = dateutil.tz.tzoffset('2',3*3600)
-    >>> calendar_to_jd((2010,1,1),tz)
-    2455197.875
-
-
+    * `Astropysics <http://packages.python.org/Astropysics/>`_
+    * `obstools module <https://github.com/eteq/astropysics/blob/master/astropysics/obstools.py>`_
     """
+
     #Adapted from xidl  jdcnv.pro
     from datetime import datetime,date,tzinfo
 

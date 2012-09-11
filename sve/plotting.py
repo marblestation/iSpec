@@ -1,26 +1,29 @@
-"""
-    This file is part of Spectra Visual Editor (SVE).
-    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
-
-    SVE is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    SVE is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with SVE. If not, see <http://www.gnu.org/licenses/>.
-"""
-#!/usr/bin/env python
+#
+#    This file is part of Spectra Visual Editor (SVE).
+#    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
+#
+#    SVE is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    SVE is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
+#
+#    You should have received a copy of the GNU Affero General Public License
+#    along with SVE. If not, see <http://www.gnu.org/licenses/>.
+#
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 
-def plot_spectra(spectra, filename=None, continuum=None, grid = True, title = None, ylabel = 'Flux', xlabel = 'Wavelength (nm)'):
+def plot_spectra(spectra, filename=None, grid = True, title = None, ylabel = 'Flux', xlabel = 'Wavelength (nm)'):
+    """
+        Plot a spectra. If filename (i.e. plot.png) is specified, then the plot is saved into that file
+        and not shown on the screen.
+    """
     figure = plt.figure()
     ax1 = plt.subplot(1, 1, 1)
 
@@ -54,10 +57,6 @@ def plot_spectra(spectra, filename=None, continuum=None, grid = True, title = No
         ax1.plot(spec['waveobs'], spec['flux'], lw=1, color=colors[color % 7], linestyle=linestyles[3], marker='', markersize=1, markeredgewidth=0, markerfacecolor=colors[0])
         color = (color + 1) % len(colors)
 
-    if continuum != None:
-        for c in continuum:
-            ax1.axvspan(c['wave_base'], c['wave_top'], facecolor='g', alpha=0.5)
-
     if filename == None:
         plt.show()
     else:
@@ -68,6 +67,9 @@ def plot_spectra(spectra, filename=None, continuum=None, grid = True, title = No
 
 
 def show_histogram(x, xlabel='Units', nbins=50):
+    """
+    Build a histogram from 'x' values and plot it.
+    """
     fig = plt.figure()
     ax = fig.add_subplot(111)
     # the histogram of the data

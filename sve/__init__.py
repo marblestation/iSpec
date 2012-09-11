@@ -38,11 +38,10 @@ if os.path.exists(resource_path("synthesizer.so")):
     except ImportError as e:
         pass
 from common import *
+from spectrum import *
 from continuum import *
-from convolve import *
-from interpolate import *
 from lines import *
-from radial_velocity import *
+from segments import *
 from mpfitmodels import GaussianModel, VoigtModel
 import log
 import logging

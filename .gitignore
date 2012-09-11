@@ -7,5 +7,5 @@ synthesizer/build/*
 synthesizer/synthesizer.c
 pyinstaller*/*
 *.h5
-tests/*
+tests/data/*
 sve/docs/*

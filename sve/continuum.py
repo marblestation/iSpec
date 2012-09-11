@@ -1,41 +1,75 @@
-"""
-    This file is part of Spectra Visual Editor (SVE).
-    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
-
-    SVE is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    SVE is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with SVE. If not, see <http://www.gnu.org/licenses/>.
-"""
-#!/usr/bin/env python
-#import ipdb
+#
+#    This file is part of Spectra Visual Editor (SVE).
+#    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
+#
+#    SVE is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    SVE is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
+#
+#    You should have received a copy of the GNU Affero General Public License
+#    along with SVE. If not, see <http://www.gnu.org/licenses/>.
+#
 import asciitable
 import numpy as np
 from plotting import *
 from common import *
-from convolve import *
+from spectrum import *
 from pymodelfit import UniformCDFKnotSplineModel
 import log
 import logging
 
-# Group the points in ranges of 1 nm (by default) and select the one with the maximum flux
-def find_max_value_per_wavelength_range(spectra, base_points, wave_range=1):
-    return find_a_value_per_wavelength_range(spectra, base_points, wave_range=wave_range, median=False)
+def read_continuum_regions(continuum_regions_filename):
+    """
+    Read continuum regions.
+    The specified file should be plain text with **tab** character as column delimiter.
+    Two columns should exists: 'wave_base' and 'wave_top' (the first line should contain those header names).
+    They indicate the beginning and end of each region (one per line). For instance:
+    ::
 
-# Group the points in ranges of 1 nm (by default) and select the one with the median flux
-def find_median_value_per_wavelength_range(spectra, base_points, wave_range=1):
-    return find_a_value_per_wavelength_range(spectra, base_points, wave_range=wave_range, median=True)
+        wave_base       wave_top
+        480.6000        480.6100
+        481.1570        481.1670
+        491.2240        491.2260
+        492.5800        492.5990
+    """
+    continuum_regions = asciitable.read(table=continuum_regions_filename, comment='#', names=['wave_base', 'wave_top'])
+    return continuum_regions
 
-# Group the points in ranges of 1 nm (by default) and select the one with the maximum (by default) or median flux
-def find_a_value_per_wavelength_range(spectra, base_points, wave_range=1, median=False):
+def write_continuum_regions(continuum_regions, continuum_regions_filename):
+    """
+    Write continuum regions file with the following format:
+    ::
+
+        wave_base       wave_top
+        480.6000        480.6100
+        481.1570        481.1670
+        491.2240        491.2260
+        492.5800        492.5990
+    """
+    asciitable.write(continuum_regions, output=continuum_regions_filename, delimiter='\t')
+
+def __find_max_value_per_wavelength_range(spectra, base_points, wave_range=1):
+    """
+    Group the points in ranges of 1 nm (by default) and select the one with the maximum flux.
+    """
+    return __find_a_value_per_wavelength_range(spectra, base_points, wave_range=wave_range, median=False)
+
+def __find_median_value_per_wavelength_range(spectra, base_points, wave_range=1):
+    """
+    Group the points in ranges of 1 nm (by default) and select the one with the median flux.
+    """
+    return __find_a_value_per_wavelength_range(spectra, base_points, wave_range=wave_range, median=True)
+
+def __find_a_value_per_wavelength_range(spectra, base_points, wave_range=1, median=False):
+    """
+    Group the points in ranges of 1 nm (by default) and select the one with the maximum (by default) or median flux.
+    """
     waveobs = spectra['waveobs']
     flux = spectra['flux']
     wave_step = wave_range # nm
@@ -70,9 +104,11 @@ def find_a_value_per_wavelength_range(spectra, base_points, wave_range=1, median
     return candidate_base_points
 
 
-# Considering the diference in flux of the points with the next a previous, discard outliers (iterative process)
-# - Median value and 3*sigma is used as criteria for filtering
-def discard_outliers_for_continuum_candidates(spectra, candidate_base_points, sig=3):
+def __discard_outliers_for_continuum_candidates(spectra, candidate_base_points, sig=3):
+    """
+    Considering the diference in flux of the points with the next a previous, discard outliers (iterative process).
+    Median value and 3*sigma is used as criteria for outliers detection.
+    """
     # The change between consecutive base points for continuum fitting should not be very strong,
     # identify outliers (first and last base point are excluded in this operation):
     flux_diff1 = (spectra['flux'][candidate_base_points][:-1] - spectra['flux'][candidate_base_points][1:]) / (spectra['waveobs'][candidate_base_points][:-1] - spectra['waveobs'][candidate_base_points][1:])
@@ -94,33 +130,46 @@ def discard_outliers_for_continuum_candidates(spectra, candidate_base_points, si
     return continuum_base_points
 
 
-# 1) Determine max points by using a moving window of 3 elements (also used for line determination)
-# 2) Group the points:
-#     - In ranges of 0.1 nm and select the one with the median flux (usefull to avoid noisy peaks)
-#     - In ranges of 1 nm and select the one with the max flux (
-# 3) Considering the diference in flux of the points with the next a previous, discard outliers (iterative process)
-def determine_continuum_base_points(spectra, discard_outliers=True, median_wave_range=0.1, max_wave_range=1):
+def __determine_continuum_base_points(spectra, discard_outliers=True, median_wave_range=0.1, max_wave_range=1):
+    """
+    Determine points to be used for continuum fitting by following these steps:
+
+    1) Determine max points by using a moving window of 3 elements (also used for line determination).
+    2) Group the points:
+        * In ranges of 0.1 nm and select the one with the median flux (usefull to avoid noisy peaks).
+        * In ranges of 1 nm and select the one with the max flux.
+    3) Considering the diference in flux of the points with the next a previous, discard outliers (iterative process).
+    """
     # Find max points in windows of 3 measures
     candidate_base_points = find_local_max_values(spectra['flux'])
     if median_wave_range > 0:
-        candidate_base_points = find_median_value_per_wavelength_range(spectra, candidate_base_points, wave_range=median_wave_range)
+        candidate_base_points = __find_median_value_per_wavelength_range(spectra, candidate_base_points, wave_range=median_wave_range)
     if max_wave_range > 0:
-        candidate_base_points = find_max_value_per_wavelength_range(spectra, candidate_base_points, wave_range=max_wave_range)
+        candidate_base_points = __find_max_value_per_wavelength_range(spectra, candidate_base_points, wave_range=max_wave_range)
     if discard_outliers:
-        candidate_base_points = discard_outliers_for_continuum_candidates(spectra, candidate_base_points)
+        candidate_base_points = __discard_outliers_for_continuum_candidates(spectra, candidate_base_points)
     continuum_base_points = candidate_base_points
 
 
     return continuum_base_points
 
 
-# 1) If no continuum points are specified for doing the fit, they are determined
-# 2) Fit a knot spline model with n knots, if it is not specified, there will be 1 knot every 10 nm
-#    - knots are located depending on the Cumulative Distribution Function, so there will be more
-#      where more continuum points exist
-# 3) Returns the fitted model
 def fit_continuum(spectra, nknots=None, median_wave_range=0.1, max_wave_range=1):
-    continuum_base_points = determine_continuum_base_points(spectra, discard_outliers=True, median_wave_range=median_wave_range, max_wave_range=max_wave_range)
+    """
+    Fit the continuum by following these steps:
+
+    1) Determine continuum base points:
+        a. Find base points by selecting local max. values (3 points).
+        b. Find the median value per each 0.1 nm (avoid noisy peaks).
+        c. Find the max. value per each 1 nm (avoid blended base points).
+        d. Discard outliers considering the median +/- 3 x sigma.
+    2) Spline fitting:
+        a. The number of splines can be specified, if not it will use 1 spline every 10 nm.
+        b. The algorithm automatically distributes and assigns more splines to regions more populated with base points.
+        c. If there are not enough data points to fit, the whole process is repeated but without discarding outliers.
+    3) Returns the fitted model.
+    """
+    continuum_base_points = __determine_continuum_base_points(spectra, discard_outliers=True, median_wave_range=median_wave_range, max_wave_range=max_wave_range)
 
     if nknots == None:
         # * 1 knot every 10 nm in average
@@ -151,7 +200,7 @@ def fit_continuum(spectra, nknots=None, median_wave_range=0.1, max_wave_range=1)
     # If there is no fit (because too few points)
     if fitting_error or np.any(np.isnan(continuum_model.residuals())):
         # Try without discarding outliers:
-        continuum_base_points = determine_continuum_base_points(spectra, discard_outliers=False, median_wave_range=median_wave_range,
+        continuum_base_points = __determine_continuum_base_points(spectra, discard_outliers=False, median_wave_range=median_wave_range,
 max_wave_range=max_wave_range)
         continuum_model.fitData(spectra['waveobs'][continuum_base_points], spectra['flux'][continuum_base_points])
         if np.any(np.isnan(continuum_model.residuals())):
@@ -159,67 +208,21 @@ max_wave_range=max_wave_range)
 
     return continuum_model
 
-# Interpolate continuum points from a given continuum spectra
-class MultiLinearInterpolationContinuumModel:
-    def __init__(self, continuum_spectra):
-        self.continuum_spectra = continuum_spectra
-
-    def __call__(self, waveobs):
-        flux = np.interp(waveobs, self.continuum_spectra['waveobs'], self.continuum_spectra['flux'])
-        return flux
 
 
-# 1) If no continuum points are specified for doing the interpolation, they are determined
-# 2) Smooth (optional):
-#    - If resolution is specified, build a interpolated continuum spectra and smooth it and
-#      use those new points for the model
-# 3) Build a continuum model that will interpolate values using the specified points
-# 4) Returns the model
-def interpolate_continuum(spectra, smooth=False, median_wave_range=0.1, max_wave_range=1):
-    continuum_base_points = determine_continuum_base_points(spectra, discard_outliers=True, median_wave_range=median_wave_range, max_wave_range=max_wave_range)
-
-    if len(spectra['waveobs'][continuum_base_points]) == 0:
-        raise Exception("Not enough points to interpolate")
-
-    if smooth:
-        from scipy.ndimage import gaussian_filter1d
-
-        # In order to smooth, first we reproduce a complete continuum spectrum
-        # considering a uniform wavelength grid (separated by 1nm)
-        waveobs = np.arange(np.min(spectra['waveobs']), np.max(spectra['waveobs']), 1)
-        continuum_spectra = np.recarray((len(waveobs), ), dtype=[('waveobs', float),('flux', float),('err', float)])
-        continuum_spectra['waveobs'] = waveobs
-        # Linear interpolation
-        continuum_spectra['flux'] = np.interp(continuum_spectra['waveobs'], spectra[continuum_base_points]['waveobs'], spectra[continuum_base_points]['flux'])
-        continuum_spectra['err'] = 9999.9
-
-        # Smooth (gaussian 1 sigma)
-        continuum_spectra['flux'] = gaussian_filter1d(continuum_spectra['flux'], 1, order=0)
-        return MultiLinearInterpolationContinuumModel(continuum_spectra)
-    else:
-        return MultiLinearInterpolationContinuumModel(spectra[continuum_base_points])
-
-# Calculate flux for a wavelength grid using a given model
-def get_spectra_from_model(model, spectra_wave_grid):
-    total_points = len(spectra_wave_grid)
-    spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-    spectra['waveobs'] = spectra_wave_grid
-    spectra['flux'] = model(spectra['waveobs'])
-    spectra['err'] = np.zeros(total_points)
-    return spectra
-
-
-# Find regions of wavelengths where the fluxes seem to belong to the continuum.
-# - It analyses the spectra in regions
-# - The region size is variable in function of 4*fwhm which is derived
-#   from the current wavelength and the resolution (unless a fixed_wave_step is specified)
-# - For each region, if...
-#     a) the median flux is above the continuum model (but not more than 0.08) or below but not more than 0.01
-#         * The continuum model can be a fixed flux value or a fitted model (preferable)
-#     b) and the standard deviation is less than a given maximum
-#   the region is selected
 def find_continuum(spectra, resolution, max_std_continuum = 0.002, continuum_model = 0.95, max_continuum_diff=0.01, fixed_wave_step=None, frame=None):
+    """
+    Find regions of wavelengths where the fluxes seem to belong to the continuum:
 
+    - The region size is variable in function of 4*fwhm which is derived
+      from the current wavelength and the resolution (unless a fixed_wave_step is specified)
+    - A region is accepted as continuum if the following criteria is true:
+
+        a) the median flux is above the continuum model (but not more than 0.08) or below but not more than 0.01
+            - The continuum model can be a fixed flux value or a fitted model (preferable)
+
+        b) and the standard deviation is less than a given maximum the region is selected
+    """
     min_wave = np.min(spectra['waveobs'])
     max_wave = np.max(spectra['waveobs'])
     wave_base = min_wave
@@ -286,23 +289,26 @@ def find_continuum(spectra, resolution, max_std_continuum = 0.002, continuum_mod
         i += 1
 
     continuum_regions = np.array(dirty_continuum_regions,  dtype=[('wave_base', float), ('wave_top', float), ('num_measures', int), ('mean_flux', float), ('std_flux', float)])
+    continuum_regions = __merge_regions(spectra, continuum_regions)
     logging.info("Found %i continuum regions" % len(continuum_regions))
 
     return continuum_regions
 
 
-# Find regions of wavelengths where the fluxes seem to belong to the continuum
-# but LIMITED to some regions (also called regions):
-# - It analyses the spectra in regions
-# - The region size is variable in function of 4*fwhm which is derived
-#   from the current wavelength and the resolution
-# - For each region, if...
-#     a) the median flux is above the continuum model (but not more than 0.08) or below but not more than 0.01
-#         * The continuum model can be a fixed flux value or a fitted model (preferable)
-#     b) and the standard deviation is less than a given maximum
-#   the region is selected
 def find_continuum_on_regions(spectra, resolution, regions, max_std_continuum = 0.002, continuum_model = 0.95, max_continuum_diff=0.01, fixed_wave_step=None, frame=None):
+    """
+    Find regions of wavelengths where the fluxes seem to belong to the continuum:
+    (as in find_continuum method) but **LIMITED** to some regions:
 
+    - The region size is variable in function of 4*fwhm which is derived
+      from the current wavelength and the resolution (unless a fixed_wave_step is specified)
+    - A region is accepted as continuum if the following criteria is true:
+
+        a) the median flux is above the continuum model (but not more than 0.08) or below but not more than 0.01
+            - The continuum model can be a fixed flux value or a fitted model (preferable)
+
+        b) and the standard deviation is less than a given maximum the region is selected
+    """
     min_wave = np.min(spectra['waveobs'])
     max_wave = np.max(spectra['waveobs'])
 
@@ -374,15 +380,19 @@ def find_continuum_on_regions(spectra, resolution, regions, max_std_continuum = 
             i += 1
 
     continuum_regions = np.array(dirty_continuum_regions,  dtype=[('wave_base', float), ('wave_top', float), ('num_measures', int), ('mean_flux', float), ('std_flux', float)])
+
+    continuum_regions = __merge_regions(spectra, continuum_regions)
     logging.info("Found %i continuum regions" % len(continuum_regions))
 
     return continuum_regions
 
 
 
-# Given a group of continuum regions of a spectra, merge those that are
-# consecutive
-def merge_regions(spectra, dirty_continuum_regions):
+def __merge_regions(spectra, dirty_continuum_regions):
+    """
+    Given a group of continuum regions of a spectra, merge those that are
+    consecutive.
+    """
     ### It can happend that consecutives regions with different mean_increase are
     ### selected to belong to the continuum. We can merge them for coherence:
     cleaned_continuum_regions = []
@@ -416,40 +426,5 @@ def merge_regions(spectra, dirty_continuum_regions):
     return continuum_regions
 
 
-# Considering a cumulative spectra where the 'err' field is the standard
-# deviation of the flux for a group of stars at a given wavelength,
-# identify regions of wavelength with standard deviation lower than the median
-def find_stable_regions(cumulative_spectra):
-    regions = []
-    # Discard regions that have at least one point with std higher than the median std
-    err_limit = np.median(cumulative_spectra['err'])
-    total_points = len(cumulative_spectra['err'])
-    base = 0
-    current = 0
-
-    while current < total_points:
-        add_region = False
-        while not (current >= total_points or cumulative_spectra['err'][current] > err_limit):
-            if not add_region:
-                add_region = True
-            current += 1
-
-        if add_region:
-            wave_base = cumulative_spectra['waveobs'][base]
-            wave_top = cumulative_spectra['waveobs'][current - 1]
-            wave_filter = (cumulative_spectra['waveobs'] >= wave_base) & (cumulative_spectra['waveobs'] < wave_top)
-            mean_flux = np.mean(cumulative_spectra['flux'][wave_filter])
-            std_flux = cumulative_spectra['flux'][wave_filter].std()
-            num_measures = len(cumulative_spectra['flux'][wave_filter])
-
-            regions.append((wave_base, wave_top, num_measures, mean_flux, std_flux))
-
-        base = current
-        current += 1
-
-    # Convert result array to numpy array
-    regions = np.array(regions,  dtype=[('wave_base', float), ('wave_top', float), ('num_measures', int), ('mean_flux', float), ('std_flux', float)])
-
-    return regions
 
 

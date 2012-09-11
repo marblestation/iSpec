@@ -1,20 +1,20 @@
-"""
-    This file is part of Spectra Visual Editor (SVE).
-    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
-
-    SVE is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    SVE is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with SVE. If not, see <http://www.gnu.org/licenses/>.
-"""
+#
+#    This file is part of Spectra Visual Editor (SVE).
+#    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
+#
+#    SVE is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    SVE is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
+#
+#    You should have received a copy of the GNU Affero General Public License
+#    along with SVE. If not, see <http://www.gnu.org/licenses/>.
+#
 import os
 import sys
 import numpy as np
@@ -26,42 +26,60 @@ from scipy import interpolate
 import matplotlib.pyplot as plt
 import tempfile
 import cPickle as pickle
-#import ipdb
 
 # SPECTRUM is compatible only with the plane-parallel atmospheres.
 # The first layer represents the surface.
 # Elemental abundances in the stdatom.dat file are used (and scaled with the [M/H] value)
 
-# Constant class used for microturbulent velocities because they are constant for all layers and atmospheres
 class ConstantValue:
+    """ Constant class used for microturbulent velocities because they are
+        constant for all layers and atmospheres """
     def __init__(self, value):
         self.value = value
 
     def __call__(self, x, y):
         return [[self.value]]
 
-# Read castelli et kurucz atmospheres and builds the following structure:
-#  atmospheres_params (as many as different metallicities):
-#   - atmospheres_params_with_same_metallicity
-#       - atmospheres
-#           -> params
-#  atmospheres (as many as different metallicities):
-#   - atmospheres_with_same_metallicity
-#       - atmospheres
-#           -> values
-#               * Values' order:
-#                   mass_depth = 0
-#                   temperature_K = 1
-#                   gas_preassure = 2
-#                   electron_density = 3
-#                   mean_absorption_coeff = 4
-#                   radiation_preassure = 5
-#                   microturbulent_vel = 6 # In m/s
-def read_stats_kurucz_atmospheres(atmosphere_models, required_layers=72):
+def read_kurucz_atmospheres(atmosphere_models, required_layers=72):
+    """
+    Read castelli and kurucz atmospheres.
+
+    :param atmosphere_models:
+        List or array of files with Kurucz atmospheres ordered from lower to
+        higher metallicity. Example: atmosphere_models = ["input/atmospheres/kurucz/am50k2.dat",]
+    :type atmosphere_models: array
+
+    :returns:
+        model_combinations is an array as many element as number of metallicities,
+        and each of them is:
+            model combination matrix - Atmosphere (None if it does not exists)
+
+        teff_range, logg_range, MH_range are arrays with the list of effective
+        temperature, gravity and metallicity
+
+    """
     min_values_per_layer = 7
     read_atmosphere_data = False
     atmospheres_params = []
     atmospheres = []
+
+    # Build the following structures:
+     #atmospheres_params (as many as different metallicities):
+      #- atmospheres_params_with_same_metallicity
+          #- atmospheres
+              #-> params
+     #atmospheres (as many as different metallicities):
+      #- atmospheres_with_same_metallicity
+          #- atmospheres
+              #-> values
+                  #* Values' order:
+                      #mass_depth = 0
+                      #temperature_K = 1
+                      #gas_preassure = 2
+                      #electron_density = 3
+                      #mean_absorption_coeff = 4
+                      #radiation_preassure = 5
+                      #microturbulent_vel = 6 # In m/s
 
     metallicities = []
     temperatures = []
@@ -148,25 +166,40 @@ def read_stats_kurucz_atmospheres(atmosphere_models, required_layers=72):
             logg_index = np.where(logg_range==atm_logg)[0][0]
             model_combinations[metal_num][teff_index][logg_index] = atm
 
-    # Output:
-    #  - model_combinations (as many as nMH)
-    #     - model combination matrix
-    #       -> Atmosphere  : It exists
-    #       -> None
     return model_combinations, teff_range, logg_range, MH_range
 
 
-# Builds an structure where each value of each layer has a RectBivariateSpline (based on the values
-# read from atmospheric models) that can be used for interpolation. The structure is:
-# - Modeled layers (as many as different metallicities)
-#    - Layers
-#       - Modeled values
-#           -> Model for interpolation
-# - Values used for modeled layers (as many as different metallicities) => Only useful for posterior plotting
-#    - Layers
-#       - Used values
-#           -> Matrix value (for each teff-logg)
-def modeled_interpolated_layer_values(model_combinations, teff_range, logg_range, MH_range, required_layers=72):
+def build_modeled_interpolated_layer_values(model_combinations, teff_range, logg_range, MH_range, required_layers=72):
+    """
+    Builds an structure where each value of each layer has a RectBivariateSpline (based on the values
+    read from atmospheric models) that can be used for interpolation.
+
+    :param model_combinations:
+        Output from read_kurucz_atmospheres method
+    :type model_combinations: array
+
+    :param teff_range:
+        Output from read_kurucz_atmospheres method
+    :type teff_range: array
+
+    :param logg_range:
+        Output from read_kurucz_atmospheres method
+    :type teff_range: array
+
+    :param MH_range:
+        Output from read_kurucz_atmospheres method
+    :type teff_range: array
+
+    :returns:
+        modeled_layers is an array with as many elements as different metallicities
+
+        Layers - Modeled values - Model for interpolation
+
+        used_values_for_layers is an array with as many elements as different metallicities
+        which is basicly useful only for plotting the values used for building the models:
+
+        Layers - Used values - Matrix value (for each teff-logg)
+    """
     nteff = len(teff_range)
     nlogg = len(logg_range)
     nMH  = len(MH_range)
@@ -252,99 +285,42 @@ def modeled_interpolated_layer_values(model_combinations, teff_range, logg_range
     return modeled_layers, used_values_for_layers
 
 
-# Plots all the values (except microturbulence vel which is constant) for 3 layers (0, 35 and 70) for
-# all the different original metallicities:
-#  - Values for the original teff-logg grid
-#  - Interpolated values in a finer teff-logg grid
-def plot_original_and_finer_grid(modeled_layers, used_values_for_layers, teff_range, logg_range, MH_range, required_layers=72, teff_step=100, logg_step=0.10):
-    nteff = len(teff_range)
-    nlogg = len(logg_range)
-    nMH  = len(MH_range)
-    nlayers = required_layers
-    nvalues = 7 #min_values_per_layer # Only use the 7 first values
+def valid_atmosphere_target(modeled_layers_pack, teff_target, logg_target, MH_target):
+    """
+    Checks if the objectif teff, logg and metallicity can be obtained by using the loaded model
 
-    teff_min = np.min(teff_range)
-    teff_max = np.max(teff_range)
-    logg_min = np.min(logg_range)
-    logg_max = np.max(logg_range)
-    MH_min = np.min(MH_range)
-    MH_max = np.max(MH_range)
+    :param modeled_layers_pack:
+        Output from load_modeled_layers_pack
+    :type model_combinations: array
 
-    ### Plotting
-    plot_output_dir = "output/plots/"
-
-    ### Construct original grid
-    grid_teff, grid_logg = np.indices((nteff, nlogg), dtype=float)
-    # Assign values to each grid position
-    for i in np.arange(nteff):
-        grid_teff[i] = teff_range[i]
-    for i in np.arange(nlogg):
-        grid_logg[:,i] = logg_range[i]
-
-
-    # Construct a finer grid for plotting
-    new_grid_teff, new_grid_logg = np.mgrid[teff_min:teff_max:teff_step,logg_min:logg_max:logg_step]
-    new_nteff = len(new_grid_teff[:,0])
-    new_nlogg = len(new_grid_logg[:,0])
-
-
-    for metal_num in np.arange(nMH):
-        print "\nAtmosphere models", metal_num
-        for layer_num in np.arange(0, nlayers, 35): # Only 3 layers (0, 35 and 70)
-            print "\t Layer:", layer_num
-            print "\t\t Value:",
-            for value_num in np.arange(nvalues-1): # -1: do not plot last value because it is always constant (microturbulence velocity)
-                print value_num,
-                sys.stdout.flush()
-                model_val = modeled_layers[metal_num][layer_num][value_num]
-                val = used_values_for_layers[metal_num][layer_num][value_num]
-                refined_val = model_val(new_grid_teff[:,0], new_grid_logg[0,:])
-                ## Draw
-                ##plt.figure(figsize=(9,6))
-                plt.subplot(211)
-                plt.pcolor(grid_teff, grid_logg, val)
-                plt.xlabel("Temperature (K)")
-                plt.ylabel("Log g (dex)")
-                plt.title("Original")
-
-                plt.subplot(212)
-                plt.pcolor(new_grid_teff, new_grid_logg, refined_val)
-                plt.xlabel("Temperature (K)")
-                plt.ylabel("Log g (dex)")
-                plt.title("Interpolated")
-
-                plt.subplots_adjust(bottom=0.1, right=0.8, top=0.9)
-                cax = plt.axes([0.85, 0.1, 0.075, 0.8])
-                plt.colorbar(cax=cax)
-                plt.savefig(plot_output_dir + "metal_" + str(metal_num) + "_value_" + str(value_num) + "_layer_" + str(layer_num) + ".png")
-
-# Checks if the objectif teff, logg and metallicity can be obtained by using the loaded model
-#  - Validates limits (i.e http://wwwuser.oat.ts.astro.it/castelli/grids/gridp00k2odfnew/ap00k2tab.html)
-def valid_objective(modeled_layers_pack, teff_obj, logg_obj, MH_obj):
+    :returns:
+        True if the target teff, logg and metallicity can be obtained with the
+        models
+    """
     modeled_layers, model_combinations, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
 
     nteff = len(teff_range)
     nlogg = len(logg_range)
     nMH  = len(MH_range)
 
-    teff_index = np.searchsorted(teff_range, teff_obj)
-    if teff_index == 0 and teff_obj != teff_range[0]:
+    teff_index = np.searchsorted(teff_range, teff_target)
+    if teff_index == 0 and teff_target != teff_range[0]:
         #raise Exception("Out of range: low teff value")
         return False
     if teff_index >= nteff:
         #raise Exception("Out of range: high teff value")
         return False
 
-    logg_index = np.searchsorted(logg_range, logg_obj)
-    if logg_index == 0 and logg_obj != logg_range[0]:
+    logg_index = np.searchsorted(logg_range, logg_target)
+    if logg_index == 0 and logg_target != logg_range[0]:
         #raise Exception("Out of range: low logg value")
         return False
     if logg_index >= nlogg:
         #raise Exception("Out of range: high logg value")
         return False
 
-    MH_index = np.searchsorted(MH_range, MH_obj)
-    if MH_index == 0 and MH_obj != MH_range[0]:
+    MH_index = np.searchsorted(MH_range, MH_target)
+    if MH_index == 0 and MH_target != MH_range[0]:
         #raise Exception("Out of range: low MH value")
         return False
     if MH_index >= nMH:
@@ -354,25 +330,34 @@ def valid_objective(modeled_layers_pack, teff_obj, logg_obj, MH_obj):
     valid = True
     for metal_num in [MH_index-1, MH_index]:
         valid = valid & (model_combinations[metal_num][teff_index][logg_index] != None)
-        if teff_obj != teff_range[teff_index]:
-            # teff_obj is between teff_index-1 and teff_index
+        if teff_target != teff_range[teff_index]:
+            # teff_target is between teff_index-1 and teff_index
             valid = valid & (model_combinations[metal_num][teff_index-1][logg_index] != None)
-        if logg_obj != logg_range[logg_index]:
-            # logg_obj is between logg_index-1 and logg_index
+        if logg_target != logg_range[logg_index]:
+            # logg_target is between logg_index-1 and logg_index
             valid = valid & (model_combinations[metal_num][teff_index][logg_index-1] != None)
-        if logg_obj != logg_range[logg_index] and teff_obj != teff_range[teff_index]:
+        if logg_target != logg_range[logg_index] and teff_target != teff_range[teff_index]:
             # One additional check
             valid = valid & (model_combinations[metal_num][teff_index-1][logg_index-1] != None)
     return valid
 
-# Generates an interpolated atmosphere for a given teff, logg and metallicity
-def interpolate_atmosphere_layers(modeled_layers_pack,  teff_obj, logg_obj, MH_obj):
+def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target, MH_target):
+    """
+    Generates an interpolated atmosphere for a given teff, logg and metallicity
+
+    :param modeled_layers_pack:
+        Output from load_modeled_layers_pack
+    :type model_combinations: array
+
+    :returns:
+        Interpolated model atmosphere
+    """
     modeled_layers, model_combinations, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
 
     nMH  = len(MH_range)
     nvalues = 7
-    MH_index = MH_range.searchsorted(MH_obj)
-    if MH_index == 0 and MH_obj != MH_range[0]:
+    MH_index = MH_range.searchsorted(MH_target)
+    if MH_index == 0 and MH_target != MH_range[0]:
         raise Exception("Out of range: low MH value")
     if MH_index >= nMH:
         raise Exception("Out of range: high MH value")
@@ -383,9 +368,9 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_obj, logg_obj, MH_o
         values = []
 
         for value_num in np.arange(nvalues):
-            if MH_obj == MH_range[MH_index]:
+            if MH_target == MH_range[MH_index]:
                 model_val = modeled_layers[MH_index][layer_num][value_num]
-                val = model_val(teff_obj, logg_obj)[0][0]
+                val = model_val(teff_target, logg_target)[0][0]
             else:
                 # In between two known metallicities
                 MH_xcoord = []
@@ -395,15 +380,15 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_obj, logg_obj, MH_o
                 MH_ycoord = []
                 # Value for a given teff and logg
                 model_val = modeled_layers[MH_index-1][layer_num][value_num]
-                val = model_val(teff_obj, logg_obj)
+                val = model_val(teff_target, logg_target)
                 MH_ycoord.append(val[0][0])
                 model_val = modeled_layers[MH_index][layer_num][value_num]
-                val = model_val(teff_obj, logg_obj)
+                val = model_val(teff_target, logg_target)
                 MH_ycoord.append(val[0][0])
 
                 # Modelize for obtaining the interpolated value for a given metallicity
                 model_MH_val = interpolate.interp1d(MH_xcoord, MH_ycoord)
-                val = model_MH_val(MH_obj)
+                val = model_MH_val(MH_target)
             values.append(val)
 
 
@@ -411,6 +396,16 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_obj, logg_obj, MH_o
     return layers
 
 def write_atmosphere(teff, logg, MH, layers):
+    """
+    Write a model atmosphere to a temporary file
+
+    :param layers:
+        Output from interpolate_atmosphere_layers
+    :type model_combinations: array
+
+    :returns:
+        Name of the temporary file
+    """
     atm_file = tempfile.NamedTemporaryFile(delete=False)
     atm_file.write("%.1f  %.5f  %.2f  %i\n" % (teff, logg, MH, len(layers)) )
     for layer in layers:
@@ -420,74 +415,33 @@ def write_atmosphere(teff, logg, MH, layers):
 
 
 # Serialize modeled layers and stats
-def save_modeled_layers_pack(modeled_layers, model_combinations, teff_range, logg_range, MH_range, required_layers=72, filename='input/atmospheres/modeled_layers_pack.dump'):
+def dump_modeled_layers_pack(modeled_layers, model_combinations, teff_range, logg_range, MH_range, filename, required_layers=72):
+    """
+    Build a list of modeled_layers, model_combinations, teff_range, logg_range and MH_range
+    in order to serialize it to disk for easier later recovery.
+
+    :param filename:
+        Name of the output file (i.e. models.dump)
+    :type model_combinations: string
+
+    """
     nlayers = required_layers
 
     modeled_layers_pack = (modeled_layers, model_combinations, teff_range, logg_range, MH_range, nlayers)
     pickle.dump(modeled_layers_pack, open(filename, 'w'))
 
-# Restore modeled layers and stats
-def load_modeled_layers_pack(filename='input/atmospheres/modeled_layers_pack.dump'):
+def load_modeled_layers_pack(filename):
+    """
+    Restore modeled layers and stats saved previously with save_modeled_layers_pack
+
+    :param filename:
+        Name of the input file (i.e. models.dump)
+    :type model_combinations: string
+
+    :returns:
+        List of modeled_layers, model_combinations, teff_range, logg_range and MH_range
+    """
     sys.modules['__main__'].ConstantValue = ConstantValue
     modeled_layers_pack = pickle.load(open(filename))
     return modeled_layers_pack
-
-if __name__ == '__main__':
-    # Model file and metallicity
-    kurucz = False
-    if kurucz:
-        ###### Kurucz
-        # Files should be listed in increasing order of metallicity
-        atmosphere_models = ["input/atmospheres/kurucz/am50k2.dat",
-        "input/atmospheres/kurucz/am45k2.dat",
-        "input/atmospheres/kurucz/am40k2.dat",
-        "input/atmospheres/kurucz/am35k2.dat",
-        "input/atmospheres/kurucz/am30k2.dat",
-        "input/atmospheres/kurucz/am25k2.dat",
-        "input/atmospheres/kurucz/am20k2.dat",
-        "input/atmospheres/kurucz/am15k2.dat",
-        "input/atmospheres/kurucz/am10k2.dat",
-        "input/atmospheres/kurucz/am05k2.dat",
-        "input/atmospheres/kurucz/am03k2.dat",
-        "input/atmospheres/kurucz/am02k2.dat",
-        "input/atmospheres/kurucz/am01k2.dat",
-        "input/atmospheres/kurucz/ap00k2.dat",
-        "input/atmospheres/kurucz/ap01k2.dat",
-        "input/atmospheres/kurucz/ap02k2.dat",
-        "input/atmospheres/kurucz/ap03k2.dat",
-        "input/atmospheres/kurucz/ap05k2.dat",
-        "input/atmospheres/kurucz/ap10k2.dat"]
-        dump_filename = 'input/atmospheres/kurucz/modeled_layers_pack.dump'
-    else:
-        ###### Castelli atmospheres
-        ### Files should be listed in increasing order of metallicity
-        #atmosphere_models = ["input/atmospheres/castelli/am25k2odfnew.dat", "input/atmospheres/castelli/am20k2odfnew.dat", "input/atmospheres/castelli/am15k2odfnew.dat", "input/atmospheres/castelli/am10k2odfnew.dat", "input/atmospheres/castelli/am05k2odfnew.dat", "input/atmospheres/castelli/ap00k2odfnew.dat", "input/atmospheres/castelli/ap02k2odfnew.dat", "input/atmospheres/castelli/ap05k2odfnew.dat"]
-        # Alpha +0.40 for metallicities <= -1.0
-        atmosphere_models = ["input/atmospheres/castelli/alpha+0.40/am55ak2odfnew.dat", "input/atmospheres/castelli/alpha+0.40/am45ak2odfnew.dat", "input/atmospheres/castelli/alpha+0.40/am40ak2odfnew.dat", "input/atmospheres/castelli/alpha+0.40/am35ak2odfnew.dat", "input/atmospheres/castelli/alpha+0.40/am25ak2odfnew.dat", "input/atmospheres/castelli/alpha+0.40/am20ak2odfnew.dat", "input/atmospheres/castelli/alpha+0.40/am15ak2odfnew.dat", "input/atmospheres/castelli/alpha+0.40/am10ak2odfnew.dat", "input/atmospheres/castelli/am05k2odfnew.dat", "input/atmospheres/castelli/ap00k2odfnew.dat", "input/atmospheres/castelli/ap02k2odfnew.dat", "input/atmospheres/castelli/ap05k2odfnew.dat"]
-        dump_filename = 'input/atmospheres/castelli/modeled_layers_pack.dump'
-
-
-    model_combinations, teff_range, logg_range, MH_range = read_stats_kurucz_atmospheres(atmosphere_models, required_layers=72)
-
-    modeled_layers, used_values_for_layers = modeled_interpolated_layer_values(model_combinations, teff_range, logg_range, MH_range)
-
-    #### Serialize
-    save_modeled_layers_pack(modeled_layers, model_combinations, teff_range, logg_range, MH_range, required_layers=72, filename=dump_filename)
-
-    #plot_original_and_finer_grid(modeled_layers, used_values_for_layers, teff_range, logg_range, MH_range, teff_step=100, logg_step=0.10)
-
-
-    #modeled_layers_pack = load_modeled_layers_pack(filename=dump_filename)
-
-    ##modeled_layers_pack = (modeled_layers, model_combinations, teff_range, logg_range, MH_range, 72)
-
-    #teff_obj = 5500
-    #logg_obj = 0.0
-    #MH_obj = 0.0
-
-    #valid_objective(modeled_layers_pack, teff_obj, logg_obj, MH_obj)
-    #layers = interpolate_atmosphere_layers(modeled_layers_pack, teff_obj, logg_obj, MH_obj)
-    #atm_filename = write_atmosphere(teff_obj, logg_obj, MH_obj, layers)
-
-    #os.remove(atm_filename)
 

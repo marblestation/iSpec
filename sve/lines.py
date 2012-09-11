@@ -1,46 +1,53 @@
-"""
-    This file is part of Spectra Visual Editor (SVE).
-    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
-
-    SVE is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    SVE is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with SVE. If not, see <http://www.gnu.org/licenses/>.
-"""
+#
+#    This file is part of Spectra Visual Editor (SVE).
+#    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
+#
+#    SVE is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    SVE is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
+#
+#    You should have received a copy of the GNU Affero General Public License
+#    along with SVE. If not, see <http://www.gnu.org/licenses/>.
+#
 import asciitable
 import numpy as np
 import numpy.lib.recfunctions as rfn # Extra functions
+import scipy.ndimage.filters
 import cPickle as pickle
 import gzip
 import os
 #import ipdb
 from common import *
 from continuum import *
-from radial_velocity import *
-from convolve import *
+from lines import *
+from spectrum import *
 import matplotlib.pyplot as plt
 from pymodelfit import UniformKnotSplineModel
+from pymodelfit import UniformCDFKnotSplineModel
 from mpfitmodels import GaussianModel
 from mpfitmodels import VoigtModel
+import log
+import logging
+
 import log
 import logging
 
 ########################################################################
 ## [START] LINE LISTS
 ########################################################################
-# Load a VALD linelist (short format) and filter it
-# - minimum_depth: filter out all the lines with a depth less than this percentage (0.05 = 5%)
-# - data_end can be negative in order to ignore the last nth rows (VALD usually
-#            adds references to the end of the file that should be ignored)
 def read_VALD_linelist(vald_file, minimum_depth=0.0, data_end=None):
+    """
+    Load a VALD linelist (short format) and filter it selecting only lines of a minimum depth (0% by default).
+
+    - minimum_depth: filter out all the lines with a depth less than this percentage (0.05 = 5%)
+    - data_end can be negative in order to ignore the last nth rows (VALD usually adds references to the end of the file that should be ignored)
+    """
     # Original VALD linelist
     if data_end == None:
         vald = asciitable.read(vald_file, delimiter=",", quotechar="'", data_start=3, names=["element", "wave (A)", "lower state (eV)", "Vmic (km/s)", "log(gf)", "rad", "stark", "waals", "factor", "depth", "Reference"], exclude_names=["Vmic (km/s)", "factor", "Reference"], guess=False)
@@ -62,6 +69,9 @@ def read_VALD_linelist(vald_file, minimum_depth=0.0, data_end=None):
 
 
 def read_telluric_linelist(telluric_lines_file, minimum_depth=0.0):
+    """
+    Read telluric linelist.
+    """
     # Original VALD linelist
     telluric_lines = asciitable.read(telluric_lines_file, delimiter="\t")
 
@@ -82,19 +92,12 @@ def read_telluric_linelist(telluric_lines_file, minimum_depth=0.0):
         telluric_lines_limited = telluric_lines[telluric_lines['depth'] >= minimum_depth]
         return telluric_lines_limited
 
-#from lines import *
-#l = "input/linelists/original/lumba-gustafsson.lin"
-#o = "input/linelists/lumba-gustafsson.lin"
-# Original VALD linelist
-#vald_linelist = read_VALD_linelist(l, minimum_depth=0.0, data_end=None)
-#linelist = VALD_to_SPECTRUM_format(vald_linelist)
-# Filter discarded:
-#linelist = linelist[linelist['species'] != "Discard"]
-#asciitable.write(linelist, output=o, Writer=asciitable.FixedWidthNoHeader, delimiter=None, bookend=False, formats={'wave (A)': '%4.3f', })
 
-# Convert element names type "Fe 1" or "Fe 2" to species code form by the atomic number + "." + ionization state
-# Returns "Discard" if not found
-def get_specie(chemical_elements, molecules, element_name):
+def __get_specie(chemical_elements, molecules, element_name):
+    """
+    Convert element names type "Fe 1" or "Fe 2" to species code form by the atomic number + "." + ionization state.
+    Returns "Discard" if not found.
+    """
     element = element_name.split() # Do not specify " " to avoid problems with elements with double spaces like "V  1"
 
     # Element not present or with a bad format, skip
@@ -123,10 +126,14 @@ def get_specie(chemical_elements, molecules, element_name):
     return specie
 
 
-## Calculate upper exciation level from lower and wavelength
-# Units: eV for lower excitation level
-#        nm for wavelength
-def get_upper_state(lower_state, wavelength):
+def __get_upper_state(lower_state, wavelength):
+    """
+    Calculate upper excitation level from lower and wavelength.
+    Units:
+
+    * eV for lower excitation level
+    * nm for wavelength
+    """
     # Planck constant
     h = 6.626068 * 10e-34 # m^2 kg / s
     # Light speed in vacuum
@@ -141,22 +148,27 @@ def get_upper_state(lower_state, wavelength):
     E = E * 6.24150974e18 # electron Volt (eV)
     return lower_state + E # eV
 
-# Units transformation from eV to cm^-1
-def eV_to_inverse_cm(value):
+def __eV_to_inverse_cm(value):
+    """
+    Units transformation from eV to cm^-1.
+    """
     return value * 8065.73 # cm^-1
 
 
-# Convert a VALD linelist (short format) to a format that can be used with SPECTRUM
-def VALD_to_SPECTRUM_format(vald_linelist):
+def VALD_to_SPECTRUM_format(vald_linelist, chemical_elements_file, molecules_file):
+    """
+    Convert a VALD linelist already read by 'read_VALD_linelist' method
+    to a format that can be used with SPECTRUM synthesizer.
+    """
     # Periodic table
-    chemical_elements = asciitable.read("input/abundances/chemical_elements_symbols.dat", delimiter="\t")
+    chemical_elements = asciitable.read(chemical_elements_file, delimiter="\t")
     # Some molecular symbols
     # - For diatomic molecules, the atomic_num specifies the atomic makeup of the molecule.
     #   Thus, H2 is 101.0, the two ``1''s referring to the two hydrogens, CH is 106.0,
     #   CO 608.0, MgH 112.0, TiO 822.0, etc.
     # - The lightest element always comes first in the code, so that 608.0 cannot be
     #   confused with NdO, which would be written 860.0.
-    molecules = asciitable.read("input/abundances/molecular_symbols.dat", delimiter="\t")
+    molecules = asciitable.read(molecules_file, delimiter="\t")
 
     # Prepare resulting structure
     linelist = np.recarray((len(vald_linelist), ), dtype=[('wave (A)', '<f8'), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('log(gf)', '<f8'), ('fudge factor', '<f8'),('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), ('note', '|S100')])
@@ -166,8 +178,8 @@ def VALD_to_SPECTRUM_format(vald_linelist):
     linelist['note'] = ""
 
     linelist['wave (A)'] = vald_linelist['wave (A)']
-    linelist['upper state (cm^-1)'] = (eV_to_inverse_cm(get_upper_state(vald_linelist['lower state (eV)'], vald_linelist[ "wave (A)"] / 10.))).astype(int)
-    linelist['lower state (cm^-1)'] = (eV_to_inverse_cm(vald_linelist['lower state (eV)'])).astype(int)
+    linelist['upper state (cm^-1)'] = (__eV_to_inverse_cm(__get_upper_state(vald_linelist['lower state (eV)'], vald_linelist[ "wave (A)"] / 10.))).astype(int)
+    linelist['lower state (cm^-1)'] = (__eV_to_inverse_cm(vald_linelist['lower state (eV)'])).astype(int)
     linelist['log(gf)'] = vald_linelist['log(gf)']
     #linelist['transition type'] = "99"
     linelist['transition type'] = "GA"
@@ -189,7 +201,7 @@ def VALD_to_SPECTRUM_format(vald_linelist):
 
     i = 0
     for line in vald_linelist:
-        linelist[i]['species'] = get_specie(chemical_elements, molecules, line["element"])
+        linelist[i]['species'] = __get_specie(chemical_elements, molecules, line["element"])
         linelist[i]['note'] = "_".join(line["element"].split())
         i += 1
 
@@ -197,79 +209,50 @@ def VALD_to_SPECTRUM_format(vald_linelist):
 
 
 
-# Convert a VALD linelist (short format) to a format that can be used to measure radial velocities
-# and select the top N deepest lines every wave_step armstrongs (1 nm).
-# - data_end can be negative in order to ignore the last nth rows (VALD usually
-#            adds references to the end of the file that should be ignored)
-def VALD_top_N_to_RV_format(vald_file, output_file, top=1, wave_step=10, data_end=None):
-    #vald_limited = read_VALD_linelist(vald_file, minimum_depth=0, data_end=data_end)
-    vald = asciitable.read(vald_file, delimiter=",", quotechar="'", data_start=3, names=["element", "wave (A)", "lower state (eV)", "Vmic (km/s)", "log(gf)", "Rad", "Stark", "Waals", "factor", "depth", "Reference"], guess=False)
-    # Filter
-    vald_limited = vald[vald['depth'] >= 0.0]
-
-    wave_base = np.min(vald_limited["wave (A)"])
-    wave_top = np.max(vald_limited["wave (A)"])
-
-    # Boolean array initialized to False
-    #selected = (np.zeros(top*np.ceil((wave_top - wave_base) / wave_step)) == 1)
-    selected = []
-
-    wave_current = wave_base
-    i = 0
-    # For each segment
-    while wave_current < wave_top:
-        wfilter = (vald_limited["wave (A)"] >= wave_current) & (vald_limited["wave (A)"] < wave_current + wave_step)
-        vald_filtered = vald_limited[wfilter]
-        vald_filtered.sort(order="depth")
-        # Select the top N deepest lines
-        for j in np.arange(top):
-            pos = -1*(j+1)
-            selected.append(vald_filtered[pos])
-        wave_current += wave_step
-        i += top
-
-    selected = np.array(selected, dtype=vald_limited.dtype)
-
-    asciitable.write(selected, output=output_file, delimiter=",", quotechar="'")
-
-#VALD_top_N_to_RV_format("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", "input/rv/VALD.300_1100nm.rv.lst2", top=1, wave_step=10, data_end=None)
-
-
-def filter_telluric_lines(linelist_telluric, spectra, velocity_lower_limit, velocity_upper_limit):
-    # Light speed in vacuum
-    c = 299792458.0 # m/s
-
-    ## Select telluric lines of interest
-    # Limit to region of interest
-    wmin = spectra['waveobs'][0]
-    wmax = spectra['waveobs'][-1]
-    delta_wmin = wmin * (velocity_lower_limit / (c/1000.0))
-    delta_wmax = wmax * (velocity_upper_limit / (c/1000.0))
-    wfilter = (linelist_telluric['wave_peak'] <= wmax + delta_wmax) & (linelist_telluric['wave_peak'] >= wmin + delta_wmin)
-    linelist = linelist_telluric[wfilter]
-    # Discard not fitted lines
-    rfilter = linelist['rms'] == 9999
-    linelist = linelist[~rfilter]
-    # Discard too deep or too small lines
-    rfilter = (linelist['depth'] <= 0.9) & (linelist['depth'] >= 0.01)
-    linelist = linelist[rfilter]
-    # Discard outliers FWHM in km/s (which is not wavelength dependent)
-    telluric_fwhm = (c / (linelist['wave_peak'] / linelist['fwhm'])) / 1000.0 # km/s
-    fwhm_selected, fwhm_selected_filter = sigma_clipping(telluric_fwhm, meanfunc=np.median)
-    linelist = linelist[fwhm_selected_filter]
-    return linelist
-
-
 ########################################################################
 ## [END] LINE LIST
 ########################################################################
 
-# Fits a gaussian at a given wavelength location using a fitted continuum model
-# - For absorption lines, it will alway be true:
-#      model.A() < 0 and model.sig() > 0
-#   The oposite indicates a potential bad fit
-# - model.mu outside the region used for the fitting it is also a symptom of bad fit
-def fit_gaussian(spectra_slice, continuum_model, mu, sig=None, A=None):
+def read_line_regions(line_regions_filename):
+    """
+    Read line regions.
+    Line region files should be plain text files with **tab** character as column delimiter.
+    Four columns should exists: 'wave_peak', 'wave_base', 'wave_top' and 'note'
+    (the first line should contain those header names).
+    They indicate the peak of the line, beginning and end of each region (one per line)
+    and a comment (it can be a blank string). For example:
+    ::
+
+        wave_peak       wave_base       wave_top        note
+        480.8148        480.7970        480.8330        "Fe I"
+        496.2572        496.2400        496.2820        "Fe I"
+        499.2785        499.2610        499.2950        ""
+        505.8498        505.8348        505.8660        "Fe I"
+
+    """
+    line_regions = asciitable.read(table=line_regions_filename, comment='#', names=['wave_peak', 'wave_base', 'wave_top', 'note'], quotechar="\"")
+    return line_regions
+
+def write_line_regions(line_regions, line_regions_filename):
+    """
+    Write line regions file with the following format:
+    ::
+
+        wave_peak       wave_base       wave_top        note
+        480.8148        480.7970        480.8330        "Fe I"
+        496.2572        496.2400        496.2820        "Fe I"
+        499.2785        499.2610        499.2950        ""
+        505.8498        505.8348        505.8660        "Fe I"
+    """
+    asciitable.write(line_regions, output=line_regions_filename, delimiter='\t', quotechar="\"")
+
+def __fit_gaussian(spectra_slice, continuum_model, mu, sig=None, A=None):
+    """
+    Fits a gaussian at a given wavelength location using a fitted continuum model.
+
+    - For absorption lines, it will alway be true: model.A() < 0 and model.sig() > 0.
+    - A mu parameter (model.mu) outside the region used for the fitting it is also a symptom of bad fit.
+    """
     model = GaussianModel()
     x = spectra_slice['waveobs']
     y = spectra_slice['flux']
@@ -307,13 +290,14 @@ def fit_gaussian(spectra_slice, continuum_model, mu, sig=None, A=None):
 
     return model
 
-# Fits a voigt at a given wavelength location using a fitted continuum model
-# - For absorption lines, it will alway be true:
-#      model.A() < 0 and model.sig() > 0
-#   The oposite indicates a potential bad fit
-# - For absorption lines, model.gamma() < 0 indicates strange wings and probably a bad fit
-# - model.mu outside the region used for the fitting it is also a symptom of bad fit
-def fit_voigt(spectra_slice, continuum_model, mu, sig=None, A=None, gamma=None):
+def __fit_voigt(spectra_slice, continuum_model, mu, sig=None, A=None, gamma=None):
+    """
+    Fits a voigt at a given wavelength location using a fitted continuum model.
+
+    - For absorption lines, it will alway be true: model.A() < 0 and model.sig() > 0.
+    - For absorption lines, model.gamma() < 0 indicates strange wings and probably a bad fit.
+    - A mu parameter (model.mu) outside the region used for the fitting it is also a symptom of bad fit.
+    """
     model = VoigtModel()
     x = spectra_slice['waveobs']
     y = spectra_slice['flux']
@@ -356,15 +340,15 @@ def fit_voigt(spectra_slice, continuum_model, mu, sig=None, A=None, gamma=None):
     return model
 
 
-# Fits a gaussian and a voigt at a given wavelength location using a fitted continuum model
-# - It selects the best fitted model (gaussian or voigt) unless one of them is disabled by
-#   the discard_gaussian or discard_voigt argument
-# - For absorption lines, it will alway be true:
-#      model.A() < 0 and model.sig() > 0
-#   The oposite indicates a potential bad fit
-# - For absorption lines fitted with voigt, model.gamma() < 0 indicates strange wings and probably a bad fit
-# - model.mu outside the region used for the fitting it is also a symptom of bad fit
 def fit_line(spectra_slice, continuum_model, mu, sig=None, A=None, gamma=None, discard_gaussian = False, discard_voigt = False):
+    """
+    Fits a gaussian and a voigt at a given wavelength location using a fitted continuum model.
+
+    - It selects the best fitted model (gaussian or voigt) unless one of them is disabled by the discard_gaussian or discard_voigt argument.
+    - For absorption lines, it will alway be true: model.A() < 0 and model.sig() > 0.
+    - For absorption lines fitted with voigt, model.gamma() < 0 indicates strange wings and probably a bad fit
+    - A mu parameter (model.mu) outside the region used for the fitting it is also a symptom of bad fit.
+    """
     if not discard_gaussian:
         # Default values for failed fit:
         rms_gaussian = 9999.0
@@ -375,7 +359,7 @@ def fit_line(spectra_slice, continuum_model, mu, sig=None, A=None, gamma=None, d
         # - 1 fix parameter: mu (but it will set to free if there is enough data)
         if len(spectra_slice) > 2:
             try:
-                gaussian_model = fit_gaussian(spectra_slice, continuum_model, mu, sig=sig, A=A)
+                gaussian_model = __fit_gaussian(spectra_slice, continuum_model, mu, sig=sig, A=A)
 
                 residuals = gaussian_model.residuals()
                 rms_gaussian = np.sqrt(np.sum(np.power(residuals, 2)) / len(residuals))
@@ -393,7 +377,7 @@ def fit_line(spectra_slice, continuum_model, mu, sig=None, A=None, gamma=None, d
         # - 1 fix parameter: mu (but it will set to free if there is enough data)
         if len(spectra_slice) > 3:
             try:
-                voigt_model = fit_voigt(spectra_slice, continuum_model, mu, sig=sig, A=A, gamma=gamma)
+                voigt_model = __fit_voigt(spectra_slice, continuum_model, mu, sig=sig, A=A, gamma=gamma)
                 residuals = voigt_model.residuals()
                 rms_voigt = np.sqrt(np.sum(np.power(residuals, 2)) / len(residuals))
                 discard_voigt = False
@@ -407,18 +391,24 @@ def fit_line(spectra_slice, continuum_model, mu, sig=None, A=None, gamma=None, d
     else:
         raise Exception("Gaussian or Voigt fit for absorption line not possible.")
 
-# Remove consecutive features (i.e. peaks or base points)
-def remove_consecutives_features(features):
+def __remove_consecutives_features(features):
+    """
+    Remove features (i.e. peaks or base points) that are consecutive, it makes
+    no sense to have two peaks or two base points together.
+    """
     duplicated_features = (np.abs(features[:-1] - features[1:]) == 1)
     duplicated_features = np.array([False] + duplicated_features.tolist())
     cleaned_features = features[~duplicated_features]
     return cleaned_features
 
 
-def detect_false_positives_and_noise(spectra, linemasks):
-    # Find
-    # - Peaks that are less deep than it nearby base points (false positives)
-    # - Peaks too close (2 or less positions) to the next and previous base point (noise)
+def __detect_false_and_noisy_features(spectra, linemasks):
+    """
+    Detect features that are false positive or noise:
+
+    - Peaks that are less deep than it nearby base points (false positives)
+    - Peaks too close (2 or less positions) to the next and previous base point (noise)
+    """
     peaks = linemasks['peak']
     base_points = np.asarray([linemasks['base'][0]] +  linemasks['top'].tolist())
 
@@ -450,16 +440,19 @@ def detect_false_positives_and_noise(spectra, linemasks):
     rejected = np.logical_or(false_positives, noise)
     return rejected
 
-# Given a group of peaks and base_points with the following assumptions
-# - base_points[i] < base_point[i+1]
-# - peaks[i] < peaks[i+1]
-# - base_points[i] < peaks[i] < base_points[i+1]
-# The function returns peaks and base_points where:
-# - The first and last feature is a base point
-#     base_points[0] < peaks[0] < base_points[1] < ... < base_points[n-1] < peaks[n-1] < base_points[n]
-#   where n = len(base_points)
-# - len(base_points) = len(peaks) + 1
-def assert_structure(xcoord, yvalues, peaks, base_points):
+def __assert_structure(xcoord, yvalues, peaks, base_points):
+    """
+    Given a group of peaks and base_points with the following assumptions:
+
+    - base_points[i] < base_point[i+1]
+    - peaks[i] < peaks[i+1]
+    - base_points[i] < peaks[i] < base_points[i+1]
+
+    The function returns peaks and base_points where:
+
+    - The first and last feature is a base point: base_points[0] < peaks[0] < base_points[1] < ... < base_points[n-1] < peaks[n-1] < base_points[n] where n = len(base_points)
+    - len(base_points) = len(peaks) + 1
+    """
     # Limit the base_points array to the ones that are useful, considering that
     # the first and last peak are always removed
     first_wave_peak = xcoord[peaks][0]
@@ -506,25 +499,43 @@ def assert_structure(xcoord, yvalues, peaks, base_points):
 
     return peaks, base_points
 
-# The function arguments should agree with:
-# - The first and last feature is a base point
-#     base_points[0] < peaks[0] < base_points[1] < ... < base_points[n-1] < peaks[n-1] < base_points[n]
-#   where n = len(base_points)
-# - len(base_points) = len(peaks) + 1
-# It is recommended that the spectra is normalized (better results are obtained)
-# It tries to fit a gaussian and a voigt model and selects the best unless one of them is disabled by
-# the discard_gaussian or discard_voigt argument (if both of them are disabled, there will be
-# no fit information)
-# To save computation time, min and max depth can be indicated and all the lines out
-# of this range will not be considered for fit process (save CPU time) although
-# the rest of the information of the line will be conserved in the output
-# Returns a complete structure with all the necessary information to
-# determine if it is a line of interest
-def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_depth=None, maximum_depth=None, smoothed_spectra=None, vald_linelist_file=None, telluric_linelist_file = None, discard_gaussian = False, discard_voigt = False, vel_atomic=0.0, vel_telluric=0.0, frame=None):
-    print "NOTICE: This method can generate overflow warnings due to the Least Square Algorithm"
-    print "        used for the fitting process, but they can be ignored."
+def find_linemasks(spectra, continuum_model, minimum_depth=None, maximum_depth=None, smoothed_spectra=None, vald_linelist_file=None, telluric_linelist_file = None, discard_gaussian = False, discard_voigt = False, vel_atomic=0.0, vel_telluric=0.0, frame=None):
+    """
+    Generate a line masks for a spectrum by finding peaks and base points.
+
+    It is recommended that the spectra is normalized (better results are obtained).
+    It tries to fit a gaussian and a voigt model and selects the best unless one of them is disabled by
+    the discard_gaussian or discard_voigt argument (if both of them are disabled, there will be
+    no fit information).
+
+    To save computation time, min and max depth can be indicated and all the lines out
+    of this range will not be considered for fit process (save CPU time) although
+    the rest of the information of the line will be conserved in the output.
+
+    Additionally, features that are false positive or noise are not fitted. This
+    implies ignoring:
+
+    - Peaks that are less deep than it nearby base points (false positives)
+    - Peaks too close (2 or less positions) to the next and previous base point (noise)
+
+    Returns a complete structure with all the necessary information to
+    determine if it is a line of interest.
+    """
+    #print "NOTICE: This method can generate overflow warnings due to the Least Square Algorithm"
+    #print "        used for the fitting process, but they can be ignored."
     if smoothed_spectra == None:
         smoothed_spectra = spectra
+
+    logging.info("Finding peaks and base points...")
+    # Peaks and base points will agree with the following criteria:
+    # - The first and last feature is a base point
+    #    base_points[0] < peaks[0] < base_points[1] < ... < base_points[n-1] < peaks[n-1] < base_points[n]
+    #    where n = len(base_points)
+    # - len(base_points) = len(peaks) + 1
+    peaks, base_points = __find_peaks_and_base_points(smoothed_spectra['waveobs'], smoothed_spectra['flux'])
+    # If no peaks found, just finnish
+    if len(peaks) == 0:
+        return None
 
     # Depth of the peak with respect to the total continuum in % over the total continuum
     # - In case that the peak is higher than the continuum, depth < 0
@@ -598,15 +609,16 @@ def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_dep
     linemasks["transition type"] = ""
 
     # To save computation time, exclude false positives and noise from the fitting process
-    rejected_by_noise = detect_false_positives_and_noise(spectra, linemasks)
+    rejected_by_noise = __detect_false_and_noisy_features(spectra, linemasks)
     accepted_for_fitting = np.logical_and(accepted_for_fitting, np.logical_not(rejected_by_noise))
 
+    logging.info("Fitting line models...")
     # Model: fit gaussian
     for i in np.arange(num_peaks):
         fitting_not_possible = False
         if accepted_for_fitting[i]:
             # Adjust edges
-            new_base, new_top = improve_linemask_edges(smoothed_spectra['waveobs'], smoothed_spectra['flux'], linemasks['base'][i], linemasks['top'][i], linemasks['peak'][i])
+            new_base, new_top = __improve_linemask_edges(smoothed_spectra['waveobs'], smoothed_spectra['flux'], linemasks['base'][i], linemasks['top'][i], linemasks['peak'][i])
             linemasks['base_fit'][i] = new_base
             linemasks['top_fit'][i] = new_top
             linemasks['wave_base_fit'][i] = spectra['waveobs'][new_base]
@@ -659,15 +671,19 @@ def generate_linemasks(spectra, peaks, base_points, continuum_model, minimum_dep
                 frame.update_progress(current_work_progress)
 
     if vald_linelist_file != None:
-        linemasks = fill_with_VALD_info(linemasks, vald_linelist_file=vald_linelist_file, diff_limit=0.005, vel_atomic=vel_atomic)
+        logging.info("Cross matching with atomic data...")
+        linemasks = fill_linemasks_with_VALD_info(linemasks, vald_linelist_file=vald_linelist_file, diff_limit=0.005, vel_atomic=vel_atomic)
     if telluric_linelist_file != None:
-        linemasks = fill_with_telluric_info(linemasks, telluric_linelist_file=telluric_linelist_file, vel_telluric=vel_telluric)
+        logging.info("Cross matching with telluric data...")
+        linemasks = fill_linemasks_with_telluric_info(linemasks, telluric_linelist_file=telluric_linelist_file, vel_telluric=vel_telluric)
 
     return linemasks
 
-# Adds info to those linemasks that can be affected by tellurics
-# Different nearby linemasks can be affected by the same telluric line
-def fill_with_telluric_info(linemasks, telluric_linelist_file = "input/linelists/telluric/standard_atm_air_model.lst", vel_telluric=0.0):
+def fill_linemasks_with_telluric_info(linemasks, telluric_linelist_file, vel_telluric=0.0):
+    """
+    Adds info to those linemasks that can be affected by tellurics.
+    Different nearby linemasks can be affected by the same telluric line.
+    """
     # Sort before treating
     linemasks.sort(order=['wave_peak'])
 
@@ -728,9 +744,11 @@ def fill_with_telluric_info(linemasks, telluric_linelist_file = "input/linelists
     return linemasks
 
 
-# Cross-match linemasks with a VALD linelist in order to find
-# the nearest lines and copy the information into the linemasks structure
-def fill_with_VALD_info(linemasks, vald_linelist_file="input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", diff_limit=0.005, vel_atomic=0.0):
+def fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, diff_limit=0.005, vel_atomic=0.0):
+    """
+    Cross-match linemasks with a VALD linelist in order to find
+    the nearest lines and copy the information into the linemasks structure.
+    """
     # Sort before treating
     linemasks.sort(order=['wave_peak'])
 
@@ -792,8 +810,10 @@ def fill_with_VALD_info(linemasks, vald_linelist_file="input/linelists/VALD/VALD
 
     return linemasks
 
-# Works better with a smoothed spectra (i.e. convolved using 2*resolution)
-def find_peaks_and_base_points(xcoord, yvalues):
+def __find_peaks_and_base_points(xcoord, yvalues):
+    """
+    Find peaks and base points. It works better with a smoothed spectra (i.e. convolved using 2*resolution).
+    """
     if len(yvalues[~np.isnan(yvalues)]) == 0 or len(yvalues[~np.isnan(xcoord)]) == 0:
         #raise Exception("Not enough data for finding peaks and base points")
         print "WARNING: Not enough data for finding peaks and base points"
@@ -810,77 +830,25 @@ def find_peaks_and_base_points(xcoord, yvalues):
         # These cases break the necessary condition of having the same number of
         # peaks and base_points +/-1
         # It is necessary to find those "duplicates" and remove them:
-        peaks = remove_consecutives_features(peaks)
-        base_points = remove_consecutives_features(base_points)
+        peaks = __remove_consecutives_features(peaks)
+        base_points = __remove_consecutives_features(base_points)
 
         if not (len(peaks) - len(base_points)) in [-1, 0, 1]:
             raise Exception("This should not happen")
 
         # Make sure that
-        peaks, base_points = assert_structure(xcoord, yvalues, peaks, base_points)
+        peaks, base_points = __assert_structure(xcoord, yvalues, peaks, base_points)
 
     return peaks, base_points
 
 
-def build_fitted_spectrum(waveobs, lines, continuum_model=None):
-    if continuum_model == None:
-        # Build a continuum using the baseline of the fitted lines
-        # - It may contain gaps in regions with few lines
-        continuum_spectra = np.recarray((len(lines['mu']), ), dtype=[('waveobs', float),('flux', float),('err', float)])
-        continuum_spectra['waveobs'] = lines['mu']
-        continuum_spectra['flux'] = lines['baseline']
-        continuum_model = MultiLinearInterpolationContinuumModel(continuum_spectra)
+def __improve_linemask_edges(xcoord, yvalues, base, top, peak):
+    """
+    Given a spectra, the position of a peak and its limiting region where:
 
-    # Build a fitted spectrum
-    fluxes = np.zeros(len(waveobs))
-
-    num_lines = len(lines)
-    i = 0
-    twopi = 2*np.pi
-    for line in lines:
-        if (i % 100) == 0:
-            print "%.2f%%" % (((i*1.0)/num_lines) * 100)
-
-        if line['gamma'] == 9999.0:
-            mu = line['mu']
-            A = line['A']
-            sig = line['sig']
-            squared_sig = sig**2
-            # Build the gaussian corresponding to the line
-            line_flux = (A / np.sqrt(twopi*squared_sig)) * np.exp(- (np.power((waveobs - mu), 2)) / (2*squared_sig))
-        else:
-            mu = line['mu']
-            A = line['A']
-            sig = line['sig']
-            gamma = line['gamma']
-            # Build the Voigt corresponding to the line
-            if sig == 0:
-                # Equivalent to a Lorentzian model
-                line_flux = A*gamma/np.pi/(waveobs*waveobs - 2*waveobs*mu+mu*mu+gamma*gamma)
-            else:
-                # Voigt model (Gaussian and Lorentzian)
-                from scipy.special import wofz
-                w = wofz(((waveobs - mu) + 1j*gamma)* 2**-0.5/sig)
-                line_flux = A * w.real*(twopi)**-0.5/sig
-        wfilter = (line_flux < fluxes) & (line_flux < 0)
-        #if np.min(line_flux) < -1:
-        #    print i, np.max(line_flux), np.min(line_flux), np.std(line_flux), model_rms[i]
-        fluxes[wfilter] = line_flux[wfilter]
-        i += 1
-
-    fluxes += continuum_model(waveobs)
-    total_wavelengths = len(fluxes)
-    fitted_spectra = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-    fitted_spectra['waveobs'] = waveobs
-    fitted_spectra['flux'] = fluxes
-    return fitted_spectra
-
-# Given a spectra, the position of a peak and its limiting region where:
-# - base
-# - Typical shape: concave + convex + concave region
-# - Peak is located within the convex region, although it is just in the border with
-#   the concave region (first element)
-def improve_linemask_edges(xcoord, yvalues, base, top, peak):
+    - Typical shape: concave + convex + concave region.
+    - Peak is located within the convex region, although it is just in the border with the concave region (first element).
+    """
     # Try to use two additional position, since we are going to lose them
     # by doing the first and second derivative
     original_top = top
@@ -950,568 +918,304 @@ def improve_linemask_edges(xcoord, yvalues, base, top, peak):
 
     return new_base, new_top
 
+############## [start] Radial velocity
 
-def print_linemasks_stats(linemasks, discarded):
-    # Profile types
-    gaussian = linemasks['gamma'] == 9999.0
-    voigt = linemasks['gamma'] != 9999.0
+def __create_cross_correlation_mask(data_wave, data_value, wave_grid, velocity_step=None):
+    """
+    If velocity_step is specified, create a mask uniformly spaced in terms of velocity:
 
-    print "---------------GENERAL----------------"
-    print "\t\tMean\tMedian\tStdev"
-    print "RMS:\t\t%.3f\t%.3f\t%.3f" % (np.mean(linemasks['rms'][~discarded]), np.median(linemasks['rms'][~discarded]), np.std(linemasks['rms'][~discarded]))
-    print "A:\t\t%.3f\t%.3f\t%.3f" % (np.mean(linemasks['A'][~discarded]), np.median(linemasks['A'][~discarded]), np.std(linemasks['A'][~discarded]))
-    print "sig:\t\t%.3f\t%.3f\t%.3f" % (np.mean(linemasks['sig'][~discarded]), np.median(linemasks['sig'][~discarded]), np.std(linemasks['sig'][~discarded]))
-    if len(linemasks[voigt & ~discarded]) > 0:
-        print "gamma:\t\t%.3f\t%.3f\t%.3f" % (np.mean(linemasks['gamma'][voigt & ~discarded]), np.median(linemasks['gamma'][voigt & ~discarded]), np.std(linemasks['gamma'][voigt & ~discarded]))
+    - An increment in position (i => i+1) supposes a constant velocity increment (velocity_step).
+    - An increment in position (i => i+1) does not implies a constant wavelength increment.
+    - On each wavelength position (i), the data_values with data_wave below the next wavelength position (i+1) are added up.
+    - wave_grid is only used to identify the first and last wavelength.
+    - Useful for building the cross correlate function used for determining the radial velocity of a star.
+
+    If velocity_step is not specified, create a mask spaced in the same way of the wave_grid:
+
+    - If the wave_grid is uniformly spaced in wavelength, an increment in position (i => i+1) supposes a constant wavelength increment.
+    - Useful for cross correlate/compare one spectra with its radial velocity already corrected against a linelist.
+    """
+    # Speed of light in m/s
+    c = 299792458.0
+
+    if velocity_step != None:
+        total_points = len(data_wave)
+        wave_general_base = wave_grid[0]
+        wave_general_top = wave_grid[-1]
+        grid = []
+        i = 0
+        wave_base = wave_general_base
+        while wave_base < wave_general_top and i < total_points:
+            wave_top = wave_base + wave_base * ((velocity_step*1000) / c) # nm
+            while i < total_points and data_wave[i] < wave_base:
+                i += 1
+            mask_value = 0
+            while i < total_points and data_wave[i] >= wave_base and data_wave[i] < wave_top:
+                mask_value += data_value[i]
+                i += 1
+            grid.append((wave_base, mask_value))
+            wave_base = wave_top
+
+        mask = np.array(grid, dtype=[('wave', float), ('value', float)])
     else:
-        print "gamma:\t\t-\t-\t-"
-    print "R:\t\t%i\t%i\t%i" % (np.median(linemasks['R'][~discarded]), np.mean(linemasks['R'][~discarded]), np.std(linemasks['R'][~discarded]))
-    print "FWHM (nm):\t%.3f\t%.3f\t%.3f" % (np.median(linemasks['fwhm'][~discarded]), np.mean(linemasks['fwhm'][~discarded]), np.std(linemasks['fwhm'][~discarded]))
-    print "FWHM (km/s):\t%.3f\t%.3f\t%.3f" % (np.median(linemasks['fwhm_kms'][~discarded]), np.mean(linemasks['fwhm_kms'][~discarded]), np.std(linemasks['fwhm_kms'][~discarded]))
-    if len(linemasks[gaussian & ~discarded]) > 0:
-        print "---------------GAUSSIAN----------------"
-        print "\t\tMean\tMedian\tStdev"
-        print "RMS:\t\t%.3f\t%.3f\t%.3f" % (np.mean(linemasks['rms'][gaussian & ~discarded]), np.median(linemasks['rms'][gaussian & ~discarded]), np.std(linemasks['rms'][gaussian & ~discarded]))
-        print "A:\t\t%.3f\t%.3f\t%.3f" % (np.mean(linemasks['A'][gaussian & ~discarded]), np.median(linemasks['A'][gaussian & ~discarded]), np.std(linemasks['A'][gaussian & ~discarded]))
-        print "sig:\t\t%.3f\t%.3f\t%.3f" % (np.mean(linemasks['sig'][gaussian & ~discarded]), np.median(linemasks['sig'][gaussian & ~discarded]), np.std(linemasks['sig'][gaussian & ~discarded]))
-        print "R:\t\t%i\t%i\t%i" % (np.median(linemasks['R'][gaussian & ~discarded]), np.mean(linemasks['R'][gaussian & ~discarded]), np.std(linemasks['R'][gaussian & ~discarded]))
-        print "FWHM (nm):\t%.3f\t%.3f\t%.3f" % (np.median(linemasks['fwhm'][gaussian & ~discarded]), np.mean(linemasks['fwhm'][gaussian & ~discarded]), np.std(linemasks['fwhm'][gaussian & ~discarded]))
-        print "FWHM (km/s):\t%.3f\t%.3f\t%.3f" % (np.median(linemasks['fwhm_kms'][gaussian & ~discarded]), np.mean(linemasks['fwhm_kms'][gaussian & ~discarded]), np.std(linemasks['fwhm_kms'][gaussian & ~discarded]))
-    if len(linemasks[voigt & ~discarded]) > 0:
-        print "---------------VOIGT-------------------"
-        print "\t\tMean\tMedian\tStdev"
-        print "RMS:\t\t%.3f\t%.3f\t%.3f" % (np.mean(linemasks['rms'][voigt & ~discarded]), np.median(linemasks['rms'][voigt & ~discarded]), np.std(linemasks['rms'][voigt & ~discarded]))
-        print "A:\t\t%.3f\t%.3f\t%.3f" % (np.mean(linemasks['A'][voigt & ~discarded]), np.median(linemasks['A'][voigt & ~discarded]), np.std(linemasks['A'][voigt & ~discarded]))
-        print "sig:\t\t%.3f\t%.3f\t%.3f" % (np.mean(linemasks['sig'][voigt & ~discarded]), np.median(linemasks['sig'][voigt & ~discarded]), np.std(linemasks['sig'][voigt & ~discarded]))
-        print "gamma:\t\t%.3f\t%.3f\t%.3f" % (np.mean(linemasks['gamma'][voigt & ~discarded]), np.median(linemasks['gamma'][voigt & ~discarded]), np.std(linemasks['gamma'][voigt & ~discarded]))
-        print "R:\t\t%i\t%i\t%i" % (np.median(linemasks['R'][voigt & ~discarded]), np.mean(linemasks['R'][voigt & ~discarded]), np.std(linemasks['R'][voigt & ~discarded]))
-        print "FWHM (nm):\t%.3f\t%.3f\t%.3f" % (np.median(linemasks['fwhm'][voigt & ~discarded]), np.mean(linemasks['fwhm'][voigt & ~discarded]), np.std(linemasks['fwhm'][voigt & ~discarded]))
-        print "FWHM (km/s):\t%.3f\t%.3f\t%.3f" % (np.median(linemasks['fwhm_kms'][voigt & ~discarded]), np.mean(linemasks['fwhm_kms'][voigt & ~discarded]), np.std(linemasks['fwhm_kms'][voigt & ~discarded]))
+        total_points = len(wave_grid)
+        mask = np.recarray((total_points, ), dtype=[('wave', float), ('value', float)])
+        mask['wave'] = wave_grid
+        mask['value'] = np.zeros(total_points)
+
+        mask_value = mask['value']
+
+        max_j = len(data_wave)
+        j = 0
+        for i in np.arange(total_points-1):
+            wave_base = wave_grid[i]
+            wave_top = wave_grid[i+1]
+            while j < max_j and data_wave[j] < wave_base:
+                j += 1
+            while j < max_j and data_wave[j] >= wave_base and data_wave[j] < wave_top:
+                mask_value[i] += data_value[j]
+                j += 1
+            if j >= max_j:
+                break
+    return mask
+
+def __cross_correlation_function(spectra, mask, lower_velocity_limit, upper_velocity_limit, velocity_step, frame=None):
+    """
+    Calculates the cross correlation value between the spectra and the specified mask
+    by shifting the mask from lower to upper velocity.
+
+    - The spectra and the mask should be uniformly spaced in terms of velocity (which
+      implies non-uniformly distributed in terms of wavelength).
+    - The velocity step used for the construction of the mask should be the same
+      as the one specified in this function.
+    - The lower/upper/step velocity is only used to determine how many shifts
+      should be done (in array positions) and return a velocity grid.
+    """
+
+    last_reported_progress = -1
+    if frame != None:
+        frame.update_progress(0)
+
+    # Speed of light in m/s
+    c = 299792458.0
+
+    velocity = np.arange(lower_velocity_limit, upper_velocity_limit, velocity_step)
+    # 1 shift = 0.5 km/s (or the specified value)
+    shifts = np.int32(np.arange(lower_velocity_limit, upper_velocity_limit, velocity_step) / velocity_step)
 
 
-if __name__ == '__main__':
-    #### VALD line list
-    ## Original VALD linelist
-    #vald_file = "input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
-    ##vald_file = "input/linelists/uves_linelist_mpa_v3.sme"
-    #output_file = "input/linelists/VALD.300_1100nm.lst"
-    #minimum_depth = 0.0
-    #vald_linelist = read_VALD_linelist(vald_file, minimum_depth=minimum_depth)
-    #linelist = VALD_to_SPECTRUM_format(vald_linelist)
-    ## Filter discarded:
-    #linelist = linelist[linelist['species'] != "Discard"]
-    #asciitable.write(linelist, output=output_file, Writer=asciitable.FixedWidthNoHeader, delimiter=None, bookend=False, formats={'wave (A)': '%4.3f', })
-    #import ipdb
-    #ipdb.set_trace()
+    num_shifts = len(shifts)
+    # Cross-correlation function
+    ccf = np.zeros(num_shifts)
+    for shift, i in zip(shifts, np.arange(num_shifts)):
+        if shift == 0:
+            shifted_mask = mask['value']
+        elif shift > 0:
+            shifted_mask = np.hstack((shift*[0], mask['value'][:-1*shift]))
+        else:
+            shifted_mask = np.hstack((mask['value'][-1*shift:], -1*shift*[0]))
+        ccf[i] = np.correlate(spectra['flux'], shifted_mask)[0]
+        current_work_progress = ((i*1.0)/num_shifts) * 100
+        if report_progress(current_work_progress, last_reported_progress):
+            last_reported_progress = current_work_progress
+            logging.info("%.2f%%" % current_work_progress)
+            if frame != None:
+                frame.update_progress(current_work_progress)
 
-    #VALD_top_3_to_RV_format("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", "input/rv/VALD.300_1100nm.rv.lst", top=1, wave_step=10)
+    ccf = ccf/np.max(ccf) # Normalize
 
-    ### Line detection and fitting example:
-
-    #############################
-    ## Stars' spectra
-    #############################
-    #star, resolution = "input/spectra/examples/espadons_mu_leo.s.gz", 80000
-    #star, resolution = "input/spectra/examples/espadons_mu_leo_norm.s.gz", 80000
-    #star, resolution = "input/spectra/examples/harps_procyon.s.gz", 115000
-    #star, resolution = "input/spectra/examples/harps_procyon_norm.s.gz", 115000
-    #star, resolution = "input/spectra/examples/narval_arcturus.s.gz", 80000
-    #star, resolution = "input/spectra/examples/narval_arcturus_norm.s.gz", 80000
-    #star, resolution = "input/spectra/examples/narval_mu_cas.s.gz", 80000
-    #star, resolution = "input/spectra/examples/narval_mu_cas_norm.s.gz", 80000
-    #star, resolution = "input/spectra/examples/narval_sun.s.gz", 80000
-    star, resolution = "input/spectra/examples/narval_sun_norm.s.gz", 80000
-    #star, resolution = "input/spectra/binaries/elodie_hd005516A_spectroscopic_binary.s.gz", 42000
-    #star, resolution = "input/spectra/binaries/elodie_hd085503_single_star.s.gz", 42000
-    #star, resolution = "input/spectra/instruments/elodie_hd146233_SN237_normalized.s.gz", 42000
-    #star, resolution = "input/spectra/instruments/elodie_hd146233_SN237.s.gz", 42000
-    #star, resolution = "input/spectra/instruments/giraffe_hd107328_normalized.s.gz", 16000
-    #star, resolution = "input/spectra/instruments/giraffe_hd107328.s.gz", 16000
-    #star, resolution = "input/spectra/instruments/narval_hd146233_normalized.s.gz", 80000
-    #star, resolution = "input/spectra/instruments/narval_hd146233.s.gz", 80000
-    #star, resolution = "input/spectra/instruments/uves_hd146233.s.gz", 47000
-    #star, resolution = "input/spectra/instruments/uves_hd146233_normalized.s.gz", 47000
-    #star, resolution = "input/spectra/instruments/espadons_hd85503.s.gz", 80000
-    #star, resolution = "input/spectra/instruments/harps_procyon.s.gz", 115000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr1567_001.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr2845_001.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr3492_001.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr3982_001.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr4828_002.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr708_001.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr7906_001.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr838_001.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr4182_001.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr5867_001.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr7235_001.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr8028_001.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr8976_001.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr4828_001.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr6629_001.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr7528_001.s.gz", 80000
-    #star, resolution = "input/spectra/telluric_standards/narval_hr804_001.s.gz", 80000
-    #star, resolution = "input/spectra/synthetic/synth_LUMBA_Gustafsson_SME_arcturus.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_LUMBA_Gustafsson_SME_mu_cas_a.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_LUMBA_Gustafsson_SME_mu_leo.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_LUMBA_Gustafsson_SME_sun.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_SPEC_kurucz_arcturus.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_SPEC_kurucz_mu_cas_a.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_SPEC_kurucz_mu_leo.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_SPEC_kurucz_sun.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_VALD_kurucz_arcturus.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_VALD_kurucz_mu_cas_a.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_VALD_kurucz_mu_leo.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_VALD_kurucz_sun.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_VALD_castelli_arcturus.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_SPEC_castelli_arcturus.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_SPEC_castelli_mu_cas_a.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_SPEC_castelli_mu_leo.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_SPEC_castelli_sun.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_VALD_castelli_mu_cas_a.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_VALD_castelli_mu_leo.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/synth_VALD_castelli_sun.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/telluric_standard_atm_air_model.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/telluric_standard_atm_air_model_norm.s.gz", 200000
-
-    # Normalize spectra
-    normalize = False #True
-    # Smooth spectra using the instrumental resolution
-    smooth_spectra = True
-
-    #############################
-    ## Synthetic telluric lines' spectra
-    #star, resolution = "input/spectra/synthetic/telluric_standard_atm_air_model.s.gz", 200000
-    #star, resolution = "input/spectra/synthetic/telluric_standard_atm_air_model_norm.s.gz", 200000
-    # Do NOT smooth spectra using the instrumental resolution
-    #smooth_spectra = True
-    #############################
-
-    ### Fitting parameters
-    discard_gaussian = False
-    discard_voigt = True
-    generate_fitted_spectra = True
-
-    ### Filtering parameters
-    # Discard lines that do not have at least a given depth
-    minimum_depth = 0.05 # (% of the continuum)
-    maximum_depth = 1.00 # (% of the continuum)
-    # Discard potential gaps in the spectra that are identified as lines
-    discard_too_big_wavelength_range = False
-    # Discard outliers (biggest RMS)
-    discard_outlier_fit = False
-    # Discard outliers in resolving power
-    discard_outlier_R = False
-
-    ## Reading spectra
-    print "Reading spectrum..."
-    spectra = read_spectra(star)
-
-    if normalize:
-        print "Continuum normalization..."
-        continuum_model_for_normalization = fit_continuum(spectra)
-        spectra['flux'] /= continuum_model_for_normalization(spectra['waveobs'])
-
-    #--- Radial velocity ----------------------------------------------
-    print "Radial Velocity...",
-    #--- Line lists ----------------------------------------------
-    # - Atomic
-    vald_linelist_file = "input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
-    linelist_atomic = read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
-    xcoord, fluxes, num_used_lines = build_velocity_profile(spectra, \
-            linelist_atomic, lower_velocity_limit=-200.0, upper_velocity_limit=200.0, velocity_step=0.5)
-    models = modelize_velocity_profile(xcoord, fluxes)
-    rv = np.round(models[0].mu(), 2) # km/s
-    spectra = correct_velocity(spectra, rv)
-    print rv, "km/s"
-
-    original_spectra = spectra
-    if smooth_spectra:
-        print "Convolving (smoothing)..."
-        # Use 2 times the resolution to smooth the spectra without loosing too much details
-        spectra = convolve_spectra(original_spectra, 2*resolution)
-
-    print "Finding peaks and base points..."
-    peaks, base_points = find_peaks_and_base_points(spectra['waveobs'], spectra['flux'])
-
-    # Determine continuum
-    print "Determining continuum..."
-    continuum_model = fit_continuum(spectra)
-
-    print "Generating linemasks, fitting gaussians/voigt and matching VALD lines..."
-    linemasks = generate_linemasks(original_spectra, peaks, base_points, continuum_model, minimum_depth=minimum_depth, maximum_depth=maximum_depth, smoothed_spectra=spectra ,vald_linelist_file="input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst", telluric_linelist_file = "input/linelists/telluric/standard_atm_air_model.lst", discard_gaussian = discard_gaussian, discard_voigt = discard_voigt)
-
-    ####################################################################
-    ##### FILTERS
-    ####################################################################
-    # - Mandatory filters
-    ####################################################################
-    print "Applying peak filters..."
-    rejected_by_noise = detect_false_positives_and_noise(spectra, linemasks)
-
-    # Identify peaks higher than continuum
-    # - Depth is negative if the peak is higher than the continuum
-    # - Relative depth is negative if the mean base point is higher than the continuum
-    rejected_by_depth_higher_than_continuum = (linemasks['depth'] < 0)
-
-    # Identify peaks with a depth inferior/superior to a given limit (% of the continuum)
-    # - Observed depth
-    rejected_by_depth_limits1 = np.logical_or((linemasks['depth'] <= minimum_depth), (linemasks['depth'] >= maximum_depth))
-    # - Fitted depth
-    rejected_by_depth_limits2 = np.logical_or((linemasks['depth_fit'] <= minimum_depth), (linemasks['depth_fit'] >= maximum_depth))
-    rejected_by_depth_limits = np.logical_or(rejected_by_depth_limits1, rejected_by_depth_limits2)
-
-    # Identify bad fits (9999.0: Cases where has not been possible to fit a gaussian/voigt)
-    rejected_by_bad_fit = (linemasks['rms'] >= 9999.0)
-
-    rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
-    rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
-
-    discarded = rejected_by_noise
-    discarded = np.logical_or(discarded, rejected_by_depth_higher_than_continuum)
-    discarded = np.logical_or(discarded, rejected_by_depth_limits)
-    discarded = np.logical_or(discarded, rejected_by_bad_fit)
-    discarded = np.logical_or(discarded, rejected_by_atomic_line_not_found)
-    discarded = np.logical_or(discarded, rejected_by_telluric_line)
-    mandatory_discarded = discarded.copy()
-    ####################################################################
-    # - Optional filters for outliers
-    #   * Outliers identification should be done avoiding the already discarded points
-    #     otherwise, we will have noise contamination
-    ####################################################################
-    # Identify linemasks with too big wavelength range (outliers)
-    # WARNING: If the spectrum has a small wavelength range with some few strong features
-    #          they may be erroneously discarded by this filter
-    wave_diff = (linemasks['wave_top'] - linemasks['wave_base']) / (linemasks['top'] - linemasks['base'])
-    wave_diff_selected, wave_diff_selected_filter = sigma_clipping(wave_diff[~mandatory_discarded], sig=3, meanfunc=np.median) # Discard outliers
-    accepted_index = np.arange(len(wave_diff))[~mandatory_discarded][wave_diff_selected_filter]
-    rejected_by_wave_gaps = wave_diff < 0 # Create an array of booleans
-    rejected_by_wave_gaps[:] = True # Initialize
-    rejected_by_wave_gaps[accepted_index] = False
-    # If the peak was already discarded previously by the mandatory filters, do not mark it
-    rejected_by_wave_gaps[mandatory_discarded] = False
-
-    if discard_too_big_wavelength_range:
-        discarded = np.logical_or(discarded, rejected_by_wave_gaps)
-
-    # Identify outliers considering RMS
-    rms_selected, rms_selected_filter = sigma_clipping(linemasks['rms'][~mandatory_discarded], sig=3, meanfunc=np.median) # Discard outliers
-    accepted_index = np.arange(len(linemasks['rms']))[~mandatory_discarded][rms_selected_filter]
-    rejected_by_outlier_fit = linemasks['rms'] < 0 # Create an array of booleans
-    rejected_by_outlier_fit[:] = True # Initialize
-    rejected_by_outlier_fit[accepted_index] = False
-    # If the peak was already discarded previously by the mandatory filters, do not mark it
-    rejected_by_outlier_fit[mandatory_discarded] = False
-
-    if discard_outlier_fit:
-        discarded = np.logical_or(discarded, rejected_by_outlier_fit)
-
-    # Identify outliers considering the resolution
-    r_selected, r_selected_filter = sigma_clipping(linemasks['R'][~mandatory_discarded], sig=3, meanfunc=np.median) # Discard outliers
-    accepted_index = np.arange(len(linemasks['R']))[~mandatory_discarded][r_selected_filter]
-    rejected_by_outlier_R = linemasks['R'] < 0 # Create an array of booleans
-    rejected_by_outlier_R[:] = True # Initialize
-    rejected_by_outlier_R[accepted_index] = False
-    # If the peak was already discarded previously by the mandatory filters, do not mark it
-    rejected_by_outlier_R[mandatory_discarded] = False
-
-    if discard_outlier_R:
-        discarded = np.logical_or(discarded, rejected_by_outlier_R)
-
-    # Base points near the continuum in 5%
-    c1 = continuum_model(linemasks['wave_base_fit'])
-    f1 = spectra['flux'][linemasks['base_fit']]
-    d1 = ((c1 - f1) / c1)
-    rejected_by_not_ideal1 = d1 > 0.05
-    c2 = continuum_model(linemasks['wave_top_fit'])
-    f2 = spectra['flux'][linemasks['top_fit']]
-    d2 = ((c2 - f2) / c2)
-    rejected_by_not_ideal2 = d2 > 0.05
-    # Base point with similar fluxes (less than 1% difference)
-    x = np.abs(f1 - f2) / f1
-    rejected_by_not_ideal = x > 0.05
-    #rejected_by_not_ideal = np.logical_or(rejected_by_not_ideal1, rejected_by_not_ideal2)
-    #rejected_by_not_ideal = np.logical_or(rejected_by_not_ideal, rejected_by_not_ideal3)
-    discarded = np.logical_or(discarded, rejected_by_not_ideal)
-
-    # Identify outliers in the cross-matching with the VALD line list
-    #wave_peak_diff = np.abs(linemasks['wave_peak'] - linemasks['VALD_wave_peak'])
-    ##wave_diff_selected, wave_diff_selected_filter = sigma_clipping(wave_peak_diff[~discarded], sig=3, meanfunc=np.median) # Discard outliers
-    ##accepted_index = np.arange(len(wave_peak_diff))[~discarded][wave_diff_selected_filter]
-    ##bad_VALD_crossmatch = wave_peak_diff < 0 # Create an array of booleans
-    ##bad_VALD_crossmatch[:] = True # Initialize
-    ##bad_VALD_crossmatch[accepted_index] = False
-    #bad_VALD_crossmatch = wave_peak_diff > 0.005
-
-    #telluric_R_selected, telluric_R_selected_filter = sigma_clipping(linemasks['telluric_R'][~discarded], sig=3, meanfunc=np.median) # Discard outliers
-    #accepted_index = np.arange(len(linemasks['telluric_R']))[~discarded][telluric_R_selected_filter]
-    #bad_telluric_R = linemasks['telluric_R'] < 0 # Create an array of booleans
-    #bad_telluric_R[:] = True # Initialize
-    #bad_telluric_R[accepted_index] = False
+    return velocity, ccf
 
 
-    #telluric_wave_peak_diff = np.abs(linemasks['wave_peak'] - linemasks['telluric_wave_peak'])
-    ##wave_diff_selected, wave_diff_selected_filter = sigma_clipping(telluric_wave_peak_diff[~discarded], sig=3, meanfunc=np.median) # Discard outliers
-    ##accepted_index = np.arange(len(wave_peak_diff))[~discarded][wave_diff_selected_filter]
-    ##bad_telluric_crossmatch = telluric_wave_peak_diff < 0 # Create an array of booleans
-    ##bad_telluric_crossmatch[:] = True # Initialize
-    ##bad_telluric_crossmatch[accepted_index] = False
-    #bad_telluric_crossmatch = (telluric_wave_peak_diff > 0.005) & (linemasks['telluric_fwhm'] != 0)
+def build_velocity_profile(spectra, linelist, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, frame=None):
+    """
+    Determines the velocity profile by cross-correlating the spectra with a mask
+    built from a line list.
 
-    ####################################################################
-    linemasks['discarded'][discarded] = True
-    ####################################################################
-    ##### END FILTERS
-    ####################################################################
+    :returns:
+        Velocity coordenates, normalized fluxes (relative intensities) and number of used lines.
 
-    # Profile types
-    gaussian = linemasks['gamma'] == 9999.0
-    voigt = linemasks['gamma'] != 9999.0
+    """
+    # Build a mask with non-uniform wavelength increments but constant in terms of velocity
+    linelist_mask = __create_cross_correlation_mask(linelist['wave_peak'], linelist['depth'], spectra['waveobs'], velocity_step)
 
-    ## Peaks
-    print "--------------------------------------"
-    print "Number of preliminary peaks:\t", len(linemasks)
-    print "- Noise and false positive:\t", len(linemasks[rejected_by_noise])
-    print "- Peaks higher than continuum:\t", len(linemasks[rejected_by_depth_higher_than_continuum])
-    print "- Bad fits:\t\t\t", len(linemasks[rejected_by_bad_fit])
-    print "- Out of depth limits:\t\t", len(linemasks[rejected_by_depth_limits]), "\t[%.2f - %.2f]" % (minimum_depth, maximum_depth)
-    print "- No atomic line data:\t\t", len(linemasks[rejected_by_atomic_line_not_found])
-    print "- Telluric line:\t\t", len(linemasks[rejected_by_telluric_line])
-    print "Number of line candidates:\t", len(linemasks[~mandatory_discarded])
-    if discard_too_big_wavelength_range:
-        print "- Too big wavelength range:\t", len(linemasks[rejected_by_wave_gaps]), "\t[Enabled]"
+    # Resampling spectra to match the wavelength grid of the mask
+    # Speed of light in m/s
+    c = 299792458.0
+    interpolated_spectra = resample_spectra(spectra, linelist_mask['wave'])
+
+    # Obtain the cross-correlate function by shifting the mask
+    velocity, ccf = __cross_correlation_function(interpolated_spectra, linelist_mask, lower_velocity_limit = lower_velocity_limit, upper_velocity_limit =upper_velocity_limit, velocity_step = velocity_step, frame=frame)
+    return velocity, ccf, len(linelist_mask)
+
+
+def modelize_velocity_profile(xcoord, fluxes, only_one_peak=False):
+    """
+    Fits Gaussians to the deepest peaks in the velocity profile.
+
+    * For Radial Velocity profiles, more than 1 outlier peak implies that the star is a spectroscopic binary.
+
+    :returns:
+        Array of fitted models.
+
+    """
+    models = []
+    if len(xcoord) == 0 or len(fluxes) == 0:
+        return models
+
+    # Smooth flux
+    sig = 1
+    smoothed_fluxes = scipy.ndimage.filters.gaussian_filter1d(fluxes, sig)
+    # Finding peaks and base points
+    peaks, base_points = __find_peaks_and_base_points(xcoord, smoothed_fluxes)
+
+    if len(peaks) == 0:
+        return models
+
+    # Fit continuum to normalize
+    nknots = 2
+    continuum_model = UniformCDFKnotSplineModel(nknots)
+    continuum_model.fitData(xcoord[base_points], fluxes[base_points])
+    fluxes /= continuum_model(xcoord)
+
+    if len(peaks) != 0:
+        # Adjusting edges
+        base = base_points[:-1]
+        top = base_points[1:]
+        new_base = np.zeros(len(base), dtype=int)
+        new_top = np.zeros(len(base), dtype=int)
+        for i in np.arange(len(peaks)):
+            new_base[i], new_top[i] = __improve_linemask_edges(xcoord, fluxes, base[i], top[i], peaks[i])
+        base = new_base
+        top = new_top
+
+        if only_one_peak:
+            # Just try with the deepest line
+            selected_peaks_indices = []
+        else:
+            # Identify peak outliers
+            fluxes_not_outliers, selected_fluxes_not_outliers = sigma_clipping(fluxes[peaks], sig=3, meanfunc=np.median)
+            selected_peaks_indices = np.arange(len(peaks))[~selected_fluxes_not_outliers]
+            # FILTER: Make sure that the outliers selected are outliers because they are
+            # deeper than the rest (we do not want outliers because they are less deep than the rest)
+            interesting_outliers = fluxes[peaks[selected_peaks_indices]] < np.median(fluxes[peaks])
+            selected_peaks_indices = selected_peaks_indices[interesting_outliers]
+            # Sort the interesting peaks from more to less deep
+            sorted_peaks_indices = np.argsort(fluxes[peaks[selected_peaks_indices]])
+            selected_peaks_indices = selected_peaks_indices[sorted_peaks_indices]
+            # Discard too small peaks (less than a third of the main peak)
+            if len(selected_peaks_indices) >= 2:
+                diff = (fluxes[peaks[selected_peaks_indices]] - fluxes[peaks[selected_peaks_indices]][0])
+                wfilter = diff < fluxes[peaks[selected_peaks_indices]][0] / 3
+                selected_peaks_indices = selected_peaks_indices[wfilter]
+
+        if len(selected_peaks_indices) == 0:
+            # Try with the deepest line
+            sorted_peak_indices = np.argsort(fluxes[peaks])
+            selected_peaks_indices = [sorted_peak_indices[0]]
     else:
-        print "- Too big wavelength range:\t", len(linemasks[rejected_by_wave_gaps]), "\t[Disabled]"
-    if discard_outlier_fit:
-        print "- Outlier fits:\t\t\t", len(linemasks[rejected_by_outlier_fit]), "\t[Enabled]"
+        # If no peaks found, just consider the deepest point and mark the base and top
+        # as the limits of the whole data
+        sorted_fluxes_indices = np.argsort(fluxes)
+        peaks = sorted_fluxes_indices[0]
+        base = 0
+        top = len(xcoord) - 1
+        selected_peaks_indices = [0]
+
+    for i in np.asarray(selected_peaks_indices):
+        model = GaussianModel()
+
+        # Parameters estimators
+        baseline = np.median(fluxes[base_points])
+        A = fluxes[peaks[i]] - baseline
+        sig = np.abs(xcoord[top[i]] - xcoord[base[i]])/3.0
+        mu = xcoord[peaks[i]]
+
+        parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for j in np.arange(4)]
+        parinfo[0]['value'] = 1#fluxes[base[i]] # baseline # Continuum
+        parinfo[0]['fixed'] = True
+        #parinfo[0]['limited'] = [False, True]
+        #parinfo[0]['limits'] = [np.min([fluxes[base[i]], fluxes[top[i]]]), np.max([fluxes[base[i]], fluxes[top[i]]])]
+        parinfo[1]['value'] = A # Only negative (absorption lines) and greater than the lowest point + 25%
+        parinfo[1]['limited'] = [False, True]
+        parinfo[1]['limits'] = [0., 0.]
+        parinfo[2]['value'] = sig # Only positives (absorption lines)
+        parinfo[2]['limited'] = [True, False]
+        parinfo[2]['limits'] = [0., 0.]
+        parinfo[3]['value'] = mu # Peak only within the xcoord slice
+        parinfo[3]['limited'] = [True, True]
+        parinfo[3]['limits'] = [xcoord[base[i]], xcoord[top[i]]]
+
+        f = fluxes[base[i]:top[i]+1]
+        min_flux = np.min(f)
+        # More weight to the deeper fluxes
+        if min_flux < 0:
+            weights = f + -1*(min_flux) + 0.01 # Above zero
+            weights = np.min(weights) / weights
+        else:
+            weights = min_flux / f
+
+        try:
+            #model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=parinfo, weights=weights)
+            model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=parinfo)
+            models.append(model)
+        except Exception, e:
+            print e.message
+
+    #plt.plot(xcoord, fluxes)
+    #if len(models) >= 1:
+        #plt.plot(xcoord, models[0](xcoord))
+    #plt.scatter(xcoord[base_points], fluxes[base_points])
+    #plt.show()
+
+    return np.asarray(models)
+
+def select_good_velocity_profile_models(models, xcoord, fluxes):
+    """
+    Select the modeled peaks that are not deeper than mean flux + 6*standard deviation
+    unless it is the only detected peak.
+    """
+    accept = []
+    if len(models) == 0:
+        return accept
+
+    ## We want to calculate the mean and standard deviation of the velocity profile
+    ## but discounting the effect of the deepest detected lines:
+    # Build the fluxes for the composite models but ONLY for lines deeper than 0.97
+    line_fluxes = None
+    for model in models:
+        if model(model.mu()) >= 0.97:
+            continue
+        if line_fluxes == None:
+            line_fluxes = model(xcoord)
+            continue
+
+        current_line_fluxes = model(xcoord)
+        wfilter = line_fluxes > current_line_fluxes
+        line_fluxes[wfilter] = current_line_fluxes[wfilter]
+    ### Substract the line models conserving the base level
+    if line_fluxes != None:
+        values = 1 + fluxes - line_fluxes
     else:
-        print "- Outlier fits:\t\t\t", len(linemasks[rejected_by_outlier_fit]), "\t[Disabled]"
-    if discard_outlier_R:
-        print "- Resolving power outliers:\t", len(linemasks[rejected_by_outlier_R]), "\t[Enabled]"
-    else:
-        print "- Resolving power outliers:\t", len(linemasks[rejected_by_outlier_R]), "\t[Disabled]"
-    print "- Not ideal:\t\t\t", len(linemasks[rejected_by_not_ideal]), "\t[Enabled]"
-    print "Final number of lines:\t\t", len(linemasks[~discarded])
-    print "- Gaussian profile:\t\t", len(linemasks[gaussian & ~discarded])
-    print "- Voigt profile:\t\t", len(linemasks[voigt & ~discarded])
-    print_linemasks_stats(linemasks, discarded)
+        values = fluxes
+    ## Finally, calculate the mean and standard deviation
+    check_mean = np.mean(values)
+    check_std = np.std(values)
+    for (i, model) in enumerate(models):
+        mu = model.mu()
+        peak = model(mu)
 
-    if generate_fitted_spectra:
-        print "Building a fitted spectrum..."
-        #waveobs = generate_wavelength_grid(np.min(spectra['waveobs']), np.max(spectra['waveobs']), resolution, points_per_fwhm = 3)
-        waveobs = spectra['waveobs']
-        fitted_spectra = build_fitted_spectrum(waveobs, linemasks[~discarded], continuum_model)
-
-        # Plot
-        fig = plt.figure()
-        plt.plot(spectra['waveobs'], original_spectra['flux'])
-        plt.plot(spectra['waveobs'], continuum_model(spectra['waveobs']))
-        plt.plot(fitted_spectra['waveobs'], fitted_spectra['flux'])
-        #plt.scatter(spectra['waveobs'][peaks], original_spectra['flux'][peaks], c='red')
-        #plt.scatter(spectra['waveobs'][base_points], original_spectra['flux'][base_points], c='green')
-        plt.scatter(spectra['waveobs'][peaks[~discarded]], original_spectra['flux'][peaks[~discarded]], c='red')
-        plt.scatter(spectra['waveobs'][base_points[~discarded]], original_spectra['flux'][base_points[~discarded]], c='green')
-        plt.scatter(spectra['waveobs'][base_points[1:][~discarded[:-1]]], original_spectra['flux'][base_points[1:][~discarded[:-1]]], c='green')
-        plt.show()
-    else:
-        fitted_spectra = None
-
-    ##### Saving...
-    dump_filename = "output/" + os.path.basename(star) + ".dump"
-    # Complete dump
-    version = 20120402
-    data = (os.path.abspath(star), resolution, linemasks, fitted_spectra)
-    pickle.dump((version, data), gzip.open(dump_filename, "wb", compresslevel=3), protocol=2)
-
-    ##### Restoring...
-    #dump_filename = "output/" + os.path.basename(star) + ".dump"
-    #version, data = pickle.load(gzip.open(dump_filename, "rb"))
-    #star, resolution, linemasks, fitted_spectra = data
-
-    ## Build a continuum using the baseline of the fitted lines
-    ## - It may contain gaps in regions with few lines
-    #continuum_spectra = np.recarray((len(linemasks['mu'][~discarded]), ), dtype=[('waveobs', float),('flux', float),('err', float)])
-    #continuum_spectra['waveobs'] = linemasks['mu'][~discarded]
-    #continuum_spectra['flux'] = linemasks['baseline'][~discarded]
-    #continuum_model = MultiLinearInterpolationContinuumModel(continuum_spectra)
-    ##################
-
-    #from pymodelfit import LinearModel
-    #trend = LinearModel()
-    #trend.fitData(linemasks[~discarded]['wave_peak'], linemasks['fwhm'][~discarded])
-    #plt.scatter(linemasks[~discarded]['wave_peak'], linemasks['fwhm'][~discarded], s=4)
-    #plt.plot(linemasks[~discarded]['wave_peak'], trend(linemasks[~discarded]['wave_peak']), color="red", linewidth=3)
-    #plt.xlabel('Wavelength peak')
-    #plt.ylabel('FWHM (nm)')
-    #plt.show()
-
-    #from pymodelfit import LinearModel
-    #trend = LinearModel()
-    #trend.fitData(linemasks[~discarded]['wave_peak'], linemasks['fwhm_kms'][~discarded])
-    #plt.scatter(linemasks[~discarded]['wave_peak'], linemasks['fwhm_kms'][~discarded], s=4)
-    #plt.plot(linemasks[~discarded]['wave_peak'], trend(linemasks[~discarded]['wave_peak']), color="red", linewidth=3)
-    #plt.xlabel('Wavelength peak')
-    #plt.ylabel('FWHM (km/s)')
-    #plt.show()
-
-    #from pymodelfit import LinearModel
-    #trend = LinearModel()
-    #trend.fitData(linemasks[~discarded]['wave_peak'], linemasks['R'][~discarded])
-    #plt.scatter(linemasks[~discarded]['wave_peak'], linemasks['R'][~discarded], s=4)
-    #plt.plot(linemasks[~discarded]['wave_peak'], trend(linemasks[~discarded]['wave_peak']), color="red", linewidth=3)
-    #plt.xlabel('Wavelength peak')
-    #plt.ylabel('Resolving power')
-    #plt.show()
-
-    #from pymodelfit import LinearModel
-    #trend = LinearModel()
-    #trend.fitData(linemasks[~rejected_by_outlier_R]['wave_peak'], linemasks['R'][~rejected_by_outlier_R])
-    #plt.scatter(linemasks[~rejected_by_outlier_R]['wave_peak'], linemasks['R'][~rejected_by_outlier_R], s=4)
-    #plt.plot(linemasks[~rejected_by_outlier_R]['wave_peak'], trend(linemasks[~rejected_by_outlier_R]['wave_peak']), color="red", linewidth=3)
-    #plt.xlabel('Wavelength peak')
-    #plt.ylabel('Resolving power')
-    #plt.show()
-
-    #from pymodelfit import LinearModel
-    #trend = LinearModel()
-    #r = (linemasks['telluric_R'] > 0) #& (linemasks['telluric_R'] < 100000)
-    ##r = r & (np.abs(linemasks['depth'] - linemasks['telluric_depth']) < 0.1)
-    ##r = r & (linemasks['fwhm'] - linemasks['telluric_fwhm'] < 0.04)
-    #r = r & (linemasks['VALD_wave_peak'] == 0)
-    #trend.fitData(linemasks[r]['wave_peak'], linemasks['telluric_R'][r])
-    #plt.plot(linemasks[r]['wave_peak'], linemasks['telluric_R'][r])
-    ##plt.plot(linemasks[r]['wave_peak'], trend(linemasks[r]['wave_peak']), color="red", linewidth=3)
-    #plt.xlabel('Wavelength peak')
-    #plt.ylabel('Resolving power')
-    #plt.show()
-
-    #print np.mean(linemasks['telluric_R'][r])
-
-    #from pymodelfit import LinearModel
-    #trend = LinearModel()
-    #trend.fitData(linemasks[gaussian & ~discarded]['wave_peak'], linemasks['R'][gaussian & ~discarded])
-    #plt.scatter(linemasks[gaussian & ~discarded]['wave_peak'], linemasks['R'][gaussian & ~discarded], s=4)
-    #plt.plot(linemasks[gaussian & ~discarded]['wave_peak'], trend(linemasks[gaussian & ~discarded]['wave_peak']), color="red", linewidth=3)
-    #plt.xlabel('Wavelength peak')
-    #plt.ylabel('Resolving power')
-    #plt.show()
-
-    #show_histogram(linemasks['R'][~discarded][linemasks['R'][~discarded] < 100000])
-
-    #from pymodelfit import LinearModel
-    #trend = LinearModel()
-    #trend.fitData(linemasks[gaussian & ~discarded]['depth'], linemasks['R'][gaussian & ~discarded])
-    #plt.scatter(linemasks[gaussian & ~discarded]['depth'], linemasks['R'][gaussian & ~discarded], s=4)
-    #plt.plot(linemasks[gaussian & ~discarded]['depth'], trend(linemasks[gaussian & ~discarded]['depth']), color="red", linewidth=3)
-    #plt.xlabel('Depth')
-    #plt.ylabel('Resolving power')
-    #plt.show()
-
-    #from pymodelfit import LinearModel
-    #plt.scatter(linemasks['R'][gaussian & ~discarded], linemasks[gaussian & ~discarded]['depth'], s=4)
-    #plt.ylabel('Depth')
-    #plt.xlabel('Resolving power')
-    #plt.show()
-
-    ############ STATS
-    #wave_peak_diff = np.abs(linemasks['wave_peak'] - linemasks['VALD_wave_peak'])
-    #show_histogram(np.abs(wave_peak_diff), nbins=100)
-    #show_histogram(np.abs(linemasks["depth"] - linemasks["relative_depth"]), nbins=100)
-    #show_histogram(linemasks["rms"], nbins=100)
-    #show_histogram(linemasks["A"], nbins=100)
-    #show_histogram(linemasks["sig"], nbins=100)
-    #
-    #show_histogram(linemasks["depth"], nbins=100)
-    #show_histogram(linemasks["relative_depth"], nbins=100)
-    #show_histogram(np.abs(linemasks["depth"] - linemasks["solar_depth"]), nbins=100)
-    #show_histogram(linemasks[~discarded]['rms'], nbins=100)
-
-    #show_histogram(linemasks[~discarded]['sig'], xlabel='sig', nbins=100)
-    #show_histogram(linemasks[~discarded]['A'], xlabel='A', nbins=100)
-    #show_histogram(linemasks[~discarded]['gamma'], xlabel='gamma', nbins=100)
-
-    #show_histogram(linemasks['R'][~discarded][linemasks['R'][~discarded] < 200000], xlabel='R', nbins=100)
+        # Discard peak if it is not deeper than mean flux + 6*standard deviation
+        # unless it is the only detected peak
+        limit = check_mean - 6*check_std
+        if len(models) > 1 and (limit < 0.05 or peak >= limit):
+            accept.append(False)
+        else:
+            accept.append(True)
+    return np.asarray(accept)
 
 
-    #elements = np.unique(linemasks['element'][~discarded])
-    #x = np.arange(len(elements))
-    #y = np.zeros(len(elements))
-    #for element, i in zip(elements, x):
-        #subset = linemasks[linemasks['element'][~discarded] == element]
-        #y[i] = np.median(subset['depth'])
-    #plt.bar(x, y, align='center')
-    #plt.xlabel("Elements")
-    #plt.ylabel("Median depth")
-    #t = plt.xticks(x, elements, size='small')
-    #plt.show()
-
-    #elements = np.unique(linemasks['element'][~discarded])
-    #x = np.arange(len(elements))
-    #y = np.zeros(len(elements))
-    #for element, i in zip(elements, x):
-        #subset = linemasks[linemasks['element'][~discarded] == element]
-        #y[i] = len(subset['depth'])
-    #plt.bar(x, y, align='center')
-    #plt.xlabel("Elements")
-    #plt.ylabel("Count")
-    #t = plt.xticks(x, elements, size='small')
-    #plt.show()
 
 
-    #from pymodelfit import LinearModel
-    #trend = LinearModel()
-    #trend.fitData(linemasks[~discarded]['mu'], linemasks[~discarded]['sig'])
-    #plt.plot(linemasks[~discarded]['mu'], linemasks[~discarded]['sig'])
-    #plt.plot(linemasks[~discarded]['mu'], trend(linemasks[~discarded]['mu']), color="red", linewidth=4)
-    #plt.xlabel('Wavelength peak')
-    #plt.ylabel('Sigma')
-    #plt.show()
+############## [end] Radial velocity
 
-    #plt.plot(linemasks[~discarded]['mu'], linemasks[~discarded]['rms'])
-    #plt.xlabel('Wavelength peak')
-    #plt.ylabel('RMS')
-    #plt.show()
-
-    #wave_peak_diff = np.abs(linemasks['wave_peak'] - linemasks['VALD_wave_peak'])
-    #plt.plot(linemasks[~discarded]['mu'], np.abs(wave_peak_diff[~discarded]))
-    #plt.xlabel('Wavelength peak')
-    #plt.ylabel('Wavelength diff. with VALD')
-    #plt.show()
-
-    #plt.scatter(linemasks[~discarded]['depth'], linemasks[~discarded]['log(gf)'], s=4)
-    #plt.xlabel('Depth')
-    #plt.ylabel('log(gf)')
-    #plt.show()
-
-    #plt.scatter(linemasks[~discarded]['depth'], linemasks[~discarded]['lower state (eV)'], s=4)
-    #plt.xlabel('Depth')
-    #plt.ylabel('lower state (eV)')
-    #plt.show()
-
-    #plt.scatter(linemasks[~discarded]['log(gf)'], linemasks[~discarded]['lower state (eV)'], s=4)
-    #plt.xlabel('log(gf)')
-    #plt.ylabel('lower state (eV)')
-    #plt.show()
-
-    #fig = plt.figure()
-    #ax = fig.add_subplot(111, projection='3d')
-    #ax.plot_wireframe(, rstride=10, cstride=10)
-    #plt.show()
-
-    ##import matplotlib.pyplot as plt
-    #from mpl_toolkits.mplot3d import axes3d, Axes3D #<-- Note the capitalization!
-    #fig = plt.figure()
-    #ax = Axes3D(fig) #<-- Note the difference from your original code...
-    #X, Y, Z = linemasks[~discarded]['log(gf)'], linemasks[~discarded]['lower state (eV)'], linemasks[~discarded]['depth']
-    #cset = ax.contour(X, Y, Z, 16, extend3d=True)
-    #ax.clabel(cset, fontsize=9, inline=1)
-    #plt.show()
-
-    #plt.scatter(linemasks[~discarded]['depth'], linemasks[~discarded]['solar_depth'], s=4)
-    #plt.xlabel('Depth')
-    #plt.ylabel('Solar depth')
-    #plt.show()
-
-    #plt.scatter(linemasks[~discarded]['depth'], linemasks[~discarded]['relative_depth'], s=4)
-    #plt.xlabel('Depth')
-    #plt.ylabel('Relative depth')
-    #plt.show()

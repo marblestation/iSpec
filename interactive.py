@@ -35,6 +35,7 @@ import numpy.lib.recfunctions as rfn # Extra functions
 import threading
 import getopt
 
+import logging
 
 # The recommended way to use wx with mpl is with the WXAgg backend.
 import matplotlib
@@ -2460,13 +2461,14 @@ class SpectraFrame(wx.Frame):
         wx.CallAfter(self.status_message, "Cross-match with VALD data...")
 
         telluric_linelist_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
-        linemasks = sve.fill_with_telluric_info(linemasks, telluric_linelist_file=telluric_linelist_file, vel_telluric=vel_telluric)
+        linemasks = sve.fill_linemasks_with_telluric_info(linemasks, telluric_linelist_file, vel_telluric=vel_telluric)
         ## Cross-match with VALD data
-        linemasks = sve.fill_with_VALD_info(linemasks, vald_linelist_file=resource_path("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"), diff_limit=0.005, vel_atomic=vel_atomic)
+        vald_linelist_file=resource_path("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst")
+        linemasks = sve.fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, diff_limit=0.005, vel_atomic=vel_atomic)
         ## Calculate line data that is compatible with SPECTRUM
         linemasks = rfn.append_fields(linemasks, "wave (A)", dtypes=float, data=linemasks['VALD_wave_peak'] * 10.0)
         linemasks = linemasks.data
-        SPECTRUM_linelist = sve.VALD_to_SPECTRUM_format(linemasks)
+        SPECTRUM_linelist = sve.VALD_to_SPECTRUM_format(linemasks, "input/abundances/chemical_elements_symbols.dat", "input/abundances/molecular_symbols.dat")
         # Save the converted data
         linemasks["species"] = SPECTRUM_linelist["species"]
         linemasks["lower state (cm^-1)"] = SPECTRUM_linelist["lower state (cm^-1)"]
@@ -2591,8 +2593,6 @@ max_wave_range=max_wave_range)
         median_wave_range = self.text2float(dlg.median_wave_range.GetValue(), 'Median wave range value is not a valid one.')
         max_wave_range = self.text2float(dlg.max_wave_range.GetValue(), 'Max wave range value is not a valid one.')
         in_continuum = dlg.radio_button_continuum.GetValue()
-        #find_continuum_by_fitting = dlg.radio_button_splines.GetValue()
-        find_continuum_by_fitting = True
         dlg.Destroy()
 
         if nknots == None or median_wave_range < 0 or max_wave_range < 0:
@@ -2603,11 +2603,22 @@ max_wave_range=max_wave_range)
         self.operation_in_progress = True
         self.status_message("Fitting continuum...")
         self.update_progress(10)
-        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'in_continuum':in_continuum, 'fitting_method':find_continuum_by_fitting, 'median_wave_range':median_wave_range, 'max_wave_range':max_wave_range})
+        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'in_continuum':in_continuum, 'median_wave_range':median_wave_range, 'max_wave_range':max_wave_range})
         thread.setDaemon(True)
         thread.start()
 
-    def on_fit_continuum_thread(self, nknots, fitting_method=True, in_continuum=False, median_wave_range=0.1, max_wave_range=1):
+    def get_spectra_from_model(self, model, spectra_wave_grid):
+        """
+        Calculate flux for a wavelength grid using a given model (i.e. continuum fitted model).
+        """
+        total_points = len(spectra_wave_grid)
+        spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+        spectra['waveobs'] = spectra_wave_grid
+        spectra['flux'] = model(spectra['waveobs'])
+        spectra['err'] = np.zeros(total_points)
+        return spectra
+
+    def on_fit_continuum_thread(self, nknots, in_continuum=False, median_wave_range=0.1, max_wave_range=1):
         if in_continuum:
             # Select from the spectra the regions that should be used to fit the continuum
             spectra_regions = None
@@ -2625,12 +2636,8 @@ max_wave_range=max_wave_range)
 
         if spectra_regions != None:
             try:
-                if fitting_method:
-                    self.active_spectrum.continuum_model = sve.fit_continuum(spectra_regions, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range)
-                else:
-                    self.active_spectrum.continuum_model = sve.interpolate_continuum(spectra_regions, median_wave_range=median_wave_range,
-max_wave_range=max_wave_range)
-                self.active_spectrum.continuum_data = sve.get_spectra_from_model(self.active_spectrum.continuum_model, self.active_spectrum.data['waveobs'])
+                self.active_spectrum.continuum_model = sve.fit_continuum(spectra_regions, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range)
+                self.active_spectrum.continuum_data = self.get_spectra_from_model(self.active_spectrum.continuum_model, self.active_spectrum.data['waveobs'])
                 wx.CallAfter(self.on_fit_continuum_finish, nknots)
             except Exception as e:
                 self.operation_in_progress = False
@@ -2721,7 +2728,6 @@ max_wave_range=max_wave_range)
             continuum_regions = sve.find_continuum_on_regions(self.active_spectrum.data, resolution, self.regions["segments"], max_std_continuum = sigma, continuum_model = self.active_spectrum.continuum_model, max_continuum_diff=max_continuum_diff, fixed_wave_step=fixed_wave_step, frame=self)
         else:
             continuum_regions = sve.find_continuum(self.active_spectrum.data, resolution, max_std_continuum = sigma, continuum_model = self.active_spectrum.continuum_model, max_continuum_diff=max_continuum_diff, fixed_wave_step=fixed_wave_step, frame=self)
-        continuum_regions = sve.merge_regions(self.active_spectrum.data, continuum_regions)
 
         wx.CallAfter(self.on_find_continuum_finish, continuum_regions)
 
@@ -2813,25 +2819,19 @@ max_wave_range=max_wave_range)
         wx.CallAfter(self.status_message, "Smoothing spectra...")
         smoothed_spectra = sve.convolve_spectra(spectra, 2*resolution, frame=self)
 
-        logging.info("Finding peaks and base points...")
-        wx.CallAfter(self.update_progress, 10.)
-        wx.CallAfter(self.status_message, "Finding peaks and base points...")
-        peaks, base_points = sve.find_peaks_and_base_points(smoothed_spectra['waveobs'], smoothed_spectra['flux'])
-        wx.CallAfter(self.update_progress, 100.)
-
-        # If no peaks found, just finnish
-        if len(peaks) == 0:
-            wx.CallAfter(self.on_find_lines_finish, None, None, None)
-            return
 
         wx.CallAfter(self.status_message, "Generating line masks, fitting gaussians and matching VALD lines...")
         logging.info("Generating line masks, fitting gaussians and matching VALD lines...")
         telluric_linelist_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
-        linemasks = sve.generate_linemasks(spectra, peaks, base_points, self.active_spectrum.continuum_model, minimum_depth=min_depth, maximum_depth=max_depth, smoothed_spectra=smoothed_spectra ,vald_linelist_file=resource_path("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"), telluric_linelist_file = telluric_linelist_file, discard_gaussian = False, discard_voigt = True, vel_atomic=vel_atomic, vel_telluric=vel_telluric, frame=self)
+        linemasks = sve.find_linemasks(spectra, self.active_spectrum.continuum_model, minimum_depth=min_depth, maximum_depth=max_depth, smoothed_spectra=smoothed_spectra, vald_linelist_file=resource_path("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"), telluric_linelist_file = telluric_linelist_file, discard_gaussian = False, discard_voigt = True, vel_atomic=vel_atomic, vel_telluric=vel_telluric, frame=self)
+
+        # If no peaks found, just finnish
+        if linemasks == None or len(linemasks) == 0:
+            wx.CallAfter(self.on_find_lines_finish, None, None, None)
+            return
 
         logging.info("Applying filters to discard bad line masks...")
         wx.CallAfter(self.status_message, "Applying filters to discard bad line masks...")
-        rejected_by_noise = sve.detect_false_positives_and_noise(smoothed_spectra, linemasks)
 
         # Identify peaks higher than continuum
         # - Depth is negative if the peak is higher than the continuum
@@ -2851,7 +2851,7 @@ max_wave_range=max_wave_range)
         #rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
         rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
 
-        discarded = rejected_by_noise
+        discarded = rejected_by_depth_higher_than_continuum
 
         # In case it is specified, select only given elements
         if elements != "":
@@ -2861,7 +2861,6 @@ max_wave_range=max_wave_range)
                 select = np.logical_or(select, linemasks['element'] == element.strip().capitalize())
             discarded = np.logical_or(discarded, np.logical_not(select))
 
-        discarded = np.logical_or(discarded, rejected_by_depth_higher_than_continuum)
         discarded = np.logical_or(discarded, rejected_by_depth_limits)
         discarded = np.logical_or(discarded, rejected_by_bad_fit)
         if discard_tellurics:
@@ -2894,7 +2893,7 @@ max_wave_range=max_wave_range)
         ### Calculate line data that is compatible with SPECTRUM
         linemasks = rfn.append_fields(linemasks, "wave (A)", dtypes=float, data=linemasks['VALD_wave_peak'] * 10.0)
         linemasks = linemasks.data
-        SPECTRUM_linelist = sve.VALD_to_SPECTRUM_format(linemasks)
+        SPECTRUM_linelist = sve.VALD_to_SPECTRUM_format(linemasks, "input/abundances/chemical_elements_symbols.dat", "input/abundances/molecular_symbols.dat")
         # Save the converted data
         linemasks["species"] = SPECTRUM_linelist["species"]
         linemasks["lower state (cm^-1)"] = SPECTRUM_linelist["lower state (cm^-1)"]
@@ -2993,7 +2992,7 @@ max_wave_range=max_wave_range)
         self.dec_minutes = dec_minutes
         self.dec_seconds = dec_seconds
 
-        vh, vb = sve.baryvel((year, month, day, hours, minutes, seconds))
+        vh, vb = sve.calculate_barycentric_velocity((year, month, day, hours, minutes, seconds))
 
         ra = (ra_hours + ra_minutes/60 + ra_seconds/(60*60)) # hours
         ra = ra * 360/24 # degrees
@@ -3005,7 +3004,10 @@ max_wave_range=max_wave_range)
         self.barycentric_vel = vb[0]*np.cos(dec)*np.cos(ra) + vb[1]*np.cos(dec)*np.sin(ra) + vb[2]*np.sin(dec) # km/s
         self.barycentric_vel = np.round(self.barycentric_vel, 2) # km/s
 
-        self.flash_status_message("Barycentric velocity determined: " + str(self.barycentric_vel) + " km/s")
+        msg = "Barycentric velocity determined: " + str(self.barycentric_vel) + " km/s"
+        title = "Barycentric velocity"
+        self.info(title, msg)
+        self.flash_status_message(msg)
 
     def on_estimate_snr(self, event):
         if self.check_operation_in_progress():
@@ -3204,6 +3206,34 @@ max_wave_range=max_wave_range)
         thread.setDaemon(True)
         thread.start()
 
+    def filter_telluric_lines(self, linelist_telluric, spectra, velocity_lower_limit, velocity_upper_limit):
+        """
+        Select telluric lines inside a given velocity limits (km/s).
+        """
+        # Light speed in vacuum
+        c = 299792458.0 # m/s
+
+        ## Select telluric lines of interest
+        # Limit to region of interest
+        wmin = spectra['waveobs'][0]
+        wmax = spectra['waveobs'][-1]
+        delta_wmin = wmin * (velocity_lower_limit / (c/1000.0))
+        delta_wmax = wmax * (velocity_upper_limit / (c/1000.0))
+        wfilter = (linelist_telluric['wave_peak'] <= wmax + delta_wmax) & (linelist_telluric['wave_peak'] >= wmin + delta_wmin)
+        linelist = linelist_telluric[wfilter]
+        # Discard not fitted lines
+        rfilter = linelist['rms'] == 9999
+        linelist = linelist[~rfilter]
+        # Discard too deep or too small lines
+        rfilter = (linelist['depth'] <= 0.9) & (linelist['depth'] >= 0.01)
+        linelist = linelist[rfilter]
+        # Discard outliers FWHM in km/s (which is not wavelength dependent)
+        telluric_fwhm = (c / (linelist['wave_peak'] / linelist['fwhm'])) / 1000.0 # km/s
+        fwhm_selected, fwhm_selected_filter = sve.sigma_clipping(telluric_fwhm, meanfunc=np.median)
+        linelist = linelist[fwhm_selected_filter]
+        return linelist
+
+
     def on_determine_velocity_thread(self, relative_to_atomic_data):
         wx.CallAfter(self.status_message, "Determining velocity...")
 
@@ -3222,7 +3252,7 @@ max_wave_range=max_wave_range)
             velocity_lower_limit = self.velocity_telluric_lower_limit
             velocity_upper_limit = self.velocity_telluric_upper_limit
             velocity_step = self.velocity_telluric_step
-            linelist = sve.filter_telluric_lines(self.linelist_telluric, self.active_spectrum.data, velocity_lower_limit, velocity_upper_limit)
+            linelist = self.filter_telluric_lines(self.linelist_telluric, self.active_spectrum.data, velocity_lower_limit, velocity_upper_limit)
 
         xcoord, fluxes, num_used_lines = sve.build_velocity_profile(self.active_spectrum.data, linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, frame=self)
         wx.CallAfter(self.on_determine_velocity_finish, xcoord, fluxes, relative_to_atomic_data, num_used_lines, linelist)
@@ -3231,7 +3261,7 @@ max_wave_range=max_wave_range)
         # Modelize
         if relative_to_atomic_data:
             models = sve.modelize_velocity_profile(xcoord, fluxes)
-            accept = sve.find_confident_models(models, xcoord, fluxes)
+            accept = sve.select_good_velocity_profile_models(models, xcoord, fluxes)
             if len(models[accept]) == 0:
                 models = models[:1]
             else:
@@ -3465,9 +3495,9 @@ max_wave_range=max_wave_range)
             if self.modeled_layers_pack == None:
                 logging.info("Loading modeled atmospheres...")
                 self.status_message("Loading modeled atmospheres...")
-                self.modeled_layers_pack = sve.load_modeled_layers_pack(filename=resource_path('input/atmospheres/default.modeled_layers_pack.dump'))
+                self.modeled_layers_pack = sve.load_modeled_layers_pack(resource_path('input/atmospheres/default.modeled_layers_pack.dump'))
 
-            if not sve.valid_objective(self.modeled_layers_pack, teff, logg, MH):
+            if not sve.valid_atmosphere_target(self.modeled_layers_pack, teff, logg, MH):
                 msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of theatmospheric models."
                 title = 'Out of the atmospheric models'
                 self.error(title, msg)
@@ -3488,7 +3518,6 @@ max_wave_range=max_wave_range)
                     self.flash_status_message("Bad values.")
                     return
 
-                #waveobs = generate_wavelength_grid(wave_base, wave_top, resolution, points_per_fwhm = 3)
                 waveobs = np.arange(wave_base, wave_top, wave_step)
             else:
                 #in_segments
@@ -3502,7 +3531,6 @@ max_wave_range=max_wave_range)
                     wave_base = region.get_wave_base()
                     wave_top = region.get_wave_top()
 
-                    #new_waveobs = generate_wavelength_grid(wave_base, wave_top, resolution, points_per_fwhm = 3)
                     new_waveobs = np.arange(wave_base, wave_top, wave_step)
                     if waveobs == None:
                         waveobs = new_waveobs
