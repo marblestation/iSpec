@@ -21,7 +21,8 @@ from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 
 def plot_spectra(spectra, filename=None, grid = True, title = None, ylabel = 'Flux', xlabel = 'Wavelength (nm)'):
     """
-        Plot a spectra. If filename (i.e. plot.png) is specified, then the plot is saved into that file
+        Plot a spectrum or array of spectra.
+        If filename (i.e. plot.png) is specified, then the plot is saved into that file
         and not shown on the screen.
     """
     figure = plt.figure()

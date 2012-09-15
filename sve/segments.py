@@ -15,7 +15,6 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with SVE. If not, see <http://www.gnu.org/licenses/>.
 #
-import asciitable
 import numpy as np
 import log
 import logging
@@ -34,7 +33,11 @@ def read_segment_regions(segment_regions_filename):
         491.2240        491.2260
         492.5800        492.5990
     """
-    segment_regions = asciitable.read(table=segment_regions_filename, comment='#', names=['wave_base', 'wave_top'])
+    segment_regions = np.array([tuple(seg.rstrip('\r\n').split("\t")) for seg in open(segment_regions_filename,)][1:], dtype=[('wave_base', float),('wave_top', float)])
+
+    if np.any(segment_regions['wave_top'] - segment_regions['wave_base'] <= 0):
+        logging.error("Segments regions where wave_base is equal or bigger than wave_top")
+        raise Exception("Incompatible format")
     return segment_regions
 
 def write_segment_regions(segment_regions, segment_regions_filename):
@@ -48,6 +51,9 @@ def write_segment_regions(segment_regions, segment_regions_filename):
         491.2240        491.2260
         492.5800        492.5990
     """
-    asciitable.write(segment_regions, output=segment_regions_filename, delimiter='\t')
+    out = open(segments_regions_filename, "w")
+    out.write("wave_base\twave_top\n")
+    out.write("\n".join(["\t".join(map(str, (seg['wave_base'], seg['wave_top']))) for seg in segments_regions]))
+    out.close()
 
 

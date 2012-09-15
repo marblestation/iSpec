@@ -1,21 +1,21 @@
 #!/usr/bin/env python
-"""
-    This file is part of Spectra.
-    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
-
-    Spectra is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    Spectra is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with Spectra.  If not, see <http://www.gnu.org/licenses/>.
-"""
+#
+#    This file is part of Spectra Visual Editor (SVE).
+#    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
+#
+#    SVE is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    SVE is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
+#
+#    You should have received a copy of the GNU Affero General Public License
+#    along with SVE. If not, see <http://www.gnu.org/licenses/>.
+#
 #################
 # Run with ipython -pdb -c "%run interactive.py"
 #################
@@ -28,7 +28,6 @@ import sys
 import pprint
 import random
 import wx
-import asciitable
 import numpy as np
 import numpy.lib.recfunctions as rfn # Extra functions
 
@@ -77,7 +76,7 @@ class CustomizableRegion:
         else:
             self.mark_position = None
 
-        # Fit line properties, dictionary of spectrum (to vinculate to different spectra):
+        # Fit line properties, dictionary of spectrum (to vinculate to different spectrum):
         self.line_plot_id = {}
         self.line_model = {}
         self.line_extra = {}
@@ -713,8 +712,8 @@ class SpectraFrame(wx.Frame):
         menu_file.AppendSeparator()
         m_expt = menu_file.Append(-1, "&Save plot image as\tCtrl-S", "Save plot image to file")
         self.Bind(wx.EVT_MENU, self.on_save_plot, m_expt)
-        m_expt = menu_file.Append(-1, "Save s&pectra as\tCtrl-P", "Save active spectra to file")
-        self.Bind(wx.EVT_MENU, self.on_save_spectra, m_expt)
+        m_expt = menu_file.Append(-1, "Save s&pectrum as\tCtrl-P", "Save active spectrum to file")
+        self.Bind(wx.EVT_MENU, self.on_save_spectrum, m_expt)
         self.spectrum_function_items.append(m_expt)
         m_expt = menu_file.Append(-1, "Save &continuum regions as\tCtrl-C", "Save continuum regions to file")
         self.Bind(wx.EVT_MENU, self.on_save_continuum_regions, m_expt)
@@ -728,7 +727,7 @@ class SpectraFrame(wx.Frame):
 
         menu_edit = wx.Menu()
         self.menu_active_spectrum = wx.Menu()
-        m_expt = menu_edit.AppendMenu(-1, 'Select spectra', self.menu_active_spectrum)
+        m_expt = menu_edit.AppendMenu(-1, 'Select spectrum', self.menu_active_spectrum)
         self.spectrum_function_items.append(m_expt)
 
         m_close_spectrum = menu_edit.Append(-1, "Close spectrum", "Close current active spectrum")
@@ -794,11 +793,11 @@ class SpectraFrame(wx.Frame):
         m_expt = menu_edit.AppendMenu(-1, 'Correct velocity...', menu_correct_velocity)
         self.spectrum_function_items.append(m_expt)
 
-        m_correct_rv = menu_correct_velocity.Append(-1, "&Radial velocity", "Correct spectra by using its radial velocity")
+        m_correct_rv = menu_correct_velocity.Append(-1, "&Radial velocity", "Correct spectrum by using its radial velocity")
         self.Bind(wx.EVT_MENU, self.on_correct_rv, m_correct_rv)
         self.spectrum_function_items.append(m_correct_rv)
 
-        m_correct_barycentric_vel = menu_correct_velocity.Append(-1, "Barycentric velocity", "Correct spectra by using its radial velocity")
+        m_correct_barycentric_vel = menu_correct_velocity.Append(-1, "Barycentric velocity", "Correct spectrum by using its radial velocity")
         self.Bind(wx.EVT_MENU, self.on_correct_barycentric_vel, m_correct_barycentric_vel)
         self.spectrum_function_items.append(m_correct_barycentric_vel)
         #####
@@ -831,18 +830,18 @@ class SpectraFrame(wx.Frame):
         m_normalize_spectrum = menu_edit.Append(-1, "Continuum normalization", "Normalize spectrum")
         self.Bind(wx.EVT_MENU, self.on_continuum_normalization, m_normalize_spectrum)
         self.spectrum_function_items.append(m_normalize_spectrum)
-        m_clean_spectra = menu_edit.Append(-1, "Clean fluxes and errors", "Filter out measurements with fluxes and errors out of range")
-        self.Bind(wx.EVT_MENU, self.on_clean_spectra, m_clean_spectra)
-        self.spectrum_function_items.append(m_clean_spectra)
-        m_cut_spectra = menu_edit.Append(-1, "Wavelength range reduction", "Reduce the wavelength range")
-        self.Bind(wx.EVT_MENU, self.on_cut_spectra, m_cut_spectra)
-        self.spectrum_function_items.append(m_cut_spectra)
+        m_clean_spectrum = menu_edit.Append(-1, "Clean fluxes and errors", "Filter out measurements with fluxes and errors out of range")
+        self.Bind(wx.EVT_MENU, self.on_clean_spectrum, m_clean_spectrum)
+        self.spectrum_function_items.append(m_clean_spectrum)
+        m_cut_spectrum = menu_edit.Append(-1, "Wavelength range reduction", "Reduce the wavelength range")
+        self.Bind(wx.EVT_MENU, self.on_cut_spectrum, m_cut_spectrum)
+        self.spectrum_function_items.append(m_cut_spectrum)
         m_convert_to_nm = menu_edit.Append(-1, "Convert to nanometers", "Divide wavelength by 10")
         self.Bind(wx.EVT_MENU, self.on_convert_to_nm, m_convert_to_nm)
         self.spectrum_function_items.append(m_convert_to_nm)
-        m_resample_spectra = menu_edit.Append(-1, "Resample spectrum", "Resample wavelength grid")
-        self.Bind(wx.EVT_MENU, self.on_resample_spectra, m_resample_spectra)
-        self.spectrum_function_items.append(m_resample_spectra)
+        m_resample_spectrum = menu_edit.Append(-1, "Resample spectrum", "Resample wavelength grid")
+        self.Bind(wx.EVT_MENU, self.on_resample_spectrum, m_resample_spectrum)
+        self.spectrum_function_items.append(m_resample_spectrum)
         m_combine_spectra = menu_edit.Append(-1, "Combine all spectra", "Combine all spectra into one")
         self.Bind(wx.EVT_MENU, self.on_combine_spectra, m_combine_spectra)
         self.spectrum_function_items.append(m_combine_spectra)
@@ -1000,14 +999,14 @@ class SpectraFrame(wx.Frame):
         # Put a legend to the right of the current axis
         self.update_legend()
 
-    def remove_drawn_continuum_spectra(self):
+    def remove_drawn_continuum_spectrum(self):
         if self.active_spectrum != None and self.active_spectrum.continuum_plot_id != None:
             self.axes.lines.remove(self.active_spectrum.continuum_plot_id)
             self.active_spectrum.continuum_plot_id = None
             self.canvas.draw()
 
-    def remove_continuum_spectra(self):
-        self.remove_drawn_continuum_spectra()
+    def remove_continuum_spectrum(self):
+        self.remove_drawn_continuum_spectrum()
         self.active_spectrum.continuum_model = None
         self.active_spectrum.continuum_data = None
 
@@ -1037,7 +1036,7 @@ class SpectraFrame(wx.Frame):
 
         self.canvas.draw()
 
-    def draw_continuum_spectra(self):
+    def draw_continuum_spectrum(self):
         if self.active_spectrum == None:
             return
 
@@ -1114,7 +1113,7 @@ class SpectraFrame(wx.Frame):
         self.axes.set_ylabel("flux", fontsize="10")
 
         for spec in self.spectra:
-            # Remove "[A]  " from spectra name (legend) if it exists
+            # Remove "[A]  " from spectrum name (legend) if it exists
             if self.active_spectrum != None and self.active_spectrum.plot_id != None:
                 self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
             self.active_spectrum = spec
@@ -1371,8 +1370,8 @@ class SpectraFrame(wx.Frame):
         wave_top = region.get_wave_top()
 
         wave_filter = (self.active_spectrum.data['waveobs'] >= wave_base) & (self.active_spectrum.data['waveobs'] <= wave_top)
-        spectra_window = self.active_spectrum.data[wave_filter]
-        num_points = len(spectra_window['flux'])
+        spectrum_window = self.active_spectrum.data[wave_filter]
+        num_points = len(spectrum_window['flux'])
 
         self.add_stats("Number of measures", num_points)
 
@@ -1388,11 +1387,11 @@ class SpectraFrame(wx.Frame):
                 self.add_stats("Note", note)
 
         if num_points > 0:
-            self.add_stats("Flux min.", "%.6f" % np.min(spectra_window['flux']))
-            self.add_stats("Flux max.", "%.6f" % np.max(spectra_window['flux']))
-            self.add_stats("Flux mean", "%.6f" % np.mean(spectra_window['flux']))
-            self.add_stats("Flux median", "%.6f" % np.median(spectra_window['flux']))
-            self.add_stats("Flux standard deviation", "%.6f" % np.std(spectra_window['flux']))
+            self.add_stats("Flux min.", "%.6f" % np.min(spectrum_window['flux']))
+            self.add_stats("Flux max.", "%.6f" % np.max(spectrum_window['flux']))
+            self.add_stats("Flux mean", "%.6f" % np.mean(spectrum_window['flux']))
+            self.add_stats("Flux median", "%.6f" % np.median(spectrum_window['flux']))
+            self.add_stats("Flux standard deviation", "%.6f" % np.std(spectrum_window['flux']))
 
         if region.element_type == "lines" and region.line_plot_id.has_key(self.active_spectrum) and region.line_model[self.active_spectrum] != None:
             self.add_stats("Gaussian mean (mu)", "%.4f" % region.line_model[self.active_spectrum].mu())
@@ -1426,7 +1425,7 @@ class SpectraFrame(wx.Frame):
 
         if self.active_spectrum.continuum_model != None:
             if num_points > 0:
-                mean_continuum = np.mean(self.active_spectrum.continuum_model(spectra_window['waveobs']))
+                mean_continuum = np.mean(self.active_spectrum.continuum_model(spectrum_window['waveobs']))
                 self.add_stats("Continuum mean for the region", "%.4f" % mean_continuum)
             residuals = np.abs(self.active_spectrum.continuum_model.residuals())
             rms = np.mean(residuals) + np.std(residuals)
@@ -1498,19 +1497,19 @@ class SpectraFrame(wx.Frame):
                             continue # Give the oportunity to select another file name
 
                         # Remove current continuum from plot if exists
-                        self.remove_drawn_continuum_spectra()
+                        self.remove_drawn_continuum_spectrum()
 
                         # Remove current drawn fitted lines if they exist
                         self.remove_drawn_fitted_lines()
 
                         for path in paths:
-                            # Remove "[A]  " from spectra name (legend) if it exists
+                            # Remove "[A]  " from spectrum name (legend) if it exists
                             if self.active_spectrum != None and self.active_spectrum.plot_id != None:
                                 self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
-                            new_spectra_data = sve.read_spectra(path)
+                            new_spectrum_data = sve.read_spectrum(path)
                             name = self.get_name(path.split('/')[-1]) # If it already exists, add a suffix
                             color = self.get_color()
-                            self.active_spectrum = Spectrum(new_spectra_data, name, path = path, color=color)
+                            self.active_spectrum = Spectrum(new_spectrum_data, name, path = path, color=color)
                             self.spectra.append(self.active_spectrum)
                             self.update_menu_active_spectrum()
                             self.draw_active_spectrum()
@@ -1613,7 +1612,7 @@ class SpectraFrame(wx.Frame):
         self.update_menu_active_spectrum()
         self.update_title()
         self.draw_active_spectrum()
-        self.draw_continuum_spectra()
+        self.draw_continuum_spectrum()
         self.draw_fitted_lines()
         self.update_scale()
         self.flash_status_message("Spectrum closed.")
@@ -1663,7 +1662,7 @@ class SpectraFrame(wx.Frame):
         self.update_menu_active_spectrum()
         self.update_title()
         self.draw_active_spectrum()
-        self.draw_continuum_spectra()
+        self.draw_continuum_spectrum()
         self.draw_fitted_lines()
         self.update_scale()
         self.flash_status_message("All spectra closed.")
@@ -1708,7 +1707,7 @@ class SpectraFrame(wx.Frame):
                 action_ended = True
 
 
-    def on_save_spectra(self, event):
+    def on_save_spectrum(self, event):
         if self.check_operation_in_progress():
             return
         file_choices = "All|*"
@@ -1744,7 +1743,7 @@ class SpectraFrame(wx.Frame):
 
                 self.status_message("Saving %s..." % path)
                 # Save, compress if the filename ends with ".gz"
-                sve.write_spectra(self.active_spectrum.data, path, compress=(path.split('.')[-1] == "gz"))
+                sve.write_spectrum(self.active_spectrum.data, path, compress=(path.split('.')[-1] == "gz"))
                 self.active_spectrum.not_saved = False
                 self.update_title()
 
@@ -1755,7 +1754,7 @@ class SpectraFrame(wx.Frame):
                 self.update_legend()
                 self.canvas.draw()
 
-                # Menu active spectra
+                # Menu active spectrum
                 for item in self.menu_active_spectrum.GetMenuItems():
                     if item.IsChecked():
                         item.SetItemLabel(self.active_spectrum.name)
@@ -1958,20 +1957,20 @@ class SpectraFrame(wx.Frame):
         wx.CallAfter(self.status_message, "Degrading spectrum resolution...")
         if from_resolution == 0:
             # Smooth
-            convolved_spectra = sve.convolve_spectra(self.active_spectrum.data, to_resolution, frame=self)
+            convolved_spectrum = sve.convolve_spectrum(self.active_spectrum.data, to_resolution, frame=self)
         else:
-            convolved_spectra = sve.convolve_spectra(self.active_spectrum.data, from_resolution, to_resolution=to_resolution, frame=self)
-        wx.CallAfter(self.on_degrade_resolution_finnish, convolved_spectra, from_resolution, to_resolution)
+            convolved_spectrum = sve.convolve_spectrum(self.active_spectrum.data, from_resolution, to_resolution=to_resolution, frame=self)
+        wx.CallAfter(self.on_degrade_resolution_finnish, convolved_spectrum, from_resolution, to_resolution)
 
-    def on_degrade_resolution_finnish(self, convolved_spectra, from_resolution, to_resolution):
+    def on_degrade_resolution_finnish(self, convolved_spectrum, from_resolution, to_resolution):
         # Remove current continuum from plot if exists
-        self.remove_continuum_spectra()
+        self.remove_continuum_spectrum()
 
         # Remove current drawn fitted lines if they exist
         # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
         self.remove_fitted_lines()
 
-        self.active_spectrum.data = convolved_spectra
+        self.active_spectrum.data = convolved_spectrum
         self.active_spectrum.not_saved = True
         self.active_spectrum.resolution_telluric = to_resolution
         self.active_spectrum.resolution_atomic = to_resolution
@@ -1982,13 +1981,13 @@ class SpectraFrame(wx.Frame):
         self.flash_status_message("Spectrum degreaded from resolution %.2f to %.2f" % (from_resolution, to_resolution))
         self.operation_in_progress = False
 
-    def on_clean_spectra(self, event):
+    def on_clean_spectrum(self, event):
         if not self.check_active_spectrum_exists():
             return
         if self.check_operation_in_progress():
             return
 
-        dlg = CleanSpectraDialog(self, -1, "Clean fluxes and errors", 0.0, 1.2, 0.0, 1.2)
+        dlg = CleanSpectrumDialog(self, -1, "Clean fluxes and errors", 0.0, 1.2, 0.0, 1.2)
         dlg.ShowModal()
 
         if not dlg.action_accepted:
@@ -2012,10 +2011,10 @@ class SpectraFrame(wx.Frame):
             if not self.question(title, msg):
                 return
 
-        self.status_message("Cleaning spectra...")
+        self.status_message("Cleaning spectrum...")
 
         # Remove current continuum from plot if exists
-        self.remove_continuum_spectra()
+        self.remove_continuum_spectrum()
 
         # Remove current drawn fitted lines if they exist
         # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
@@ -2032,13 +2031,13 @@ class SpectraFrame(wx.Frame):
         self.update_scale()
         self.flash_status_message("Spectrum cleaned.")
 
-    def on_cut_spectra(self, event):
+    def on_cut_spectrum(self, event):
         if not self.check_active_spectrum_exists():
             return
         if self.check_operation_in_progress():
             return
 
-        dlg = CutSpectraDialog(self, -1, "Wavelength range reduction", np.round(np.min(self.active_spectrum.data['waveobs']), 2), np.round(np.max(self.active_spectrum.data['waveobs']), 2))
+        dlg = CutSpectrumDialog(self, -1, "Wavelength range reduction", np.round(np.min(self.active_spectrum.data['waveobs']), 2), np.round(np.max(self.active_spectrum.data['waveobs']), 2))
         dlg.ShowModal()
 
         if not dlg.action_accepted:
@@ -2068,10 +2067,10 @@ class SpectraFrame(wx.Frame):
             self.flash_status_message("Bad value.")
             return
 
-        self.status_message("Cutting spectra...")
+        self.status_message("Cutting spectrum...")
 
         # Remove current continuum from plot if exists
-        self.remove_continuum_spectra()
+        self.remove_continuum_spectrum()
 
         # Remove current drawn fitted lines if they exist
         # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
@@ -2085,13 +2084,13 @@ class SpectraFrame(wx.Frame):
         self.update_scale()
         self.flash_status_message("Spectrum cutted.")
 
-    def on_resample_spectra(self, event):
+    def on_resample_spectrum(self, event):
         if not self.check_active_spectrum_exists():
             return
         if self.check_operation_in_progress():
             return
 
-        dlg = ResampleSpectraDialog(self, -1, "Resample spectrum", np.round(np.min(self.active_spectrum.data['waveobs']), 2), np.round(np.max(self.active_spectrum.data['waveobs']), 2), 0.001)
+        dlg = ResampleSpectrumDialog(self, -1, "Resample spectrum", np.round(np.min(self.active_spectrum.data['waveobs']), 2), np.round(np.max(self.active_spectrum.data['waveobs']), 2), 0.001)
         dlg.ShowModal()
 
         if not dlg.action_accepted:
@@ -2106,8 +2105,8 @@ class SpectraFrame(wx.Frame):
         if wave_base == None or wave_top == None or wave_top <= wave_base or wave_step <= 0:
             self.flash_status_message("Bad value.")
             return
-        # It is not necessary to check if base and top are out of the current spectra,
-        # the resample_spectra function can deal it
+        # It is not necessary to check if base and top are out of the current spectrum,
+        # the resample_spectrum function can deal it
 
         # Check if spectrum is saved
         if self.active_spectrum.not_saved:
@@ -2119,26 +2118,26 @@ class SpectraFrame(wx.Frame):
         self.operation_in_progress = True
 
         # Remove current continuum from plot if exists
-        self.remove_continuum_spectra()
+        self.remove_continuum_spectrum()
 
         # Remove current drawn fitted lines if they exist
         # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
         self.remove_fitted_lines()
 
-        thread = threading.Thread(target=self.on_resample_spectra_thread, args=(wave_base, wave_top, wave_step,))
+        thread = threading.Thread(target=self.on_resample_spectrum_thread, args=(wave_base, wave_top, wave_step,))
         thread.setDaemon(True)
         thread.start()
 
-    def on_resample_spectra_thread(self, wave_base, wave_top, wave_step):
+    def on_resample_spectrum_thread(self, wave_base, wave_top, wave_step):
         # Homogenize
         wx.CallAfter(self.status_message, "Resampling spectrum...")
         wx.CallAfter(self.update_progress, 10)
         xaxis = np.arange(wave_base, wave_top, wave_step)
-        resampled_spectra_data = sve.resample_spectra(self.active_spectrum.data, xaxis, linear=True, frame=self)
-        self.active_spectrum.data = resampled_spectra_data
-        wx.CallAfter(self.on_resample_spectra_finnish)
+        resampled_spectrum_data = sve.resample_spectrum(self.active_spectrum.data, xaxis, linear=True, frame=self)
+        self.active_spectrum.data = resampled_spectrum_data
+        wx.CallAfter(self.on_resample_spectrum_finnish)
 
-    def on_resample_spectra_finnish(self):
+    def on_resample_spectrum_finnish(self):
         self.active_spectrum.not_saved = True
 
         self.draw_active_spectrum()
@@ -2186,8 +2185,8 @@ class SpectraFrame(wx.Frame):
         if wave_base == None or wave_top == None or wave_top <= wave_base or wave_step <= 0:
             self.flash_status_message("Bad value.")
             return
-        # It is not necessary to check if base and top are out of the current spectra,
-        # the resample_spectra function can deal it
+        # It is not necessary to check if base and top are out of the current spectrum,
+        # the resample_spectrum function can deal it
 
         # Check if there is any spectrum not saved
         #spectra_not_saved = False
@@ -2217,8 +2216,8 @@ class SpectraFrame(wx.Frame):
             wx.CallAfter(self.status_message, "Resampling spectrum %i of %i (%s)..." % (i+1, total, spec.name))
             if spec == self.active_spectrum:
                 active = i
-            resampled_spectra_data = sve.resample_spectra(spec.data, xaxis, frame=self)
-            resampled_spectra.append(resampled_spectra_data)
+            resampled_spectrum_data = sve.resample_spectrum(spec.data, xaxis, frame=self)
+            resampled_spectra.append(resampled_spectrum_data)
             i += 1
 
         # Combine
@@ -2241,18 +2240,18 @@ class SpectraFrame(wx.Frame):
 
             if operation_mean:
                 # Mean fluxes
-                combined_spectra = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-                combined_spectra['waveobs'] = xaxis
-                combined_spectra['flux'] = np.mean(matrix, axis=0)
-                combined_spectra['err'] = std
-                combined_spectra_name = "Cumulative_mean_spectra"
+                combined_spectrum = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+                combined_spectrum['waveobs'] = xaxis
+                combined_spectrum['flux'] = np.mean(matrix, axis=0)
+                combined_spectrum['err'] = std
+                combined_spectrum_name = "Cumulative_mean_spectrum"
             else:
                 # Median fluxes
-                combined_spectra = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-                combined_spectra['waveobs'] = xaxis
-                combined_spectra['flux'] = np.median(matrix, axis=0)
-                combined_spectra['err'] = std
-                combined_spectra_name = "Cumulative_median_spectra"
+                combined_spectrum = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+                combined_spectrum['waveobs'] = xaxis
+                combined_spectrum['flux'] = np.median(matrix, axis=0)
+                combined_spectrum['err'] = std
+                combined_spectrum_name = "Cumulative_median_spectrum"
         elif operation_subtract:
             flux = np.zeros(total_wavelengths)
             err = np.zeros(total_wavelengths)
@@ -2264,38 +2263,38 @@ class SpectraFrame(wx.Frame):
                     flux = flux - spec['flux']
                 err = np.sqrt(np.power(err,2) + np.power(spec['err'],2))
                 i += 1
-            combined_spectra = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-            combined_spectra['waveobs'] = xaxis
-            combined_spectra['flux'] = flux
-            combined_spectra['err'] = err
-            combined_spectra_name = "Subtracted_spectra"
+            combined_spectrum = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+            combined_spectrum['waveobs'] = xaxis
+            combined_spectrum['flux'] = flux
+            combined_spectrum['err'] = err
+            combined_spectrum_name = "Subtracted_spectrum"
         elif operation_add:
             flux = np.zeros(total_wavelengths)
             err = np.zeros(total_wavelengths)
             for spec in resampled_spectra:
                 flux = flux + spec['flux']
                 err = np.sqrt(np.power(err,2) + np.power(spec['err'],2))
-            combined_spectra = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-            combined_spectra['waveobs'] = xaxis
-            combined_spectra['flux'] = flux
-            combined_spectra['err'] = err
-            combined_spectra_name = "Added_spectra"
+            combined_spectrum = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+            combined_spectrum['waveobs'] = xaxis
+            combined_spectrum['flux'] = flux
+            combined_spectrum['err'] = err
+            combined_spectrum_name = "Added_spectrum"
 
         # Free memory
         for spec in resampled_spectra:
             del spec
         del resampled_spectra
 
-        wx.CallAfter(self.on_combine_spectra_finnish, combined_spectra, combined_spectra_name)
+        wx.CallAfter(self.on_combine_spectra_finnish, combined_spectrum, combined_spectrum_name)
 
-    def on_combine_spectra_finnish(self, combined_spectra, combined_spectra_name):
-        # Remove "[A]  " from spectra name (legend)
+    def on_combine_spectra_finnish(self, combined_spectrum, combined_spectrum_name):
+        # Remove "[A]  " from spectrum name (legend)
         self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
 
         # Add plot
-        name = self.get_name(combined_spectra_name) # If it already exists, add a suffix
+        name = self.get_name(combined_spectrum_name) # If it already exists, add a suffix
         color = self.get_color()
-        self.active_spectrum = Spectrum(combined_spectra, name, color=color)
+        self.active_spectrum = Spectrum(combined_spectrum, name, color=color)
         self.active_spectrum.not_saved = True
         self.spectra.append(self.active_spectrum)
         self.draw_active_spectrum()
@@ -2338,7 +2337,7 @@ class SpectraFrame(wx.Frame):
         self.active_spectrum.not_saved = True
 
         # Remove current continuum from plot if exists
-        self.remove_continuum_spectra()
+        self.remove_continuum_spectrum()
 
         self.draw_active_spectrum()
         self.update_title()
@@ -2371,7 +2370,6 @@ class SpectraFrame(wx.Frame):
 
         vel_telluric = self.text2float(dlg.vel_telluric.GetValue(), 'Velocity respect to telluric lines is not a valid one.')
         vel_atomic = self.text2float(dlg.vel_atomic.GetValue(), 'Velocity respect to atomic lines is not a valid one.')
-        write_note = dlg.write_note.IsChecked()
         dlg.Destroy()
         if vel_atomic == None or vel_telluric == None:
             self.flash_status_message("Bad value.")
@@ -2383,126 +2381,73 @@ class SpectraFrame(wx.Frame):
         # Remove drawd lines if they exist
         self.remove_drawn_fitted_lines()
 
-        ### Container:
-        # Array needed to fill info about the peak position (initial and fitted mu), VALD data and SPECTRUM compatible data
-        linemasks = np.recarray((total_regions, ), dtype=[('wave_peak', float), ('mu', float), ('fwhm', float), ('ew', float), ('telluric_wave_peak', float), ('telluric_depth', float), ('telluric_fwhm', float), ('telluric_R', float), ('VALD_wave_peak', float), ('element', '|S4'), ('lower state (eV)', float), ('log(gf)', float), ('solar_depth', float), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('fudge factor', float), ('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), ('i', int)])
-        # Default values
-        linemasks['wave_peak'] = 0
-        linemasks['mu'] = 0.0
-        linemasks['ew'] = 0.0
-        linemasks['fwhm'] = 0.0
-        linemasks["telluric_wave_peak"] = 0
-        linemasks["telluric_depth"] = 0
-        linemasks["telluric_fwhm"] = 0
-        linemasks['telluric_R'] = 0
-        linemasks['VALD_wave_peak'] = 0
-        linemasks['element'] = ""
-        linemasks['lower state (eV)'] = 0
-        linemasks['log(gf)'] = 0
-        linemasks['solar_depth'] = 0.0
-        linemasks["species"] = ""
-        linemasks["lower state (cm^-1)"] = 0
-        linemasks["upper state (cm^-1)"] = 0
-        linemasks["fudge factor"] = 0
-        linemasks["transition type"] = ""
-        linemasks["rad"] = 0
-        linemasks["stark"] = 0
-        linemasks["waals"] = 0
-        linemasks["i"] = 0
 
         self.operation_in_progress = True
         self.status_message("Fitting lines...")
-        thread = threading.Thread(target=self.on_fit_lines_thread, args=(linemasks, vel_atomic, vel_telluric, write_note))
+        thread = threading.Thread(target=self.on_fit_lines_thread, args=(vel_atomic, vel_telluric))
         thread.setDaemon(True)
         thread.start()
 
-    def on_fit_lines_thread(self, linemasks, vel_atomic, vel_telluric, write_note):
-        total_regions = len(self.region_widgets["lines"])
-        i = 0
-        #for region in self.region_widgets["lines"]:
-        for i in np.arange(len(self.region_widgets["lines"])):
-            region = self.region_widgets["lines"][i]
-            # Save the position in the array because linemasks will be sorted in the future (fill VALD routines) and
-            # and we need to be able to find its corresponding self.region_widget["lines"]
-            linemasks['i'][i] = i
-            wave_base = region.get_wave_base()
-            wave_top = region.get_wave_top()
-            mu = region.get_wave_peak()
-            wave_filter = (self.active_spectrum.data['waveobs'] >= wave_base) & (self.active_spectrum.data['waveobs'] <= wave_top)
-            spectra_window = self.active_spectrum.data[wave_filter]
-
-            try:
-                # Remove old possible results
-                region.line_model[self.active_spectrum] = None
-
-                # Fit gaussian
-                line_model, rms = sve.fit_line(spectra_window, self.active_spectrum.continuum_model, mu, discard_voigt = True)
-                continuum_value = self.active_spectrum.continuum_model(spectra_window['waveobs'])
-
-                # Save results
-                region.line_model[self.active_spectrum] = line_model
-                linemasks['wave_peak'][i] = mu
-                linemasks['mu'][i] = line_model.mu()
-                linemasks['fwhm'][i] = line_model.fwhm()[0]
-
-                # Equivalent Width
-                # - Include 99.97% of the gaussian area
-                from_x = line_model.mu() - 3*line_model.sig()
-                to_x = line_model.mu() + 3*line_model.sig()
-                integrated_flux = -1 * line_model.integrate(from_x, to_x)
-                linemasks['ew'][i] = integrated_flux / np.mean(continuum_value)
-            except Exception as e:
-                logging.error("Wave base - top: %.2f %.2f | Exception msg: %s", wave_base, wave_top, e)
-
-            current_work_progress = (i*1.0 / total_regions) * 100
-            wx.CallAfter(self.update_progress, current_work_progress)
-            #i += 1
-
-        wx.CallAfter(self.status_message, "Cross-match with VALD data...")
-
+    def on_fit_lines_thread(self, vel_atomic, vel_telluric):
+        self.update_numpy_arrays_from_widgets("lines")
+        vald_linelist_file = resource_path("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst")
+        chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
+        molecules_file = resource_path("input/abundances/molecular_symbols.dat")
         telluric_linelist_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
-        linemasks = sve.fill_linemasks_with_telluric_info(linemasks, telluric_linelist_file, vel_telluric=vel_telluric)
-        ## Cross-match with VALD data
-        vald_linelist_file=resource_path("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst")
-        linemasks = sve.fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, diff_limit=0.005, vel_atomic=vel_atomic)
-        ## Calculate line data that is compatible with SPECTRUM
-        linemasks = rfn.append_fields(linemasks, "wave (A)", dtypes=float, data=linemasks['VALD_wave_peak'] * 10.0)
-        linemasks = linemasks.data
-        SPECTRUM_linelist = sve.VALD_to_SPECTRUM_format(linemasks, "input/abundances/chemical_elements_symbols.dat", "input/abundances/molecular_symbols.dat")
-        # Save the converted data
-        linemasks["species"] = SPECTRUM_linelist["species"]
-        linemasks["lower state (cm^-1)"] = SPECTRUM_linelist["lower state (cm^-1)"]
-        linemasks["upper state (cm^-1)"] = SPECTRUM_linelist["upper state (cm^-1)"]
-        linemasks["fudge factor"] = SPECTRUM_linelist["fudge factor"]
-        linemasks["transition type"] = SPECTRUM_linelist["transition type"]
-        linemasks["rad"] = SPECTRUM_linelist["rad"]
-        linemasks["stark"] = SPECTRUM_linelist["stark"]
-        linemasks["waals"] = SPECTRUM_linelist["waals"]
+        linemasks = sve.fit_lines(self.regions["lines"], self.active_spectrum.data, self.active_spectrum.continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian=False, discard_voigt=True, frame=self)
+        wx.CallAfter(self.on_fit_lines_finnish, linemasks)
 
-        wx.CallAfter(self.on_fit_lines_finnish, linemasks, write_note)
+    def on_fit_lines_finnish(self, linemasks):
+        elements = "lines"
+        self.remove_fitted_lines() # If they exist
+        self.remove_regions(elements, check_not_saved=False)
 
-    def on_fit_lines_finnish(self, linemasks, write_note):
-        # Update extras and notes (if needed)
-        for line in linemasks:
-            i = line['i']
-            line_extra = str(line['VALD_wave_peak']) + ";" + str(line['species']) + ";"
-            line_extra = line_extra + str(line['lower state (cm^-1)']) + ";" + str(line['upper state (cm^-1)']) + ";"
-            line_extra = line_extra + str(line['log(gf)']) + ";" + str(line['fudge factor']) + ";"
-            line_extra = line_extra + str(line['transition type']) + ";" + str(line['rad']) + ";"
-            line_extra = line_extra + str(line['stark']) + ";" + str(line['waals']) + ";"
-            line_extra = line_extra + str(line['ew']) + ";" + line['element'] + ";"
-            line_extra = line_extra + str(line['telluric_wave_peak']) + ";" + str(line['telluric_depth'])
-            self.region_widgets["lines"][i].line_extra[self.active_spectrum] = line_extra
-            if write_note:
-                note_text = line['element']
+        if linemasks != None and len(linemasks) > 0:
+            total_regions = len(linemasks)
+            line_regions = np.recarray((total_regions, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100')])
+            line_regions['wave_peak'] = linemasks['mu']
+            line_regions['wave_base'] = linemasks['wave_base']
+            line_regions['wave_top'] = linemasks['wave_top']
+            line_regions['note'] = linemasks['element']
+
+            # Save the data in the note, separated by commas (only the first element will be shown in the GUI)
+            line_models = []
+            line_extras = []
+            i = 0
+            for line in linemasks:
+                line_extra = str(line['VALD_wave_peak']) + ";" + str(line['species']) + ";"
+                line_extra = line_extra + str(line['lower state (cm^-1)']) + ";" + str(line['upper state (cm^-1)']) + ";"
+                line_extra = line_extra + str(line['log(gf)']) + ";" + str(line['fudge factor']) + ";"
+                line_extra = line_extra + str(line['transition type']) + ";" + str(line['rad']) + ";"
+                line_extra = line_extra + str(line['stark']) + ";" + str(line['waals']) + ";"
+                line_extra = line_extra + str(line['ew']) + ";" + line['element'] + ";"
+                line_extra = line_extra + str(line['telluric_wave_peak']) + ";" + str(line['telluric_depth'])
+                line_extras.append(line_extra)
+                line_model = sve.GaussianModel(baseline=line['baseline'], A=line['A'], sig=line['sig'], mu=line['mu'])
+                line_model.rms = line['rms']
+                line_models.append(line_model)
                 if line["telluric_wave_peak"] != 0:
-                    note_text += "*"
-                self.region_widgets["lines"][i].update_mark_note_text(note_text)
+                    line_regions['note'][i] += "*"
+                i += 1
 
-        # Draw new lines
-        self.draw_fitted_lines()
+            self.regions[elements] = line_regions
+            self.draw_regions(elements)
+
+            # Fitted Gaussian lines
+            i = 0
+            for region in self.region_widgets["lines"]:
+                region.line_model[self.active_spectrum] = line_models[i]
+                region.line_extra[self.active_spectrum] = line_extras[i]
+                i += 1
+            self.draw_fitted_lines()
+
+            self.not_saved[elements] = True
+            self.update_title()
+            self.flash_status_message("%i line masks found/fitted!" % (len(line_regions)))
+        else:
+            self.flash_status_message("No line masks found/fitted!")
+        self.canvas.draw()
         self.operation_in_progress = False
-        self.flash_status_message("Lines fitted.")
 
 
     def remove_drawn_fitted_lines(self):
@@ -2527,13 +2472,13 @@ class SpectraFrame(wx.Frame):
                 wave_base = region.get_wave_base()
                 wave_top = region.get_wave_top()
                 wave_filter = (self.active_spectrum.data['waveobs'] >= wave_base) & (self.active_spectrum.data['waveobs'] <= wave_top)
-                spectra_window = self.active_spectrum.data[wave_filter]
+                spectrum_window = self.active_spectrum.data[wave_filter]
 
                 # Get fluxes from model
-                line_fluxes = region.line_model[self.active_spectrum](spectra_window['waveobs'])
+                line_fluxes = region.line_model[self.active_spectrum](spectrum_window['waveobs'])
 
                 # zorder = 4, above the line region
-                line_plot_id = self.axes.plot(spectra_window['waveobs'], line_fluxes, lw=1, color='red', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=4)[0]
+                line_plot_id = self.axes.plot(spectrum_window['waveobs'], line_fluxes, lw=1, color='red', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=4)[0]
                 region.line_plot_id[self.active_spectrum] = line_plot_id
         self.canvas.draw()
 
@@ -2542,22 +2487,22 @@ class SpectraFrame(wx.Frame):
             return
 
         # Remove current continuum from plot if exists
-        self.remove_drawn_continuum_spectra()
+        self.remove_drawn_continuum_spectrum()
 
         # Remove current drawn fitted lines if they exist
         self.remove_drawn_fitted_lines()
 
-        # Determine the new spectra and draw its continuum if exists
+        # Determine the new spectrum and draw its continuum if exists
         i = 0
         for item in self.menu_active_spectrum.GetMenuItems():
             if item.IsChecked():
-                # Remove "[A]  " from spectra name (legend)
+                # Remove "[A]  " from spectrum name (legend)
                 self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
                 # Change active spectrum
                 self.active_spectrum = self.spectra[i]
                 self.draw_active_spectrum()
 
-                self.draw_continuum_spectra()
+                self.draw_continuum_spectrum()
                 self.draw_fitted_lines()
                 self.canvas.draw()
                 self.flash_status_message("Active spectrum: %s" % self.active_spectrum.name)
@@ -2567,7 +2512,7 @@ class SpectraFrame(wx.Frame):
     def on_remove_fitted_continuum(self, event):
         if self.check_operation_in_progress():
             return
-        self.remove_continuum_spectra()
+        self.remove_continuum_spectrum()
 
     def on_fit_continuum(self, event):
         if not self.check_active_spectrum_exists():
@@ -2599,6 +2544,9 @@ max_wave_range=max_wave_range)
             self.flash_status_message("Bad value.")
             return
 
+        if in_continuum and len(self.region_widgets["continuum"]) == 0:
+            self.flash_status_message("No continuum regions found.")
+            return
 
         self.operation_in_progress = True
         self.status_message("Fitting continuum...")
@@ -2607,47 +2555,33 @@ max_wave_range=max_wave_range)
         thread.setDaemon(True)
         thread.start()
 
-    def get_spectra_from_model(self, model, spectra_wave_grid):
+    def get_spectrum_from_model(self, model, spectrum_wave_grid):
         """
         Calculate flux for a wavelength grid using a given model (i.e. continuum fitted model).
         """
-        total_points = len(spectra_wave_grid)
-        spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-        spectra['waveobs'] = spectra_wave_grid
-        spectra['flux'] = model(spectra['waveobs'])
-        spectra['err'] = np.zeros(total_points)
-        return spectra
+        total_points = len(spectrum_wave_grid)
+        spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+        spectrum['waveobs'] = spectrum_wave_grid
+        spectrum['flux'] = model(spectrum['waveobs'])
+        spectrum['err'] = np.zeros(total_points)
+        return spectrum
 
     def on_fit_continuum_thread(self, nknots, in_continuum=False, median_wave_range=0.1, max_wave_range=1):
-        if in_continuum:
-            # Select from the spectra the regions that should be used to fit the continuum
-            spectra_regions = None
-            for region in self.region_widgets["continuum"]:
-                wave_base = region.get_wave_base()
-                wave_top = region.get_wave_top()
-                wave_filter = (self.active_spectrum.data['waveobs'] >= wave_base) & (self.active_spectrum.data['waveobs'] <= wave_top)
-                new_spectra_region = self.active_spectrum.data[wave_filter]
-                if spectra_regions == None:
-                    spectra_regions = new_spectra_region
-                else:
-                    spectra_regions = np.hstack((spectra_regions, new_spectra_region))
-        else:
-            spectra_regions = self.active_spectrum.data
-
-        if spectra_regions != None:
-            try:
-                self.active_spectrum.continuum_model = sve.fit_continuum(spectra_regions, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range)
-                self.active_spectrum.continuum_data = self.get_spectra_from_model(self.active_spectrum.continuum_model, self.active_spectrum.data['waveobs'])
-                wx.CallAfter(self.on_fit_continuum_finish, nknots)
-            except Exception as e:
-                self.operation_in_progress = False
-                wx.CallAfter(self.flash_status_message, "Not enough data points to fit, reduce the number of nknots or increase the spectra regions.")
-        else:
+        try:
+            if in_continuum:
+                self.update_numpy_arrays_from_widgets("continuum")
+                self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, segments=self.regions["continuum"] , nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range)
+            else:
+                self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range)
+            self.active_spectrum.continuum_data = self.get_spectrum_from_model(self.active_spectrum.continuum_model, self.active_spectrum.data['waveobs'])
+            wx.CallAfter(self.on_fit_continuum_finish, nknots)
+        except Exception as e:
             self.operation_in_progress = False
-            wx.CallAfter(self.flash_status_message, "No continuum regions found.")
+            wx.CallAfter(self.flash_status_message, "Not enough data points to fit, reduce the number of nknots or increase the spectrum regions.")
+
 
     def on_fit_continuum_finish(self, nknots):
-        self.draw_continuum_spectra()
+        self.draw_continuum_spectrum()
         self.canvas.draw()
         self.operation_in_progress = False
         self.flash_status_message("Continuum fitted with %s knots uniform Spline model." % str(nknots))
@@ -2725,7 +2659,7 @@ max_wave_range=max_wave_range)
         wx.CallAfter(self.status_message, "Finding continuum regions...")
         if in_segments:
             self.update_numpy_arrays_from_widgets("segments")
-            continuum_regions = sve.find_continuum_on_regions(self.active_spectrum.data, resolution, self.regions["segments"], max_std_continuum = sigma, continuum_model = self.active_spectrum.continuum_model, max_continuum_diff=max_continuum_diff, fixed_wave_step=fixed_wave_step, frame=self)
+            continuum_regions = sve.find_continuum(self.active_spectrum.data, resolution, segments=self.regions["segments"], max_std_continuum = sigma, continuum_model = self.active_spectrum.continuum_model, max_continuum_diff=max_continuum_diff, fixed_wave_step=fixed_wave_step, frame=self)
         else:
             continuum_regions = sve.find_continuum(self.active_spectrum.data, resolution, max_std_continuum = sigma, continuum_model = self.active_spectrum.continuum_model, max_continuum_diff=max_continuum_diff, fixed_wave_step=fixed_wave_step, frame=self)
 
@@ -2800,58 +2734,46 @@ max_wave_range=max_wave_range)
 
     def on_find_lines_thread(self, max_depth, min_depth, elements, resolution, vel_atomic, vel_telluric, discard_tellurics, in_segments=False):
         if in_segments:
-            # Select spectra from regions
+            # Select spectrum from regions
             self.update_numpy_arrays_from_widgets("segments")
-            spectra = None
+            spectrum = None
             for region in self.region_widgets["segments"]:
                 wave_base = region.get_wave_base()
                 wave_top = region.get_wave_top()
 
                 wfilter = np.logical_and(self.active_spectrum.data['waveobs'] >= wave_base, self.active_spectrum.data['waveobs'] <= wave_top)
-                if spectra == None:
-                    spectra = self.active_spectrum.data[wfilter]
+                if spectrum == None:
+                    spectrum = self.active_spectrum.data[wfilter]
                 else:
-                    spectra = np.hstack((spectra, self.active_spectrum.data[wfilter]))
+                    spectrum = np.hstack((spectrum, self.active_spectrum.data[wfilter]))
         else:
-            spectra = self.active_spectrum.data
+            spectrum = self.active_spectrum.data
 
-        logging.info("Smoothing spectra...")
-        wx.CallAfter(self.status_message, "Smoothing spectra...")
-        smoothed_spectra = sve.convolve_spectra(spectra, 2*resolution, frame=self)
+        logging.info("Smoothing spectrum...")
+        wx.CallAfter(self.status_message, "Smoothing spectrum...")
+        smoothed_spectrum = sve.convolve_spectrum(spectrum, 2*resolution, frame=self)
 
 
         wx.CallAfter(self.status_message, "Generating line masks, fitting gaussians and matching VALD lines...")
         logging.info("Generating line masks, fitting gaussians and matching VALD lines...")
+        vald_linelist_file = resource_path("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst")
+        chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
+        molecules_file = resource_path("input/abundances/molecular_symbols.dat")
         telluric_linelist_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
-        linemasks = sve.find_linemasks(spectra, self.active_spectrum.continuum_model, minimum_depth=min_depth, maximum_depth=max_depth, smoothed_spectra=smoothed_spectra, vald_linelist_file=resource_path("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"), telluric_linelist_file = telluric_linelist_file, discard_gaussian = False, discard_voigt = True, vel_atomic=vel_atomic, vel_telluric=vel_telluric, frame=self)
+        linemasks = sve.find_linemasks(spectrum, self.active_spectrum.continuum_model, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, minimum_depth=min_depth, maximum_depth=max_depth, smoothed_spectrum=smoothed_spectrum, discard_gaussian = False, discard_voigt = True, vel_atomic=vel_atomic, vel_telluric=vel_telluric, frame=self)
 
         # If no peaks found, just finnish
         if linemasks == None or len(linemasks) == 0:
-            wx.CallAfter(self.on_find_lines_finish, None, None, None)
+            wx.CallAfter(self.on_find_lines_finish, None)
             return
 
         logging.info("Applying filters to discard bad line masks...")
         wx.CallAfter(self.status_message, "Applying filters to discard bad line masks...")
 
-        # Identify peaks higher than continuum
-        # - Depth is negative if the peak is higher than the continuum
-        # - Relative depth is negative if the mean base point is higher than the continuum
-        rejected_by_depth_higher_than_continuum = (linemasks['depth'] < 0)
-
-        # Identify peaks with a depth inferior/superior to a given limit (% of the continuum)
-        # - Observed depth
-        rejected_by_depth_limits1 = np.logical_or((linemasks['depth'] <= min_depth), (linemasks['depth'] >= max_depth))
-        # - Fitted depth
-        rejected_by_depth_limits2 = np.logical_or((linemasks['depth_fit'] <= min_depth), (linemasks['depth_fit'] >= max_depth))
-        rejected_by_depth_limits = np.logical_or(rejected_by_depth_limits1, rejected_by_depth_limits2)
-
-        # Identify bad fits (9999.0: Cases where has not been possible to fit a gaussian/voigt)
-        rejected_by_bad_fit = (linemasks['rms'] >= 9999.0)
-
         #rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
         rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
 
-        discarded = rejected_by_depth_higher_than_continuum
+        discarded = linemasks['wave_peak'] < 0 # All to false
 
         # In case it is specified, select only given elements
         if elements != "":
@@ -2861,8 +2783,6 @@ max_wave_range=max_wave_range)
                 select = np.logical_or(select, linemasks['element'] == element.strip().capitalize())
             discarded = np.logical_or(discarded, np.logical_not(select))
 
-        discarded = np.logical_or(discarded, rejected_by_depth_limits)
-        discarded = np.logical_or(discarded, rejected_by_bad_fit)
         if discard_tellurics:
             discarded = np.logical_or(discarded, rejected_by_telluric_line)
         #discarded = np.logical_or(discarded, rejected_by_atomic_line_not_found)
@@ -2884,72 +2804,11 @@ max_wave_range=max_wave_range)
             wx.CallAfter(self.on_find_lines_finish, None, None, None)
             return
 
-        line_regions = np.recarray((total_regions, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100')])
-        line_regions['wave_peak'] = linemasks['mu']
-        line_regions['wave_base'] = linemasks['wave_base']
-        line_regions['wave_top'] = linemasks['wave_top']
-        line_regions['note'] = linemasks['element']
 
-        ### Calculate line data that is compatible with SPECTRUM
-        linemasks = rfn.append_fields(linemasks, "wave (A)", dtypes=float, data=linemasks['VALD_wave_peak'] * 10.0)
-        linemasks = linemasks.data
-        SPECTRUM_linelist = sve.VALD_to_SPECTRUM_format(linemasks, "input/abundances/chemical_elements_symbols.dat", "input/abundances/molecular_symbols.dat")
-        # Save the converted data
-        linemasks["species"] = SPECTRUM_linelist["species"]
-        linemasks["lower state (cm^-1)"] = SPECTRUM_linelist["lower state (cm^-1)"]
-        linemasks["upper state (cm^-1)"] = SPECTRUM_linelist["upper state (cm^-1)"]
-        linemasks["fudge factor"] = SPECTRUM_linelist["fudge factor"]
-        linemasks["transition type"] = SPECTRUM_linelist["transition type"]
-        linemasks["rad"] = SPECTRUM_linelist["rad"]
-        linemasks["stark"] = SPECTRUM_linelist["stark"]
-        linemasks["waals"] = SPECTRUM_linelist["waals"]
+        wx.CallAfter(self.on_find_lines_finish, linemasks)
 
-        # Save the data in the note, separated by commas (only the first element will be shown in the GUI)
-        line_models = []
-        line_extras = []
-        i = 0
-        for line in linemasks:
-            line_extra = str(line['VALD_wave_peak']) + ";" + str(line['species']) + ";"
-            line_extra = line_extra + str(line['lower state (cm^-1)']) + ";" + str(line['upper state (cm^-1)']) + ";"
-            line_extra = line_extra + str(line['log(gf)']) + ";" + str(line['fudge factor']) + ";"
-            line_extra = line_extra + str(line['transition type']) + ";" + str(line['rad']) + ";"
-            line_extra = line_extra + str(line['stark']) + ";" + str(line['waals']) + ";"
-            line_extra = line_extra + str(line['ew']) + ";" + line['element'] + ";"
-            line_extra = line_extra + str(line['telluric_wave_peak']) + ";" + str(line['telluric_depth'])
-            line_extras.append(line_extra)
-            line_model = sve.GaussianModel(baseline=line['baseline'], A=line['A'], sig=line['sig'], mu=line['mu'])
-            line_model.rms = line['rms']
-            line_models.append(line_model)
-            if line["telluric_wave_peak"] != 0:
-                line_regions['note'][i] += "*"
-            i += 1
-
-        wx.CallAfter(self.on_find_lines_finish, line_regions, line_models, line_extras)
-
-    def on_find_lines_finish(self, line_regions, line_models, line_extras):
-        elements = "lines"
-        self.remove_fitted_lines() # If they exist
-        self.remove_regions(elements, check_not_saved=False)
-
-        if line_regions != None and len(line_regions) > 0:
-            self.regions[elements] = line_regions
-            self.draw_regions(elements)
-
-            # Fitted Gaussian lines
-            i = 0
-            for region in self.region_widgets["lines"]:
-                region.line_model[self.active_spectrum] = line_models[i]
-                region.line_extra[self.active_spectrum] = line_extras[i]
-                i += 1
-            self.draw_fitted_lines()
-
-            self.not_saved[elements] = True
-            self.update_title()
-            self.flash_status_message("%i line masks found!" % (len(line_regions)))
-        else:
-            self.flash_status_message("No line masks found!")
-        self.canvas.draw()
-        self.operation_in_progress = False
+    def on_find_lines_finish(self, linemasks):
+        self.on_fit_lines_finnish(linemasks)
 
     def on_determine_barycentric_vel(self, event):
         dlg = DetermineBarycentricCorrectionDialog(self, -1, "Barycentric velocity determination", self.day, self.month, self.year, self.hours, self.minutes, self.seconds, self.ra_hours, self.ra_minutes, self.ra_seconds, self.dec_degrees, self.dec_minutes, self.dec_seconds)
@@ -2992,17 +2851,8 @@ max_wave_range=max_wave_range)
         self.dec_minutes = dec_minutes
         self.dec_seconds = dec_seconds
 
-        vh, vb = sve.calculate_barycentric_velocity((year, month, day, hours, minutes, seconds))
-
-        ra = (ra_hours + ra_minutes/60 + ra_seconds/(60*60)) # hours
-        ra = ra * 360/24 # degrees
-        ra = ra * ((2*np.pi) / 360) # radians
-        dec = (dec_degrees + dec_minutes/60 + dec_seconds/(60*60)) # degrees
-        dec = dec * ((2*np.pi) / 360) # radians
-
         # Project velocity toward star
-        self.barycentric_vel = vb[0]*np.cos(dec)*np.cos(ra) + vb[1]*np.cos(dec)*np.sin(ra) + vb[2]*np.sin(dec) # km/s
-        self.barycentric_vel = np.round(self.barycentric_vel, 2) # km/s
+        self.barycentric_vel = sve.calculate_barycentric_velocity_correction((year, month, day, hours, minutes, seconds), (ra_hours, ra_minutes, ra_seconds, dec_degrees, dec_minutes, dec_seconds))
 
         msg = "Barycentric velocity determined: " + str(self.barycentric_vel) + " km/s"
         title = "Barycentric velocity"
@@ -3206,7 +3056,7 @@ max_wave_range=max_wave_range)
         thread.setDaemon(True)
         thread.start()
 
-    def filter_telluric_lines(self, linelist_telluric, spectra, velocity_lower_limit, velocity_upper_limit):
+    def filter_telluric_lines(self, linelist_telluric, spectrum, velocity_lower_limit, velocity_upper_limit):
         """
         Select telluric lines inside a given velocity limits (km/s).
         """
@@ -3215,8 +3065,8 @@ max_wave_range=max_wave_range)
 
         ## Select telluric lines of interest
         # Limit to region of interest
-        wmin = spectra['waveobs'][0]
-        wmax = spectra['waveobs'][-1]
+        wmin = spectrum['waveobs'][0]
+        wmax = spectrum['waveobs'][-1]
         delta_wmin = wmin * (velocity_lower_limit / (c/1000.0))
         delta_wmax = wmax * (velocity_upper_limit / (c/1000.0))
         wfilter = (linelist_telluric['wave_peak'] <= wmax + delta_wmax) & (linelist_telluric['wave_peak'] >= wmin + delta_wmin)
@@ -3384,7 +3234,7 @@ max_wave_range=max_wave_range)
         self.status_message("Correcting " + vel_type + " velocity...")
 
         # Remove current continuum from plot if exists
-        self.remove_continuum_spectra()
+        self.remove_continuum_spectrum()
 
         # Remove current drawn fitted lines if they exist
         # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
@@ -3431,7 +3281,7 @@ max_wave_range=max_wave_range)
         self.status_message("Converting to nanometers...")
 
         # Remove current continuum from plot if exists
-        self.remove_continuum_spectra()
+        self.remove_continuum_spectrum()
 
         # Remove current drawn fitted lines if they exist
         # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
@@ -3537,7 +3387,7 @@ max_wave_range=max_wave_range)
                     else:
                         waveobs = np.hstack((waveobs, new_waveobs))
 
-            # If wavelength out of the linelist file are used, SPECTRUM starts to generate flat spectra
+            # If wavelength out of the linelist file are used, SPECTRUM starts to generate flat spectrum
             if np.min(waveobs) <= 300.0 or np.max(waveobs) >= 1100.0:
                 # luke.300_1000nm.lst
                 msg = "Wavelength range is outside line list for spectrum generation."
@@ -3567,38 +3417,38 @@ max_wave_range=max_wave_range)
     def on_synthesize_thread(self, waveobs, atm_filename, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
         total_points = len(waveobs)
 
-        synth_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-        synth_spectra['waveobs'] = waveobs
+        synth_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+        synth_spectrum['waveobs'] = waveobs
 
         # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
-        synth_spectra['flux'] = sve.generate_spectrum(synth_spectra['waveobs']*10.0, atm_filename, linelist_file = resource_path("input/linelists/SPECTRUM/default.300_1100nm.lst"), abundances_file = resource_path("input/abundances/default.stdatom.dat"), microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, verbose=1, update_progress_func=self.update_progress)
+        synth_spectrum['flux'] = sve.generate_spectrum(synth_spectrum['waveobs']*10.0, atm_filename, linelist_file = resource_path("input/linelists/SPECTRUM/default.300_1100nm.lst"), abundances_file = resource_path("input/abundances/default.stdatom.dat"), microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, verbose=1, update_progress_func=self.update_progress)
 
 
-        synth_spectra.sort(order='waveobs') # Make sure it is ordered by wavelength
+        synth_spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
 
         # Remove atmosphere model temporary file
         os.remove(atm_filename)
-        wx.CallAfter(self.on_synthesize_finnish, synth_spectra, teff, logg, MH, microturbulence_vel)
+        wx.CallAfter(self.on_synthesize_finnish, synth_spectrum, teff, logg, MH, microturbulence_vel)
 
-    def on_synthesize_finnish(self, synth_spectra, teff, logg, MH, microturbulence_vel):
+    def on_synthesize_finnish(self, synth_spectrum, teff, logg, MH, microturbulence_vel):
         # Draw new lines
         self.draw_fitted_lines()
         self.operation_in_progress = False
         self.flash_status_message("Lines fitted.")
         # Remove current continuum from plot if exists
-        self.remove_drawn_continuum_spectra()
+        self.remove_drawn_continuum_spectrum()
 
         # Remove current drawn fitted lines if they exist
         self.remove_drawn_fitted_lines()
 
-        # Remove "[A]  " from spectra name (legend) if it exists
+        # Remove "[A]  " from spectrum name (legend) if it exists
         if self.active_spectrum != None and self.active_spectrum.plot_id != None:
             self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
 
         # Name: If it already exists, add a suffix
         name = self.get_name("Synth_" + str(teff) + "_" + str(logg) + "_"  + str(MH) + "_" + str(microturbulence_vel))
         color = self.get_color()
-        self.active_spectrum = Spectrum(synth_spectra, name, color=color)
+        self.active_spectrum = Spectrum(synth_spectrum, name, color=color)
 
         self.spectra.append(self.active_spectrum)
         self.active_spectrum.not_saved = True
@@ -3610,7 +3460,7 @@ max_wave_range=max_wave_range)
         self.canvas.draw()
 
         self.operation_in_progress = False
-        self.flash_status_message("Synthetic spectra generated!")
+        self.flash_status_message("Synthetic spectrum generated!")
 
 
     def on_exit(self, event):
@@ -3688,7 +3538,7 @@ along with Spectra Visual Editor.  If not, see <http://www.gnu.org/licenses/>.""
 ## Print usage
 def usage():
     print "Usage:"
-    print sys.argv[0], "[--continuum=file] [--lines=file] [--segments=file] [spectra_file]"
+    print sys.argv[0], "[--continuum=file] [--lines=file] [--segments=file] [spectrum_file]"
 
 ## Interpret arguments
 def get_arguments():
@@ -3702,7 +3552,7 @@ def get_arguments():
     continuum_file = None
     lines_file = None
     segments_file = None
-    spectra_file = None
+    spectrum_file = None
     for o, a in opts:
         if o in ("-c", "--continuum"):
             continuum_file = a
@@ -3732,11 +3582,11 @@ def get_arguments():
 
     # Open spectra
     for arg in args:
-        spectra_file = arg
-        if not os.path.exists(spectra_file):
-            print "Spectra file", arg, "does not exists!"
+        spectrum_file = arg
+        if not os.path.exists(spectrum_file):
+            print "Spectrum file", arg, "does not exists!"
             sys.exit(2)
-        filenames['spectra'].append(spectra_file)
+        filenames['spectra'].append(spectrum_file)
 
     return filenames
 
@@ -3752,11 +3602,11 @@ if __name__ == '__main__':
     spectra = []
     for path in filenames['spectra']:
         try:
-            spectrum = sve.read_spectra(path)
+            spectrum = sve.read_spectrum(path)
             #wfilter = (spectrum['waveobs'] >= 516.0) & (spectrum['waveobs'] <= 519.0)
             #spectrum = spectrum[wfilter]
         except Exception as e:
-            print "Spectra file", path, "has an incompatible format!"
+            print "Spectrum file", path, "has an incompatible format!"
             sys.exit(2)
         spectra.append(spectrum)
 
@@ -3830,18 +3680,4 @@ if __name__ == '__main__':
     app.frame.Show()
     app.MainLoop()
 
-
-#### IGNORE: Code for original files
-#~ continuum = asciitable.read(table=filenames['continuum'], delimiter=' ', comment=';', names=['wave_base', 'wave_top'], data_start=0)
-#~ continuum['wave_base'] = continuum['wave_base'] / 10 # nm
-#~ continuum['wave_top'] = continuum['wave_top'] / 10 # nm
-
-#~ lines = asciitable.read(table=filenames['lines'], delimiter=' ', comment=';', names=['wave_peak', 'wave_base', 'wave_top'], data_start=0)
-#~ lines['wave_base'] = lines['wave_base'] / 10 # nm
-#~ lines['wave_peak'] = lines['wave_peak'] / 10 # nm
-#~ lines['wave_top'] = lines['wave_top'] / 10 # nm
-
-#~ segments = asciitable.read(table=filenames['segments'], delimiter=' ', comment=';', names=['wave_base', 'wave_top'], data_start=0)
-#~ segments['wave_base'] = segments['wave_base'] / 10 # nm
-#~ segments['wave_top'] = segments['wave_top'] / 10 # nm
 

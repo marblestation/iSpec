@@ -31,12 +31,12 @@ def resource_path(relative):
         basedir = os.path.dirname(__file__)
     return os.path.join(basedir, relative)
 
-if os.path.exists(resource_path("synthesizer.so")):
-    try:
-        from atmospheres import *
-        from synth import *
-    except ImportError as e:
-        pass
+#if os.path.exists(resource_path("synthesizer.so")):
+try:
+    from atmospheres import *
+    from synth import *
+except ImportError as e:
+    pass
 from common import *
 from spectrum import *
 from continuum import *

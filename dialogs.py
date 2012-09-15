@@ -1,21 +1,21 @@
 #!/usr/bin/env python
-"""
-    This file is part of Spectra.
-    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
-
-    Spectra is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    Spectra is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with Spectra.  If not, see <http://www.gnu.org/licenses/>.
-"""
+#
+#    This file is part of Spectra Visual Editor (SVE).
+#    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
+#
+#    SVE is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    SVE is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
+#
+#    You should have received a copy of the GNU Affero General Public License
+#    along with SVE. If not, see <http://www.gnu.org/licenses/>.
+#
 #################
 # Run with ipython -pdb -c "%run interactive.py"
 #################
@@ -30,7 +30,7 @@ import numpy as np
 
 # The recommended way to use wx with mpl is with the WXAgg backend.
 import matplotlib
-matplotlib.use('WXAgg')
+#matplotlib.use('WXAgg')
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_wxagg import \
     FigureCanvasWxAgg as FigCanvas, \
@@ -370,7 +370,7 @@ class CorrectVelocityDialog(wx.Dialog):
         self.hbox.Add(self.text_where, 0, border=3, flag=flags)
 
         self.vbox2 = wx.BoxSizer(wx.VERTICAL)
-        self.radio_button_spectra = wx.RadioButton(self, -1, 'Spectra', style=wx.RB_GROUP)
+        self.radio_button_spectra = wx.RadioButton(self, -1, 'Spectrum', style=wx.RB_GROUP)
         self.vbox2.Add(self.radio_button_spectra, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
         self.radio_button_regions = wx.RadioButton(self, -1, 'Regions')
         self.vbox2.Add(self.radio_button_regions, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
@@ -655,7 +655,7 @@ class VelocityProfileDialog(wx.Dialog):
         self.recalculate = True
         self.EndModal(wx.ID_YES)
 
-class CleanSpectraDialog(wx.Dialog):
+class CleanSpectrumDialog(wx.Dialog):
     def __init__(self, parent, id, title, flux_base, flux_top, err_base, err_top):
         wx.Dialog.__init__(self, parent, id, title)
 
@@ -727,7 +727,7 @@ class CleanSpectraDialog(wx.Dialog):
         self.EndModal(wx.ID_OK)
 
 
-class CutSpectraDialog(wx.Dialog):
+class CutSpectrumDialog(wx.Dialog):
     def __init__(self, parent, id, title, wave_base, wave_top):
         wx.Dialog.__init__(self, parent, id, title)
 
@@ -774,7 +774,7 @@ class CutSpectraDialog(wx.Dialog):
         self.action_accepted = True
         self.EndModal(wx.ID_OK)
 
-class ResampleSpectraDialog(wx.Dialog):
+class ResampleSpectrumDialog(wx.Dialog):
     def __init__(self, parent, id, title, wave_base, wave_top, wave_step):
         wx.Dialog.__init__(self, parent, id, title)
 
@@ -917,7 +917,7 @@ class CombineSpectraDialog(wx.Dialog):
 
 class SyntheticSpectrumDialog(wx.Dialog):
     def __init__(self, parent, id, title, wave_base, wave_top, wave_step, resolution, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff):
-        wx.Dialog.__init__(self, parent, id, title, size=(450,450))
+        wx.Dialog.__init__(self, parent, id, title, size=(450,550))
 
         self.action_accepted = False
 
@@ -1176,7 +1176,7 @@ class EstimateErrorsDialog(wx.Dialog):
 
 class FitLinesDialog(wx.Dialog):
     def __init__(self, parent, id, title, vel_atomic, vel_telluric):
-        wx.Dialog.__init__(self, parent, id, title, size=(450,300))
+        wx.Dialog.__init__(self, parent, id, title, size=(450,250))
 
         self.action_accepted = False
 
@@ -1205,17 +1205,6 @@ class FitLinesDialog(wx.Dialog):
         self.hbox.Add(self.vel_telluric, 0, border=3, flag=flags)
 
         self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
-
-        ### Rewrite notes
-        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
-        self.write_note = wx.CheckBox(self, -1, 'Overwrite the line mark notes if needed', style=wx.ALIGN_LEFT)
-        self.write_note.SetValue(True)
-
-        self.hbox.AddSpacer(10)
-        self.hbox.Add(self.write_note, 0, border=3, flag=flags)
-
-        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
-
 
         self.vbox.AddSpacer(10)
 

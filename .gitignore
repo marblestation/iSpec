@@ -6,6 +6,7 @@ output/*
 synthesizer/build/*
 synthesizer/synthesizer.c
 pyinstaller*/*
+docs-sphinx/*
 *.h5
 tests/data/*
 sve/docs/*

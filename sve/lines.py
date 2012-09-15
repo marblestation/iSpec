@@ -155,59 +155,6 @@ def __eV_to_inverse_cm(value):
     return value * 8065.73 # cm^-1
 
 
-def VALD_to_SPECTRUM_format(vald_linelist, chemical_elements_file, molecules_file):
-    """
-    Convert a VALD linelist already read by 'read_VALD_linelist' method
-    to a format that can be used with SPECTRUM synthesizer.
-    """
-    # Periodic table
-    chemical_elements = asciitable.read(chemical_elements_file, delimiter="\t")
-    # Some molecular symbols
-    # - For diatomic molecules, the atomic_num specifies the atomic makeup of the molecule.
-    #   Thus, H2 is 101.0, the two ``1''s referring to the two hydrogens, CH is 106.0,
-    #   CO 608.0, MgH 112.0, TiO 822.0, etc.
-    # - The lightest element always comes first in the code, so that 608.0 cannot be
-    #   confused with NdO, which would be written 860.0.
-    molecules = asciitable.read(molecules_file, delimiter="\t")
-
-    # Prepare resulting structure
-    linelist = np.recarray((len(vald_linelist), ), dtype=[('wave (A)', '<f8'), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('log(gf)', '<f8'), ('fudge factor', '<f8'),('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), ('note', '|S100')])
-    linelist['species'] = ""
-    linelist['fudge factor'] = 1.0
-    linelist['transition type'] = "99"
-    linelist['note'] = ""
-
-    linelist['wave (A)'] = vald_linelist['wave (A)']
-    linelist['upper state (cm^-1)'] = (__eV_to_inverse_cm(__get_upper_state(vald_linelist['lower state (eV)'], vald_linelist[ "wave (A)"] / 10.))).astype(int)
-    linelist['lower state (cm^-1)'] = (__eV_to_inverse_cm(vald_linelist['lower state (eV)'])).astype(int)
-    linelist['log(gf)'] = vald_linelist['log(gf)']
-    #linelist['transition type'] = "99"
-    linelist['transition type'] = "GA"
-    linelist['rad'] = vald_linelist['rad']
-    linelist['stark'] = vald_linelist['stark']
-    linelist['waals'] = vald_linelist['waals']
-    # Van der Waals should be zero or negative
-    fwaals = vald_linelist['waals'] > 0
-    linelist['waals'][fwaals] = 0
-    # TODO: Consider AO
-    #if ():
-        ## Anstee-O'Mara theory
-        #linelist['transition type'] = "AO"
-        #linelist['sig.alpha'] = vald_linelist['Waals']
-        #linelist['rad'] = vald_linelist['Waals']
-        #linelist['rad'] = 0
-        #linelist['stark'] = -999 # Mark to remove manually after
-        #linelist['waals'] = -999 # Mark to remove manually after
-
-    i = 0
-    for line in vald_linelist:
-        linelist[i]['species'] = __get_specie(chemical_elements, molecules, line["element"])
-        linelist[i]['note'] = "_".join(line["element"].split())
-        i += 1
-
-    return linelist
-
-
 
 ########################################################################
 ## [END] LINE LIST
@@ -230,7 +177,16 @@ def read_line_regions(line_regions_filename):
         505.8498        505.8348        505.8660        "Fe I"
 
     """
-    line_regions = asciitable.read(table=line_regions_filename, comment='#', names=['wave_peak', 'wave_base', 'wave_top', 'note'], quotechar="\"")
+    line_regions = np.array([tuple(line.rstrip('\r\n').split("\t")) for line in open(line_regions_filename,)][1:], dtype=[('wave_peak', float),('wave_base', float),('wave_top', float), ('note', '|S100')])
+
+    if np.any(line_regions['wave_top'] - line_regions['wave_base'] <= 0):
+        logging.error("Line regions where wave_base is equal or bigger than wave_top")
+        raise Exception("Incompatible format")
+
+    if np.any(line_regions['wave_top'] - line_regions['wave_peak'] <= 0) or np.any(line_regions['wave_peak'] - line_regions['wave_base'] <= 0):
+        logging.error("Line regions where wave_peak is outside wave_base and wave_top")
+        raise Exception("Incompatible format")
+
     return line_regions
 
 def write_line_regions(line_regions, line_regions_filename):
@@ -239,14 +195,17 @@ def write_line_regions(line_regions, line_regions_filename):
     ::
 
         wave_peak       wave_base       wave_top        note
-        480.8148        480.7970        480.8330        "Fe I"
-        496.2572        496.2400        496.2820        "Fe I"
-        499.2785        499.2610        499.2950        ""
-        505.8498        505.8348        505.8660        "Fe I"
+        480.8148        480.7970        480.8330        Fe I
+        496.2572        496.2400        496.2820        Fe I
+        499.2785        499.2610        499.2950
+        505.8498        505.8348        505.8660        Fe I
     """
-    asciitable.write(line_regions, output=line_regions_filename, delimiter='\t', quotechar="\"")
+    out = open(line_regions_filename, "w")
+    out.write("wave_peak\twave_base\twave_top\tnote\n")
+    out.write("\n".join(["\t".join(map(str, (line['wave_peak'], line['wave_base'], line['wave_top'], line['note']))) for line in line_regions]))
+    out.close()
 
-def __fit_gaussian(spectra_slice, continuum_model, mu, sig=None, A=None):
+def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None):
     """
     Fits a gaussian at a given wavelength location using a fitted continuum model.
 
@@ -254,12 +213,12 @@ def __fit_gaussian(spectra_slice, continuum_model, mu, sig=None, A=None):
     - A mu parameter (model.mu) outside the region used for the fitting it is also a symptom of bad fit.
     """
     model = GaussianModel()
-    x = spectra_slice['waveobs']
-    y = spectra_slice['flux']
+    x = spectrum_slice['waveobs']
+    y = spectrum_slice['flux']
     min_flux = np.min(y)
 
     # Parameters estimators
-    baseline = np.median(continuum_model(spectra_slice['waveobs']))
+    baseline = np.median(continuum_model(spectrum_slice['waveobs']))
     if A == None:
         A = min_flux - baseline
     if sig == None:
@@ -272,10 +231,10 @@ def __fit_gaussian(spectra_slice, continuum_model, mu, sig=None, A=None):
     parinfo[1]['value'] = A # Only negative (absorption lines) and greater than the lowest point + 25%
     parinfo[1]['limited'] = [True, True]
     parinfo[1]['limits'] = [(min_flux-baseline) * 1.25, 0.]
-    parinfo[2]['value'] = sig # Only positives (absorption lines) and lower than the spectra slice
+    parinfo[2]['value'] = sig # Only positives (absorption lines) and lower than the spectrum slice
     parinfo[2]['limited'] = [True, True]
     parinfo[2]['limits'] = [0., x[-1] - x[0]]
-    parinfo[3]['value'] = mu # Peak only within the spectra slice
+    parinfo[3]['value'] = mu # Peak only within the spectrum slice
     parinfo[3]['limited'] = [True, True]
     #parinfo[3]['limits'] = [x[0], x[-1]]
     parinfo[3]['limits'] = [mu - 0.005, mu + 0.005]
@@ -283,14 +242,14 @@ def __fit_gaussian(spectra_slice, continuum_model, mu, sig=None, A=None):
     # If there are only 3 data point, fix 'mu'
     # - if not, the fit will fail with an exception because there are not
     #   more data points than parameters
-    if len(spectra_slice) == 3:
+    if len(spectrum_slice) == 3:
         parinfo[3]['fixed'] = True
 
     model.fitData(x, y, parinfo=parinfo)
 
     return model
 
-def __fit_voigt(spectra_slice, continuum_model, mu, sig=None, A=None, gamma=None):
+def __fit_voigt(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None):
     """
     Fits a voigt at a given wavelength location using a fitted continuum model.
 
@@ -299,12 +258,12 @@ def __fit_voigt(spectra_slice, continuum_model, mu, sig=None, A=None, gamma=None
     - A mu parameter (model.mu) outside the region used for the fitting it is also a symptom of bad fit.
     """
     model = VoigtModel()
-    x = spectra_slice['waveobs']
-    y = spectra_slice['flux']
+    x = spectrum_slice['waveobs']
+    y = spectrum_slice['flux']
     min_flux = np.min(y)
 
     # Parameters estimators
-    baseline = np.median(continuum_model(spectra_slice['waveobs']))
+    baseline = np.median(continuum_model(spectrum_slice['waveobs']))
     if A == None:
         A = min_flux - baseline
     if sig == None:
@@ -318,21 +277,21 @@ def __fit_voigt(spectra_slice, continuum_model, mu, sig=None, A=None, gamma=None
     parinfo[1]['value'] = A # Only negative (absorption lines) and greater than the lowest point + 25%
     parinfo[1]['limited'] = [True, True]
     parinfo[1]['limits'] = [(min_flux-baseline) * 1.25, 0.]
-    parinfo[2]['value'] = sig # Only positives (absorption lines) and lower than the spectra slice
+    parinfo[2]['value'] = sig # Only positives (absorption lines) and lower than the spectrum slice
     parinfo[2]['limited'] = [True, True]
     parinfo[2]['limits'] = [0., x[-1] - x[0]]
-    parinfo[3]['value'] = mu # Peak only within the spectra slice
+    parinfo[3]['value'] = mu # Peak only within the spectrum slice
     parinfo[3]['limited'] = [True, True]
     #parinfo[3]['limits'] = [x[0], x[-1]]
     parinfo[3]['limits'] = [mu - 0.005, mu + 0.005]
-    parinfo[4]['value'] = gamma # Only positives (not zero, otherwise its a gaussian) and small (for nm, it should be <= 0.01 aprox but I leave it in relative terms considering the spectra slice)
+    parinfo[4]['value'] = gamma # Only positives (not zero, otherwise its a gaussian) and small (for nm, it should be <= 0.01 aprox but I leave it in relative terms considering the spectrum slice)
     parinfo[4]['limited'] = [True, True]
     parinfo[4]['limits'] = [0.001, x[-1] - x[0]]
 
     # If there are only 4 data point, fix 'mu'
     # - if not, the fit will fail with an exception because there are not
     #   more data points than parameters
-    if len(spectra_slice) == 4:
+    if len(spectrum_slice) == 4:
         parinfo[3]['fixed'] = True
 
     model.fitData(x, y, parinfo=parinfo)
@@ -340,7 +299,7 @@ def __fit_voigt(spectra_slice, continuum_model, mu, sig=None, A=None, gamma=None
     return model
 
 
-def fit_line(spectra_slice, continuum_model, mu, sig=None, A=None, gamma=None, discard_gaussian = False, discard_voigt = False):
+def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None, discard_gaussian = False, discard_voigt = False):
     """
     Fits a gaussian and a voigt at a given wavelength location using a fitted continuum model.
 
@@ -357,9 +316,9 @@ def fit_line(spectra_slice, continuum_model, mu, sig=None, A=None, gamma=None, d
         # If there are more data points than parameters (if not, the fit will fail with an exception)
         # - 2 free parameters: A, sig
         # - 1 fix parameter: mu (but it will set to free if there is enough data)
-        if len(spectra_slice) > 2:
+        if len(spectrum_slice) > 2:
             try:
-                gaussian_model = __fit_gaussian(spectra_slice, continuum_model, mu, sig=sig, A=A)
+                gaussian_model = __fit_gaussian(spectrum_slice, continuum_model, mu, sig=sig, A=A)
 
                 residuals = gaussian_model.residuals()
                 rms_gaussian = np.sqrt(np.sum(np.power(residuals, 2)) / len(residuals))
@@ -375,9 +334,9 @@ def fit_line(spectra_slice, continuum_model, mu, sig=None, A=None, gamma=None, d
         # If there are more data points than parameters (if not, the fit will fail with an excepteion)
         # - 3 free parameters: A, sig, gamma
         # - 1 fix parameter: mu (but it will set to free if there is enough data)
-        if len(spectra_slice) > 3:
+        if len(spectrum_slice) > 3:
             try:
-                voigt_model = __fit_voigt(spectra_slice, continuum_model, mu, sig=sig, A=A, gamma=gamma)
+                voigt_model = __fit_voigt(spectrum_slice, continuum_model, mu, sig=sig, A=A, gamma=gamma)
                 residuals = voigt_model.residuals()
                 rms_voigt = np.sqrt(np.sum(np.power(residuals, 2)) / len(residuals))
                 discard_voigt = False
@@ -402,7 +361,7 @@ def __remove_consecutives_features(features):
     return cleaned_features
 
 
-def __detect_false_and_noisy_features(spectra, linemasks):
+def __detect_false_and_noisy_features(spectrum, linemasks):
     """
     Detect features that are false positive or noise:
 
@@ -412,13 +371,13 @@ def __detect_false_and_noisy_features(spectra, linemasks):
     peaks = linemasks['peak']
     base_points = np.asarray([linemasks['base'][0]] +  linemasks['top'].tolist())
 
-    ## First feature found in spectra: base point
-    ## Last feature found in spectra: base point
+    ## First feature found in spectrum: base point
+    ## Last feature found in spectrum: base point
     # Left
-    peak_base_diff_left = spectra['flux'][base_points[:-1]] - spectra['flux'][peaks]
+    peak_base_diff_left = spectrum['flux'][base_points[:-1]] - spectrum['flux'][peaks]
     peak_base_index_diff_left = base_points[:-1] - peaks
     # Right
-    peak_base_diff_right = spectra['flux'][base_points[1:]] - spectra['flux'][peaks]
+    peak_base_diff_right = spectrum['flux'][base_points[1:]] - spectrum['flux'][peaks]
     peak_base_index_diff_right = base_points[1:] - peaks
 
     # Find peaks too close (2 positions) to the next or previous peak (noise)
@@ -459,39 +418,39 @@ def __assert_structure(xcoord, yvalues, peaks, base_points):
     first_wave_base = xcoord[base_points][0]
     if first_wave_peak > first_wave_base:
         if len(base_points) - len(peaks) == 1:
-            ## First feature found in spectra: base point
-            ## Last feature found in spectra: base point
+            ## First feature found in spectrum: base point
+            ## Last feature found in spectrum: base point
             base_points = base_points
             peaks = peaks
         elif len(base_points) - len(peaks) == 0:
-            ## First feature found in spectra: base point
-            ## Last feature found in spectra: peak
+            ## First feature found in spectrum: base point
+            ## Last feature found in spectrum: peak
             # - Remove last peak
             #base_points = base_points
             #peaks = peaks[:-1]
-            # - Add a base point (last point in the spectra)
+            # - Add a base point (last point in the spectrum)
             base_points = np.hstack((base_points, [len(xcoord)-1]))
             peaks = peaks
         else:
             raise Exception("This should not happen")
     else:
         if len(base_points) - len(peaks) == -1:
-            ## First feature found in spectra: peak
-            ## Last feature found in spectra: peak
+            ## First feature found in spectrum: peak
+            ## Last feature found in spectrum: peak
             # - Remove first and last peaks
             #base_points = base_points
             #peaks = peaks[1:-1]
-            # - Add two base points (first and last point in the spectra)
+            # - Add two base points (first and last point in the spectrum)
             base_points = np.hstack(([0], base_points))
             base_points = np.hstack((base_points, [len(xcoord)-1]))
             peaks = peaks
         elif len(base_points) - len(peaks) == 0:
-            ## First feature found in spectra: peak
-            ## Last feature found in spectra: base point
+            ## First feature found in spectrum: peak
+            ## Last feature found in spectrum: base point
             # - Remove first peak
             #base_points = base_points
             #peaks = peaks[1:]
-            # - Add a base point (first point in the spectra)
+            # - Add a base point (first point in the spectrum)
             base_points = np.hstack(([0], base_points))
             peaks = peaks
         else:
@@ -499,82 +458,22 @@ def __assert_structure(xcoord, yvalues, peaks, base_points):
 
     return peaks, base_points
 
-def find_linemasks(spectra, continuum_model, minimum_depth=None, maximum_depth=None, smoothed_spectra=None, vald_linelist_file=None, telluric_linelist_file = None, discard_gaussian = False, discard_voigt = False, vel_atomic=0.0, vel_telluric=0.0, frame=None):
-    """
-    Generate a line masks for a spectrum by finding peaks and base points.
-
-    It is recommended that the spectra is normalized (better results are obtained).
-    It tries to fit a gaussian and a voigt model and selects the best unless one of them is disabled by
-    the discard_gaussian or discard_voigt argument (if both of them are disabled, there will be
-    no fit information).
-
-    To save computation time, min and max depth can be indicated and all the lines out
-    of this range will not be considered for fit process (save CPU time) although
-    the rest of the information of the line will be conserved in the output.
-
-    Additionally, features that are false positive or noise are not fitted. This
-    implies ignoring:
-
-    - Peaks that are less deep than it nearby base points (false positives)
-    - Peaks too close (2 or less positions) to the next and previous base point (noise)
-
-    Returns a complete structure with all the necessary information to
-    determine if it is a line of interest.
-    """
-    #print "NOTICE: This method can generate overflow warnings due to the Least Square Algorithm"
-    #print "        used for the fitting process, but they can be ignored."
-    if smoothed_spectra == None:
-        smoothed_spectra = spectra
-
-    logging.info("Finding peaks and base points...")
-    # Peaks and base points will agree with the following criteria:
-    # - The first and last feature is a base point
-    #    base_points[0] < peaks[0] < base_points[1] < ... < base_points[n-1] < peaks[n-1] < base_points[n]
-    #    where n = len(base_points)
-    # - len(base_points) = len(peaks) + 1
-    peaks, base_points = __find_peaks_and_base_points(smoothed_spectra['waveobs'], smoothed_spectra['flux'])
-    # If no peaks found, just finnish
-    if len(peaks) == 0:
-        return None
-
-    # Depth of the peak with respect to the total continuum in % over the total continuum
-    # - In case that the peak is higher than the continuum, depth < 0
-    continuum_at_peak = continuum_model(spectra['waveobs'][peaks])
-    flux_at_peak = spectra['flux'][peaks]
-    depth = ((continuum_at_peak - flux_at_peak) / continuum_at_peak)
-
-    if minimum_depth == None:
-        minimum_depth = np.min(depth)
-    if maximum_depth == None:
-        minimum_depth = np.max(depth)
-
-    # To save computation time, min and max depth can be indicated and all the lines out
-    # of this range will not be considered for fit process (save CPU time) although
-    # the rest of the information of the line will be conserved in the output
-    accepted_for_fitting = np.logical_and(depth >= minimum_depth, depth <= maximum_depth)
-
-    last_reported_progress = -1
-    if frame != None:
-        frame.update_progress(0)
-
-    num_peaks = len(peaks)
-    linemasks = np.recarray((num_peaks, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('peak', int), ('base', int), ('top', int), ('depth', float), ('relative_depth', float), ('wave_base_fit', float), ('wave_top_fit', float), ('base_fit', int), ('top_fit', int), ('mu', float), ('sig', float), ('A', float), ('baseline', float), ('gamma', float), ('fwhm', float), ('fwhm_kms', float), ('R', float), ('depth_fit', float), ('relative_depth_fit', float), ('integrated_flux', float), ('ew', float), ('rms', float), ('VALD_wave_peak', float), ('element', '|S4'), ('lower state (eV)', float), ('log(gf)', float), ('telluric_wave_peak', float), ('telluric_fwhm', float), ('telluric_R', float), ('telluric_depth', float), ('solar_depth', float), ('discarded', bool), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('fudge factor', float), ('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8')])
-
+def __create_linemasks_structure(num_peaks):
+    linemasks = np.recarray((num_peaks, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100'), ('peak', int), ('base', int), ('top', int), ('depth', float), ('relative_depth', float), ('wave_base_fit', float), ('wave_top_fit', float), ('base_fit', int), ('top_fit', int), ('mu', float), ('sig', float), ('A', float), ('baseline', float), ('gamma', float), ('fwhm', float), ('fwhm_kms', float), ('R', float), ('depth_fit', float), ('relative_depth_fit', float), ('integrated_flux', float), ('ew', float), ('rms', float), ('VALD_wave_peak', float), ('element', '|S4'), ('lower state (eV)', float), ('log(gf)', float), ('telluric_wave_peak', float), ('telluric_fwhm', float), ('telluric_R', float), ('telluric_depth', float), ('solar_depth', float), ('discarded', bool), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('fudge factor', float), ('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8')])
+    # Initialization
     linemasks['discarded'] = False
     # Line mask
-    linemasks['wave_peak'] = spectra['waveobs'][peaks]
-    linemasks['wave_base'] = spectra['waveobs'][base_points[:-1]]
-    linemasks['wave_top'] = spectra['waveobs'][base_points[1:]]
-    # Position in the spectra, usefull for noise detection
-    linemasks['peak'] = peaks
-    linemasks['base'] = base_points[:-1]
-    linemasks['top'] = base_points[1:]
-    linemasks['depth'] = depth
+    linemasks['wave_peak'] = 0.0
+    linemasks['wave_base'] = 0.0
+    linemasks['wave_top'] = 0.0
+    linemasks['note'] = ""
+    # Position in the spectrum, usefull for noise detection
+    linemasks['peak'] = 0
+    linemasks['base'] = 0
+    linemasks['top'] = 0
+    linemasks['depth'] = 0.0
     # Relative depth is "peak - mean_base_point" with respect to the total continuum
-    # - In case that the mean base point is higher than the continuum, relative_depth < 0
-    # - relative_depth < depth is always true
-    flux_from_top_base_point_to_continuum = np.abs(continuum_at_peak - np.mean([spectra['flux'][base_points[:-1]], spectra['flux'][base_points[1:]]]))
-    linemasks['relative_depth'] = ((continuum_at_peak - (flux_at_peak + flux_from_top_base_point_to_continuum)) / continuum_at_peak)
+    linemasks['relative_depth'] = 0
     # Default values for line identification
     linemasks['VALD_wave_peak'] = 0
     linemasks['element'] = ""
@@ -605,65 +504,206 @@ def find_linemasks(spectra, continuum_model, minimum_depth=None, maximum_depth=N
     linemasks["species"] = ""
     linemasks["lower state (cm^-1)"] = 0
     linemasks["upper state (cm^-1)"] = 0
-    linemasks["fudge factor"] = 0
-    linemasks["transition type"] = ""
+    linemasks["fudge factor"] = 1.0
+    linemasks["transition type"] = "99"
+    return linemasks
+
+
+def find_linemasks(spectrum, continuum_model, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, minimum_depth=None, maximum_depth=None, smoothed_spectrum=None, discard_gaussian = False, discard_voigt = False, vel_atomic=0.0, vel_telluric=0.0, frame=None):
+    """
+    Generate a line masks for a spectrum by finding peaks and base points.
+
+    It is recommended that the spectrum is normalized (better results are obtained).
+    It tries to fit a gaussian and a voigt model and selects the best unless one of them is disabled by
+    the discard_gaussian or discard_voigt argument (if both of them are disabled, there will be
+    no fit information).
+
+    To save computation time, min and max depth can be indicated and all the lines out
+    of this range will not be considered for fit process (save CPU time) although
+    the rest of the information of the line will be conserved in the output.
+
+    Additionally, features that are false positive or noise are not fitted. This
+    implies ignoring:
+
+    - Peaks that are less deep than it nearby base points (false positives)
+    - Peaks too close (2 or less positions) to the next and previous base point (noise)
+
+    Returns a complete structure with all the necessary information to
+    determine if it is a line of interest.
+    """
+    #print "NOTICE: This method can generate overflow warnings due to the Least Square Algorithm"
+    #print "        used for the fitting process, but they can be ignored."
+    if smoothed_spectrum == None:
+        smoothed_spectrum = spectrum
+
+    logging.info("Finding peaks and base points...")
+    # Peaks and base points will agree with the following criteria:
+    # - The first and last feature is a base point
+    #    base_points[0] < peaks[0] < base_points[1] < ... < base_points[n-1] < peaks[n-1] < base_points[n]
+    #    where n = len(base_points)
+    # - len(base_points) = len(peaks) + 1
+    peaks, base_points = __find_peaks_and_base_points(smoothed_spectrum['waveobs'], smoothed_spectrum['flux'])
+    # If no peaks found, just finnish
+    if len(peaks) == 0:
+        return None
+
+    # Depth of the peak with respect to the total continuum in % over the total continuum
+    # - In case that the peak is higher than the continuum, depth < 0
+    continuum_at_peak = continuum_model(spectrum['waveobs'][peaks])
+    flux_at_peak = spectrum['flux'][peaks]
+    depth = ((continuum_at_peak - flux_at_peak) / continuum_at_peak)
+
+    if minimum_depth == None:
+        minimum_depth = np.min(depth)
+    if maximum_depth == None:
+        minimum_depth = np.max(depth)
+
+    # To save computation time, min and max depth can be indicated and all the lines out
+    # of this range will not be considered for fit process (save CPU time) although
+    # the rest of the information of the line will be conserved in the output
+    accepted_for_fitting = np.logical_and(depth >= minimum_depth, depth <= maximum_depth)
+
+    last_reported_progress = -1
+    if frame != None:
+        frame.update_progress(0)
+
+    num_peaks = len(peaks)
+    linemasks = __create_linemasks_structure(num_peaks)
+
+    # Line mask
+    linemasks['wave_peak'] = spectrum['waveobs'][peaks]
+    linemasks['wave_base'] = spectrum['waveobs'][base_points[:-1]]
+    linemasks['wave_top'] = spectrum['waveobs'][base_points[1:]]
+    # Position in the spectrum, usefull for noise detection
+    linemasks['peak'] = peaks
+    linemasks['base'] = base_points[:-1]
+    linemasks['top'] = base_points[1:]
+    linemasks['depth'] = depth
+    # Relative depth is "peak - mean_base_point" with respect to the total continuum
+    # - In case that the mean base point is higher than the continuum, relative_depth < 0
+    # - relative_depth < depth is always true
+    flux_from_top_base_point_to_continuum = np.abs(continuum_at_peak - np.mean([spectrum['flux'][base_points[:-1]], spectrum['flux'][base_points[1:]]]))
+    linemasks['relative_depth'] = ((continuum_at_peak - (flux_at_peak + flux_from_top_base_point_to_continuum)) / continuum_at_peak)
 
     # To save computation time, exclude false positives and noise from the fitting process
-    rejected_by_noise = __detect_false_and_noisy_features(spectra, linemasks)
+    rejected_by_noise = __detect_false_and_noisy_features(spectrum, linemasks)
     accepted_for_fitting = np.logical_and(accepted_for_fitting, np.logical_not(rejected_by_noise))
 
+    linemasks = fit_lines(linemasks, spectrum, continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian=discard_gaussian, discard_voigt=discard_voigt, smoothed_spectrum=smoothed_spectrum, accepted_for_fitting=accepted_for_fitting, frame=frame)
+
+    # Identify peaks higher than continuum
+    # - Depth is negative if the peak is higher than the continuum
+    # - Relative depth is negative if the mean base point is higher than the continuum
+    rejected_by_depth_higher_than_continuum = (linemasks['depth'] < 0)
+
+    # Identify peaks with a depth inferior/superior to a given limit (% of the continuum)
+    # - Observed depth
+    rejected_by_depth_limits1 = np.logical_or((linemasks['depth'] <= minimum_depth), (linemasks['depth'] >= maximum_depth))
+    # - Fitted depth
+    rejected_by_depth_limits2 = np.logical_or((linemasks['depth_fit'] <= minimum_depth), (linemasks['depth_fit'] >= maximum_depth))
+    rejected_by_depth_limits = np.logical_or(rejected_by_depth_limits1, rejected_by_depth_limits2)
+
+    # Identify bad fits (9999.0: Cases where has not been possible to fit a gaussian/voigt)
+    rejected_by_bad_fit = (linemasks['rms'] >= 9999.0)
+
+    discarded = rejected_by_depth_higher_than_continuum
+    discarded = np.logical_or(discarded, rejected_by_depth_limits)
+    discarded = np.logical_or(discarded, rejected_by_bad_fit)
+
+    linemasks = linemasks[~discarded]
+
+    return linemasks
+
+def fit_lines(regions, spectrum, continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian = False, discard_voigt = False, smoothed_spectrum=None, accepted_for_fitting=None, frame=None):
+    """
+    Fits gaussians models in the specified line regions.
+    * 'regions' should be an array with 'wave_base', 'wave_peak' and 'wave_top' columns.
+    * If 'smoothed_spectrum' is present, the wave_base and wave_top can be adjusted before fitting
+    * If 'accepted_for_fitting' array is present, only those regions that are set to true
+    will be fitted
+
+    :returns:
+        Array with additional columns such as 'mu', 'sig', 'A', 'baseline'...
+    """
+    last_reported_progress = -1
+    total_regions = len(regions)
+
     logging.info("Fitting line models...")
+    if not regions.dtype.fields.has_key('wave_base_fit'):
+        # If it is not a complete regions (it has not been created with
+        # __create_linemasks_structure and it only contains wave base, top and peak)
+        # we create a complete one
+        regions_tmp = regions
+        regions = __create_linemasks_structure(total_regions)
+        regions['wave_base'] = regions_tmp['wave_base']
+        regions['wave_top'] = regions_tmp['wave_top']
+        regions['wave_peak'] = regions_tmp['wave_peak']
+
+    i = 0
     # Model: fit gaussian
-    for i in np.arange(num_peaks):
+    for i in np.arange(total_regions):
         fitting_not_possible = False
-        if accepted_for_fitting[i]:
+        if accepted_for_fitting == None or accepted_for_fitting[i]:
             # Adjust edges
-            new_base, new_top = __improve_linemask_edges(smoothed_spectra['waveobs'], smoothed_spectra['flux'], linemasks['base'][i], linemasks['top'][i], linemasks['peak'][i])
-            linemasks['base_fit'][i] = new_base
-            linemasks['top_fit'][i] = new_top
-            linemasks['wave_base_fit'][i] = spectra['waveobs'][new_base]
-            linemasks['wave_top_fit'][i] = spectra['waveobs'][new_top]
+            if smoothed_spectrum != None:
+                new_base, new_top = __improve_linemask_edges(smoothed_spectrum['waveobs'], smoothed_spectrum['flux'], regions['base'][i], regions['top'][i], regions['peak'][i])
+            else:
+                new_base = regions['base'][i]
+                new_top = regions['top'][i]
+            regions['base_fit'][i] = new_base
+            regions['top_fit'][i] = new_top
+            regions['wave_base_fit'][i] = spectrum['waveobs'][new_base]
+            regions['wave_top_fit'][i] = spectrum['waveobs'][new_top]
 
             try:
-                line_model, rms = fit_line(spectra[new_base:new_top+1], continuum_model, linemasks['wave_peak'][i], discard_gaussian = discard_gaussian, discard_voigt = discard_voigt)
-                linemasks['mu'][i] = line_model.mu()
-                linemasks['sig'][i] = line_model.sig()
-                linemasks['A'][i] = line_model.A()
-                linemasks['baseline'][i] = line_model.baseline()
+                if new_base == 0 and new_top == 0:
+                    # If the original 'region' structure was a simple one not created
+                    # with __create_linemasks_structure, the values of base, peak and top
+                    # are set to 0 and we have to find the spectra window by using
+                    # wave_base and wave_top
+                    wave_filter = (spectrum['waveobs'] >= regions['wave_base'][i]) & (spectrum['waveobs'] <= regions['wave_top'][i])
+                    spectrum_window = spectrum[wave_filter]
+                else:
+                    spectrum_window = spectrum[new_base:new_top+1]
+                line_model, rms = __fit_line(spectrum_window, continuum_model, regions['wave_peak'][i], discard_gaussian = discard_gaussian, discard_voigt = discard_voigt)
+                regions['mu'][i] = line_model.mu()
+                regions['sig'][i] = line_model.sig()
+                regions['A'][i] = line_model.A()
+                regions['baseline'][i] = line_model.baseline()
                 if type(line_model) == VoigtModel:
-                    linemasks['gamma'][i] = line_model.gamma()
+                    regions['gamma'][i] = line_model.gamma()
                 else:
                     # The model is Gaussian, do not use 'gamma'
-                    linemasks['gamma'][i] = 9999.0
+                    regions['gamma'][i] = 9999.0
 
-                linemasks['fwhm'][i], linemasks['fwhm_kms'][i] = line_model.fwhm()
-                linemasks['R'][i] = linemasks['mu'][i] / linemasks['fwhm'][i] # Resolving power
+                regions['fwhm'][i], regions['fwhm_kms'][i] = line_model.fwhm()
+                regions['R'][i] = regions['mu'][i] / regions['fwhm'][i] # Resolving power
 
                 # Depth of the peak with respect to the total continuum in % over the total continuum
                 # - In case that the peak is higher than the continuum, depth < 0
                 continuum = line_model.baseline()
                 flux = line_model(line_model.mu())
-                linemasks['depth_fit'][i] = ((continuum - flux) / continuum)
+                regions['depth_fit'][i] = ((continuum - flux) / continuum)
                 # Relative depth is "peak - mean_base_point" with respect to the total continuum
                 # - In case that the mean base point is higher than the continuum, relative_depth < 0
                 # - relative_depth < depth is always true
-                flux_from_top_base_point_to_continuum = np.abs(continuum - np.mean([spectra['flux'][base_points[i]], spectra['flux'][base_points[i+1]]]))
-                linemasks['relative_depth_fit'][i] = ((continuum - (flux + flux_from_top_base_point_to_continuum)) / continuum)
+                flux_from_top_base_point_to_continuum = np.abs(continuum - np.max(spectrum_window['flux']))
+                regions['relative_depth_fit'][i] = ((continuum - (flux + flux_from_top_base_point_to_continuum)) / continuum)
 
                 # Equivalent Width
                 # - Include 99.97% of the gaussian area
-                from_x = linemasks['mu'][i] - 3*linemasks['sig'][i]
-                to_x = linemasks['mu'][i] + 3*linemasks['sig'][i]
-                linemasks['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x)
-                linemasks['ew'][i] = linemasks['integrated_flux'][i] / np.mean(continuum_model(spectra['waveobs'][new_base:new_top+1]))
+                from_x = regions['mu'][i] - 3*regions['sig'][i]
+                to_x = regions['mu'][i] + 3*regions['sig'][i]
+                regions['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x)
+                regions['ew'][i] = regions['integrated_flux'][i] / np.mean(continuum_model(spectrum_window['waveobs']))
                 # RMS
-                linemasks['rms'][i] = rms
+                regions['rms'][i] = rms
             except Exception as e:
                 #print "WARNING: Bad line fit (", i, ") - ", e.message
                 fitting_not_possible = True
 
 
-        current_work_progress = ((i*1.0)/num_peaks) * 100
+        current_work_progress = ((i*1.0)/total_regions) * 100
         if report_progress(current_work_progress, last_reported_progress):
             last_reported_progress = current_work_progress
             logging.info("%.2f%%" % current_work_progress)
@@ -672,14 +712,15 @@ def find_linemasks(spectra, continuum_model, minimum_depth=None, maximum_depth=N
 
     if vald_linelist_file != None:
         logging.info("Cross matching with atomic data...")
-        linemasks = fill_linemasks_with_VALD_info(linemasks, vald_linelist_file=vald_linelist_file, diff_limit=0.005, vel_atomic=vel_atomic)
+        regions = __fill_linemasks_with_VALD_info(regions, vald_linelist_file, chemical_elements_file, molecules_file, diff_limit=0.005, vel_atomic=vel_atomic)
     if telluric_linelist_file != None:
         logging.info("Cross matching with telluric data...")
-        linemasks = fill_linemasks_with_telluric_info(linemasks, telluric_linelist_file=telluric_linelist_file, vel_telluric=vel_telluric)
+        regions = __fill_linemasks_with_telluric_info(regions, telluric_linelist_file, vel_telluric=vel_telluric)
 
-    return linemasks
+    return regions
 
-def fill_linemasks_with_telluric_info(linemasks, telluric_linelist_file, vel_telluric=0.0):
+
+def __fill_linemasks_with_telluric_info(linemasks, telluric_linelist_file, vel_telluric=0.0):
     """
     Adds info to those linemasks that can be affected by tellurics.
     Different nearby linemasks can be affected by the same telluric line.
@@ -712,9 +753,9 @@ def fill_linemasks_with_telluric_info(linemasks, telluric_linelist_file, vel_tel
     min_wave_peak = np.min(clean_linemasks['wave_peak'])
 
     if telluric_linelist['wave_peak'][0] > min_wave_peak or telluric_linelist['wave_peak'][-1] < max_wave_peak:
-        print "WARNING: Telluric linelist does not cover the whole linemask wavelength range"
-        print "- Telluric range from", telluric_linelist['wave_peak'][0], "to", telluric_linelist['wave_peak'][-1], "nm"
-        print "- Linemask range from", min_wave_peak, "to", max_wave_peak, "nm"
+        logging.warn("Telluric linelist does not cover the whole linemask wavelength range")
+        logging.warn("- Telluric range from " + str(telluric_linelist['wave_peak'][0]) + " to " + str(telluric_linelist['wave_peak'][-1]) + " nm")
+        logging.warn("- Linemask range from " + str(min_wave_peak) + " to " + str(max_wave_peak) + " nm")
 
     diff_limit = np.max(telluric_linelist["fwhm"])
     wfilter = (telluric_linelist['wave_peak'] >= min_wave_peak - diff_limit) & (telluric_linelist['wave_peak'] <= max_wave_peak + diff_limit)
@@ -744,11 +785,21 @@ def fill_linemasks_with_telluric_info(linemasks, telluric_linelist_file, vel_tel
     return linemasks
 
 
-def fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, diff_limit=0.005, vel_atomic=0.0):
+def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elements_file, molecules_file, diff_limit=0.005, vel_atomic=0.0):
     """
     Cross-match linemasks with a VALD linelist in order to find
     the nearest lines and copy the information into the linemasks structure.
     """
+    # Periodic table
+    chemical_elements = asciitable.read(chemical_elements_file, delimiter="\t")
+    # Some molecular symbols
+    # - For diatomic molecules, the atomic_num specifies the atomic makeup of the molecule.
+    #   Thus, H2 is 101.0, the two ``1''s referring to the two hydrogens, CH is 106.0,
+    #   CO 608.0, MgH 112.0, TiO 822.0, etc.
+    # - The lightest element always comes first in the code, so that 608.0 cannot be
+    #   confused with NdO, which would be written 860.0.
+    molecules = asciitable.read(molecules_file, delimiter="\t")
+
     # Sort before treating
     linemasks.sort(order=['wave_peak'])
 
@@ -802,17 +853,26 @@ def fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, diff_limit=0.00
                 linemasks["solar_depth"][j] = vald_linelist["depth"][i]
                 linemasks["rad"][j] = vald_linelist["rad"][i]
                 linemasks["stark"][j] = vald_linelist["stark"][i]
-                linemasks["waals"][j] = vald_linelist["waals"][i]
+                if vald_linelist["waals"][i] <= 0:
+                    linemasks["waals"][j] = vald_linelist["waals"][i]
+                else:
+                    linemasks["waals"][j] = 0
+                linemasks['species'][j] = __get_specie(chemical_elements, molecules, linemasks["element"][j])
+                #linemasks['note'][j] = "_".join(linemasks["element"][j].split())
 
     if vel_atomic != 0:
         linemasks['wave_peak'] = original_wave_peak
         linemasks['mu'] = original_mu
 
+    linemasks['upper state (cm^-1)'] = (__eV_to_inverse_cm(__get_upper_state(linemasks['lower state (eV)'], linemasks[ "VALD_wave_peak"]))).astype(int)
+    linemasks['lower state (cm^-1)'] = (__eV_to_inverse_cm(linemasks['lower state (eV)'])).astype(int)
+    linemasks['transition type'] = "GA"
+
     return linemasks
 
 def __find_peaks_and_base_points(xcoord, yvalues):
     """
-    Find peaks and base points. It works better with a smoothed spectra (i.e. convolved using 2*resolution).
+    Find peaks and base points. It works better with a smoothed spectrum (i.e. convolved using 2*resolution).
     """
     if len(yvalues[~np.isnan(yvalues)]) == 0 or len(yvalues[~np.isnan(xcoord)]) == 0:
         #raise Exception("Not enough data for finding peaks and base points")
@@ -844,7 +904,7 @@ def __find_peaks_and_base_points(xcoord, yvalues):
 
 def __improve_linemask_edges(xcoord, yvalues, base, top, peak):
     """
-    Given a spectra, the position of a peak and its limiting region where:
+    Given a spectrum, the position of a peak and its limiting region where:
 
     - Typical shape: concave + convex + concave region.
     - Peak is located within the convex region, although it is just in the border with the concave region (first element).
@@ -906,7 +966,7 @@ def __improve_linemask_edges(xcoord, yvalues, base, top, peak):
                     new_top = np.min([right_concave_pos[np.min(right_concave_edge_pos)] + base, original_top])
 
     else:
-        # This will happen very rarely (only in peaks detected at the extreme of a spectra
+        # This will happen very rarely (only in peaks detected at the extreme of a spectrum
         # and one of its basepoints has been "artificially" added and it happens to be
         # just next to the peak)
         new_base = base
@@ -933,7 +993,7 @@ def __create_cross_correlation_mask(data_wave, data_value, wave_grid, velocity_s
     If velocity_step is not specified, create a mask spaced in the same way of the wave_grid:
 
     - If the wave_grid is uniformly spaced in wavelength, an increment in position (i => i+1) supposes a constant wavelength increment.
-    - Useful for cross correlate/compare one spectra with its radial velocity already corrected against a linelist.
+    - Useful for cross correlate/compare one spectrum with its radial velocity already corrected against a linelist.
     """
     # Speed of light in m/s
     c = 299792458.0
@@ -979,12 +1039,12 @@ def __create_cross_correlation_mask(data_wave, data_value, wave_grid, velocity_s
                 break
     return mask
 
-def __cross_correlation_function(spectra, mask, lower_velocity_limit, upper_velocity_limit, velocity_step, frame=None):
+def __cross_correlation_function(spectrum, mask, lower_velocity_limit, upper_velocity_limit, velocity_step, frame=None):
     """
-    Calculates the cross correlation value between the spectra and the specified mask
+    Calculates the cross correlation value between the spectrum and the specified mask
     by shifting the mask from lower to upper velocity.
 
-    - The spectra and the mask should be uniformly spaced in terms of velocity (which
+    - The spectrum and the mask should be uniformly spaced in terms of velocity (which
       implies non-uniformly distributed in terms of wavelength).
     - The velocity step used for the construction of the mask should be the same
       as the one specified in this function.
@@ -1014,7 +1074,7 @@ def __cross_correlation_function(spectra, mask, lower_velocity_limit, upper_velo
             shifted_mask = np.hstack((shift*[0], mask['value'][:-1*shift]))
         else:
             shifted_mask = np.hstack((mask['value'][-1*shift:], -1*shift*[0]))
-        ccf[i] = np.correlate(spectra['flux'], shifted_mask)[0]
+        ccf[i] = np.correlate(spectrum['flux'], shifted_mask)[0]
         current_work_progress = ((i*1.0)/num_shifts) * 100
         if report_progress(current_work_progress, last_reported_progress):
             last_reported_progress = current_work_progress
@@ -1027,9 +1087,9 @@ def __cross_correlation_function(spectra, mask, lower_velocity_limit, upper_velo
     return velocity, ccf
 
 
-def build_velocity_profile(spectra, linelist, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, frame=None):
+def build_velocity_profile(spectrum, linelist, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, frame=None):
     """
-    Determines the velocity profile by cross-correlating the spectra with a mask
+    Determines the velocity profile by cross-correlating the spectrum with a mask
     built from a line list.
 
     :returns:
@@ -1037,15 +1097,15 @@ def build_velocity_profile(spectra, linelist, lower_velocity_limit = -200, upper
 
     """
     # Build a mask with non-uniform wavelength increments but constant in terms of velocity
-    linelist_mask = __create_cross_correlation_mask(linelist['wave_peak'], linelist['depth'], spectra['waveobs'], velocity_step)
+    linelist_mask = __create_cross_correlation_mask(linelist['wave_peak'], linelist['depth'], spectrum['waveobs'], velocity_step)
 
-    # Resampling spectra to match the wavelength grid of the mask
+    # Resampling spectrum to match the wavelength grid of the mask
     # Speed of light in m/s
     c = 299792458.0
-    interpolated_spectra = resample_spectra(spectra, linelist_mask['wave'])
+    interpolated_spectrum = resample_spectrum(spectrum, linelist_mask['wave'])
 
     # Obtain the cross-correlate function by shifting the mask
-    velocity, ccf = __cross_correlation_function(interpolated_spectra, linelist_mask, lower_velocity_limit = lower_velocity_limit, upper_velocity_limit =upper_velocity_limit, velocity_step = velocity_step, frame=frame)
+    velocity, ccf = __cross_correlation_function(interpolated_spectrum, linelist_mask, lower_velocity_limit = lower_velocity_limit, upper_velocity_limit =upper_velocity_limit, velocity_step = velocity_step, frame=frame)
     return velocity, ccf, len(linelist_mask)
 
 

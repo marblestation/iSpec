@@ -21,16 +21,27 @@ import scipy.ndimage as ndi
 from spectrum import *
 from plotting import *
 from common import *
-import asciitable
 from scipy.interpolate import UnivariateSpline
 import numpy as np
 import matplotlib.pyplot as plt
 import log
 import logging
 
-def read_spectra(spectra_filename, estimate_errors_if_not_present=False):
+def __read_spectrum(spectrum_filename):
+    try:
+        spectrum = np.array([tuple(line.rstrip('\r\n').split("\t")) for line in open(spectrum_filename,)][1:], dtype=[('waveobs', float),('flux', float),('err', float)])
+    except Exception as err:
+        # Try without error column
+        spectrum_tmp = np.array([tuple(line.rstrip('\r\n').split("\t")) for line in open(spectrum_filename,)][1:], dtype=[('waveobs', float),('flux', float)])
+        spectrum = np.recarray((len(spectrum_tmp), ), dtype=[('waveobs', float),('flux', float),('err', float)])
+        spectrum['waveobs'] = spectrum_tmp['waveobs']
+        spectrum['flux'] = spectrum_tmp['flux']
+        spectrum['err'] = 0.0
+    return spectrum
+
+def read_spectrum(spectrum_filename, estimate_errors_if_not_present=False):
     """
-    Return spectra recarray structure from a filename.
+    Return spectrum recarray structure from a filename.
     The file format shouldd be plain text files with **tab** character as column delimiter.
     Three columns should exists: wavelength, flux and error (although this last one is not a relevant value
     for the editor and it can be set all to zero).
@@ -49,64 +60,28 @@ def read_spectra(spectra_filename, estimate_errors_if_not_present=False):
     with the extension '.gz' (gzip) and if it exists, it will be automatically uncompressed.
     """
     # If it is not compressed
-    if os.path.exists(spectra_filename) and spectra_filename[-3:] != ".gz":
-        try:
-            spectra = asciitable.read(table=spectra_filename, names=['waveobs', 'flux', 'err'])
-        except asciitable.core.InconsistentTableError as err:
-            try:
-                # If it fails, try indicating that data starts at line 2 (original NARVAL spectra need this)
-                spectra = asciitable.read(table=spectra_filename, data_start=2, names=['waveobs', 'flux', 'err'])
-            except asciitable.core.InconsistentTableError as err:
-                # Try without error column
-                spectra_tmp = asciitable.read(table=spectra_filename, names=['waveobs', 'flux'])
-                spectra = np.recarray((len(spectra_tmp), ), dtype=[('waveobs', float),('flux', float),('err', float)])
-                spectra['waveobs'] = spectra_tmp['waveobs']
-                spectra['flux'] = spectra_tmp['flux']
-                if estimate_errors_if_not_present:
-                    print "Estimating errors based on estimated SNR..."
-                    snr = estimate_snr(spectra['flux'])
-                    spectra['err'] = spectra['flux'] / snr
-                else:
-                    spectra['err'] = np.zeros(len(spectra)) # Add a zeroed error column
-
-    elif (os.path.exists(spectra_filename) and spectra_filename[-3:] == ".gz") or (os.path.exists(spectra_filename + ".gz")):
-        if spectra_filename[-3:] != ".gz":
-            spectra_filename = spectra_filename + ".gz"
+    if os.path.exists(spectrum_filename) and spectrum_filename[-3:] != ".gz":
+        spectrum = __read_spectrum(spectrum_filename)
+    elif (os.path.exists(spectrum_filename) and spectrum_filename[-3:] == ".gz") or (os.path.exists(spectrum_filename + ".gz")):
+        if spectrum_filename[-3:] != ".gz":
+            spectrum_filename = spectrum_filename + ".gz"
 
         tmp_spec = tempfile.mktemp() + str(int(random.random() * 100000000))
         # Uncompress to a temporary file
         f_out = open(tmp_spec, 'wb')
-        f_in = gzip.open(spectra_filename, 'rb')
+        f_in = gzip.open(spectrum_filename, 'rb')
         f_out.writelines(f_in)
         f_out.close()
         f_in.close()
 
-        try:
-            spectra = asciitable.read(table=tmp_spec, names=['waveobs', 'flux', 'err'])
-        except asciitable.core.InconsistentTableError as err:
-            try:
-                # If it fails, try indicating that data starts at line 2 (original NARVAL spectra need this)
-                spectra = asciitable.read(table=tmp_spec, data_start=2, names=['waveobs', 'flux', 'err'])
-            except asciitable.core.InconsistentTableError as err:
-                # Try without error column
-                spectra_tmp = asciitable.read(table=tmp_spec, names=['waveobs', 'flux'])
-                spectra = np.recarray((len(spectra_tmp), ), dtype=[('waveobs', float),('flux', float),('err', float)])
-                spectra['waveobs'] = spectra_tmp['waveobs']
-                spectra['flux'] = spectra_tmp['flux']
-                print "Estimating errors based on estimated SNR..."
-                snr = estimate_snr(spectra['flux'])
-                spectra['err'] = spectra['flux'] / snr
-                #spectra['err'] = np.zeros(len(spectra)) # Add a zeroed error column
+        spectrum = __read_spectrum(tmp_spec)
         os.remove(tmp_spec)
 
-    # Filter invalid errors and fluxes
-    # TODO: Decide if we should request a valid 'error' column
-    #valid = (spectra['err'] > 0) & ~np.isnan(spectra['err']) & (spectra['flux'] > 0) & ~np.isnan(spectra['flux'])
-    #valid = (spectra['flux'] > 0) & ~np.isnan(spectra['flux'])
-    valid = ~np.isnan(spectra['flux'])
+    # Filtering...
+    valid = ~np.isnan(spectrum['flux'])
 
     # Find duplicate wavelengths
-    dups, dups_index = find_duplicates(spectra, 'waveobs')
+    dups, dups_index = find_duplicates(spectrum, 'waveobs')
 
     # Filter all duplicates except the first one
     last_wave = None
@@ -122,15 +97,15 @@ def read_spectra(spectra_filename, estimate_errors_if_not_present=False):
             last_wave = dups[i]['waveobs']
 
     # Filter invalid and duplicated values
-    spectra = spectra[valid]
+    spectrum = spectrum[valid]
 
-    spectra.sort(order='waveobs') # Make sure it is ordered by wavelength
+    spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
 
-    return spectra
+    return spectrum
 
-def write_spectra(spectra, spectra_filename, compress=True):
+def write_spectrum(spectrum, spectrum_filename, compress=True):
     """
-    Write spectra to a file with the following file format:
+    Write spectrum to a file with the following file format:
     ::
 
         waveobs       flux          err
@@ -141,21 +116,27 @@ def write_spectra(spectra, spectra_filename, compress=True):
 
     """
     if compress:
-        if spectra_filename[-3:] != ".gz":
-            spectra_filename = spectra_filename + ".gz"
+        if spectrum_filename[-3:] != ".gz":
+            spectrum_filename = spectrum_filename + ".gz"
 
         tmp_spec = tempfile.mktemp() + str(int(random.random() * 100000000))
-        asciitable.write(spectra, output=tmp_spec, delimiter='\t')
+        out = open(tmp_spec, "w")
+        out.write("waveobs\tflux\terr\n")
+        out.write("\n".join(["\t".join(map(str, (line['waveobs'], line['flux'], line['err']))) for line in spectrum]))
+        out.close()
 
         # Compress the temporary file
         f_in = open(tmp_spec, 'rb')
-        f_out = gzip.open(spectra_filename, 'wb')
+        f_out = gzip.open(spectrum_filename, 'wb')
         f_out.writelines(f_in)
         f_out.close()
         f_in.close()
         os.remove(tmp_spec)
     else:
-        asciitable.write(spectra, output=spectra_filename, delimiter='\t')
+        out = open(spectrum_filename, "w")
+        out.write("waveobs\tflux\terr\n")
+        out.write("\n".join(["\t".join(map(str, (line['waveobs'], line['flux'], line['err']))) for line in spectrum]))
+        out.close()
 
 
 def estimate_snr(flux, num_points=10, frame=None):
@@ -194,7 +175,7 @@ def estimate_snr(flux, num_points=10, frame=None):
 def __get_fwhm(lambda_peak, from_resolution, to_resolution):
     """
     Calculate the FWHM of the gaussian needed to convert
-    a spectra from one resolution to another at a given wavelength point.
+    a spectrum from one resolution to another at a given wavelength point.
     """
     if from_resolution <= to_resolution:
         raise Exception("This method cannot deal with final resolutions that are equal or bigger than original")
@@ -211,37 +192,37 @@ def __fwhm_to_sigma(fwhm):
     return sigma
 
 
-def convolve_spectra(spectra, from_resolution, to_resolution=None, frame=None):
+def convolve_spectrum(spectrum, from_resolution, to_resolution=None, frame=None):
     """
     Spectra resolution smoothness/degradation. Procedure:
 
     1) Define a bin per measure which marks the wavelength range that it covers.
     2) For each point, identify the window segment to convolve by using the bin widths and the FWHM.
-    3) Build a gaussian using the sigma value and the wavelength values of the spectra window.
-    4) Convolve the spectra window with the gaussian and save the convolved value.
+    3) Build a gaussian using the sigma value and the wavelength values of the spectrum window.
+    4) Convolve the spectrum window with the gaussian and save the convolved value.
 
-    If "to_resolution" is not specified or its equal to "from_resolution", then the spectra
+    If "to_resolution" is not specified or its equal to "from_resolution", then the spectrum
     is convolved with the instrumental gaussian defined by "from_resolution".
 
     If "to_resolution" is specified, the convolution is made with the difference of
-    both resolutions in order to degrade the spectra.
+    both resolutions in order to degrade the spectrum.
     """
     if to_resolution != None and from_resolution <= to_resolution:
         raise Exception("This method cannot deal with final resolutions that are bigger than original")
 
-    total_points = len(spectra)
-    convolved_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-    convolved_spectra['waveobs'] = spectra['waveobs']
-    convolved_spectra['err'] = spectra['err']
+    total_points = len(spectrum)
+    convolved_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+    convolved_spectrum['waveobs'] = spectrum['waveobs']
+    convolved_spectrum['err'] = spectrum['err']
 
     last_reported_progress = -1
     if frame != None:
         frame.update_progress(0)
 
-    flux = spectra['flux']
-    err = spectra['err']
+    flux = spectrum['flux']
+    err = spectrum['err']
     # Consider the wavelength of the measurements as the center of the bins
-    waveobs = spectra['waveobs']
+    waveobs = spectrum['waveobs']
     # Calculate the wavelength distance between the center of each bin
     wave_distance = waveobs[1:] - waveobs[:-1]
     # Define the edge of each bin as half the wavelength distance to the bin next to it
@@ -272,13 +253,13 @@ def convolve_spectra(spectra, from_resolution, to_resolution=None, frame=None):
     # Number of measures
     nwaveobs = len(waveobs)
 
-    # In theory, len(nbins) == len(spectra)
+    # In theory, len(nbins) == len(spectrum)
     for i in np.arange(len(nbins)):
         current_nbins = 2 * nbins[i] # Each side
         current_center = waveobs[i] # Center
         current_sigma = sigma[i]
 
-        # Find lower and uper index for the gaussian, taking care of the current spectra limits
+        # Find lower and uper index for the gaussian, taking care of the current spectrum limits
         lower_pos = int(max(0, i - current_nbins))
         upper_pos = int(min(nwaveobs, i + current_nbins + 1))
 
@@ -300,8 +281,8 @@ def convolve_spectra(spectra, from_resolution, to_resolution=None, frame=None):
         weighted_err = err_segment * gaussian
         current_convolved_err = np.sqrt(np.power(weighted_err, 2).sum())
 
-        convolved_spectra['flux'][i] = current_convolved_flux
-        convolved_spectra['err'][i] = current_convolved_err
+        convolved_spectrum['flux'][i] = current_convolved_flux
+        convolved_spectrum['err'][i] = current_convolved_err
 
         current_work_progress = (i*1.0 / total_points) * 100
         if report_progress(current_work_progress, last_reported_progress):
@@ -311,10 +292,10 @@ def convolve_spectra(spectra, from_resolution, to_resolution=None, frame=None):
                 frame.update_progress(current_work_progress)
     logging.info("Spectra convolved!")
 
-    return convolved_spectra
+    return convolved_spectrum
 
 
-def __interpolate_flux(spectra, wavelength):
+def __interpolate_flux(spectrum, wavelength):
     """
     Interpolate flux for a given wavelength by using Bessel's Central-Difference Interpolation.
     It considers:
@@ -324,14 +305,14 @@ def __interpolate_flux(spectra, wavelength):
     """
     # Target wavelength
     objective_wavelength = wavelength
-    fluxes = spectra['flux']
-    waveobs = spectra['waveobs']
+    fluxes = spectrum['flux']
+    waveobs = spectrum['waveobs']
 
     # Find the index position of the first wave length equal or higher than the objective
 #    index = np.where(waveobs >= objective_wavelength)[0][0]
     index = waveobs.searchsorted(objective_wavelength)
 
-    total_points = len(spectra)
+    total_points = len(spectrum)
     if index == total_points:
         # DISCARD: Linear extrapolation using index-1 and index-2
         # flux = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index-1]-fluxes[index-2])/(waveobs[index-1]-waveobs[index-2]))
@@ -377,13 +358,13 @@ def __interpolate_flux(spectra, wavelength):
     return flux, index
 
 
-def resample_spectra(spectra, xaxis, linear=True, frame=None):
+def resample_spectrum(spectrum, xaxis, linear=True, frame=None):
     """
-    Returns a new spectra with measures at the given xaxis wavelength
+    Returns a new spectrum with measures at the given xaxis wavelength
     Interpolation is completely linear by default (fastest option) but a Bessel's
     Central-Difference Interpolation with 4 points can be activated by
     specifying "linear=False", in that case interpolation is linear only
-    when there are not enough points (i.e. beginning/end of spectra).
+    when there are not enough points (i.e. beginning/end of spectrum).
     """
     total_points = len(xaxis)
     last_reported_progress = -1
@@ -393,21 +374,21 @@ def resample_spectra(spectra, xaxis, linear=True, frame=None):
         logging.info("%.2f%%" % current_work_progress)
         if frame != None:
             frame.update_progress(current_work_progress)
-        resampled_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-        resampled_spectra['waveobs'] = xaxis
-        resampled_spectra['flux'] = np.interp(xaxis, spectra['waveobs'], spectra['flux'], left=0.0, right=0.0) # No extrapolation, just returns zeros
+        resampled_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+        resampled_spectrum['waveobs'] = xaxis
+        resampled_spectrum['flux'] = np.interp(xaxis, spectrum['waveobs'], spectrum['flux'], left=0.0, right=0.0) # No extrapolation, just returns zeros
 
         current_work_progress = 90.0
         logging.info("%.2f%%" % current_work_progress)
         if frame != None:
             frame.update_progress(current_work_progress)
     else:
-        resampled_spectra = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-        resampled_spectra['waveobs'] = xaxis
+        resampled_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+        resampled_spectrum['waveobs'] = xaxis
 
         from_index = 0 # Optimization: discard regions already processed
         for i in np.arange(total_points):
-            resampled_spectra['flux'][i], index = __interpolate_flux(spectra[from_index:], resampled_spectra['waveobs'][i])
+            resampled_spectrum['flux'][i], index = __interpolate_flux(spectrum[from_index:], resampled_spectrum['waveobs'][i])
             if index > 4:
                 from_index = index - 4
             current_work_progress = np.min([(i*1.0 / total_points) * 100, 90.0])
@@ -417,10 +398,10 @@ def resample_spectra(spectra, xaxis, linear=True, frame=None):
                 if frame != None:
                     frame.update_progress(current_work_progress)
 
-    resampled_spectra['err'] = np.interp(xaxis, spectra['waveobs'], spectra['err'])
-    return resampled_spectra
+    resampled_spectrum['err'] = np.interp(xaxis, spectrum['waveobs'], spectrum['err'])
+    return resampled_spectrum
 
-def correct_velocity(spectra, velocity):
+def correct_velocity(spectrum, velocity):
     """
     Correct velocity in km/s.
     """
@@ -430,8 +411,8 @@ def correct_velocity(spectra, velocity):
     velocity = velocity * 1000
 
     # Correct wavelength scale for radial velocity
-    spectra['waveobs'] = spectra['waveobs'] / ((velocity / c) + 1)
-    return spectra
+    spectrum['waveobs'] = spectrum['waveobs'] / ((velocity / c) + 1)
+    return spectrum
 
 def correct_velocity_regions(regions, velocity, with_peak=False):
     """

@@ -15,7 +15,6 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with SVE. If not, see <http://www.gnu.org/licenses/>.
 #
-import asciitable
 from scipy.interpolate import UnivariateSpline
 import numpy.lib.recfunctions as rfn # Extra functions
 import numpy as np
@@ -308,10 +307,10 @@ def __precession_matrix(equinox1, equinox2, fk4=False):
 
     return r
 
-def calculate_barycentric_velocity(datetime, deq=0):
+def __baryvel(datetime, deq=0):
     """
-    Calculates barycentric velocity components of Earth.
-    The code has been copied from: `astrolib <http://code.google.com/p/astrolibpy/source/browse/trunk/astrolib/>`_
+    Calculates heliocentric and barycentric velocity components of Earth.
+    The code has been copied from: `astrolib <http://code.google.com/p/astrolibpy/source/browse/astrolib/baryvel.py>`_
     """
     #dje = astropysics.obstools.calendar_to_jd(datetime) # Julian ephemeris date.
     dje = calendar_to_jd(datetime) # Julian ephemeris date
@@ -484,8 +483,29 @@ def calculate_barycentric_velocity(datetime, deq=0):
 
     dvelh = au * (np.transpose(np.dot(np.transpose(prema), np.transpose(np.array([dxhd, dyahd, dzahd])))))
     dvelb = au * (np.transpose(np.dot(np.transpose(prema), np.transpose(np.array([dxbd, dyabd, dzabd])))))
-
     return (dvelh, dvelb)
+
+
+def calculate_barycentric_velocity_correction(datetime, coordinates, deq=0):
+    """
+    Calculates barycentric velocity correction for a given star.
+    The code is based on: `astrolib <http://code.google.com/p/astrolibpy/source/browse/astrolib/baryvel.py>`_
+    """
+    dvelh, dvelb = __baryvel(datetime)
+
+    # Calculate velocity toward a star in a given position
+    ra_hours, ra_minutes, ra_seconds, dec_degrees,  dec_minutes, dec_seconds = coordinates
+    ra = (ra_hours + ra_minutes/60 + ra_seconds/(60*60)) # hours
+    ra = ra * 360/24 # degrees
+    ra = ra * ((2*np.pi) / 360) # radians
+    dec = (dec_degrees + dec_minutes/60 + dec_seconds/(60*60)) # degrees
+    dec = dec * ((2*np.pi) / 360) # radians
+
+    # Project velocity toward star
+    barycentric_vel = dvelb[0]*np.cos(dec)*np.cos(ra) + dvelb[1]*np.cos(dec)*np.sin(ra) + dvelb[2]*np.sin(dec) # km/s
+    barycentric_vel = np.round(barycentric_vel, 2) # km/s
+
+    return barycentric_vel
 
 
 
