@@ -21,13 +21,27 @@ echo "--------------------------------------------------------------------------
 echo "Enter the spectra number you want to use : "
 read i;
 
+# Directory of the script
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Default exeuction
+SVE='/usr/bin/env python '$DIR'/interactive.py'
+
+if [ ! -f interactive.py ]; then
+    platform=`uname`
+    if [[ "$platform" == 'Linux' && -f $DIR/sve.linux2/sve.linux2 ]]; then
+        SVE=$DIR'/sve.linux2/sve.linux2'
+    elif [[ "$platform" == 'Darwin' && -f $DIR/sve.darwin/sve.darwin ]]; then
+        SVE=$DIR'/sve.darwin/sve.darwin'
+    fi
+fi
+
 case $i in
-1) python interactive.py input/spectra/examples/harps_procyon.s.gz ;;
-2) python interactive.py input/spectra/examples/narval_sun.s.gz ;;
-3) python interactive.py input/spectra/examples/narval_mu_cas.s.gz ;;
-4) python interactive.py input/spectra/examples/narval_arcturus.s.gz ;;
-5) python interactive.py input/spectra/examples/espadons_mu_leo.s.gz ;;
-6) python interactive.py input/spectra/examples/espadons_mu_leo.s.gz input/spectra/examples/narval_arcturus.s.gz input/spectra/examples/harps_procyon.s.gz input/spectra/examples/narval_mu_cas.s.gz input/spectra/examples/narval_sun.s.gz ;;
-7) python interactive.py --continuum=input/regions/continuum_regions.txt --lines=input/regions/line_masks.txt --segments=input/regions/segments.txt input/spectra/examples/narval_sun.s.gz ;;
+1) $SVE $DIR/input/spectra/examples/harps_procyon.s.gz ;;
+2) $SVE $DIR/input/spectra/examples/narval_sun.s.gz ;;
+3) $SVE $DIR/input/spectra/examples/narval_mu_cas.s.gz ;;
+4) $SVE $DIR/input/spectra/examples/narval_arcturus.s.gz ;;
+5) $SVE $DIR/input/spectra/examples/espadons_mu_leo.s.gz ;;
+6) $SVE $DIR/input/spectra/examples/espadons_mu_leo.s.gz $DIR/input/spectra/examples/narval_arcturus.s.gz $DIR/input/spectra/examples/harps_procyon.s.gz $DIR/input/spectra/examples/narval_mu_cas.s.gz $DIR/input/spectra/examples/narval_sun.s.gz ;;
+7) $SVE --continuum=$DIR/input/regions/continuum_regions.txt --lines=$DIR/input/regions/line_masks.txt --segments=$DIR/input/regions/segments.txt $DIR/input/spectra/examples/narval_sun.s.gz ;;
 8) exit
 esac

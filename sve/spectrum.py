@@ -39,7 +39,7 @@ def __read_spectrum(spectrum_filename):
         spectrum['err'] = 0.0
     return spectrum
 
-def read_spectrum(spectrum_filename, estimate_errors_if_not_present=False):
+def read_spectrum(spectrum_filename):
     """
     Return spectrum recarray structure from a filename.
     The file format shouldd be plain text files with **tab** character as column delimiter.

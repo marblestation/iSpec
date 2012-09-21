@@ -1590,6 +1590,14 @@ class SpectraFrame(wx.Frame):
         self.spectra.remove(self.active_spectrum)
         self.axes.lines.remove(self.active_spectrum.plot_id)
 
+
+        # Remove errors if they exists
+        if self.active_spectrum != None and self.active_spectrum.errors_plot_id1 != None:
+            self.axes.lines.remove(self.active_spectrum.errors_plot_id1)
+            self.active_spectrum.errors_plot_id1 = None
+        if self.active_spectrum != None and self.active_spectrum.errors_plot_id2 != None:
+            self.axes.lines.remove(self.active_spectrum.errors_plot_id2)
+            self.active_spectrum.errors_plot_id2 = None
         # Remove fitted continuum if it exists
         if self.active_spectrum != None and self.active_spectrum.continuum_plot_id != None:
             self.axes.lines.remove(self.active_spectrum.continuum_plot_id)
@@ -2180,6 +2188,7 @@ class SpectraFrame(wx.Frame):
         operation_mean = dlg.radio_button_mean.GetValue()
         operation_subtract = dlg.radio_button_subtract.GetValue()
         operation_add = dlg.radio_button_add.GetValue()
+        operation_divide = dlg.radio_button_divide.GetValue()
         dlg.Destroy()
 
         if wave_base == None or wave_top == None or wave_top <= wave_base or wave_step <= 0:
@@ -2201,11 +2210,11 @@ class SpectraFrame(wx.Frame):
                 #return
 
         self.operation_in_progress = True
-        thread = threading.Thread(target=self.on_combine_spectra_thread, args=(wave_base, wave_top, wave_step, operation_median, operation_mean, operation_subtract, operation_add))
+        thread = threading.Thread(target=self.on_combine_spectra_thread, args=(wave_base, wave_top, wave_step, operation_median, operation_mean, operation_subtract, operation_add, operation_divide))
         thread.setDaemon(True)
         thread.start()
 
-    def on_combine_spectra_thread(self, wave_base, wave_top, wave_step, operation_median, operation_mean, operation_subtract, operation_add):
+    def on_combine_spectra_thread(self, wave_base, wave_top, wave_step, operation_median, operation_mean, operation_subtract, operation_add, operation_divide):
         # Homogenize
         i = 0
         total = len(self.spectra)
@@ -2279,6 +2288,27 @@ class SpectraFrame(wx.Frame):
             combined_spectrum['flux'] = flux
             combined_spectrum['err'] = err
             combined_spectrum_name = "Added_spectrum"
+        elif operation_divide:
+            flux = np.zeros(total_wavelengths)
+            err = np.zeros(total_wavelengths)
+            i = 0
+            for spec in resampled_spectra:
+                logging.warn("Division by zero may occur")
+                if i == 0:
+                    err = spec['err'].copy()
+                    flux = spec['flux'].copy()
+                else:
+                    err = np.sqrt(np.power(flux / err, 2) + np.power(spec['flux'] / spec['err'], 2)) * 0.7
+                    if i == active:
+                        flux = flux * spec['flux']
+                    else:
+                        flux = flux * (1. / spec['flux'])
+                i += 1
+            combined_spectrum = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+            combined_spectrum['waveobs'] = xaxis
+            combined_spectrum['flux'] = flux
+            combined_spectrum['err'] = err
+            combined_spectrum_name = "Divided_spectrum"
 
         # Free memory
         for spec in resampled_spectra:

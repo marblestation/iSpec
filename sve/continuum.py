@@ -144,8 +144,8 @@ def __determine_continuum_base_points(spectrum, discard_outliers=True, median_wa
 
     1) Determine max points by using a moving window of 3 elements (also used for line determination).
     2) Group the points:
-        * In ranges of 0.1 nm and select the one with the median flux (usefull to avoid noisy peaks).
-        * In ranges of 1 nm and select the one with the max flux.
+        - In ranges of 0.1 nm and select the one with the median flux (usefull to avoid noisy peaks).
+        - In ranges of 1 nm and select the one with the max flux.
     3) Considering the diference in flux of the points with the next a previous, discard outliers (iterative process).
     """
     # Find max points in windows of 3 measures
@@ -237,8 +237,6 @@ def find_continuum(spectrum, resolution, segments=None, max_std_continuum = 0.00
     - A region is accepted as continuum if the following criteria is true:
 
         a) the median flux is above the continuum model (but not more than 0.08) or below but not more than 0.01
-            - The continuum model can be a fixed flux value or a fitted model (preferable)
-
         b) and the standard deviation is less than a given maximum the region is selected
     - If 'segments' is specified, then the search is limited to that wavelengths areas
     """

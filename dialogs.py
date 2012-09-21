@@ -835,7 +835,7 @@ class ResampleSpectrumDialog(wx.Dialog):
 
 class CombineSpectraDialog(wx.Dialog):
     def __init__(self, parent, id, title, wave_base, wave_top, wave_step):
-        wx.Dialog.__init__(self, parent, id, title, size=(350,450))
+        wx.Dialog.__init__(self, parent, id, title, size=(350,550))
 
         self.action_accepted = False
 
@@ -894,6 +894,8 @@ class CombineSpectraDialog(wx.Dialog):
         self.vbox2.Add(self.radio_button_subtract, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
         self.radio_button_add = wx.RadioButton(self, -1, 'Add')
         self.vbox2.Add(self.radio_button_add, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
+        self.radio_button_divide = wx.RadioButton(self, -1, 'Divide')
+        self.vbox2.Add(self.radio_button_divide, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
 
         self.radio_button_median.SetValue(True)
         self.hbox.Add(self.vbox2, 0, border=3, flag=flags)
@@ -1140,7 +1142,7 @@ class DegradeResolutionDialog(wx.Dialog):
 
 class EstimateErrorsDialog(wx.Dialog):
     def __init__(self, parent, id, title, snr):
-        wx.Dialog.__init__(self, parent, id, title, size=(250,100))
+        wx.Dialog.__init__(self, parent, id, title, size=(250,200))
 
         self.action_accepted = False
 

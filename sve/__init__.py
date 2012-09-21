@@ -37,7 +37,7 @@ try:
     from synth import *
 except ImportError as e:
     pass
-from common import *
+from common import calculate_barycentric_velocity_correction, sigma_clipping
 from spectrum import *
 from continuum import *
 from lines import *

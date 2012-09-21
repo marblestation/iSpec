@@ -167,15 +167,16 @@ def read_line_regions(line_regions_filename):
     Four columns should exists: 'wave_peak', 'wave_base', 'wave_top' and 'note'
     (the first line should contain those header names).
     They indicate the peak of the line, beginning and end of each region (one per line)
-    and a comment (it can be a blank string). For example:
+    and a comment (it can be any string comment). For example:
     ::
 
         wave_peak       wave_base       wave_top        note
-        480.8148        480.7970        480.8330        "Fe I"
-        496.2572        496.2400        496.2820        "Fe I"
-        499.2785        499.2610        499.2950        ""
-        505.8498        505.8348        505.8660        "Fe I"
+        480.8148        480.7970        480.8330        Fe 1
+        496.2572        496.2400        496.2820        Fe 1
+        499.2785        499.2610        499.2950
+        505.8498        505.8348        505.8660        Fe 1
 
+    The note can be blank but the previous **tab** character should exists anyway.
     """
     line_regions = np.array([tuple(line.rstrip('\r\n').split("\t")) for line in open(line_regions_filename,)][1:], dtype=[('wave_peak', float),('wave_base', float),('wave_top', float), ('note', '|S100')])
 
@@ -195,10 +196,10 @@ def write_line_regions(line_regions, line_regions_filename):
     ::
 
         wave_peak       wave_base       wave_top        note
-        480.8148        480.7970        480.8330        Fe I
-        496.2572        496.2400        496.2820        Fe I
+        480.8148        480.7970        480.8330        Fe 1
+        496.2572        496.2400        496.2820        Fe 1
         499.2785        499.2610        499.2950
-        505.8498        505.8348        505.8660        Fe I
+        505.8498        505.8348        505.8660        Fe 1
     """
     out = open(line_regions_filename, "w")
     out.write("wave_peak\twave_base\twave_top\tnote\n")
