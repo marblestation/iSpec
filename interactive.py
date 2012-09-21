@@ -1650,6 +1650,13 @@ class SpectraFrame(wx.Frame):
 
         for spec in self.spectra:
             self.axes.lines.remove(spec.plot_id)
+            # Remove errors if they exists
+            if spec != None and spec.errors_plot_id1 != None:
+                self.axes.lines.remove(spec.errors_plot_id1)
+                spec.errors_plot_id1 = None
+            if spec != None and spec.errors_plot_id2 != None:
+                self.axes.lines.remove(spec.errors_plot_id2)
+                spec.errors_plot_id2 = None
             # Remove fitted continuum if it exists
             if spec != None and spec.continuum_plot_id != None:
                 self.axes.lines.remove(spec.continuum_plot_id)
