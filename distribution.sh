@@ -1,9 +1,17 @@
 #!/bin/bash
+
+mkdir tmp/
+mv sve/atmospheres.py* tmp/
+mv sve/synth.py* tmp/
 cd pyinstaller/
 rm -rf sve/build/
 rm -rf sve/dist/
 python utils/Build.py sve/sve.spec
 cd ..
+mv tmp/atmospheres.py* sve/
+mv tmp/synth.py* sve/
+rmdir tmp/
+
 rm -rf ./pyinstaller/sve/dist/input/spectra/examples/ ./pyinstaller/sve/dist/*.command
 cp -rf *.command ./pyinstaller/sve/dist/
 mkdir -p ./pyinstaller/sve/dist/input/spectra/examples/
@@ -17,7 +25,6 @@ cp -f input/spectra/binaries/*.s.gz ./pyinstaller/sve/dist/input/spectra/binarie
 echo "-----------------------------------------------"
 echo " SVE distribution in './pyinstaller/sve/dist/'"
 echo "-----------------------------------------------"
-cd ..
 cd docs-sphinx/
 make latexpdf
 echo "----------------------------------------------------------"
