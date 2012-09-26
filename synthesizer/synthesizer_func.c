@@ -167,26 +167,15 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
     pfunc *V;
     population *POP;
     Helium *He;
-    char *file,name[80],lines[80],atmdat[80];
     char fixfile[80];
     char vgrad[80],isofile[80];
     FILE *qf;
     double opwave;
 
     setreset(0);
-    ///////////////////////// Arguments
-    strcpy(name, atmosphere_model_file); // stellar atmosphere data file
-    file = name;
-    strcpy(lines, linelist_file);
-    strcpy(atmdat, abundances_file);        // atomic data file
+    /////////////////////////
     strcpy(isofile, "isotope.iso"); // only used if global flagI == 1 but then it produces segmentation fault (original SPECTRUM problem)
-    //strcpy(oname, output_file); // output file
-    //ofile = oname;
     vturb = microturbulence_vel; // km/s, if flagu == 0
-    //start = wave_base; // Begin wavelength
-    //end = wave_top; // End wavelength
-    //dwave = wave_step; // step
-    //inc = dwave;
     strcpy(vgrad,"velgrad.dat"); // velocity gradient file only used if flagg == 1
     /////////////////////////
 
@@ -237,13 +226,13 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
     }
 
     // stellar atmosphere data file
-    inmodel(model,file,flagw);
+    inmodel(model,atmosphere_model_file,flagw);
     // Velocity gradient    
     if(flagg == 1) invelgrad(vgrad);
     if(flagg == 0) for(i=0;i<Ntau;i++) velgrad[i] = 0.0;
     
     // Enter name of line list file: (default = luke.lst)
-    if((qf = fopen(lines,"r")) == NULL) {
+    if((qf = fopen(linelist_file,"r")) == NULL) {
         printf("Cannot find line data file\n");
         return(1);
     }
@@ -262,7 +251,7 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
     /* Normal abundances for hydrogen and helium; inatom may change these */
     ah = 0.911;
     ahe = 0.089;
-    inatom(atmdat,atom,model->MH,&ah,&ahe);
+    inatom(abundances_file,atom,model->MH,&ah,&ahe);
     if(flaga == 1) printf("\nHydrogen abundance = %5.3f     Helium = %5.3f\n",ah,ahe);
 
     if(flagx == 1) infix(fixfile,atom,ah);

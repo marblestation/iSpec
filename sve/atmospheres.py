@@ -257,6 +257,7 @@ def build_modeled_interpolated_layer_values(model_combinations, teff_range, logg
                                 # we search for the next valid atmosphere with higher temperature
                                 # we do this to minimize strange effects in the posterior cubic spline interpolation
                                 t = teff_index + 1
+                                future_valid_atm = None
                                 while t < nteff:
                                     future_valid_atm = model_combinations[metal_num][t][logg_index]
                                     if future_valid_atm != None:
@@ -265,10 +266,27 @@ def build_modeled_interpolated_layer_values(model_combinations, teff_range, logg
 
                                 # If atmosphere found
                                 if future_valid_atm != None:
-                                    val[i][j] = future_valid_atm[layer_num][value_num]
+                                    try:
+                                        val[i][j] = future_valid_atm[layer_num][value_num]
+                                    except IndexError:
+                                        import ipdb
+                                        ipdb.set_trace()
                                 else:
-                                    # There should be at least one valid model for each logg
-                                    raise Exception("Bad model format")
+                                    l = logg_index + 1
+                                    future_valid_atm = None
+                                    while l < nlogg:
+                                        future_valid_atm = model_combinations[metal_num][teff_index][l]
+                                        if future_valid_atm != None:
+                                            break
+                                        l += 1
+                                    if future_valid_atm != None:
+                                        val[i][j] = future_valid_atm[layer_num][value_num]
+                                    else:
+                                        # There should be at least one valid model for each logg
+                                        #raise Exception("Bad model format (%f, %f, %f)" % (teff, logg, MH_range[metal_num]))
+                                        val[i][j] = 0.0
+                                        print "Problem! (%f, %f, %f)" % (teff, logg, MH_range[metal_num])
+
                 if value_num == 6: # microturbulent_vel value
                     # Microturbulence velocity is constant for all layers of the castelli models
                     model_val = ConstantValue(val[0][0])

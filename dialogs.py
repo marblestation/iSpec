@@ -916,10 +916,9 @@ class CombineSpectraDialog(wx.Dialog):
         self.EndModal(wx.ID_OK)
 
 
-
-class SyntheticSpectrumDialog(wx.Dialog):
-    def __init__(self, parent, id, title, wave_base, wave_top, wave_step, resolution, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff):
-        wx.Dialog.__init__(self, parent, id, title, size=(450,550))
+class SendSpectrumDialog(wx.Dialog):
+    def __init__(self, parent, id, title, applications):
+        wx.Dialog.__init__(self, parent, id, title, size=(450,150))
 
         self.action_accepted = False
 
@@ -927,6 +926,65 @@ class SyntheticSpectrumDialog(wx.Dialog):
 
         flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
 
+
+        ### Model atmosphere
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_application = wx.StaticText(self, -1, "Application: ", style=wx.ALIGN_LEFT)
+        self.application = wx.ComboBox (self, wx.ID_ANY, applications[0], choices=applications, style=wx.CB_READONLY)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_application, 0, border=3, flag=flags)
+        self.hbox.Add(self.application, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        self.vbox.AddSpacer(30)
+
+        sizer =  self.CreateButtonSizer(wx.CANCEL|wx.OK)
+        self.vbox.Add(sizer, 0, wx.ALIGN_CENTER)
+        self.vbox.AddSpacer(10)
+        self.SetSizer(self.vbox)
+        self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
+
+    def on_ok(self, event):
+        self.action_accepted = True
+        self.EndModal(wx.ID_OK)
+
+class SyntheticSpectrumDialog(wx.Dialog):
+    def __init__(self, parent, id, title, wave_base, wave_top, wave_step, resolution, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff):
+        wx.Dialog.__init__(self, parent, id, title, size=(450,650))
+
+        self.action_accepted = False
+
+        self.vbox = wx.BoxSizer(wx.VERTICAL)
+
+        flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
+
+
+        ### Model atmosphere
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_atmospheres = wx.StaticText(self, -1, "Model atmosphere: ", style=wx.ALIGN_LEFT)
+        self.atmospheres = wx.ComboBox (self, wx.ID_ANY, 'MARCS', choices=['Kurucz', 'Castelli', 'MARCS'], style=wx.CB_READONLY)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_atmospheres, 0, border=3, flag=flags)
+        self.hbox.Add(self.atmospheres, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        ### Linelist
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_linelist = wx.StaticText(self, -1, "Line list: ", style=wx.ALIGN_LEFT)
+        self.linelist = wx.ComboBox (self, wx.ID_ANY, 'VALD', choices=['SPECTRUM', 'VALD'], style=wx.CB_READONLY)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_linelist, 0, border=3, flag=flags)
+        self.hbox.Add(self.linelist, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
 
         ### Teff
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)

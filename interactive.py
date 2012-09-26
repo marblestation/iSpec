@@ -48,6 +48,7 @@ from matplotlib.ticker import ScalarFormatter
 
 import sve
 from dialogs import *
+from SAMPManager import *
 
 ## PyInstaller resource access
 def resource_path(relative):
@@ -481,14 +482,15 @@ class SpectraFrame(wx.Frame):
         self.embedshell = IPython.Shell.IPShellEmbed(argv=['--pdb'])
         self.embedshell()
 
-    # regions should be a dictionary with 'continuum', 'lines' and 'segments' keys
+
     # filenames should be a dictionary with 'spectra', 'continuum', 'lines' and 'segments' keys
     def __init__(self, spectra=None, regions=None, filenames=None):
         self.embedshell = None
         self.ipython_thread = None
         #self.ipython_thread = threading.Thread(target=self.ipython)
         #self.ipython_thread.setDaemon(True)
-        #self.ipython_thread.start()
+
+        self.samp_manager = SAMPManager(self.on_receive_spectrum, check_connection_period=2)
 
         self.spectra_colors = ('#0000FF', '#A52A2A', '#A020F0', '#34764A', '#000000', '#90EE90', '#FFA500', '#1E90FF',   '#FFC0CB', '#7F7F7F', '#00FF00',)
 
@@ -547,7 +549,7 @@ class SpectraFrame(wx.Frame):
         self.velocity_atomic_step = 1.0 # km/s
         self.linelist_atomic = None
         self.linelist_telluric = None
-        self.modeled_layers_pack = None # Synthesize spectrum (atmospheric models)
+        self.modeled_layers_pack = {} # Synthesize spectrum (atmospheric models)
         self.find_continuum_regions_wave_step = 0.05
         self.find_continuum_regions_sigma = 0.001
         self.find_continuum_regions_max_continuum_diff = 1.0
@@ -836,7 +838,7 @@ class SpectraFrame(wx.Frame):
         m_cut_spectrum = menu_edit.Append(-1, "Wavelength range reduction", "Reduce the wavelength range")
         self.Bind(wx.EVT_MENU, self.on_cut_spectrum, m_cut_spectrum)
         self.spectrum_function_items.append(m_cut_spectrum)
-        m_convert_to_nm = menu_edit.Append(-1, "Convert to nanometers", "Divide wavelength by 10")
+        m_convert_to_nm = menu_edit.Append(-1, "Convert from armstrong to nanometers", "Divide wavelength by 10")
         self.Bind(wx.EVT_MENU, self.on_convert_to_nm, m_convert_to_nm)
         self.spectrum_function_items.append(m_convert_to_nm)
         m_resample_spectrum = menu_edit.Append(-1, "Resample spectrum", "Resample wavelength grid")
@@ -846,10 +848,14 @@ class SpectraFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_combine_spectra, m_combine_spectra)
         self.spectrum_function_items.append(m_combine_spectra)
 
+        menu_edit.AppendSeparator()
         if "generate_spectrum" in dir(sve):
-            menu_edit.AppendSeparator()
             m_synthesize = menu_edit.Append(-1, "&Synthesize spectrum", "Synthesize spectrum")
             self.Bind(wx.EVT_MENU, self.on_synthesize, m_synthesize)
+
+        m_send_spectrum = menu_edit.Append(-1, "Send spectrum to...", "Send spectrum to external application")
+        self.Bind(wx.EVT_MENU, self.on_send_spectrum, m_send_spectrum)
+        self.spectrum_function_items.append(m_send_spectrum)
 
         menu_help = wx.Menu()
         m_about = menu_help.Append(-1, "&About\tF1", "About the visual editor")
@@ -1194,9 +1200,11 @@ class SpectraFrame(wx.Frame):
             msg = "Are you sure you want to exit without saving the regions/spectra?"
             title = "Changes not saved"
             if self.question(title, msg):
+                self.samp_manager.shutdown()
                 self.tbicon.Destroy()
                 self.Destroy()
         else:
+            self.samp_manager.shutdown()
             self.tbicon.Destroy()
             self.Destroy()
 
@@ -3370,6 +3378,10 @@ max_wave_range=max_wave_range)
             wave_base = self.text2float(dlg.wave_base.GetValue(), 'Wavelength min. value is not a valid one.')
             wave_top = self.text2float(dlg.wave_top.GetValue(), 'Wavelength max. value is not a valid one.')
             wave_step = self.text2float(dlg.wave_step.GetValue(), 'Wavelength step value is not a valid one.')
+            selected_atmosphere_models = dlg.atmospheres.GetValue()
+            selected_linelist = dlg.linelist.GetValue()
+            linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + "/300_1100nm.lst")
+            abundances_file = resource_path("input/abundances/" + selected_atmosphere_models + "/stdatom.dat")
 
             in_segments = dlg.radio_button_segments.GetValue() # else in spectrum
             dlg.Destroy()
@@ -3379,12 +3391,12 @@ max_wave_range=max_wave_range)
                 return
 
 
-            if self.modeled_layers_pack == None:
-                logging.info("Loading modeled atmospheres...")
-                self.status_message("Loading modeled atmospheres...")
-                self.modeled_layers_pack = sve.load_modeled_layers_pack(resource_path('input/atmospheres/default.modeled_layers_pack.dump'))
+            if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
+                logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
+                self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
+                self.modeled_layers_pack[selected_atmosphere_models] = sve.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/modeled_layers_pack.dump'))
 
-            if not sve.valid_atmosphere_target(self.modeled_layers_pack, teff, logg, MH):
+            if not sve.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
                 msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of theatmospheric models."
                 title = 'Out of the atmospheric models'
                 self.error(title, msg)
@@ -3393,7 +3405,7 @@ max_wave_range=max_wave_range)
 
             # Prepare atmosphere model
             self.status_message("Interpolating atmosphere model...")
-            layers = sve.interpolate_atmosphere_layers(self.modeled_layers_pack, teff, logg, MH)
+            layers = sve.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH)
             atm_filename = sve.write_atmosphere(teff, logg, MH, layers)
 
             # Generate
@@ -3447,18 +3459,18 @@ max_wave_range=max_wave_range)
             self.operation_in_progress = True
             self.status_message("Synthesizing spectrum...")
             self.update_progress(10)
-            thread = threading.Thread(target=self.on_synthesize_thread, args=(waveobs, atm_filename, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution))
+            thread = threading.Thread(target=self.on_synthesize_thread, args=(waveobs, linelist_file, abundances_file, atm_filename, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution))
             thread.setDaemon(True)
             thread.start()
 
-    def on_synthesize_thread(self, waveobs, atm_filename, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
+    def on_synthesize_thread(self, waveobs, linelist_file, abundances_file, atm_filename, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
         total_points = len(waveobs)
 
         synth_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
         synth_spectrum['waveobs'] = waveobs
 
         # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
-        synth_spectrum['flux'] = sve.generate_spectrum(synth_spectrum['waveobs']*10.0, atm_filename, linelist_file = resource_path("input/linelists/SPECTRUM/default.300_1100nm.lst"), abundances_file = resource_path("input/abundances/default.stdatom.dat"), microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, verbose=1, update_progress_func=self.update_progress)
+        synth_spectrum['flux'] = sve.generate_spectrum(synth_spectrum['waveobs']*10.0, atm_filename, linelist_file=linelist_file, abundances_file=abundances_file, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, verbose=1, update_progress_func=self.update_progress)
 
 
         synth_spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
@@ -3499,6 +3511,103 @@ max_wave_range=max_wave_range)
         self.operation_in_progress = False
         self.flash_status_message("Synthetic spectrum generated!")
 
+    def set_operation_in_progress(self):
+        self.operation_in_progress = True
+
+    def unset_operation_in_progress(self):
+        self.operation_in_progress = False
+
+    def on_receive_spectrum(self, new_spectrum_data, name):
+        #if self.check_operation_in_progress():
+            #return
+        #wx.CallAfter(self.set_operation_in_progress)
+        #wx.CallAfter(self.flash_status_message, "Receiving spectrum from external application...", progress=False)
+        wx.CallAfter(self.on_receive_spectrum_thread, new_spectrum_data, name)
+
+    def on_receive_spectrum_thread(self, new_spectrum_data, name):
+        # Remove current continuum from plot if exists
+        self.remove_drawn_continuum_spectrum()
+
+        # Remove current drawn fitted lines if they exist
+        self.remove_drawn_fitted_lines()
+
+        # Remove "[A]  " from spectrum name (legend) if it exists
+        if self.active_spectrum != None and self.active_spectrum.plot_id != None:
+            self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
+        name = self.get_name(name) # If it already exists, add a suffix
+        color = self.get_color()
+        self.active_spectrum = Spectrum(new_spectrum_data, name, color=color)
+        self.active_spectrum.not_saved = True
+        self.spectra.append(self.active_spectrum)
+        self.update_menu_active_spectrum()
+        self.draw_active_spectrum()
+        self.update_scale()
+
+        self.flash_status_message("Received file %s" % name)
+        self.operation_in_progress = False
+        return
+
+    def on_send_spectrum(self, event):
+        if not self.check_active_spectrum_exists():
+            return
+        if self.check_operation_in_progress():
+            return
+
+        if not self.samp_manager.is_connected():
+            msg = "No compatible external application can be detected because SVE is not connected to any SAMP hub.\n\n* A SAMP hub can be created by using TOPCAT application."
+            title = 'Connection not available'
+            self.error(title, msg)
+            self.flash_status_message("Not connected to any SAMP hub.")
+            return
+
+        ids, names, as_tables = self.samp_manager.get_subscribers()
+
+        if len(names) == 0:
+            msg = "No compatible external SAMP application has been detected."
+            title = 'Send spectrum error'
+            self.error(title, msg)
+            self.flash_status_message("No compatible SAMP application detected.")
+            return
+
+        dlg = SendSpectrumDialog(self, -1, "Send spectrum to external application", applications=names)
+        dlg.ShowModal()
+
+        if not dlg.action_accepted:
+            dlg.Destroy()
+            return
+
+        selected_application = dlg.application.GetValue()
+        selected_application_index = None
+        for i in np.arange(len(names)):
+            if selected_application == names[i]:
+                selected_application_index = i
+                break
+
+        if selected_application_index == None:
+            raise Exception("This should not happen")
+
+        self.operation_in_progress = True
+        self.flash_status_message("Sending spectrum to %s..." % selected_application)
+        self.gauge.SetValue(pos=10)
+
+        thread = threading.Thread(target=self.on_send_spectrum_thread, args=(selected_application, ids[selected_application_index], as_tables[selected_application_index]))
+        thread.setDaemon(True)
+        thread.start()
+
+    def on_send_spectrum_thread(self, application, application_id, as_table):
+        errors = False
+        try:
+            self.samp_manager.broadcast_spectrum(self.active_spectrum.data, self.active_spectrum.name, application_id, as_table=as_table)
+        except Exception:
+            errors = True
+        wx.CallAfter(self.on_send_spectrum_finnish, application, errors)
+
+    def on_send_spectrum_finnish(self, application, errors):
+        if errors:
+            self.flash_status_message("Communication failed with %s." % (application))
+        else:
+            self.flash_status_message("Spectrum sent to %s." % (application))
+        self.operation_in_progress = False
 
     def on_exit(self, event):
         self.on_close(event)
@@ -3712,7 +3821,7 @@ if __name__ == '__main__':
         }
     os.environ['LANG'] = locales[u'en'][1]
 
-    app = wx.App(False) # False to avoid additional windows for stdout/stderr
+    app = wx.App(redirect=False) # False to avoid additional windows for stdout/stderr
     app.frame = SpectraFrame(spectra, regions, filenames)
     app.frame.Show()
     app.MainLoop()
