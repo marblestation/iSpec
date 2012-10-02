@@ -26,4 +26,4 @@ int rotation_spectrum(const double waveobs[], double fluxes[], int num_measures,
 
 int resolution_spectrum(const double waveobs[], double fluxes[], int num_measures, int R, int verbose, progressfunc user_func, void *user_data);
 
-
+int abundances_determination(char *atmosphere_model_file, char *linelist_file, int num_measures, char *abundances_file, double microturbulence_vel, int verbose, double abundances[], double normal_abundances[], double relative_abundances[], progressfunc user_func, void *user_data);

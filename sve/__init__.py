@@ -35,9 +35,10 @@ def resource_path(relative):
 try:
     from atmospheres import *
     from synth import *
+    from abundances import *
 except ImportError as e:
     pass
-from common import calculate_barycentric_velocity_correction, sigma_clipping
+from common import calculate_barycentric_velocity_correction, sigma_clipping, interquartile_range_filtering
 from spectrum import *
 from continuum import *
 from lines import *

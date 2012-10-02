@@ -147,7 +147,7 @@ class SAMPManager():
         return spectrum
 
     def __signal_handler(self, signal, frame):
-        print 'You pressed Ctrl+C!'
+        print 'SIGTERM received (ctrl+c)'
         self.shutdown()
 
     def shutdown(self):

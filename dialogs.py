@@ -31,6 +31,7 @@ import numpy as np
 # The recommended way to use wx with mpl is with the WXAgg backend.
 import matplotlib
 #matplotlib.use('WXAgg')
+import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_wxagg import \
     FigureCanvasWxAgg as FigCanvas, \
@@ -1022,7 +1023,7 @@ class SyntheticSpectrumDialog(wx.Dialog):
 
         self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
 
-        ### MH
+        ### Microturbulence
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
 
         self.text_microturbulence_vel = wx.StaticText(self, -1, "Microturbulence velocity (km/s): ", style=wx.ALIGN_LEFT)
@@ -1278,4 +1279,198 @@ class FitLinesDialog(wx.Dialog):
         self.action_accepted = True
         self.EndModal(wx.ID_OK)
 
+class DetermineAbundancesDialog(wx.Dialog):
+    def __init__(self, parent, id, title, teff, logg, MH, microturbulence_vel):
+        wx.Dialog.__init__(self, parent, id, title, size=(450,450))
 
+        self.action_accepted = False
+
+        self.vbox = wx.BoxSizer(wx.VERTICAL)
+
+        flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
+
+        ### Model atmosphere
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_atmospheres = wx.StaticText(self, -1, "Model atmosphere: ", style=wx.ALIGN_LEFT)
+        self.atmospheres = wx.ComboBox (self, wx.ID_ANY, 'MARCS', choices=['Kurucz', 'Castelli', 'MARCS'], style=wx.CB_READONLY)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_atmospheres, 0, border=3, flag=flags)
+        self.hbox.Add(self.atmospheres, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        ### Teff
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_teff = wx.StaticText(self, -1, "Effective temperature (K): ", style=wx.ALIGN_LEFT)
+        self.teff = wx.TextCtrl(self, -1, str(teff),  style=wx.TE_RIGHT)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_teff, 0, border=3, flag=flags)
+        self.hbox.Add(self.teff, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        ### Log g
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_logg = wx.StaticText(self, -1, "Gravity (log g): ", style=wx.ALIGN_LEFT)
+        self.logg = wx.TextCtrl(self, -1, str(logg),  style=wx.TE_RIGHT)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_logg, 0, border=3, flag=flags)
+        self.hbox.Add(self.logg, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        ### MH
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_MH = wx.StaticText(self, -1, "Metallicity [M/H]: ", style=wx.ALIGN_LEFT)
+        self.MH = wx.TextCtrl(self, -1, str(MH),  style=wx.TE_RIGHT)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_MH, 0, border=3, flag=flags)
+        self.hbox.Add(self.MH, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        ### Microturbulence
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_microturbulence_vel = wx.StaticText(self, -1, "Microturbulence velocity (km/s): ", style=wx.ALIGN_LEFT)
+        self.microturbulence_vel = wx.TextCtrl(self, -1, str(microturbulence_vel),  style=wx.TE_RIGHT)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_microturbulence_vel, 0, border=3, flag=flags)
+        self.hbox.Add(self.microturbulence_vel, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        sizer = self.CreateButtonSizer(wx.CANCEL|wx.OK)
+        self.vbox.Add(sizer, 0, wx.ALIGN_CENTER)
+        self.vbox.AddSpacer(10)
+        self.SetSizer(self.vbox)
+        self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
+
+    def on_ok(self, event):
+        self.action_accepted = True
+        self.EndModal(wx.ID_OK)
+
+class AbundancesDialog(wx.Dialog):
+    def __init__(self, parent, id, title, linemasks, abundances, teff, logg, MH, microturbulence_vel):
+        wx.Dialog.__init__(self, parent, id, title, size=(600, 600))
+
+        self.recalculate = False
+        self.action_accepted = False
+
+        self.vbox = wx.BoxSizer(wx.VERTICAL)
+
+        flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
+
+        ### Plot
+        # Create the mpl Figure and FigCanvas objects.
+        # 5x4 inches, 100 dots-per-inch
+        #
+        self.dpi = 100
+        self.fig = Figure((3.0, 3.0), dpi=self.dpi)
+        self.canvas = FigCanvas(self, -1, self.fig)
+
+        # Since we have only one plot, we can use add_axes
+        # instead of add_subplot, but then the subplot
+        # configuration tool in the navigation toolbar wouldn't
+        # work.
+        self.axes = self.fig.add_subplot(1, 1, 1)
+        # Avoid using special notation that are not easy to understand in axis for big zoom
+        myyfmt = ScalarFormatter(useOffset=False)
+    	self.axes.get_xaxis().set_major_formatter(myyfmt)
+    	self.axes.get_yaxis().set_major_formatter(myyfmt)
+
+        self.toolbar = NavigationToolbar(self.canvas)
+
+        self.vbox.Add(self.canvas, 1, wx.LEFT | wx.TOP | wx.GROW)
+        self.vbox.Add(self.toolbar, 0, wx.EXPAND)
+        self.vbox.AddSpacer(10)
+
+        ### Stats
+        self.stats = wx.ListCtrl(self, -1, style=wx.LC_REPORT)
+        self.stats.InsertColumn(0, 'Property')
+        self.stats.InsertColumn(1, 'Value')
+        self.stats.SetColumnWidth(0, 300)
+        self.stats.SetColumnWidth(1, 300)
+
+        #self.vbox.Add(self.stats, 0, flag = wx.ALIGN_LEFT | wx.ALL | wx.TOP | wx.EXPAND)
+        self.vbox.Add(self.stats, 0, wx.EXPAND)
+        self.vbox.AddSpacer(10)
+
+        self.text_question = wx.StaticText(self, -1, "Recalculate again? ", style=wx.ALIGN_CENTER)
+
+        sizer =  self.CreateButtonSizer(wx.YES_NO | wx.NO_DEFAULT)
+        self.vbox.Add(self.text_question, 0, wx.ALIGN_CENTER)
+        self.vbox.AddSpacer(10)
+        self.vbox.Add(sizer, 0, wx.ALIGN_CENTER)
+        self.vbox.AddSpacer(10)
+        self.SetSizer(self.vbox)
+        self.Bind(wx.EVT_BUTTON, self.on_yes, id=wx.ID_YES)
+        self.Bind(wx.EVT_BUTTON, self.on_no, id=wx.ID_NO)
+
+        ## Stats
+        num_items = self.stats.GetItemCount()
+        self.stats.InsertStringItem(num_items, "Temperature effective")
+        self.stats.SetStringItem(num_items, 1, str(np.round(teff, 1)))
+        num_items += 1
+        self.stats.InsertStringItem(num_items, "Gravity")
+        self.stats.SetStringItem(num_items, 1, str(np.round(logg, 2)))
+        num_items += 1
+        self.stats.InsertStringItem(num_items, "Metallicity")
+        self.stats.SetStringItem(num_items, 1, str(np.round(MH, 2)))
+        num_items += 1
+        self.stats.InsertStringItem(num_items, "Microturbulence velocity (km/s)")
+        self.stats.SetStringItem(num_items, 1, str(np.round(microturbulence_vel, 2)))
+        num_items += 1
+        self.stats.InsertStringItem(num_items, "Total number of lines")
+        self.stats.SetStringItem(num_items, 1, str(len(abundances)))
+        num_items += 1
+
+        ## Draw
+        elements = np.unique(linemasks['element'])
+        for element in elements:
+            flines = linemasks['element'] == element
+            element_linemasks = linemasks[flines]
+            element_abundances = abundances[flines]
+            self.axes.plot(element_linemasks['VALD_wave_peak'], element_abundances, linestyle='', marker='o', markersize=5, zorder=1, label=element)
+            self.stats.InsertStringItem(num_items, element + " abundance (%)")
+            self.stats.SetStringItem(num_items, 1, str(np.round(100.*np.power(10, np.median(element_abundances)), 5)))
+            num_items += 1
+            self.stats.InsertStringItem(num_items, element + " median abundance in log(N/Ntot) (dex)")
+            self.stats.SetStringItem(num_items, 1, str(np.round(np.median(element_abundances), 2)))
+            num_items += 1
+            self.stats.InsertStringItem(num_items, element + " mean abundance in log(N/Ntot) (dex)")
+            self.stats.SetStringItem(num_items, 1, str(np.round(np.mean(element_abundances), 2)))
+            num_items += 1
+            self.stats.InsertStringItem(num_items, element + " standard deviation in abundance (dex)")
+            self.stats.SetStringItem(num_items, 1, str(np.round(np.std(element_abundances), 2)))
+            num_items += 1
+            self.stats.InsertStringItem(num_items, element + " lines number")
+            self.stats.SetStringItem(num_items, 1, str(np.round(len(element_abundances), 0)))
+            num_items += 1
+
+        leg = self.axes.legend(loc='upper right', shadow=False)
+        ltext  = leg.get_texts()
+        plt.setp(ltext, fontsize='8')
+
+        self.axes.grid(True, which="both")
+        self.axes.set_title("Abundances", fontsize="10")
+        self.axes.set_xlabel("wavelength (nm)", fontsize="10")
+        self.axes.set_ylabel("abundance (dex)", fontsize="10")
+
+
+    def on_no(self, event):
+        self.recalculate = False
+        self.EndModal(wx.ID_NO)
+
+    def on_yes(self, event):
+        self.recalculate = True
+        self.EndModal(wx.ID_YES)

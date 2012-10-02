@@ -107,6 +107,10 @@ double sqrt2 = 1.414214;
 long intdiv();
 long mmin(),mmax();
 
+// - For abundances:
+double eqwidth(model,line,atom,wave,V,POP);
+int bwline(wave,line,atom,ew,qf);
+
 int Ntau;
 float **bkap;
 float **bkap2;
@@ -357,6 +361,7 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
 // Expects waveobs to be homogeneusly spaced and at least of length 2
 int macroturbulence_spectrum(const double waveobs[], double fluxes[], int num_measures, double macroturbulence, int verbose, progressfunc user_func, void *user_data) {
     int i;
+    int flagw = verbose; // Verbose mode (1: True, 0: False)
     // Macroturbulence
     ////////////////////
     //double dlam = 0.01; // Spacing in armstrongs
@@ -495,6 +500,108 @@ int resolution_spectrum(const double waveobs[], double fluxes[], int num_measure
     }
 
     return(0);
+}
+
+#define FACTOR 1.6
+#define JMAX 100
+int flagCNO = 0;
+// Abundance determination
+int abundances_determination(char *atmosphere_model_file, char *linelist_file, int num_measures, char *abundances_file, double microturbulence_vel, int verbose, double abundances[], double normal_abundances[], double relative_abundances[], progressfunc user_func, void *user_data) {
+  int i,j,k,flag;
+  int code;
+  int flagw = verbose;
+  double ah,ahe,waveref,wave,Flux,Depth,w,w0,vturb,vt,ew,original_abund;
+  double nabund,abund0,abund1,abundmid,wmid,Atot,AH,vtl,vth,vts,MH;
+  atmosphere *model;
+  atominfo *atom;
+  linelist *list;
+  linedata *line;
+  pfunc *V;
+  population *POP;
+  char *file,*ofile,c;
+  FILE *qf;
+
+  setreset(0);
+
+  if((model = (atmosphere *) calloc(1,sizeof(atmosphere))) == NULL)
+    nrerror("Allocation of memory for atmosphere failed");
+  if((V = (pfunc *) calloc(1,sizeof(pfunc))) == NULL)
+    nrerror("Allocation of memory for pfunc failed");
+  if((atom = (atominfo *) calloc(NATOM,sizeof(atominfo))) == NULL)
+    nrerror("Allocation of memory for atom failed");
+  if((POP = (population *) calloc(NATOM-NMOL,sizeof(population))) == NULL)
+    nrerror("Allocation of memory for population failed");
+  if((line = (linedata *) calloc(1,sizeof(linedata))) == NULL)
+    nrerror("Allocation of memory for line failed");
+
+  printf("\nABUNDANCE v2.75 (C) Richard O. Gray 2008");
+  printf("\n* Linked to Python by Sergi Blanco Cuaresma - September 2012\n\n");
+
+
+  inmodel(model,atmosphere_model_file,flagw);
+  
+  if((qf = fopen(linelist_file,"r")) == NULL) {
+   printf("Cannot find line data file\n");
+   exit(1);
+  }
+  
+  vturb = microturbulence_vel*1.0e+05;
+  for(i=0;i<Ntau;i++) model->mtv[i] = vturb;  
+
+  ah = 0.911;
+  ahe = 0.089;
+  inatom(abundances_file, atom,model->MH,&ah,&ahe);
+
+  pfinit(V,atom,model,flagw);
+  printf("\nCalculating Number Densities\n");
+  Density(model,atom,ah,ahe,flagw);
+  printf("Poping\n");
+  popinit(POP,atom,model,V,flagw);
+
+  waveref = 5000.0;
+  printf("Calculating Reference Opacities\n");
+  tauref(model,waveref);
+  printf("Entering Main Loop\n");
+
+  int pos = 0;
+  while(bwline(&wave,line,atom,&ew,qf) == 1) {
+     if(line[0].code == 6.0 || line[0].code == 7.0 || line[0].code == 8.0) 
+       flagCNO = 1;
+     else flagCNO = 0;
+     original_abund = line[0].abund;
+     flag = 0;
+     line[0].abund = original_abund;
+     while(eqwidth(model,line,atom,wave,V,POP) > ew) {
+	    line[0].abund /= FACTOR;
+     }
+     abund0 = line[0].abund;
+     line[0].abund = original_abund;
+     while(eqwidth(model,line,atom,wave,V,POP) < ew)
+	 line[0].abund *= FACTOR;
+     abund1 = line[0].abund;
+     for(j=1;j<=JMAX;j++) {
+       abundmid = line[0].abund = (abund0 + abund1)/2.0;
+       wmid = eqwidth(model,line,atom,wave,V,POP);
+       if(wmid >= ew) abund1 = abundmid;
+       if(wmid < ew) abund0 = abundmid;
+       if(fabs(log10(abund1/abund0)) <= 0.0002) break;
+     }
+     Atot = log10((abund1+abund0)/2.0);
+     AH = Atot + 0.0405 + 12.0;
+     MH = Atot - log10(original_abund) + model->MH;
+     /*printf("%8.3f  %5.1f %6.3f  %4.2f  %7.3f  %7.3f  %6.3f\n",line[0].wave,*/
+               /*line[0].code,line[0].El,microturbulence_vel,Atot,AH,MH);*/
+     abundances[pos] = Atot;
+     normal_abundances[pos] = AH;
+     relative_abundances[pos] = MH;
+     
+     if (pos % 25 == 0) {
+            if(flagw == 1) printf("Wavelength %9.3f - Work completed %.2f\%\n", wave, ((1.0*pos)/num_measures)*100.0);
+            user_func(((1.0*pos)/num_measures)*100.0, user_data);
+     }
+     pos++;
+  }
+
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -824,3 +931,115 @@ long m,n;
   else return(n);
 }
 
+
+int bwline(wave,line,atom,ew,qf)
+double *wave,*ew;
+linedata *line;
+atominfo *atom;
+FILE *qf;
+{
+  int i,icode,j;
+  double lambda,code,code1,El,Eu,loggf,df,eqw,sig,alp,SA;
+  double gammar,gammas,gammaw; 
+  char T[5];
+  char tmp[10],buffer[120];
+
+  if(fgets(buffer,100,qf) == NULL) return(0);
+  if(buffer[0] == '#') return(3);
+  *wave = lambda = atof(strtok(buffer," "));
+  line[0].wave = lambda;
+  line[0].code = code = atof(strtok(NULL," "));
+  line[0].El = 1.23981e-04*atof(strtok(NULL," "));
+  line[0].Eu = 1.23981e-04*atof(strtok(NULL," "));
+  loggf = atof(strtok(NULL," "));
+  line[0].gf = pow(10.0,loggf);
+  line[0].fac = atof(strtok(NULL," "));
+  strcpy(T,strtok(NULL," "));
+  strcpy(line[0].T,T);
+  /* If transition type is AO, read in alp and sig parameters */
+  if(strcmp(T,"AO") == 0) {
+    SA = atof(strtok(NULL," "));
+    sig = floor(SA);
+    alp = SA - floor(SA);
+  } else alp = sig = 0.0;
+  /* If transition type is GA, read in individual gammas, where
+       Gamma stark is per electron number, Gamma van der Waals per
+       neutral hydrogen number.  Logarithms of these Gammas should
+       appear in the linelist */
+  if(strcmp(T,"GA") == 0) {
+    gammar = pow(10.0,atof(strtok(NULL," ")));
+    gammas = pow(10.0,atof(strtok(NULL," ")));
+    gammaw = pow(10.0,atof(strtok(NULL," ")));
+  } else gammar = gammas = gammaw = 0.0;
+  line[0].alp = alp;
+  line[0].sig = sig;
+  line[0].gammar = gammar;
+  line[0].gammas = gammas;
+  line[0].gammaw = gammaw;
+  *ew = atof(strtok(NULL," "));
+  if(approx(code,floor(code),0.001) == 1) icode = 0;
+  else if(approx(code,floor(code)+0.1,0.001) == 1) icode = 1;
+  i = 0;
+  while((int)code != atom[i].code) i++;
+  line[0].atomass = atom[i].amass;
+  line[0].chi1 = atom[i].I1;
+  line[0].chi2 = atom[i].I2;
+  if(icode == 0) line[0].chi = atom[i].I1;
+  else line[0].chi = atom[i].I2;
+  line[0].abund = atom[i].abund;
+  line[0].flag = 0;
+  for(j=0;j<NTAU;j++) line[0].xnum[j] = line[0].a[j] =
+		      line[0].dopp[j] = 0.0;
+  return(1);
+}
+
+double eqwidth(model,line,atom,wave,V,POP)
+atmosphere *model;
+linedata *line;
+atominfo *atom;
+double wave;
+pfunc *V;
+population *POP;
+//double eqwidth(atmosphere *model, linedata *line, atominfo *atom, double wave, pfunc *V, population *POP)
+{
+  double dwave = 0.005;
+  double w1,w2,w,d0,Flux;
+  int i,m;
+  int n = 0;
+
+  if(flagCNO == 1) {
+    m = 0;
+    if(line[0].code == 6.0) m = 5;
+    if(line[0].code == 7.0) m = 6;
+    if(line[0].code == 8.0) m = 7;
+    if(m == 0) {
+      printf("\nCNO error in Blackwel ... now exiting\n");
+      exit(1);
+    }
+  }
+  tauwave(model,wave);
+  Flux = flux(model,wave);
+  pop(line,0,model,V,POP);
+  /* Note that in pop8, for codes 6.0, 7.0 & 8.0, line[0].xnum is hardwired,
+     and so eqwidth returns the same equivalent width for CI, NI and OI lines
+     without the correction below.  Correction added Nov 7, 2006 */
+  if(flagCNO == 1) {
+    for(i=0;i<Ntau;i++) line[0].xnum[i] *= line[0].abund/atom[m].abund;
+  }
+  broad(model,line,0,line[0].sig,line[0].alp,line[0].fac);
+  capnu(line,0,model);
+
+  w = w1 = w2 = 0.0;
+  while(1) {
+    eqtaukap(wave,model,line);
+    w2 = depth(model,wave,Flux);
+    if(n == 0) d0 = w2;
+    if(n > 0) w += 0.5*(w1 + w2)*dwave;
+    w1 = w2;
+    /* if(w2 < 0.10*d0) dwave = 0.01;
+       if(w2 < 0.02*d0) dwave = 0.05; */
+    if(w2 < 0.00001) return(2000*w);
+    wave += dwave;
+    n++;
+  }
+}

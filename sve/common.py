@@ -77,6 +77,23 @@ def find_duplicates(a, key):
     return (duplicates, duplicates_index)
 
 
+def interquartile_range_filtering(data, k=1.5):
+    """
+    Interquartile range (IQR) is used to find outliers in data. By default, outliers
+    are observations that fall below Quartile1 - k*(IQR) or above Quartile3 + k*(IQR).
+
+    - k = 1.5 represents +/-2.698 * sigma (or standard dev) of a gaussian
+    distribution, which includes the 99.3% of the data.
+    """
+    # First and third quartile (the second is the median)
+    q1 = np.percentile(data, 25) # 25% of the data (left to right)
+    q3 = np.percentile(data, 75) # 75%
+    # Interquartile range
+    iqr = q3 - q1
+    sfilter = np.logical_and(data > q1 - k * iqr, data < q3 + k * iqr)
+    return data[sfilter], sfilter
+
+
 def sigma_clipping(data, sig=3, meanfunc=np.mean):
     """
     Identify outliers considering the mean (if meanfunc=np.mean) or median (if meanfunc=np.median) value and 3 sigma (3*stdev),

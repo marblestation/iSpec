@@ -640,6 +640,21 @@ def fit_lines(regions, spectrum, continuum_model, vel_atomic, vel_telluric, vald
         regions['wave_top'] = regions_tmp['wave_top']
         regions['wave_peak'] = regions_tmp['wave_peak']
 
+        # Find index in spectrum for base, top and peak
+        regions['base'] = 0
+        regions['top'] = 0
+        regions['peak'] = 0
+        for i in np.arange(len(regions_tmp)):
+            where_base = np.where(spectrum['waveobs'] >= regions_tmp['wave_base'][i])
+            if len(where_base) > 0:
+                regions['base'][i] = where_base[0][0]
+            where_top = np.where(spectrum['waveobs'] >= regions_tmp['wave_top'][i])
+            if len(where_top) > 0:
+                regions['top'][i] = where_top[0][0]
+            where_peak = np.where(spectrum['waveobs'] >= regions_tmp['wave_peak'][i])
+            if len(where_peak) > 0:
+                regions['peak'][i] = where_peak[0][0]
+
     i = 0
     # Model: fit gaussian
     for i in np.arange(total_regions):
@@ -1155,7 +1170,8 @@ def modelize_velocity_profile(xcoord, fluxes, only_one_peak=False):
             selected_peaks_indices = []
         else:
             # Identify peak outliers
-            fluxes_not_outliers, selected_fluxes_not_outliers = sigma_clipping(fluxes[peaks], sig=3, meanfunc=np.median)
+            #fluxes_not_outliers, selected_fluxes_not_outliers = sigma_clipping(fluxes[peaks], sig=3, meanfunc=np.median)
+            fluxes_not_outliers, selected_fluxes_not_outliers = interquartile_range_filtering(fluxes[peaks], k=1.5)
             selected_peaks_indices = np.arange(len(peaks))[~selected_fluxes_not_outliers]
             # FILTER: Make sure that the outliers selected are outliers because they are
             # deeper than the rest (we do not want outliers because they are less deep than the rest)

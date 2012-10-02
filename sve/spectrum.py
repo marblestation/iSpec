@@ -147,6 +147,7 @@ def estimate_snr(flux, num_points=10, frame=None):
     # Avoid negative values and outliers
     flux = flux[flux > 0.0]
     #flux, f = sigma_clipping(flux, sig=3, meanfunc=np.median)
+    #flux, f = interquartile_range_filtering(flux, k=1.5)
     last_reported_progress = -1
     if num_points == 1:
         snr = np.mean(flux) / np.std(flux)
@@ -166,7 +167,8 @@ def estimate_snr(flux, num_points=10, frame=None):
                 if frame != None:
                     frame.update_progress(current_work_progress)
         snr = np.asarray(snr)
-    snr, s = sigma_clipping(snr, sig=3, meanfunc=np.median)
+    #snr, s = sigma_clipping(snr, sig=3, meanfunc=np.median)
+    snr, s = interquartile_range_filtering(snr, k=1.5)
     estimated_snr = np.mean(snr)
     logging.info("SNR = %.2f" % estimated_snr)
     return estimated_snr

@@ -126,12 +126,12 @@ class GaussianModel(MPFitModel):
         if to_x == None:
             to_x = self.mu() + 3*self.sig()
 
-        if self.x == None:
-            return 0
-        else:
-            from scipy.integrate import quad
-            integral, estimated_error = quad(self._make_gauss(), from_x, to_x)
-            return integral
+        #if self.x == None:
+            #return 0
+        #else:
+        from scipy.integrate import quad
+        integral, estimated_error = quad(self._make_gauss(), from_x, to_x)
+        return integral
 
     # Returns fwhm in nm and kms
     def fwhm(self):
@@ -208,12 +208,12 @@ class VoigtModel(MPFitModel):
         if to_x == None:
             to_x = self.mu() + 3*self.sig()
 
-        if self.x == None:
-            return 0
-        else:
-            from scipy.integrate import quad
-            integral, estimated_error = quad(self._make_voigt(), from_x, to_x)
-            return integral
+        #if self.x == None:
+            #return 0
+        #else:
+        from scipy.integrate import quad
+        integral, estimated_error = quad(self._make_voigt(), from_x, to_x)
+        return integral
 
     # Returns fwhm in nm and kms
     def fwhm(self):

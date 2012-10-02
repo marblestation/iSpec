@@ -125,8 +125,10 @@ def __discard_outliers_for_continuum_candidates(spectrum, candidate_base_points,
     flux_diff1 = np.asarray(flux_diff1.tolist() + [flux_diff2[-1]])
     flux_diff2 = np.asarray([flux_diff1[0]] + flux_diff2.tolist())
     # Identify outliers
-    flux_diff1_selected, not_outliers1 = sigma_clipping(flux_diff1, sig=sig, meanfunc=np.median)
-    flux_diff2_selected, not_outliers2 = sigma_clipping(flux_diff2, sig=sig, meanfunc=np.median)
+    #flux_diff1_selected, not_outliers1 = sigma_clipping(flux_diff1, sig=sig, meanfunc=np.median)
+    #flux_diff2_selected, not_outliers2 = sigma_clipping(flux_diff2, sig=sig, meanfunc=np.median)
+    flux_diff1_selected, not_outliers1 = interquartile_range_filtering(flux_diff1, k=1.5)
+    flux_diff2_selected, not_outliers2 = interquartile_range_filtering(flux_diff2, k=1.5)
     outliers = np.logical_or(np.logical_not(not_outliers1), np.logical_not(not_outliers2))
 
     # Ensure that first and last points are not filtered out in order to avoid

@@ -110,9 +110,9 @@ resampled_mu_cas_a_spectrum = sve.resample_spectrum(mu_cas_a_spectrum, wavelengt
 total_wavelengths = len(resampled_sun_spectrum)
 coadded_spectrum = np.recarray((total_wavelengths, ), \
                     dtype=[('waveobs', float),('flux', float),('err', float)])
-coadded_spectrum = resampled_sun_spectrum['waveobs']
-coadded_spectrum = resampled_sun_spectrum['flux'] + resampled_mu_cas_a_spectrum['flux']
-coadded_spectrum = np.sqrt(np.power(resampled_sun_spectrum['err'],2) + \
+coadded_spectrum['waveobs'] = resampled_sun_spectrum['waveobs']
+coadded_spectrum['flux'] = resampled_sun_spectrum['flux'] + resampled_mu_cas_a_spectrum['flux']
+coadded_spectrum['err'] = np.sqrt(np.power(resampled_sun_spectrum['err'],2) + \
                                 np.power(resampled_mu_cas_a_spectrum['err'],2))
 
 
@@ -173,6 +173,11 @@ sun_linemasks = sve.find_linemasks(sun_spectrum, sun_continuum_model, vald_linel
                         smoothed_spectrum=smoothed_sun_spectrum, \
                         discard_gaussian=False, discard_voigt=True, \
                         vel_atomic=vel_atomic, vel_telluric=vel_telluric)
+# Exclude lines that have not been successfully cross matched with the atomic data
+# because we cannot calculate the chemical abundance (it will crash the corresponding routines)
+rejected_by_atomic_line_not_found = (sun_linemasks['VALD_wave_peak'] == 0)
+sun_linemasks = sun_linemasks[~rejected_by_atomic_line_not_found]
+
 sve.write_line_regions(sun_linemasks, "sun_linemasks.txt")
 
 ##--- Barycentric velocity correction ---------------------------------------
@@ -227,6 +232,10 @@ linemasks = sve.fit_lines(line_regions, sun_spectrum, sun_continuum_model, vel_a
                             vel_telluric, vald_linelist_file, chemical_elements_file, \
                             molecules_file, telluric_linelist_file, discard_gaussian=False, \
                             discard_voigt=True)
+# Exclude lines that have not been successfully cross matched with the atomic data
+# because we cannot calculate the chemical abundance (it will crash the corresponding routines)
+rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
+linemasks = linemasks[~rejected_by_atomic_line_not_found]
 
 
 ##--- Save spectrum ---------------------------------------------------------

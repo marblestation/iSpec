@@ -30,6 +30,7 @@ import random
 import wx
 import numpy as np
 import numpy.lib.recfunctions as rfn # Extra functions
+import tempfile
 
 import threading
 import getopt
@@ -403,6 +404,12 @@ class Spectrum():
         self.velocity_profile_telluric_rv_step = None
         self.velocity_profile_telluric_fwhm_correction = 0.0
         self.snr = None
+        self.linemasks = None # Linemasks that has been fitted and cross-matched with atomic & telluric data
+        self.abundances = None
+        self.abundances_teff = 5777.0
+        self.abundances_logg = 4.44
+        self.abundances_MH = 0.02
+        self.abundances_microturbulence_vel = 2.0
 
 class SVETaskBarIcon(wx.TaskBarIcon):
     TBMENU_RESTORE = wx.NewId()
@@ -853,7 +860,12 @@ class SpectraFrame(wx.Frame):
             m_synthesize = menu_edit.Append(-1, "&Synthesize spectrum", "Synthesize spectrum")
             self.Bind(wx.EVT_MENU, self.on_synthesize, m_synthesize)
 
-        m_send_spectrum = menu_edit.Append(-1, "Send spectrum to...", "Send spectrum to external application")
+        if "determine_abundances" in dir(sve):
+            m_determine_abundances = menu_edit.Append(-1, "Determine abundances with fitted lines", "Determine chemical abundances with fitted lines")
+            self.Bind(wx.EVT_MENU, self.on_determine_abundances, m_determine_abundances)
+            self.spectrum_function_items.append(m_determine_abundances)
+
+        m_send_spectrum = menu_edit.Append(-1, "Send spectrum to...", "Send spectrum to external application.")
         self.Bind(wx.EVT_MENU, self.on_send_spectrum, m_send_spectrum)
         self.spectrum_function_items.append(m_send_spectrum)
 
@@ -1005,10 +1017,20 @@ class SpectraFrame(wx.Frame):
         # Put a legend to the right of the current axis
         self.update_legend()
 
+    def remove_drawn_errors_spectrum(self):
+        if self.active_spectrum != None and self.active_spectrum.errors_plot_id1 != None:
+            self.axes.lines.remove(self.active_spectrum.errors_plot_id1)
+            self.active_spectrum.errors_plot_id1 = None
+        if self.active_spectrum != None and self.active_spectrum.errors_plot_id2 != None:
+            self.axes.lines.remove(self.active_spectrum.errors_plot_id2)
+            self.active_spectrum.errors_plot_id2 = None
+
     def remove_drawn_continuum_spectrum(self):
         if self.active_spectrum != None and self.active_spectrum.continuum_plot_id != None:
             self.axes.lines.remove(self.active_spectrum.continuum_plot_id)
             self.active_spectrum.continuum_plot_id = None
+            self.active_spectrum.continuum_model = None
+            self.active_spectrum.continuum_data = None
             self.canvas.draw()
 
     def remove_continuum_spectrum(self):
@@ -1115,7 +1137,7 @@ class SpectraFrame(wx.Frame):
         """
         self.axes.grid(True, which="both")
         self.axes.set_title("Spectra", fontsize="10")
-        self.axes.set_xlabel("wavelength", fontsize="10")
+        self.axes.set_xlabel("wavelength (nm)", fontsize="10")
         self.axes.set_ylabel("flux", fontsize="10")
 
         for spec in self.spectra:
@@ -1600,26 +1622,11 @@ class SpectraFrame(wx.Frame):
 
 
         # Remove errors if they exists
-        if self.active_spectrum != None and self.active_spectrum.errors_plot_id1 != None:
-            self.axes.lines.remove(self.active_spectrum.errors_plot_id1)
-            self.active_spectrum.errors_plot_id1 = None
-        if self.active_spectrum != None and self.active_spectrum.errors_plot_id2 != None:
-            self.axes.lines.remove(self.active_spectrum.errors_plot_id2)
-            self.active_spectrum.errors_plot_id2 = None
+        self.remove_drawn_errors_spectrum()
         # Remove fitted continuum if it exists
-        if self.active_spectrum != None and self.active_spectrum.continuum_plot_id != None:
-            self.axes.lines.remove(self.active_spectrum.continuum_plot_id)
-            self.active_spectrum.continuum_plot_id = None
-            self.active_spectrum.continuum_model = None
-            self.active_spectrum.continuum_data = None
+        self.remove_drawn_continuum_spectrum()
         # Remove fitted lines if they exist
-        for region in self.region_widgets["lines"]:
-            if region.line_model.has_key(self.active_spectrum):
-                if region.line_plot_id[self.active_spectrum] != None:
-                    self.axes.lines.remove(region.line_plot_id[self.active_spectrum])
-                del region.line_plot_id[self.active_spectrum]
-                del region.line_model[self.active_spectrum]
-                del region.line_extra[self.active_spectrum]
+        self.remove_fitted_lines()
         if len(self.spectra) == 0:
             self.active_spectrum = None
         else:
@@ -2439,18 +2446,46 @@ class SpectraFrame(wx.Frame):
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
         molecules_file = resource_path("input/abundances/molecular_symbols.dat")
         telluric_linelist_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
-        linemasks = sve.fit_lines(self.regions["lines"], self.active_spectrum.data, self.active_spectrum.continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian=False, discard_voigt=True, frame=self)
+        linemasks = sve.fit_lines(self.regions["lines"], self.active_spectrum.data, self.active_spectrum.continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian=False, discard_voigt=True, smoothed_spectrum=self.active_spectrum.data, frame=self)
+        # Exclude lines that have not been successfully cross matched with the atomic data
+        # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
+        rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
+        linemasks = linemasks[~rejected_by_atomic_line_not_found]
+
         wx.CallAfter(self.on_fit_lines_finnish, linemasks)
 
-    def on_fit_lines_finnish(self, linemasks):
+    def on_fit_lines_finnish(self, linemasks, conserve_previous_regions=True):
         elements = "lines"
+
+        diff_num_regions = len(self.region_widgets["lines"]) - len(linemasks)
+        if conserve_previous_regions and diff_num_regions > 0:
+            # Find regions that has been discarded due to a bad fit or other reason
+            # in order to recover them
+            recovered_regions = np.recarray((diff_num_regions, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100')])
+            i = 0
+            for region in self.region_widgets["lines"]:
+                lost_region = True
+                for line in linemasks:
+                    if region.get_wave_base() == line['wave_base'] and region.get_wave_top() == line['wave_top']:
+                        lost_region = False
+                        continue
+                if lost_region:
+                    recovered_regions[i]['wave_base'] = region.get_wave_base()
+                    recovered_regions[i]['wave_top'] = region.get_wave_top()
+                    recovered_regions[i]['wave_peak'] = region.get_wave_peak()
+                    recovered_regions[i]['note'] = region.get_note_text()
+                    i += 1
+
         self.remove_fitted_lines() # If they exist
         self.remove_regions(elements, check_not_saved=False)
+
+        self.active_spectrum.linemasks = linemasks
 
         if linemasks != None and len(linemasks) > 0:
             total_regions = len(linemasks)
             line_regions = np.recarray((total_regions, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100')])
             line_regions['wave_peak'] = linemasks['mu']
+            # If no edge limit improvement has been applied (i.e. fit_lines does not do it)
             line_regions['wave_base'] = linemasks['wave_base']
             line_regions['wave_top'] = linemasks['wave_top']
             line_regions['note'] = linemasks['element']
@@ -2475,15 +2510,17 @@ class SpectraFrame(wx.Frame):
                     line_regions['note'][i] += "*"
                 i += 1
 
+            if conserve_previous_regions and diff_num_regions > 0:
+                line_regions = np.hstack((line_regions, recovered_regions))
+
             self.regions[elements] = line_regions
             self.draw_regions(elements)
 
             # Fitted Gaussian lines
-            i = 0
-            for region in self.region_widgets["lines"]:
-                region.line_model[self.active_spectrum] = line_models[i]
-                region.line_extra[self.active_spectrum] = line_extras[i]
-                i += 1
+            # * The not fitted but recovered lines will be avoided by the "diff_num_regions + i"
+            for i in np.arange(len(line_models)):
+                self.region_widgets["lines"][i].line_model[self.active_spectrum] = line_models[i]
+                self.region_widgets["lines"][i].line_extra[self.active_spectrum] = line_extras[i]
             self.draw_fitted_lines()
 
             self.not_saved[elements] = True
@@ -2510,6 +2547,8 @@ class SpectraFrame(wx.Frame):
                 del region.line_plot_id[self.active_spectrum]
                 del region.line_model[self.active_spectrum]
                 del region.line_extra[self.active_spectrum]
+        self.active_spectrum.linemasks = None
+        self.active_spectrum.abundances = None
 
     def draw_fitted_lines(self):
         for region in self.region_widgets["lines"]:
@@ -2815,10 +2854,10 @@ max_wave_range=max_wave_range)
         logging.info("Applying filters to discard bad line masks...")
         wx.CallAfter(self.status_message, "Applying filters to discard bad line masks...")
 
-        #rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
+        rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
         rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
 
-        discarded = linemasks['wave_peak'] < 0 # All to false
+        discarded = linemasks['wave_peak'] <= 0 # All to false
 
         # In case it is specified, select only given elements
         if elements != "":
@@ -2830,11 +2869,16 @@ max_wave_range=max_wave_range)
 
         if discard_tellurics:
             discarded = np.logical_or(discarded, rejected_by_telluric_line)
-        #discarded = np.logical_or(discarded, rejected_by_atomic_line_not_found)
+
+        # Exclude lines that have not been successfully cross matched with the atomic data
+        # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
+        discarded = np.logical_or(discarded, rejected_by_atomic_line_not_found)
+
         if in_segments:
             # Identify linemasks with too big wavelength range (probably star in between segments)
             wave_diff = (linemasks['wave_top'] - linemasks['wave_base']) / (linemasks['top'] - linemasks['base'])
-            wave_diff_selected, wave_diff_selected_filter = sve.sigma_clipping(wave_diff[~discarded], sig=3, meanfunc=np.median) # Discard outliers
+            #wave_diff_selected, wave_diff_selected_filter = sve.sigma_clipping(wave_diff[~discarded], sig=3, meanfunc=np.median) # Discard outliers
+            wave_diff_selected, wave_diff_selected_filter = sve.interquartile_range_filtering(wave_diff[~discarded], k=1.5) # Discard outliers
             accepted_index = np.arange(len(wave_diff))[~discarded][wave_diff_selected_filter]
             rejected_by_wave_gaps = wave_diff < 0 # Create an array of booleans
             rejected_by_wave_gaps[:] = True # Initialize
@@ -2853,7 +2897,7 @@ max_wave_range=max_wave_range)
         wx.CallAfter(self.on_find_lines_finish, linemasks)
 
     def on_find_lines_finish(self, linemasks):
-        self.on_fit_lines_finnish(linemasks)
+        self.on_fit_lines_finnish(linemasks, conserve_previous_regions=False)
 
     def on_determine_barycentric_vel(self, event):
         dlg = DetermineBarycentricCorrectionDialog(self, -1, "Barycentric velocity determination", self.day, self.month, self.year, self.hours, self.minutes, self.seconds, self.ra_hours, self.ra_minutes, self.ra_seconds, self.dec_degrees, self.dec_minutes, self.dec_seconds)
@@ -3510,6 +3554,121 @@ max_wave_range=max_wave_range)
 
         self.operation_in_progress = False
         self.flash_status_message("Synthetic spectrum generated!")
+
+    def on_determine_abundances(self, event, show_previous_results=True):
+        # Check if velocity has been previously determined and show those results
+        if show_previous_results and self.active_spectrum.linemasks != None and self.active_spectrum.abundances != None:
+            teff = self.active_spectrum.abundances_teff
+            logg = self.active_spectrum.abundances_logg
+            MH = self.active_spectrum.abundances_MH
+            microturbulence_vel = self.active_spectrum.abundances_microturbulence_vel
+            title = "Chemical abundances"
+            dlg = AbundancesDialog(self, -1, title, self.active_spectrum.linemasks, self.active_spectrum.abundances, teff, logg, MH, microturbulence_vel)
+            dlg.ShowModal()
+            recalculate = dlg.recalculate
+            dlg.Destroy()
+            if not recalculate:
+                return
+
+        if self.check_operation_in_progress():
+            return
+
+        if self.active_spectrum.linemasks == None:
+            msg = "Lines should be fitted first."
+            title = 'Lines not fitted'
+            self.error(title, msg)
+            self.flash_status_message("Not previous fitted lines available.")
+            return
+
+        teff = self.active_spectrum.abundances_teff
+        logg = self.active_spectrum.abundances_logg
+        MH = self.active_spectrum.abundances_MH
+        microturbulence_vel = self.active_spectrum.abundances_microturbulence_vel
+        dlg = DetermineAbundancesDialog(self, -1, "Abundances determination", teff, logg, MH, microturbulence_vel)
+        dlg.ShowModal()
+
+        if not dlg.action_accepted:
+            dlg.Destroy()
+            return
+
+        teff = self.text2float(dlg.teff.GetValue(), 'Effective temperature value is not a valid one.')
+        logg = self.text2float(dlg.logg.GetValue(), 'Gravity (log g) value is not a valid one.')
+        MH = self.text2float(dlg.MH.GetValue(), 'Metallicity [M/H] value is not a valid one.')
+        microturbulence_vel = self.text2float(dlg.microturbulence_vel.GetValue(), 'Microturbulence velocity value is not a valid one.')
+        selected_atmosphere_models = dlg.atmospheres.GetValue()
+        abundances_file = resource_path("input/abundances/" + selected_atmosphere_models + "/stdatom.dat")
+        dlg.Destroy()
+
+        if teff == None or logg == None or MH == None or microturbulence_vel == None:
+            self.flash_status_message("Bad value.")
+            return
+
+        self.active_spectrum.abundances_teff = teff
+        self.active_spectrum.abundances_logg = logg
+        self.active_spectrum.abundances_MH = MH
+        self.active_spectrum.abundances_microturbulence_vel = microturbulence_vel
+
+        if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
+            logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
+            self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
+            self.modeled_layers_pack[selected_atmosphere_models] = sve.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/modeled_layers_pack.dump'))
+
+        if not sve.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
+            msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of theatmospheric models."
+            title = 'Out of the atmospheric models'
+            self.error(title, msg)
+            self.flash_status_message("Bad values.")
+            return
+
+        # Prepare atmosphere model
+        self.status_message("Interpolating atmosphere model...")
+        layers = sve.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH)
+        atm_filename = sve.write_atmosphere(teff, logg, MH, layers)
+
+        self.operation_in_progress = True
+        self.status_message("Determining abundances...")
+        self.update_progress(10)
+
+        thread = threading.Thread(target=self.on_determine_abundances_thread, args=(atm_filename, abundances_file, microturbulence_vel))
+        thread.setDaemon(True)
+        thread.start()
+
+
+    def on_determine_abundances_thread(self, atmosphere_model_file, abundances_file, microturbulence_vel):
+        linelist_file = tempfile.NamedTemporaryFile(delete=False)
+        linelist_file.close()
+        linelist_filename = linelist_file.name
+        self.active_spectrum.linemasks['ew'] = 1000. * 10. * self.active_spectrum.linemasks['ew'] # From nm to mA
+        self.active_spectrum.linemasks['VALD_wave_peak'] = 10 * self.active_spectrum.linemasks['VALD_wave_peak'] # From nm to Angstrom
+        sve.write_abundance_lines(self.active_spectrum.linemasks, linelist_filename)
+        self.active_spectrum.linemasks['ew'] = self.active_spectrum.linemasks['ew'] / (1000. * 10.) # From mA to nm
+        self.active_spectrum.linemasks['VALD_wave_peak'] = self.active_spectrum.linemasks['VALD_wave_peak'] / 10 # From Angstrom to nm
+        num_measures = len(self.active_spectrum.linemasks)
+        abundances, normal_abundances, relative_abundances = sve.determine_abundances(atmosphere_model_file, linelist_filename, num_measures, abundances_file, microturbulence_vel = 2.0, verbose=1, update_progress_func=self.update_progress)
+
+        # Remove atmosphere model temporary file
+        os.remove(atmosphere_model_file,)
+        os.remove(linelist_filename,)
+        wx.CallAfter(self.on_determine_abundances_finnish, abundances, normal_abundances, relative_abundances)
+
+    def on_determine_abundances_finnish(self, abundances, normal_abundances, relative_abundances):
+        self.flash_status_message("Abundances determined!")
+        self.operation_in_progress = False
+
+        self.active_spectrum.abundances = normal_abundances
+
+        teff = self.active_spectrum.abundances_teff
+        logg = self.active_spectrum.abundances_logg
+        MH = self.active_spectrum.abundances_MH
+        microturbulence_vel = self.active_spectrum.abundances_microturbulence_vel
+        title = "Chemical abundances"
+        dlg = AbundancesDialog(self, -1, title, self.active_spectrum.linemasks, abundances, teff, logg, MH, microturbulence_vel)
+        dlg.ShowModal()
+        recalculate = dlg.recalculate
+        dlg.Destroy()
+        if recalculate:
+            self.on_determine_abundances(None, show_previous_results=False)
+
 
     def set_operation_in_progress(self):
         self.operation_in_progress = True
