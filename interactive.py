@@ -49,7 +49,10 @@ from matplotlib.ticker import ScalarFormatter
 
 import sve
 from dialogs import *
-from SAMPManager import *
+
+try:
+    from SAMPManager import *
+except: pass
 
 ## PyInstaller resource access
 def resource_path(relative):
@@ -497,7 +500,10 @@ class SpectraFrame(wx.Frame):
         #self.ipython_thread = threading.Thread(target=self.ipython)
         #self.ipython_thread.setDaemon(True)
 
-        self.samp_manager = SAMPManager(self.on_receive_spectrum, check_connection_period=2)
+        if "SAMPManager" in sys.modules.keys():
+            self.samp_manager = SAMPManager(self.on_receive_spectrum, check_connection_period=2)
+        else:
+            self.samp_manager = None
 
         self.spectra_colors = ('#0000FF', '#A52A2A', '#A020F0', '#34764A', '#000000', '#90EE90', '#FFA500', '#1E90FF',   '#FFC0CB', '#7F7F7F', '#00FF00',)
 
@@ -865,9 +871,10 @@ class SpectraFrame(wx.Frame):
             self.Bind(wx.EVT_MENU, self.on_determine_abundances, m_determine_abundances)
             self.spectrum_function_items.append(m_determine_abundances)
 
-        m_send_spectrum = menu_edit.Append(-1, "Send spectrum to...", "Send spectrum to external application.")
-        self.Bind(wx.EVT_MENU, self.on_send_spectrum, m_send_spectrum)
-        self.spectrum_function_items.append(m_send_spectrum)
+        if self.samp_manager != None:
+            m_send_spectrum = menu_edit.Append(-1, "Send spectrum to...", "Send spectrum to external application.")
+            self.Bind(wx.EVT_MENU, self.on_send_spectrum, m_send_spectrum)
+            self.spectrum_function_items.append(m_send_spectrum)
 
         menu_help = wx.Menu()
         m_about = menu_help.Append(-1, "&About\tF1", "About the visual editor")
@@ -1222,11 +1229,13 @@ class SpectraFrame(wx.Frame):
             msg = "Are you sure you want to exit without saving the regions/spectra?"
             title = "Changes not saved"
             if self.question(title, msg):
-                self.samp_manager.shutdown()
+                if self.samp_manager != None:
+                    self.samp_manager.shutdown()
                 self.tbicon.Destroy()
                 self.Destroy()
         else:
-            self.samp_manager.shutdown()
+            if self.samp_manager != None:
+                self.samp_manager.shutdown()
             self.tbicon.Destroy()
             self.Destroy()
 
@@ -1430,6 +1439,10 @@ class SpectraFrame(wx.Frame):
             self.add_stats("Gaussian base level (mean continuum)", "%.4f" % region.line_model[self.active_spectrum].baseline())
             rms = region.line_model[self.active_spectrum].rms
             self.add_stats("Gaussian fit root mean squeare (RMS)", "%.4f" % rms)
+
+            #from_x = region.get_wave_peak() - 3*regions['sig'][i]
+            #to_x = region.get_wave_peak() + 3*regions['sig'][i]
+                #regions['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x)
             wave_base = region.get_wave_base()
             wave_top = region.get_wave_top()
             integrated_flux = -1 * region.line_model[self.active_spectrum].integrate(wave_base, wave_top)
@@ -2292,6 +2305,7 @@ class SpectraFrame(wx.Frame):
                     flux = flux + spec['flux']
                 else:
                     flux = flux - spec['flux']
+                # Error propagation assuming that they are independent
                 err = np.sqrt(np.power(err,2) + np.power(spec['err'],2))
                 i += 1
             combined_spectrum = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
@@ -2304,6 +2318,7 @@ class SpectraFrame(wx.Frame):
             err = np.zeros(total_wavelengths)
             for spec in resampled_spectra:
                 flux = flux + spec['flux']
+                # Error propagation assuming that they are independent
                 err = np.sqrt(np.power(err,2) + np.power(spec['err'],2))
             combined_spectrum = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
             combined_spectrum['waveobs'] = xaxis
@@ -2320,6 +2335,7 @@ class SpectraFrame(wx.Frame):
                     err = spec['err'].copy()
                     flux = spec['flux'].copy()
                 else:
+                    # Error propagation assuming that they are independent
                     err = np.sqrt(np.power(flux / err, 2) + np.power(spec['flux'] / spec['err'], 2)) * 0.7
                     if i == active:
                         flux = flux * spec['flux']
@@ -2982,7 +2998,7 @@ max_wave_range=max_wave_range)
             efilter = self.active_spectrum.data['err'] > 0
             spec = self.active_spectrum.data[efilter]
             if len(spec) > 1:
-                estimated_snr = np.mean(spec['flux'] / spec['err'])
+                estimated_snr = np.median(spec['flux'] / spec['err'])
                 self.on_estimate_snr_finnish(estimated_snr)
             else:
                 msg = 'All value errors are set to zero or negative numbers'
@@ -3426,6 +3442,10 @@ max_wave_range=max_wave_range)
             selected_linelist = dlg.linelist.GetValue()
             linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + "/300_1100nm.lst")
             abundances_file = resource_path("input/abundances/" + selected_atmosphere_models + "/stdatom.dat")
+            if selected_atmosphere_models == "MARCS":
+                nlayers = 56
+            else:
+                nlayers = 72
 
             in_segments = dlg.radio_button_segments.GetValue() # else in spectrum
             dlg.Destroy()
@@ -3503,18 +3523,18 @@ max_wave_range=max_wave_range)
             self.operation_in_progress = True
             self.status_message("Synthesizing spectrum...")
             self.update_progress(10)
-            thread = threading.Thread(target=self.on_synthesize_thread, args=(waveobs, linelist_file, abundances_file, atm_filename, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution))
+            thread = threading.Thread(target=self.on_synthesize_thread, args=(waveobs, linelist_file, abundances_file, atm_filename, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, nlayers))
             thread.setDaemon(True)
             thread.start()
 
-    def on_synthesize_thread(self, waveobs, linelist_file, abundances_file, atm_filename, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
+    def on_synthesize_thread(self, waveobs, linelist_file, abundances_file, atm_filename, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution, nlayers):
         total_points = len(waveobs)
 
         synth_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
         synth_spectrum['waveobs'] = waveobs
 
         # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
-        synth_spectrum['flux'] = sve.generate_spectrum(synth_spectrum['waveobs']*10.0, atm_filename, linelist_file=linelist_file, abundances_file=abundances_file, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, verbose=1, update_progress_func=self.update_progress)
+        synth_spectrum['flux'] = sve.generate_spectrum(synth_spectrum['waveobs']*10.0, atm_filename, linelist_file=linelist_file, abundances_file=abundances_file, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, nlayers=nlayers, verbose=1, update_progress_func=self.update_progress)
 
 
         synth_spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
@@ -3597,6 +3617,10 @@ max_wave_range=max_wave_range)
         microturbulence_vel = self.text2float(dlg.microturbulence_vel.GetValue(), 'Microturbulence velocity value is not a valid one.')
         selected_atmosphere_models = dlg.atmospheres.GetValue()
         abundances_file = resource_path("input/abundances/" + selected_atmosphere_models + "/stdatom.dat")
+        if selected_atmosphere_models == "MARCS":
+            nlayers = 56
+        else:
+            nlayers = 72
         dlg.Destroy()
 
         if teff == None or logg == None or MH == None or microturbulence_vel == None:
@@ -3629,12 +3653,12 @@ max_wave_range=max_wave_range)
         self.status_message("Determining abundances...")
         self.update_progress(10)
 
-        thread = threading.Thread(target=self.on_determine_abundances_thread, args=(atm_filename, abundances_file, microturbulence_vel))
+        thread = threading.Thread(target=self.on_determine_abundances_thread, args=(atm_filename, abundances_file, microturbulence_vel, nlayers))
         thread.setDaemon(True)
         thread.start()
 
 
-    def on_determine_abundances_thread(self, atmosphere_model_file, abundances_file, microturbulence_vel):
+    def on_determine_abundances_thread(self, atmosphere_model_file, abundances_file, microturbulence_vel, nlayers):
         linelist_file = tempfile.NamedTemporaryFile(delete=False)
         linelist_file.close()
         linelist_filename = linelist_file.name
@@ -3644,7 +3668,7 @@ max_wave_range=max_wave_range)
         self.active_spectrum.linemasks['ew'] = self.active_spectrum.linemasks['ew'] / (1000. * 10.) # From mA to nm
         self.active_spectrum.linemasks['VALD_wave_peak'] = self.active_spectrum.linemasks['VALD_wave_peak'] / 10 # From Angstrom to nm
         num_measures = len(self.active_spectrum.linemasks)
-        abundances, normal_abundances, relative_abundances = sve.determine_abundances(atmosphere_model_file, linelist_filename, num_measures, abundances_file, microturbulence_vel = 2.0, verbose=1, update_progress_func=self.update_progress)
+        abundances, normal_abundances, relative_abundances = sve.determine_abundances(atmosphere_model_file, linelist_filename, num_measures, abundances_file, microturbulence_vel = 2.0, nlayers=nlayers, verbose=1, update_progress_func=self.update_progress)
 
         # Remove atmosphere model temporary file
         os.remove(atmosphere_model_file,)
@@ -3710,6 +3734,8 @@ max_wave_range=max_wave_range)
         if not self.check_active_spectrum_exists():
             return
         if self.check_operation_in_progress():
+            return
+        if self.samp_manager == None:
             return
 
         if not self.samp_manager.is_connected():

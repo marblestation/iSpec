@@ -37,7 +37,7 @@ def write_abundance_lines(linemasks, filename):
     out.write("\n".join([" ".join(map(str, (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['ew'], line['element']))) for line in linemasks]))
     out.close()
 
-def determine_abundances(atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel = 2.0, verbose=0, update_progress_func=None):
+def determine_abundances(atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel = 2.0, nlayers=56, verbose=0, update_progress_func=None):
     """
     Determine abundances from equivalent widths
 
@@ -49,5 +49,5 @@ def determine_abundances(atmosphere_model_file, linelist_file, num_measures, abu
     If "abundances_file" contain solar abundances, this values represent
     the quantity [X/H] where X is the species in question.
     """
-    return synthesizer.abundances(atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel, verbose, update_progress_func)
+    return synthesizer.abundances(atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel, nlayers, verbose, update_progress_func)
 

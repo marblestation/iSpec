@@ -277,14 +277,26 @@ def convolve_spectrum(spectrum, from_resolution, to_resolution=None, frame=None)
         gaussian = gaussian / np.sum(gaussian)
 
         # Convolve the current position by using the segment and the gaussian
-        weighted_flux = flux_segment * gaussian
-        current_convolved_flux = weighted_flux.sum()
-        # Error propagation considering that measures are independent
-        weighted_err = err_segment * gaussian
-        current_convolved_err = np.sqrt(np.power(weighted_err, 2).sum())
+        if flux[i] > 0:
+            weighted_flux = flux_segment * gaussian
+            current_convolved_flux = weighted_flux.sum()
+            convolved_spectrum['flux'][i] = current_convolved_flux
+        else:
+            convolved_spectrum['flux'][i] = 0.0
 
-        convolved_spectrum['flux'][i] = current_convolved_flux
-        convolved_spectrum['err'][i] = current_convolved_err
+        if err[i] > 0:
+            # * Propagate error Only if the current value has a valid error value assigned
+            #
+            # Error propagation considering that measures are dependent (more conservative approach)
+            # because it is common to find spectra with errors calculated from a SNR which
+            # at the same time has been estimated from all the measurements in the same spectra
+            #
+            weighted_err = err_segment * gaussian
+            current_convolved_err = weighted_err.sum()
+            #current_convolved_err = np.sqrt(np.power(weighted_err, 2).sum()) # Case for independent errors
+            convolved_spectrum['err'][i] = current_convolved_err
+        else:
+            convolved_spectrum['err'][i] = 0.0
 
         current_work_progress = (i*1.0 / total_points) * 100
         if report_progress(current_work_progress, last_reported_progress):

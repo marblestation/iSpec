@@ -84,7 +84,7 @@ cdef void callback(double num, void *f):
 
 # waveobs in armstrong
 # microtturbulence velocity in km/s
-def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, char* atmosphere_model_file, char* linelist_file = "input/linelists/default.300_1100nm.lst", char* abundances_file = "input/abundances/default.stdatom.dat", double microturbulence_vel = 2.0, double macroturbulence = 3.0, double vsini = 2.0, double limb_darkening_coeff = 0.0, int R=500000, int verbose = 0, update_progress_func=None):
+def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, char* atmosphere_model_file, char* linelist_file = "input/linelists/default.300_1100nm.lst", char* abundances_file = "input/abundances/default.stdatom.dat", double microturbulence_vel = 2.0, double macroturbulence = 3.0, double vsini = 2.0, double limb_darkening_coeff = 0.0, int R=500000, int nlayers = 56, int verbose = 0, update_progress_func=None):
     if not os.path.exists(atmosphere_model_file):
         raise Exception("Atmosphere model file '%s' does not exists!" % atmosphere_model_file)
     if not os.path.exists(linelist_file):
@@ -108,7 +108,7 @@ def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, char* atmosphere_model_file
     global mghlb
     global mu
     global NI
-    Ntau = 72  # 72 layers for castelli-kurucz atmosphere models
+    Ntau = nlayers  # 72 layers for castelli-kurucz atmosphere models, 56 for MARCS
     flagr = 0
     flagc = 0
     flagk = 0
@@ -151,7 +151,7 @@ def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, char* atmosphere_model_file
     
     
 # microtturbulence velocity in km/s
-def abundances(char* atmosphere_model_file, char* linelist_file, int num_measures, char* abundances_file, double microturbulence_vel = 2.0, int verbose = 0, update_progress_func=None):
+def abundances(char* atmosphere_model_file, char* linelist_file, int num_measures, char* abundances_file, double microturbulence_vel = 2.0, int nlayers=56, int verbose = 0, update_progress_func=None):
     if not os.path.exists(atmosphere_model_file):
         raise Exception("Atmosphere model file '%s' does not exists!" % atmosphere_model_file)
     if not os.path.exists(linelist_file):
@@ -176,7 +176,7 @@ def abundances(char* atmosphere_model_file, char* linelist_file, int num_measure
     global mu
     global NI
     global flagCNO
-    Ntau = 72  # 72 layers for castelli-kurucz atmosphere models
+    Ntau = nlayers  # 72 layers for castelli-kurucz atmosphere models, 56 for MARCS
     flagr = 0
     flagc = 0
     flagk = 0

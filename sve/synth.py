@@ -19,9 +19,9 @@ import numpy as np
 import synthesizer
 from atmospheres import *
 
-def generate_spectrum(waveobs, atmosphere_model_file, linelist_file, abundances_file, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, update_progress_func=None):
+def generate_spectrum(waveobs, atmosphere_model_file, linelist_file, abundances_file, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, nlayers=56, verbose=0, update_progress_func=None):
     """
     Generate synthetic spectrum.
     """
-    return synthesizer.spectrum(waveobs, atmosphere_model_file, linelist_file, abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, R, verbose, update_progress_func)
+    return synthesizer.spectrum(waveobs, atmosphere_model_file, linelist_file, abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, R, nlayers, verbose, update_progress_func)
 
