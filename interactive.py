@@ -3454,6 +3454,12 @@ max_wave_range=max_wave_range)
                 self.flash_status_message("Bad value.")
                 return
 
+            if wave_step > 0.01:
+                msg = "Wavelength step cannot be bigger than 0.01 nm"
+                title = 'Wavelength step error'
+                self.error(title, msg)
+                self.flash_status_message("Bad values.")
+                return
 
             if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
                 logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
@@ -3501,7 +3507,7 @@ max_wave_range=max_wave_range)
                         waveobs = np.hstack((waveobs, new_waveobs))
 
             # If wavelength out of the linelist file are used, SPECTRUM starts to generate flat spectrum
-            if np.min(waveobs) <= 300.0 or np.max(waveobs) >= 1100.0:
+            if np.min(waveobs) < 300.0 or np.max(waveobs) > 1100.0:
                 # luke.300_1000nm.lst
                 msg = "Wavelength range is outside line list for spectrum generation."
                 title = 'Wavelength range'
@@ -3544,10 +3550,7 @@ max_wave_range=max_wave_range)
         wx.CallAfter(self.on_synthesize_finnish, synth_spectrum, teff, logg, MH, microturbulence_vel)
 
     def on_synthesize_finnish(self, synth_spectrum, teff, logg, MH, microturbulence_vel):
-        # Draw new lines
-        self.draw_fitted_lines()
         self.operation_in_progress = False
-        self.flash_status_message("Lines fitted.")
         # Remove current continuum from plot if exists
         self.remove_drawn_continuum_spectrum()
 

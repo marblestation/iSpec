@@ -23,7 +23,6 @@ import asciitable
 import math
 from datetime import datetime
 from scipy import interpolate
-import matplotlib.pyplot as plt
 import tempfile
 import cPickle as pickle
 

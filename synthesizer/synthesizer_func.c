@@ -283,6 +283,9 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
     waveref = 5000.0;
     if(flagw == 1) printf("Calculating Reference Opacities\n");
     tauref(model,waveref);
+    //printf("*** %f\n", model->kapparef[1]);
+    //printf("*** %f\n", model->tauref[1]);
+    //printf("*** %f\n", model->x[1]);
     
     
     if(flagw == 1) printf("Entering Main Loop\n");
@@ -313,8 +316,11 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
         Depth = 1.0;
 
         tauwave(model,wave);
+        //printf("*** %f\n", model->tauwave[1]);
         
         Flux = flux(model,wave);
+        //printf("*** %f\n", Flux);
+        //exit(1);
         
         if (pos == 0) {
             // Reset static vars such as last wave (argument 8)
@@ -463,7 +469,7 @@ int resolution_spectrum(const double waveobs[], double fluxes[], int num_measure
 
     i = 0;
     while(i < num_measures) {
-        res = waveobs[i]/R;
+        res = waveobs[i]/R; // fwhm
         res /= 2.0;
 
         // Spacing
@@ -483,7 +489,7 @@ int resolution_spectrum(const double waveobs[], double fluxes[], int num_measure
             }
         }
 
-        n = intdiv(res,dwave);
+        n = (long) mmax(1, intdiv(res,dwave)); // SBC: minimum 1 to avoid division by 0 for low wavelengths (below 470 nm)
         a = -log10(0.50)/(n*n);
         low = (long) mmax(0, i-3*n);
         high = (long) mmin(num_measures-1, i+3*n);
@@ -494,7 +500,9 @@ int resolution_spectrum(const double waveobs[], double fluxes[], int num_measure
             sum2 += z;
         }
         Ds = sum1/sum2;
-        //printf("%8.3f %g  %g  %i\n",wave, original_fluxes[i], Ds, i);
+        /*if (i < 10 || i > 3100-10)  {*/
+            /*printf("%8.3f %g  %g  %i :: %g %i %g %g %g %g %g %i\n",wave, original_fluxes[i], Ds, i, a, k, z, sum1, sum2, res, dwave, n);*/
+        /*}*/
         fluxes[i] = Ds;
         i += 1;
     }

@@ -16,8 +16,10 @@
 #    along with SVE. If not, see <http://www.gnu.org/licenses/>.
 #
 import numpy as np
-import synthesizer
 from atmospheres import *
+from multiprocessing import Process
+from multiprocessing import Queue
+
 
 def write_abundance_lines(linemasks, filename):
     """
@@ -38,6 +40,24 @@ def write_abundance_lines(linemasks, filename):
     out.close()
 
 def determine_abundances(atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel = 2.0, nlayers=56, verbose=0, update_progress_func=None):
+    # Generate spectrum should be run in a separate process in order
+    # to force the reload of the "synthesizer" module which
+    # contains C code with static variables in functions that should
+    # be reinitialized to work properly
+    # * The best solution would be to improve the C code but since it is too complex
+    #   this hack has been implemented
+    result_queue = Queue()
+
+    # TODO: Allow communications between process in order to update the GUI progress bar
+    update_progress_func = None
+
+    p = Process(target=__determine_abundances, args=(result_queue, atmosphere_model_file, linelist_file, num_measures, abundances_file,), kwargs={'microturbulence_vel': microturbulence_vel, 'nlayers': nlayers, 'verbose': verbose, 'update_progress_func':update_progress_func})
+    p.start()
+    abundances = result_queue.get()
+    p.join()
+    return abundances
+
+def __determine_abundances(result_queue, atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel = 2.0, nlayers=56, verbose=0, update_progress_func=None):
     """
     Determine abundances from equivalent widths
 
@@ -49,5 +69,7 @@ def determine_abundances(atmosphere_model_file, linelist_file, num_measures, abu
     If "abundances_file" contain solar abundances, this values represent
     the quantity [X/H] where X is the species in question.
     """
-    return synthesizer.abundances(atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel, nlayers, verbose, update_progress_func)
+    import synthesizer
+    abundances = synthesizer.abundances(atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel, nlayers, verbose, update_progress_func)
+    result_queue.put(abundances)
 

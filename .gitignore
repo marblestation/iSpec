@@ -3,9 +3,14 @@ input/*
 output/*
 *.so
 *.o
+*.log
+*.txt
+*.s
+tests/*
+synthesizer/discard/*
 synthesizer/build/*
 synthesizer/synthesizer.c
-pyinstaller*/*
+pyinstaller/*
 docs-sphinx/*
 *.h5
 tests/data/*

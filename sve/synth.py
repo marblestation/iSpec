@@ -16,12 +16,34 @@
 #    along with SVE. If not, see <http://www.gnu.org/licenses/>.
 #
 import numpy as np
-import synthesizer
 from atmospheres import *
+from multiprocessing import Process
+from multiprocessing import Queue
+
 
 def generate_spectrum(waveobs, atmosphere_model_file, linelist_file, abundances_file, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, nlayers=56, verbose=0, update_progress_func=None):
+    # Generate spectrum should be run in a separate process in order
+    # to force the reload of the "synthesizer" module which
+    # contains C code with static variables in functions that should
+    # be reinitialized to work properly
+    # * The best solution would be to improve the C code but since it is too complex
+    #   this hack has been implemented
+    result_queue = Queue()
+
+    # TODO: Allow communications between process in order to update the GUI progress bar
+    update_progress_func = None
+
+    p = Process(target=__generate_spectrum, args=(result_queue, waveobs, atmosphere_model_file, linelist_file, abundances_file,), kwargs={'microturbulence_vel': microturbulence_vel, 'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'nlayers': nlayers, 'verbose': verbose, 'update_progress_func':update_progress_func})
+    p.start()
+    fluxes = result_queue.get()
+    p.join()
+    return fluxes
+
+def __generate_spectrum(result_queue, waveobs, atmosphere_model_file, linelist_file, abundances_file, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, nlayers=56, verbose=0, update_progress_func=None):
     """
     Generate synthetic spectrum.
     """
-    return synthesizer.spectrum(waveobs, atmosphere_model_file, linelist_file, abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, R, nlayers, verbose, update_progress_func)
+    import synthesizer
+    fluxes = synthesizer.spectrum(waveobs, atmosphere_model_file, linelist_file, abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, R, nlayers, verbose, update_progress_func)
+    result_queue.put(fluxes)
 
