@@ -19,7 +19,10 @@ import numpy as np
 from atmospheres import *
 from multiprocessing import Process
 from multiprocessing import Queue
+from Queue import Empty
 
+import log
+import logging
 
 def write_abundance_lines(linemasks, filename):
     """
@@ -39,7 +42,7 @@ def write_abundance_lines(linemasks, filename):
     out.write("\n".join([" ".join(map(str, (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['ew'], line['element']))) for line in linemasks]))
     out.close()
 
-def determine_abundances(atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel = 2.0, nlayers=56, verbose=0, update_progress_func=None):
+def determine_abundances(atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel = 2.0, nlayers=56, verbose=0, update_progress_func=None, timeout=600):
     # Generate spectrum should be run in a separate process in order
     # to force the reload of the "synthesizer" module which
     # contains C code with static variables in functions that should
@@ -53,7 +56,14 @@ def determine_abundances(atmosphere_model_file, linelist_file, num_measures, abu
 
     p = Process(target=__determine_abundances, args=(result_queue, atmosphere_model_file, linelist_file, num_measures, abundances_file,), kwargs={'microturbulence_vel': microturbulence_vel, 'nlayers': nlayers, 'verbose': verbose, 'update_progress_func':update_progress_func})
     p.start()
-    abundances = result_queue.get()
+    try:
+        abundances = result_queue.get(timeout=timeout)
+    except Empty:
+        logging.error("Timeout in the abundance determination!")
+        abundances = (np.zeros(num_measures), np.zeros(num_measures), np.zeros(num_measures))
+        p.terminate()
+    else:
+        p.join()
     p.join()
     return abundances
 

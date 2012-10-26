@@ -143,7 +143,16 @@ int flagw;
         } else
             EMgH = EMgO = EAlH = EAlO = ESiH = ESiC = ESiO = ECaH = ECaO = ETiN = ETiO = EZrO = EH2O = 0.0;
 
+        int num_iter = 0; // SBC
         while (delta > 0.0001) {
+            /// SBC
+            // For certain atmospheres, delta never goes below 0.0001, so we stop it
+            // after 100 iterations (normally it converges with 4)
+            if (num_iter >= 100) {
+                printf("\n\tWARNING: Reached iteration limit in density() [iter = %i, delta = %f > 0.0001]\n", num_iter, delta);
+                break;
+            }
+            ///
             ne2 = n[7] * n[7];
             ne3 = n[7] * n[7] * n[7];
             nnaI = ana * n[1] / (1.0 + pna2 / n[7] + pna2 * pna3 / ne2);
@@ -282,6 +291,7 @@ int flagw;
                 delta += fabs(f[j][1] / n[j]);
             }
             delta /= 7.0;
+            num_iter += 1; // SBC
         }
         delta = 1.0;
         model->Ne[i] = n[7];
@@ -320,11 +330,13 @@ int flagw;
         model->nmax[i] = (int)imin(40, model->nmax[i]);
         if (flagw == 1)
             printf(" %d ", i);
+        fflush(stdout);
     }
     free_dmatrix(f, 1, 7, 1, 1);
     free_dmatrix(df, 1, 7, 1, 7);
     free_dvector(n, 1, 7);
     printf("\n");
+    fflush(stdout);
     if (flagP == 1)
         printDensity(model);
 }

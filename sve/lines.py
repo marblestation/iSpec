@@ -35,8 +35,6 @@ from mpfitmodels import VoigtModel
 import log
 import logging
 
-import log
-import logging
 
 ########################################################################
 ## [START] LINE LISTS
