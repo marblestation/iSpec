@@ -37,9 +37,9 @@ class ConstantValue:
         self.value = value
 
     def __call__(self, x, y):
-        return [[self.value]]
+        return self.value
 
-def read_kurucz_atmospheres(atmosphere_models, required_layers=72):
+def read_kurucz_atmospheres(atmosphere_models, required_layers=56):
     """
     Read castelli and kurucz atmospheres.
 
@@ -49,9 +49,7 @@ def read_kurucz_atmospheres(atmosphere_models, required_layers=72):
     :type atmosphere_models: array
 
     :returns:
-        model_combinations is an array as many element as number of metallicities,
-        and each of them is:
-            model combination matrix - Atmosphere (None if it does not exists)
+        Atmosphere's parameters and values
 
         teff_range, logg_range, MH_range are arrays with the list of effective
         temperature, gravity and metallicity
@@ -127,7 +125,7 @@ def read_kurucz_atmospheres(atmosphere_models, required_layers=72):
                         raise Exception("FORMAT ERROR: Not enough values")
 
                     # Only use the 7 first values
-                    current_atmosphere.append(layer[0:7])
+                    current_atmosphere.append(map(float, layer[0:7]))
         atmospheres.append(atmospheres_with_same_metallicity)
         atmospheres_params.append(atmospheres_params_with_same_metallicity)
         f.close()
@@ -141,41 +139,23 @@ def read_kurucz_atmospheres(atmosphere_models, required_layers=72):
     nMH  = len(MH_range)
 
 
-    # Build an array with as many matrices as metallicities
-    model_combinations = []
-    for metal_num in np.arange(nMH):
-        # Build a matrix Teff x Log(g) filled with 'None'
-        model_combination_matrix = np.array([None]*nteff*nlogg)
-        model_combination_matrix = model_combination_matrix.reshape(nteff, nlogg)
-        model_combinations.append(model_combination_matrix)
+    return atmospheres_params, atmospheres, teff_range, logg_range, MH_range
 
-    ## Fill the array of matrices with the corresponding atmospheric layers
-    # For each group of athmospheres with the same metallicity
-    for metal_num in np.arange(nMH):
-        atmospheres_with_same_metallicity = atmospheres[metal_num]
-        atmospheres_params_with_same_metallicity = atmospheres_params[metal_num]
-        # For each atmosphere
-        for i in np.arange(len(atmospheres_params_with_same_metallicity)):
-            # Current atmosphere and its parameters
-            atm = atmospheres_with_same_metallicity[i]
-            atm_teff = atmospheres_params_with_same_metallicity[i][0]
-            atm_logg = atmospheres_params_with_same_metallicity[i][1]
-            # Assign the atmosphere to the correct position inside the array of matrices
-            teff_index = np.where(teff_range==atm_teff)[0][0]
-            logg_index = np.where(logg_range==atm_logg)[0][0]
-            model_combinations[metal_num][teff_index][logg_index] = atm
+def __extrap(x, xp, yp):
+    """np.interp function with linear extrapolation"""
+    y = np.interp(x, xp, yp)
+    y = np.where(x<xp[0], yp[0]+(x-xp[0])*(yp[0]-yp[1])/(xp[0]-xp[1]), y)
+    y = np.where(x>xp[-1], yp[-1]+(x-xp[-1])*(yp[-1]-yp[-2])/(xp[-1]-xp[-2]), y)
+    return y
 
-    return model_combinations, teff_range, logg_range, MH_range
-
-
-def build_modeled_interpolated_layer_values(model_combinations, teff_range, logg_range, MH_range, required_layers=72):
+def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, teff_range, logg_range, MH_range, required_layers=56):
     """
     Builds an structure where each value of each layer has a RectBivariateSpline (based on the values
     read from atmospheric models) that can be used for interpolation.
 
-    :param model_combinations:
+    :param atmospheres:
         Output from read_kurucz_atmospheres method
-    :type model_combinations: array
+    :type atmospheres: array
 
     :param teff_range:
         Output from read_kurucz_atmospheres method
@@ -205,101 +185,253 @@ def build_modeled_interpolated_layer_values(model_combinations, teff_range, logg
     nlayers = required_layers
     nvalues = 7 # Only use the 7 first values
 
-    ### Construct base grid for interpolation
-    grid_teff, grid_logg = np.indices((nteff, nlogg), dtype=float)
-    # Assign values to each grid position
-    for i in np.arange(nteff):
-        grid_teff[i] = teff_range[i]
-    for i in np.arange(nlogg):
-        grid_logg[:,i] = logg_range[i]
+    models_atm_same_metallicity = []
+    values_atm_same_metallicity = [] # Useful only for plotting
+    structured_values_atm_same_metallicity = [] # Useful only for plotting
+    params_atm_same_metallicity = []
 
-    modeled_layers = []
-    used_values_for_layers = [] # Useful only for plotting
-    # For each atmosphere with the same metallicity
+    print "\n1) Searching for minimum/maximum values in each atmosphere/layer"
+    print   "----------------------------------------------------------------"
+    min_value = np.array([np.inf]*(nvalues))
+    max_value = np.array([-np.inf]*(nvalues))
     for metal_num in np.arange(nMH):
-        modeled_layers_with_same_metallicity = []
-        used_values_for_layers_with_same_metallicity = []  # Useful only for plotting
         print "\nAtmosphere models", metal_num
         print "\tLayer:",
-        # For each layer, group and modelize the different atmospheres (teff, logg)
         for layer_num in np.arange(nlayers):
-            modeled_values = []
-            used_values = []  # Useful only for plotting
             print layer_num,
             sys.stdout.flush()
             for value_num in np.arange(nvalues):
-                # Prepare structure
-                val = np.zeros(nteff*nlogg)
-                val = val.reshape(nteff, nlogg)
-                # Fill values for every teff-logg combination
-                for j in np.arange(nlogg):
-                    logg = logg_range[j]
-                    last_valid_atm = None
-                    for i in np.arange(nteff):
-                        teff = teff_range[i]
-                        teff_index = np.where(teff_range==teff)[0][0]
-                        logg_index = np.where(logg_range==logg)[0][0]
-                        atm = model_combinations[metal_num][teff_index][logg_index]
-                        if atm != None:
-                            # For this teff-logg combination, there is an atmosphere model
-                            val[i][j] = atm[layer_num][value_num]
-                            last_valid_atm = atm
-                        else:
-                            if last_valid_atm != None:
-                                # Since there is no atmosphere model for this teff-logg combination
-                                # we replicate the last one used with the same logg but lower temperature
-                                # we do this to minimize strange effects in the posterior cubic spline interpolation
-                                val[i][j] = last_valid_atm[layer_num][value_num]
-                            else:
-                                # Since there is no atmosphere model for this teff-logg combination
-                                # and there is not valid alternative with the same logg but lower temperature
-                                # we search for the next valid atmosphere with higher temperature
-                                # we do this to minimize strange effects in the posterior cubic spline interpolation
-                                t = teff_index + 1
-                                future_valid_atm = None
-                                while t < nteff:
-                                    future_valid_atm = model_combinations[metal_num][t][logg_index]
-                                    if future_valid_atm != None:
-                                        break
-                                    t += 1
+                for atm_num in xrange(len(atmospheres_params[metal_num])):
+                    single_value = float(atmospheres[metal_num][atm_num][layer_num][value_num])
+                    max_value[value_num] = np.max([single_value, max_value[value_num]])
+                    min_value[value_num] = np.min([single_value, min_value[value_num]])
 
-                                # If atmosphere found
-                                if future_valid_atm != None:
-                                    try:
-                                        val[i][j] = future_valid_atm[layer_num][value_num]
-                                    except IndexError:
-                                        import ipdb
-                                        ipdb.set_trace()
-                                else:
-                                    l = logg_index + 1
-                                    future_valid_atm = None
-                                    while l < nlogg:
-                                        future_valid_atm = model_combinations[metal_num][teff_index][l]
-                                        if future_valid_atm != None:
-                                            break
-                                        l += 1
-                                    if future_valid_atm != None:
-                                        val[i][j] = future_valid_atm[layer_num][value_num]
-                                    else:
-                                        # There should be at least one valid model for each logg
-                                        #raise Exception("Bad model format (%f, %f, %f)" % (teff, logg, MH_range[metal_num]))
-                                        val[i][j] = 0.0
-                                        print "Problem! (%f, %f, %f)" % (teff, logg, MH_range[metal_num])
+
+    print "\n\n2) Building models for interpolation/extrapolation"
+    print   "----------------------------------------------------------------"
+    # For each atmosphere with the same metallicity
+    for metal_num in np.arange(nMH):
+        print "\nAtmosphere models", metal_num
+        print "\tLayer:",
+
+        models_atm = []
+        values_atm = []  # Useful only for plotting
+        structured_values_atm = []
+        params_atm = []
+        atm_teff = []
+        atm_logg = []
+        # For this metalicity what teff-logg combinations do we have:
+        for atm_num in xrange(len(atmospheres_params[metal_num])):
+            atm_teff.append(atmospheres_params[metal_num][atm_num][0])
+            atm_logg.append(atmospheres_params[metal_num][atm_num][1])
+            #metallicity = atmospheres_params[metal_num][i][3]
+        params_atm.append((atm_teff, atm_logg))
+
+        # For each layer, group and modelize the different atmospheres (teff, logg)
+        for layer_num in np.arange(nlayers):
+            print layer_num,
+            sys.stdout.flush()
+
+            models_single_layer = []
+            values_single_layer = [] # Useful only for plotting
+            structured_values_single_layer = [] # Useful only for plotting
+            for value_num in np.arange(nvalues):
+                # Prepare structure
+                total = nteff*nlogg
+                structured_single_values = np.ma.array(np.array([np.nan]*total), mask=[i<0 for i in xrange(total)])
+                structured_single_values = structured_single_values.reshape(nteff, nlogg)
+
+                # Recollect values and save them in a list and a structured container
+                single_values = []
+                for atm_num in xrange(len(atmospheres_params[metal_num])):
+                    single_value = float(atmospheres[metal_num][atm_num][layer_num][value_num])
+                    single_values.append(single_value)
+                    # Save
+                    teff = atmospheres_params[metal_num][atm_num][0]
+                    logg = atmospheres_params[metal_num][atm_num][1]
+                    teff_index = np.where(teff_range==teff)[0][0]
+                    logg_index = np.where(logg_range==logg)[0][0]
+                    structured_single_values[teff_index][logg_index] = single_value
+
 
                 if value_num == 6: # microturbulent_vel value
-                    # Microturbulence velocity is constant for all layers of the castelli models
-                    model_val = ConstantValue(val[0][0])
+                    # Microturbulence velocity is constant for all layers
+                    single_model = ConstantValue(single_values[0])
                 else:
-                    ### Modelize for a finer grid
-                    model_val = interpolate.RectBivariateSpline(grid_teff[:,0], grid_logg[0], val)
-                # Add to current layer values
-                modeled_values.append(model_val)
-                used_values.append(val)
-            modeled_layers_with_same_metallicity.append(modeled_values)
-            used_values_for_layers_with_same_metallicity.append(used_values)
-        modeled_layers.append(modeled_layers_with_same_metallicity)
-        used_values_for_layers.append(modeled_layers_with_same_metallicity)
-    return modeled_layers, used_values_for_layers
+                    # For those teff-logg combination that we do not have an atmosphere:
+                    # - Linearly interpolate each value from the existing atmospheres:
+                    #   a. Interpolate using values for all the available temperatures with the fixed current logg
+                    #   b. Interpolate using values for all the available logg with the fixed current temperature
+                    #   c. If interpolation has been possible in (a) and (b):
+                    #      - Average the two results
+                    #      If interpolation has been possible in (a) or (b):
+                    #      - Use the interpolated result from (a) or (b)
+                    #      If no interpolation has been possible, **linear extrapolation** is needed:
+                    #         1. Extrapolate using the two nearest real values in the logg axis
+                    #         2. Extrapolate using the two nearest real value in the temperature axis
+                    #         3. If a extrapolated value has been derived in (1) and (2):
+                    #            - Do a weighted average of the two results by giving more
+                    #              weight to the value that has used the nearest real values
+                    #            If a value has been found in (1) or (2), go to second extrapolation process
+                    # - Second extrapolation process:
+                    #   a. Extrapolate using the two nearest real values in the logg axis
+                    #   b. Extrapolate using the two nearest real value in the temperature axis
+                    #   c. Use the extrapolated result from (a) or (b)
+                    #      - It is expected to have at least two atmospheres with
+                    #        the same logg or teff in the grid of combinations.
+                    #        Therefore, extrapolation (a) or (b) should be always possible.
+                    #        If not, an exception (error message) will occur.
+                    #
+                    # NOTE: In all cases, to avoid unphysical results, extrapolated
+                    #       values are limited by the maximum and minimum values
+                    #       found in all the real atmospheres.
+                    structured_single_values_interpolated = structured_single_values.copy() # Original values + interpolated/duplicated ones
+                    for logg_index in np.arange(nlogg):
+                        logg = logg_range[logg_index]
+                        for teff_index in np.arange(nteff):
+                            teff = teff_range[teff_index]
+                            if np.isnan(structured_single_values[teff_index][logg_index]):
+                                # Mark this value to keep track of those that are not original
+                                structured_single_values.mask[teff_index][logg_index] = True
+                                structured_single_values_interpolated.mask[teff_index][logg_index] = True
+                                # For interpolation/extrapolation, ignore the np.nan values:
+                                valid_logg = np.where(np.logical_not(np.isnan(structured_single_values.data[teff_index])))
+                                valid_teff = np.where(np.logical_not(np.isnan(structured_single_values.data.T[logg_index])))
+
+                                # Interpolate/extrapolate by using logg values for a fixed teff
+                                interp_logg_value = np.nan
+                                extrap_logg_value = np.nan
+                                if len(logg_range[valid_logg]) >= 2:
+                                    if logg_index < valid_logg[0][0]:
+                                        # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
+                                        extrap_logg_value = __extrap(logg_range[logg_index], logg_range[valid_logg][:2], structured_single_values.data[teff_index][valid_logg][:2])
+                                        extrap_logg_value = np.min((max_value[value_num], extrap_logg_value))
+                                        extrap_logg_value = np.max((min_value[value_num], extrap_logg_value))
+                                        logg_limit_index = valid_logg[0][0]
+                                    elif logg_index > valid_logg[0][-1]:
+                                        # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
+                                        extrap_logg_value = __extrap(logg_range[logg_index], logg_range[valid_logg][len(logg_range[valid_logg])-2:], structured_single_values.data[teff_index][valid_logg][len(logg_range[valid_logg])-2:])
+                                        extrap_logg_value = np.min((max_value[value_num], extrap_logg_value))
+                                        extrap_logg_value = np.max((min_value[value_num], extrap_logg_value))
+                                        logg_limit_index = valid_logg[0][-1]
+                                    else:
+                                        # Interpolate
+                                        interp_logg_value = np.interp(logg_range[logg_index], logg_range[valid_logg], structured_single_values.data[teff_index][valid_logg], left=np.nan, right=np.nan)
+
+                                # Interpolate/extrapolate by using teff values for a fixed logg
+                                interp_teff_value = np.nan
+                                extrap_teff_value = np.nan
+                                if len(teff_range[valid_teff]) >= 2:
+                                    if teff_index < valid_teff[0][0]:
+                                        # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
+                                        extrap_teff_value = __extrap(teff_range[teff_index], teff_range[valid_teff][:2], structured_single_values.data.T[logg_index][valid_teff][:2])
+                                        extrap_teff_value = np.min((max_value[value_num], extrap_teff_value))
+                                        extrap_teff_value = np.max((min_value[value_num], extrap_teff_value))
+                                        teff_limit_index = valid_teff[0][0]
+                                        interp_teff_value = np.nan
+                                    elif teff_index > valid_teff[0][-1]:
+                                        # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
+                                        extrap_teff_value = __extrap(teff_range[teff_index], teff_range[valid_teff][len(teff_range[valid_teff])-2:], structured_single_values.data.T[logg_index][valid_teff][len(teff_range[valid_teff])-2:])
+                                        extrap_teff_value = np.min((max_value[value_num], extrap_teff_value))
+                                        extrap_teff_value = np.max((min_value[value_num], extrap_teff_value))
+                                        teff_limit_index = valid_teff[0][-1]
+                                        interp_teff_value = np.nan
+                                    else:
+                                        # Interpolate
+                                        interp_teff_value = np.interp(teff_range[teff_index], teff_range[valid_teff], structured_single_values.data.T[logg_index][valid_teff], left=np.nan, right=np.nan)
+
+                                # Interpolated values have priority over extrapolated ones
+                                if not np.isnan(interp_logg_value) and not np.isnan(interp_teff_value):
+                                    derived_value = (interp_logg_value + interp_teff_value) / 2.0
+                                elif not np.isnan(interp_logg_value):
+                                    derived_value = interp_logg_value
+                                elif not np.isnan(interp_teff_value):
+                                    derived_value = interp_teff_value
+                                else:
+                                    if not np.isnan(extrap_logg_value) and not np.isnan(extrap_teff_value):
+                                        # The final extrapolated value is a weighted average:
+                                        # - The value extrapolated with closer real values has more weight
+                                        # WARNING: It is considered that each step in logg/teff are approximatelly of the same order of magnitude
+                                        logg_jumps = float(np.abs(logg_index - logg_limit_index))
+                                        teff_jumps = float(np.abs(teff_index - teff_limit_index))
+                                        total_jumps = logg_jumps + teff_jumps
+                                        derived_value = extrap_logg_value*(1.-(logg_jumps/total_jumps)) + extrap_teff_value*(1.-(teff_jumps/total_jumps))
+                                    else:
+                                        # Cases delegated to the second extrapolation process:
+                                        # 1. Cases where there are only one extrapolated values
+                                        # 2. Cases where it has not been possible to extrapolate values due to
+                                        #    a lack of atmospheres (there should be at least two atmospheres
+                                        #    with the same logg or teff in the grid of combinations)
+                                        derived_value = np.nan
+                                structured_single_values_interpolated[teff_index][logg_index] = derived_value
+
+                    ############################################################
+                    # Second extrapolation process
+                    # - In this process, real values + previous averaged extrapoled values will
+                    #   be considered to derive values for the cases where only one extrapolation
+                    #   can be done (case 1)
+                    ############################################################
+                    structured_single_values_interpolated2 = structured_single_values_interpolated.copy()
+                    for logg_index in np.arange(nlogg):
+                        logg = logg_range[logg_index]
+                        for teff_index in np.arange(nteff):
+                            teff = teff_range[teff_index]
+                            if np.isnan(structured_single_values_interpolated.data[teff_index][logg_index]):
+                                # Mark this value to keep track of those that are not original
+                                structured_single_values_interpolated2.mask[teff_index][logg_index] = True
+                                # For extrapolation, ignore the np.nan values:
+                                valid_logg = np.where(np.logical_not(np.isnan(structured_single_values_interpolated.data[teff_index])))
+                                valid_teff = np.where(np.logical_not(np.isnan(structured_single_values_interpolated.data.T[logg_index])))
+
+                                if len(logg_range[valid_logg]) >= 2:
+                                    # Extrapolate by using logg values for a fixed teff
+                                    if logg_index < valid_logg[0][0]:
+                                        extrap_logg_value = __extrap(logg_range[logg_index], logg_range[valid_logg][:2], structured_single_values_interpolated.data[teff_index][valid_logg][:2])
+                                        extrap_logg_value = np.min((max_value[value_num], extrap_logg_value))
+                                        extrap_logg_value = np.max((min_value[value_num], extrap_logg_value))
+                                    elif logg_index > valid_logg[0][-1]:
+                                        extrap_logg_value = __extrap(logg_range[logg_index], logg_range[valid_logg][len(logg_range[valid_logg])-2:], structured_single_values_interpolated.data[teff_index][valid_logg][len(logg_range[valid_logg])-2:])
+                                        extrap_logg_value = np.min((max_value[value_num], extrap_logg_value))
+                                        extrap_logg_value = np.max((min_value[value_num], extrap_logg_value))
+                                    else:
+                                        raise Exception("Only values that should be extrapolated are expected at this point")
+                                    structured_single_values_interpolated2[teff_index][logg_index] = extrap_logg_value
+                                    continue
+                                elif len(teff_range[valid_teff]) >= 2:
+                                    # Extrapolate by using teff values for a fixed logg
+                                    if teff_index < valid_teff[0][0]:
+                                        extrap_teff_value = __extrap(teff_range[teff_index], teff_range[valid_teff][:2], structured_single_values_interpolated.data.T[logg_index][valid_teff][:2])
+                                        extrap_teff_value = np.min((max_value[value_num], extrap_teff_value))
+                                        extrap_teff_value = np.max((min_value[value_num], extrap_teff_value))
+                                    elif teff_index > valid_teff[0][-1]:
+                                        extrap_teff_value = __extrap(teff_range[teff_index], teff_range[valid_teff][len(teff_range[valid_teff])-2:], structured_single_values_interpolated.data.T[logg_index][valid_teff][len(teff_range[valid_teff])-2:])
+                                        extrap_teff_value = np.min((max_value[value_num], extrap_teff_value))
+                                        extrap_teff_value = np.max((min_value[value_num], extrap_teff_value))
+                                    else:
+                                        raise Exception("Only values that should be extrapolated are expected at this point")
+                                    structured_single_values_interpolated2[teff_index][logg_index] = extrap_teff_value
+                                    continue
+                                else:
+                                    raise Exception("There should be at least two atmospheres with the same logg or teff in the grid of combinations")
+
+                    ############################################################
+                    # Build a spline model to be able to estimate a value for a given teff/logg combination
+                    single_model = interpolate.RectBivariateSpline(teff_range, logg_range, structured_single_values_interpolated2.data)
+                # Add to current model and used values
+                models_single_layer.append(single_model)
+                values_single_layer.append(single_values)
+                structured_values_single_layer.append(structured_single_values_interpolated2)
+            # Save models and used values for the whole layer
+            models_atm.append(models_single_layer)
+            values_atm.append(values_single_layer)
+            structured_values_atm.append(structured_values_single_layer)
+
+        models_atm_same_metallicity.append(models_atm)
+        values_atm_same_metallicity.append(values_atm)
+        structured_values_atm_same_metallicity.append(structured_values_atm)
+        params_atm_same_metallicity.append(params_atm)
+
+    return models_atm_same_metallicity, structured_values_atm_same_metallicity
 
 
 def valid_atmosphere_target(modeled_layers_pack, teff_target, logg_target, MH_target):
@@ -308,13 +440,13 @@ def valid_atmosphere_target(modeled_layers_pack, teff_target, logg_target, MH_ta
 
     :param modeled_layers_pack:
         Output from load_modeled_layers_pack
-    :type model_combinations: array
+    :type modeled_layers_pack: array
 
     :returns:
         True if the target teff, logg and metallicity can be obtained with the
         models
     """
-    modeled_layers, model_combinations, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
+    modeled_layers, used_values_for_layers, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
 
     nteff = len(teff_range)
     nlogg = len(logg_range)
@@ -344,19 +476,8 @@ def valid_atmosphere_target(modeled_layers_pack, teff_target, logg_target, MH_ta
         #raise Exception("Out of range: high MH value")
         return False
 
-    valid = True
-    for metal_num in [MH_index-1, MH_index]:
-        valid = valid & (model_combinations[metal_num][teff_index][logg_index] != None)
-        if teff_target != teff_range[teff_index]:
-            # teff_target is between teff_index-1 and teff_index
-            valid = valid & (model_combinations[metal_num][teff_index-1][logg_index] != None)
-        if logg_target != logg_range[logg_index]:
-            # logg_target is between logg_index-1 and logg_index
-            valid = valid & (model_combinations[metal_num][teff_index][logg_index-1] != None)
-        if logg_target != logg_range[logg_index] and teff_target != teff_range[teff_index]:
-            # One additional check
-            valid = valid & (model_combinations[metal_num][teff_index-1][logg_index-1] != None)
-    return valid
+    return True
+
 
 def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target, MH_target):
     """
@@ -364,12 +485,12 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
 
     :param modeled_layers_pack:
         Output from load_modeled_layers_pack
-    :type model_combinations: array
+    :type modeled_layers_pack: array
 
     :returns:
         Interpolated model atmosphere
     """
-    modeled_layers, model_combinations, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
+    modeled_layers, used_values_for_layers, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
 
     nMH  = len(MH_range)
     nvalues = 7
@@ -379,38 +500,28 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
     if MH_index >= nMH:
         raise Exception("Out of range: high MH value")
 
-    ## For each layer
-    layers = []
-    for layer_num in np.arange(nlayers):
-        values = []
+    # Prepare structure
+    total = nMH*nlayers
+    structured_single_values = np.ma.array(np.array([np.nan]*total), mask=[i<0 for i in xrange(total)])
+    structured_single_values = structured_single_values.reshape(nMH, nlayers)
 
-        for value_num in np.arange(nvalues):
-            if MH_target == MH_range[MH_index]:
-                model_val = modeled_layers[MH_index][layer_num][value_num]
-                val = model_val(teff_target, logg_target)[0][0]
-            else:
-                # In between two known metallicities
-                MH_xcoord = []
-                MH_xcoord.append(MH_range[MH_index-1])
-                MH_xcoord.append(MH_range[MH_index])
-
-                MH_ycoord = []
-                # Value for a given teff and logg
-                model_val = modeled_layers[MH_index-1][layer_num][value_num]
+    values = []
+    for value_num in np.arange(nvalues):
+        # Calculate this value for all metallicities and layers
+        for metal_num in np.arange(nMH):
+            for layer_num in np.arange(nlayers):
+                model_val = modeled_layers[metal_num][layer_num][value_num]
                 val = model_val(teff_target, logg_target)
-                MH_ycoord.append(val[0][0])
-                model_val = modeled_layers[MH_index][layer_num][value_num]
-                val = model_val(teff_target, logg_target)
-                MH_ycoord.append(val[0][0])
+                structured_single_values[metal_num][layer_num] = val
+        # Fit Bivariate Spline to consider not only variation in metallicity but also in layers
+        model_val = interpolate.RectBivariateSpline(MH_range, np.arange(nlayers), structured_single_values.data)
+        # Interpolate the current value for all layers
+        values.append(model_val(MH_target, np.arange(nlayers))[0])
+    # Transpose to have a layer in each position instead than value (easier to write to disk later)
+    layers = np.array(values).T
 
-                # Modelize for obtaining the interpolated value for a given metallicity
-                model_MH_val = interpolate.interp1d(MH_xcoord, MH_ycoord)
-                val = model_MH_val(MH_target)
-            values.append(val)
-
-
-        layers.append(values)
     return layers
+
 
 def write_atmosphere(teff, logg, MH, layers):
     """
@@ -418,7 +529,7 @@ def write_atmosphere(teff, logg, MH, layers):
 
     :param layers:
         Output from interpolate_atmosphere_layers
-    :type model_combinations: array
+    :type modeled_layers_pack: array
 
     :returns:
         Name of the temporary file
@@ -432,19 +543,19 @@ def write_atmosphere(teff, logg, MH, layers):
 
 
 # Serialize modeled layers and stats
-def dump_modeled_layers_pack(modeled_layers, model_combinations, teff_range, logg_range, MH_range, filename, required_layers=72):
+def dump_modeled_layers_pack(modeled_layers, used_values_for_layers, teff_range, logg_range, MH_range, filename, required_layers=56):
     """
-    Build a list of modeled_layers, model_combinations, teff_range, logg_range and MH_range
+    Build a list of modeled_layers, used_values_for_layers, teff_range, logg_range, MH_range and nlayers
     in order to serialize it to disk for easier later recovery.
 
     :param filename:
         Name of the output file (i.e. models.dump)
-    :type model_combinations: string
+    :type filename: string
 
     """
     nlayers = required_layers
 
-    modeled_layers_pack = (modeled_layers, model_combinations, teff_range, logg_range, MH_range, nlayers)
+    modeled_layers_pack = (modeled_layers, used_values_for_layers, teff_range, logg_range, MH_range, nlayers)
     pickle.dump(modeled_layers_pack, open(filename, 'w'))
 
 def load_modeled_layers_pack(filename):
@@ -453,10 +564,10 @@ def load_modeled_layers_pack(filename):
 
     :param filename:
         Name of the input file (i.e. models.dump)
-    :type model_combinations: string
+    :type filename: string
 
     :returns:
-        List of modeled_layers, model_combinations, teff_range, logg_range and MH_range
+        List of modeled_layers, used_values_for_layers, teff_range, logg_range, MH_range and nlayers
     """
     sys.modules['__main__'].ConstantValue = ConstantValue
     modeled_layers_pack = pickle.load(open(filename))

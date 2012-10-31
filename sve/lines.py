@@ -1023,11 +1023,13 @@ def __create_cross_correlation_mask(data_wave, data_value, wave_grid, velocity_s
             wave_top = wave_base + wave_base * ((velocity_step*1000) / c) # nm
             while i < total_points and data_wave[i] < wave_base:
                 i += 1
-            mask_value = 0
+            mask_value = 0.0
             while i < total_points and data_wave[i] >= wave_base and data_wave[i] < wave_top:
                 mask_value += data_value[i]
+                #mask_value += 1.0
+                #mask_value = 1.0
                 i += 1
-            grid.append((wave_base, mask_value))
+            grid.append(((wave_base+wave_top)/2., mask_value))
             wave_base = wave_top
 
         mask = np.array(grid, dtype=[('wave', float), ('value', float)])
@@ -1048,6 +1050,8 @@ def __create_cross_correlation_mask(data_wave, data_value, wave_grid, velocity_s
                 j += 1
             while j < max_j and data_wave[j] >= wave_base and data_wave[j] < wave_top:
                 mask_value[i] += data_value[j]
+                #mask_value[i] += 1.0
+                #mask_value[i] = 1.0
                 j += 1
             if j >= max_j:
                 break
@@ -1075,7 +1079,7 @@ def __cross_correlation_function(spectrum, mask, lower_velocity_limit, upper_vel
 
     velocity = np.arange(lower_velocity_limit, upper_velocity_limit, velocity_step)
     # 1 shift = 0.5 km/s (or the specified value)
-    shifts = np.int32(np.arange(lower_velocity_limit, upper_velocity_limit, velocity_step) / velocity_step)
+    shifts = np.int32(velocity / velocity_step)
 
 
     num_shifts = len(shifts)
@@ -1111,7 +1115,7 @@ def build_velocity_profile(spectrum, linelist, lower_velocity_limit = -200, uppe
 
     """
     # Build a mask with non-uniform wavelength increments but constant in terms of velocity
-    linelist_mask = __create_cross_correlation_mask(linelist['wave_peak'], linelist['depth'], spectrum['waveobs'], velocity_step)
+    linelist_mask = __create_cross_correlation_mask(linelist['wave_peak'], linelist['depth'], spectrum['waveobs'], velocity_step=velocity_step)
 
     # Resampling spectrum to match the wavelength grid of the mask
     # Speed of light in m/s
@@ -1147,10 +1151,14 @@ def modelize_velocity_profile(xcoord, fluxes, only_one_peak=False):
         return models
 
     # Fit continuum to normalize
-    nknots = 2
-    continuum_model = UniformCDFKnotSplineModel(nknots)
-    continuum_model.fitData(xcoord[base_points], fluxes[base_points])
-    fluxes /= continuum_model(xcoord)
+    try:
+        nknots = 2
+        continuum_model = UniformCDFKnotSplineModel(nknots)
+        continuum_model.fitData(xcoord[base_points], fluxes[base_points])
+        fluxes /= continuum_model(xcoord)
+    except Exception:
+        logging.warn("Velocity profile cannot be normalized")
+        pass
 
     if len(peaks) != 0:
         # Adjusting edges
