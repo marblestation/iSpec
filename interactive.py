@@ -3551,6 +3551,12 @@ max_wave_range=max_wave_range)
 
     def on_synthesize_finnish(self, synth_spectrum, teff, logg, MH, microturbulence_vel):
         self.operation_in_progress = False
+
+        # Check if synthetic generation has failed
+        if np.all(synth_spectrum['flux'] == 0):
+            self.flash_status_message("The synthetic spectrum generation has failed for those astrophysical parameters!")
+            return
+
         # Remove current continuum from plot if exists
         self.remove_drawn_continuum_spectrum()
 

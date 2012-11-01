@@ -38,11 +38,23 @@ def generate_spectrum(waveobs, atmosphere_model_file, linelist_file, abundances_
 
     p = Process(target=__generate_spectrum, args=(result_queue, waveobs, atmosphere_model_file, linelist_file, abundances_file,), kwargs={'microturbulence_vel': microturbulence_vel, 'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'nlayers': nlayers, 'verbose': verbose, 'update_progress_func':update_progress_func})
     p.start()
-    try:
-        fluxes = result_queue.get(timeout=timeout)
-    except Empty:
-        logging.error("Timeout in the synthetic spectrum generation!")
-        fluxes = np.zeros(len(waveobs))
+    fluxes = np.zeros(len(waveobs))
+    num_seconds = 0
+    # Constantly check that the process has not died without returning any result and blocking the queue call
+    while p.is_alive() and num_seconds < timeout:
+        try:
+            fluxes = result_queue.get(timeout=1)
+        except Empty:
+            # No results, continue waiting
+            num_seconds += 1
+        else:
+            # Results received!
+            break
+    if num_seconds >= timeout:
+        logging.error("A timeout has occurred in the synthetic spectrum generation.")
+        p.terminate()
+    elif np.all(fluxes == 0):
+        logging.error("The synthetic spectrum generation has failed for these astrophysical parameters.")
         p.terminate()
     else:
         p.join()

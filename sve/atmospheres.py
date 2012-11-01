@@ -25,6 +25,8 @@ from datetime import datetime
 from scipy import interpolate
 import tempfile
 import cPickle as pickle
+import log
+import logging
 
 # SPECTRUM is compatible only with the plane-parallel atmospheres.
 # The first layer represents the surface.
@@ -106,10 +108,12 @@ def read_kurucz_atmospheres(atmosphere_models, required_layers=56):
                 if vline[0] == "PRADK":
                     # Only consider atmospheres with the required number of layers
                     if num_layers == required_layers:
-                        temperatures.append(teff)
-                        gravities.append(logg)
-                        atmospheres_params_with_same_metallicity.append([teff, logg, metallicity])
-                        atmospheres_with_same_metallicity.append(current_atmosphere)
+                        # Limit the range of temperatures and gravity
+                        if teff <= 9000. and teff >= 2500. and logg <= 5. and logg >= 0.:
+                            temperatures.append(teff)
+                            gravities.append(logg)
+                            atmospheres_params_with_same_metallicity.append([teff, logg, metallicity])
+                            atmospheres_with_same_metallicity.append(current_atmosphere)
                     read_atmosphere_data = False
                 else:
                     num_layers += 1
@@ -148,6 +152,217 @@ def __extrap(x, xp, yp):
     y = np.where(x>xp[-1], yp[-1]+(x-xp[-1])*(yp[-1]-yp[-2])/(xp[-1]-xp[-2]), y)
     return y
 
+
+
+def __interpolate(initial_values, logg_range, teff_range, logg_index, teff_index, value_num, min_value, max_value):
+    """
+    - Linearly interpolate each value from the existing atmospheres:
+         a. Interpolate using values for all the available temperatures with the fixed current logg
+         b. Interpolate using values for all the available logg with the fixed current temperature
+         c. If interpolation has been possible in (a) and (b):
+            - Average the two results
+            If interpolation has been possible in (a) or (b):
+            - Use the interpolated result from (a) or (b)
+    """
+    interpolated_values = initial_values.copy()
+    nlogg = len(logg_range)
+    nteff = len(teff_range)
+    missing_values = 0
+    fixed_values = 0
+    for logg_index in np.arange(nlogg):
+        logg = logg_range[logg_index]
+        for teff_index in np.arange(nteff):
+            teff = teff_range[teff_index]
+            if np.isnan(initial_values.data[teff_index][logg_index]):
+                missing_values += 1
+                # Mark this value to keep track of those that are not original
+                initial_values.mask[teff_index][logg_index] = True
+                # For interpolation, ignore the np.nan values:
+                valid_logg = np.where(np.logical_not(np.isnan(initial_values.data[teff_index])))
+                valid_teff = np.where(np.logical_not(np.isnan(initial_values.data.T[logg_index])))
+
+                # Interpolate by using logg values for a fixed teff
+                interp_logg_value = np.nan
+                if len(logg_range[valid_logg]) >= 2:
+                    # Interpolate
+                    interp_logg_value = np.interp(logg_range[logg_index], logg_range[valid_logg], initial_values.data[teff_index][valid_logg], left=np.nan, right=np.nan)
+
+                # Interpolate by using teff values for a fixed logg
+                interp_teff_value = np.nan
+                if len(teff_range[valid_teff]) >= 2:
+                    # Interpolate
+                    interp_teff_value = np.interp(teff_range[teff_index], teff_range[valid_teff], initial_values.data.T[logg_index][valid_teff], left=np.nan, right=np.nan)
+
+                #  Weighted average if both interpolation have been possible
+                if not np.isnan(interp_logg_value) and not np.isnan(interp_teff_value):
+                    derived_value = (interp_logg_value + interp_teff_value) / 2.0
+                elif not np.isnan(interp_logg_value):
+                    derived_value = interp_logg_value
+                elif not np.isnan(interp_teff_value):
+                    derived_value = interp_teff_value
+                else:
+                    # Value should be extrapolated
+                    derived_value = np.nan
+
+                if not np.isnan(derived_value):
+                    # Mark this value to keep track of those that are interpolated
+                    interpolated_values.mask[teff_index][logg_index] = True
+                    interpolated_values[teff_index][logg_index] = derived_value
+                    fixed_values += 1
+    missing_values -= fixed_values
+    return interpolated_values, fixed_values, missing_values
+
+
+def __extrapolate(initial_values, logg_range, teff_range, logg_index, teff_index, value_num, min_value, max_value, only_averaged=True):
+    """
+    - Linearly extrapolate:
+         1. Extrapolate using the two nearest real values in the logg axis
+         2. Extrapolate using the two nearest real value in the temperature axis
+         3. If a extrapolated value has been derived in (1) AND (2):
+            - Do a weighted average of the two results by giving more
+              weight to the value that are closest to the real/interpolated values
+         4. If "only_averaged" is set to false:
+            - Use directly the extrapolated result from (1) OR (2)
+    """
+    extrapolated_values = initial_values.copy()
+    nlogg = len(logg_range)
+    nteff = len(teff_range)
+    missing_values = 0
+    fixed_values = 0
+    for logg_index in np.arange(nlogg):
+        logg = logg_range[logg_index]
+        for teff_index in np.arange(nteff):
+            teff = teff_range[teff_index]
+            if np.isnan(initial_values.data[teff_index][logg_index]):
+                missing_values += 1
+                # For extrapolation, ignore the np.nan values:
+                valid_logg = np.where(np.logical_not(np.isnan(initial_values.data[teff_index])))
+                valid_teff = np.where(np.logical_not(np.isnan(initial_values.data.T[logg_index])))
+
+                # Extrapolate by using logg values for a fixed teff
+                extrap_logg_value = np.nan
+                if len(logg_range[valid_logg]) >= 2:
+                    if logg_index < valid_logg[0][0]:
+                        # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
+                        extrap_logg_value = __extrap(logg_range[logg_index], logg_range[valid_logg][:2], initial_values.data[teff_index][valid_logg][:2])
+                        extrap_logg_value = np.min((max_value[value_num], extrap_logg_value))
+                        extrap_logg_value = np.max((min_value[value_num], extrap_logg_value))
+                        logg_limit_index = valid_logg[0][0]
+                    elif logg_index > valid_logg[0][-1]:
+                        # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
+                        extrap_logg_value = __extrap(logg_range[logg_index], logg_range[valid_logg][len(logg_range[valid_logg])-2:], initial_values.data[teff_index][valid_logg][len(logg_range[valid_logg])-2:])
+                        extrap_logg_value = np.min((max_value[value_num], extrap_logg_value))
+                        extrap_logg_value = np.max((min_value[value_num], extrap_logg_value))
+                        logg_limit_index = valid_logg[0][-1]
+                    else:
+                        raise Exception("Only values that should be extrapolated are expected at this point")
+
+                # Extrapolate by using teff values for a fixed logg
+                extrap_teff_value = np.nan
+                if len(teff_range[valid_teff]) >= 2:
+                    if teff_index < valid_teff[0][0]:
+                        # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
+                        extrap_teff_value = __extrap(teff_range[teff_index], teff_range[valid_teff][:2], initial_values.data.T[logg_index][valid_teff][:2])
+                        extrap_teff_value = np.min((max_value[value_num], extrap_teff_value))
+                        extrap_teff_value = np.max((min_value[value_num], extrap_teff_value))
+                        teff_limit_index = valid_teff[0][0]
+                    elif teff_index > valid_teff[0][-1]:
+                        # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
+                        extrap_teff_value = __extrap(teff_range[teff_index], teff_range[valid_teff][len(teff_range[valid_teff])-2:], initial_values.data.T[logg_index][valid_teff][len(teff_range[valid_teff])-2:])
+                        extrap_teff_value = np.min((max_value[value_num], extrap_teff_value))
+                        extrap_teff_value = np.max((min_value[value_num], extrap_teff_value))
+                        teff_limit_index = valid_teff[0][-1]
+                    else:
+                        raise Exception("Only values that should be extrapolated are expected at this point")
+
+                if not np.isnan(extrap_logg_value) and not np.isnan(extrap_teff_value):
+                    # The final extrapolated value is a weighted average:
+                    # - The value extrapolated with closer real values has more weight
+                    # WARNING: It is considered that each step in logg/teff are approximatelly of the same order of magnitude
+                    logg_jumps = float(np.abs(logg_index - logg_limit_index))
+                    teff_jumps = float(np.abs(teff_index - teff_limit_index))
+                    total_jumps = logg_jumps + teff_jumps
+                    derived_value = extrap_logg_value*(1.-(logg_jumps/total_jumps)) + extrap_teff_value*(1.-(teff_jumps/total_jumps))
+                elif not only_averaged and not np.isnan(extrap_logg_value):
+                    # Cases where there are only one extrapolated values
+                    derived_value = extrap_logg_value
+                elif not only_averaged and not np.isnan(extrap_teff_value):
+                    # Cases where there are only one extrapolated values
+                    derived_value = extrap_teff_value
+                else:
+                    derived_value = np.nan
+
+                if not np.isnan(derived_value):
+                    # Mark this value to keep track of those that have been derived
+                    extrapolated_values.mask[teff_index][logg_index] = True
+                    extrapolated_values[teff_index][logg_index] = derived_value
+                    fixed_values += 1
+    missing_values -= fixed_values
+    return extrapolated_values, fixed_values, missing_values
+
+
+def __copy_closest(initial_values, logg_range, teff_range, logg_index, teff_index):
+    """
+    - Duplicate closest values or assign a mean value:
+       a. Do a weighted average of the two nearest values in teff and logg
+       b. If only exists a value in teff or logg, use directly that
+       c. Worst case scenario: if there is no value to duplicate,
+          assign a mean value to try to minimize the effect
+          in the Bivariate Spline fitting
+           * At this point, all teff-logg combinations have an assigned value
+    """
+    nlogg = len(logg_range)
+    nteff = len(teff_range)
+    missing_values = 0
+    fixed_values = 0
+    copied_values = initial_values.copy()
+    for logg_index in np.arange(nlogg):
+        logg = logg_range[logg_index]
+        for teff_index in np.arange(nteff):
+            teff = teff_range[teff_index]
+            if np.isnan(initial_values.data[teff_index][logg_index]):
+                missing_values += 1
+                # For duplication, ignore the np.nan values:
+                valid_logg = np.where(np.logical_not(np.isnan(initial_values.data[teff_index])))
+                valid_teff = np.where(np.logical_not(np.isnan(initial_values.data.T[logg_index])))
+
+                # In this case the value cannot derived by interpolation/extrapolation,
+                # the only possibility is to copy a nearby value
+                # or just assign a default value to try to minimize the impact in the B-Spline
+                # Since this is a bad situation, a warning is printed but only one per combination of logg-teff-metalicity
+                if not "%.1f_%.2f_%.2f" % (teff, logg, MH_range[metal_num]) in warnned.keys():
+                    warnned["%.1f_%.2f_%.2f" % (teff, logg, MH_range[metal_num])] = True
+                    logging.warn("[Atmosphere: %.1f, %.2f, %.2f] It has not been possible to interpolate/extrapolate, the closer one has been copied or, if not possible, an averaged value has been assigned." % (teff, logg, MH_range[metal_num]))
+
+                if len(logg_range[valid_logg]) == 1 and len(teff_range[valid_teff]) == 1:
+                    logg_jumps = float(np.abs(logg_index - valid_logg[0]))
+                    teff_jumps = float(np.abs(teff_index - valid_teff[0]))
+                    total_jumps = logg_jumps + teff_jumps
+                    dup_logg_value = initial_values.data[teff_index][valid_logg[0]]
+                    dup_teff_value = initial_values.data.T[logg_index][valid_teff[0]]
+                    derived_value = dup_logg_value*(1.-(logg_jumps/total_jumps)) + dup_teff_value*(1.-(teff_jumps/total_jumps))
+                elif len(logg_range[valid_logg]) == 1:
+                    derived_value = initial_values.data[teff_index][valid_logg[0]]
+                elif len(teff_range[valid_teff]) == 1:
+                    derived_value = initial_values.data.T[logg_index][valid_teff[0]]
+                else:
+                    # Worst case scenario
+                    #derived_value = np.mean(structured_single_values_interpolated.data[np.where(np.logical_not(np.isnan(structured_single_values_interpolated.data)))])
+                    derived_value = np.mean(structured_single_values_interpolated) # Interpolated, extrapolated and np.nan are masked
+
+                if not np.isnan(derived_value):
+                    # Mark this value to keep track of those that have been derived
+                    copied_values.mask[teff_index][logg_index] = True
+                    copied_values[teff_index][logg_index] = derived_value
+                    fixed_values += 1
+                else:
+                    raise Exception("The value should not be NaN at this point")
+    missing_values -= fixed_values
+    return copied_values, fixed_values, missing_values
+
+
+
+
 def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, teff_range, logg_range, MH_range, required_layers=56):
     """
     Builds an structure where each value of each layer has a RectBivariateSpline (based on the values
@@ -172,19 +387,19 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
     :returns:
         modeled_layers is an array with as many elements as different metallicities
 
-        Layers - Modeled values - Model for interpolation
-
         used_values_for_layers is an array with as many elements as different metallicities
         which is basicly useful only for plotting the values used for building the models:
 
         Layers - Used values - Matrix value (for each teff-logg)
     """
+    warnned = {}
     nteff = len(teff_range)
     nlogg = len(logg_range)
     nMH  = len(MH_range)
     nlayers = required_layers
     nvalues = 7 # Only use the 7 first values
 
+    proximity_atm_same_metallicity = [] # Useful to know how close it is a teff-logg combination to a real atmosphere
     models_atm_same_metallicity = []
     values_atm_same_metallicity = [] # Useful only for plotting
     structured_values_atm_same_metallicity = [] # Useful only for plotting
@@ -259,179 +474,144 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
                     single_model = ConstantValue(single_values[0])
                 else:
                     # For those teff-logg combination that we do not have an atmosphere:
-                    # - Linearly interpolate each value from the existing atmospheres:
-                    #   a. Interpolate using values for all the available temperatures with the fixed current logg
-                    #   b. Interpolate using values for all the available logg with the fixed current temperature
-                    #   c. If interpolation has been possible in (a) and (b):
-                    #      - Average the two results
-                    #      If interpolation has been possible in (a) or (b):
-                    #      - Use the interpolated result from (a) or (b)
-                    #      If no interpolation has been possible, **linear extrapolation** is needed:
-                    #         1. Extrapolate using the two nearest real values in the logg axis
-                    #         2. Extrapolate using the two nearest real value in the temperature axis
-                    #         3. If a extrapolated value has been derived in (1) and (2):
-                    #            - Do a weighted average of the two results by giving more
-                    #              weight to the value that has used the nearest real values
-                    #            If a value has been found in (1) or (2), go to second extrapolation process
-                    # - Second extrapolation process:
-                    #   a. Extrapolate using the two nearest real values in the logg axis
-                    #   b. Extrapolate using the two nearest real value in the temperature axis
-                    #   c. Use the extrapolated result from (a) or (b)
-                    #      - It is expected to have at least two atmospheres with
-                    #        the same logg or teff in the grid of combinations.
-                    #        Therefore, extrapolation (a) or (b) should be always possible.
-                    #        If not, an exception (error message) will occur.
+                    # * First stage (using real values)
+                    #   - Linearly interpolate each value from the existing atmospheres:
+                    #     a. Interpolate using values for all the available temperatures with the fixed current logg
+                    #     b. Interpolate using values for all the available logg with the fixed current temperature
+                    #     c. If interpolation has been possible in (a) and (b):
+                    #        - Average the two results
+                    #        If interpolation has been possible in (a) or (b):
+                    #        - Use the interpolated result from (a) or (b)
+                    #     d. Decision point:
+                    #        - If there are no remaining missing values, finnish
+                    #        - If there are missing values, continue with second stage
+                    # * Second stage (using real and interpolated values + extrapolated values in following iterations)
+                    #   - Linearly extrapolate:
+                    #     1. Extrapolate using the two nearest real values in the logg axis
+                    #     2. Extrapolate using the two nearest real value in the temperature axis
+                    #     3. If a extrapolated value has been derived in (1) AND (2):
+                    #        - Do a weighted average of the two results by giving more
+                    #          weight to the value that are closest to the real/interpolated values
+                    #     4. Decision point:
+                    #        - If there are no remaining missing values, finnish
+                    #        - If some values have been derived, repeat from (1)
+                    #        - If not, use the extrapolated result from (1) OR (2) and repeat from (1)
+                    #           * If there are no extrapolated results from (1) or (2),
+                    #             continue with third stage
+                    # * Third stage (using real, interpolated and extrapolated values)
+                    #   a. Do a weighted average of the two nearest values in teff and logg
+                    #   b. If only exists a value in teff or logg, use directly that
+                    #   c. Worst case scenario: if there is no value to duplicate,
+                    #      assign a mean value to try to minimize the effect
+                    #      in the Bivariate Spline fitting
+                    #       * At this point, all teff-logg combinations have an assigned value
+                    #
                     #
                     # NOTE: In all cases, to avoid unphysical results, extrapolated
                     #       values are limited by the maximum and minimum values
                     #       found in all the real atmospheres.
-                    structured_single_values_interpolated = structured_single_values.copy() # Original values + interpolated/duplicated ones
-                    for logg_index in np.arange(nlogg):
-                        logg = logg_range[logg_index]
-                        for teff_index in np.arange(nteff):
-                            teff = teff_range[teff_index]
-                            if np.isnan(structured_single_values[teff_index][logg_index]):
-                                # Mark this value to keep track of those that are not original
-                                structured_single_values.mask[teff_index][logg_index] = True
-                                structured_single_values_interpolated.mask[teff_index][logg_index] = True
-                                # For interpolation/extrapolation, ignore the np.nan values:
-                                valid_logg = np.where(np.logical_not(np.isnan(structured_single_values.data[teff_index])))
-                                valid_teff = np.where(np.logical_not(np.isnan(structured_single_values.data.T[logg_index])))
-
-                                # Interpolate/extrapolate by using logg values for a fixed teff
-                                interp_logg_value = np.nan
-                                extrap_logg_value = np.nan
-                                if len(logg_range[valid_logg]) >= 2:
-                                    if logg_index < valid_logg[0][0]:
-                                        # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
-                                        extrap_logg_value = __extrap(logg_range[logg_index], logg_range[valid_logg][:2], structured_single_values.data[teff_index][valid_logg][:2])
-                                        extrap_logg_value = np.min((max_value[value_num], extrap_logg_value))
-                                        extrap_logg_value = np.max((min_value[value_num], extrap_logg_value))
-                                        logg_limit_index = valid_logg[0][0]
-                                    elif logg_index > valid_logg[0][-1]:
-                                        # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
-                                        extrap_logg_value = __extrap(logg_range[logg_index], logg_range[valid_logg][len(logg_range[valid_logg])-2:], structured_single_values.data[teff_index][valid_logg][len(logg_range[valid_logg])-2:])
-                                        extrap_logg_value = np.min((max_value[value_num], extrap_logg_value))
-                                        extrap_logg_value = np.max((min_value[value_num], extrap_logg_value))
-                                        logg_limit_index = valid_logg[0][-1]
-                                    else:
-                                        # Interpolate
-                                        interp_logg_value = np.interp(logg_range[logg_index], logg_range[valid_logg], structured_single_values.data[teff_index][valid_logg], left=np.nan, right=np.nan)
-
-                                # Interpolate/extrapolate by using teff values for a fixed logg
-                                interp_teff_value = np.nan
-                                extrap_teff_value = np.nan
-                                if len(teff_range[valid_teff]) >= 2:
-                                    if teff_index < valid_teff[0][0]:
-                                        # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
-                                        extrap_teff_value = __extrap(teff_range[teff_index], teff_range[valid_teff][:2], structured_single_values.data.T[logg_index][valid_teff][:2])
-                                        extrap_teff_value = np.min((max_value[value_num], extrap_teff_value))
-                                        extrap_teff_value = np.max((min_value[value_num], extrap_teff_value))
-                                        teff_limit_index = valid_teff[0][0]
-                                        interp_teff_value = np.nan
-                                    elif teff_index > valid_teff[0][-1]:
-                                        # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
-                                        extrap_teff_value = __extrap(teff_range[teff_index], teff_range[valid_teff][len(teff_range[valid_teff])-2:], structured_single_values.data.T[logg_index][valid_teff][len(teff_range[valid_teff])-2:])
-                                        extrap_teff_value = np.min((max_value[value_num], extrap_teff_value))
-                                        extrap_teff_value = np.max((min_value[value_num], extrap_teff_value))
-                                        teff_limit_index = valid_teff[0][-1]
-                                        interp_teff_value = np.nan
-                                    else:
-                                        # Interpolate
-                                        interp_teff_value = np.interp(teff_range[teff_index], teff_range[valid_teff], structured_single_values.data.T[logg_index][valid_teff], left=np.nan, right=np.nan)
-
-                                # Interpolated values have priority over extrapolated ones
-                                if not np.isnan(interp_logg_value) and not np.isnan(interp_teff_value):
-                                    derived_value = (interp_logg_value + interp_teff_value) / 2.0
-                                elif not np.isnan(interp_logg_value):
-                                    derived_value = interp_logg_value
-                                elif not np.isnan(interp_teff_value):
-                                    derived_value = interp_teff_value
-                                else:
-                                    if not np.isnan(extrap_logg_value) and not np.isnan(extrap_teff_value):
-                                        # The final extrapolated value is a weighted average:
-                                        # - The value extrapolated with closer real values has more weight
-                                        # WARNING: It is considered that each step in logg/teff are approximatelly of the same order of magnitude
-                                        logg_jumps = float(np.abs(logg_index - logg_limit_index))
-                                        teff_jumps = float(np.abs(teff_index - teff_limit_index))
-                                        total_jumps = logg_jumps + teff_jumps
-                                        derived_value = extrap_logg_value*(1.-(logg_jumps/total_jumps)) + extrap_teff_value*(1.-(teff_jumps/total_jumps))
-                                    else:
-                                        # Cases delegated to the second extrapolation process:
-                                        # 1. Cases where there are only one extrapolated values
-                                        # 2. Cases where it has not been possible to extrapolate values due to
-                                        #    a lack of atmospheres (there should be at least two atmospheres
-                                        #    with the same logg or teff in the grid of combinations)
-                                        derived_value = np.nan
-                                structured_single_values_interpolated[teff_index][logg_index] = derived_value
 
                     ############################################################
-                    # Second extrapolation process
-                    # - In this process, real values + previous averaged extrapoled values will
-                    #   be considered to derive values for the cases where only one extrapolation
-                    #   can be done (case 1)
+                    # First stage: Interpolation
                     ############################################################
-                    structured_single_values_interpolated2 = structured_single_values_interpolated.copy()
-                    for logg_index in np.arange(nlogg):
-                        logg = logg_range[logg_index]
-                        for teff_index in np.arange(nteff):
-                            teff = teff_range[teff_index]
-                            if np.isnan(structured_single_values_interpolated.data[teff_index][logg_index]):
-                                # Mark this value to keep track of those that are not original
-                                structured_single_values_interpolated2.mask[teff_index][logg_index] = True
-                                # For extrapolation, ignore the np.nan values:
-                                valid_logg = np.where(np.logical_not(np.isnan(structured_single_values_interpolated.data[teff_index])))
-                                valid_teff = np.where(np.logical_not(np.isnan(structured_single_values_interpolated.data.T[logg_index])))
+                    processed_values, fixed, missing = __interpolate(structured_single_values, logg_range, teff_range, logg_index, teff_index, value_num, min_value, max_value)
 
-                                if len(logg_range[valid_logg]) >= 2:
-                                    # Extrapolate by using logg values for a fixed teff
-                                    if logg_index < valid_logg[0][0]:
-                                        extrap_logg_value = __extrap(logg_range[logg_index], logg_range[valid_logg][:2], structured_single_values_interpolated.data[teff_index][valid_logg][:2])
-                                        extrap_logg_value = np.min((max_value[value_num], extrap_logg_value))
-                                        extrap_logg_value = np.max((min_value[value_num], extrap_logg_value))
-                                    elif logg_index > valid_logg[0][-1]:
-                                        extrap_logg_value = __extrap(logg_range[logg_index], logg_range[valid_logg][len(logg_range[valid_logg])-2:], structured_single_values_interpolated.data[teff_index][valid_logg][len(logg_range[valid_logg])-2:])
-                                        extrap_logg_value = np.min((max_value[value_num], extrap_logg_value))
-                                        extrap_logg_value = np.max((min_value[value_num], extrap_logg_value))
-                                    else:
-                                        raise Exception("Only values that should be extrapolated are expected at this point")
-                                    structured_single_values_interpolated2[teff_index][logg_index] = extrap_logg_value
-                                    continue
-                                elif len(teff_range[valid_teff]) >= 2:
-                                    # Extrapolate by using teff values for a fixed logg
-                                    if teff_index < valid_teff[0][0]:
-                                        extrap_teff_value = __extrap(teff_range[teff_index], teff_range[valid_teff][:2], structured_single_values_interpolated.data.T[logg_index][valid_teff][:2])
-                                        extrap_teff_value = np.min((max_value[value_num], extrap_teff_value))
-                                        extrap_teff_value = np.max((min_value[value_num], extrap_teff_value))
-                                    elif teff_index > valid_teff[0][-1]:
-                                        extrap_teff_value = __extrap(teff_range[teff_index], teff_range[valid_teff][len(teff_range[valid_teff])-2:], structured_single_values_interpolated.data.T[logg_index][valid_teff][len(teff_range[valid_teff])-2:])
-                                        extrap_teff_value = np.min((max_value[value_num], extrap_teff_value))
-                                        extrap_teff_value = np.max((min_value[value_num], extrap_teff_value))
-                                    else:
-                                        raise Exception("Only values that should be extrapolated are expected at this point")
-                                    structured_single_values_interpolated2[teff_index][logg_index] = extrap_teff_value
-                                    continue
-                                else:
-                                    raise Exception("There should be at least two atmospheres with the same logg or teff in the grid of combinations")
+                    # For posterior proximity calculations
+                    if value_num == 0 and layer_num == 0:
+                        # The mask of real values is going to be the same for atmospheres with the same metallicity
+                        # To optimize, use directly the mask from the first layer and the first value
+                        real_atmospheres = processed_values.data.copy()
+                        real_atmospheres[:] = 0.0 # Initialize
+                        interpolated_filter = processed_values.mask
+                        iteration = 1.
+                        real_atmospheres[interpolated_filter] = iteration # Gap that has been derived by interpolation
+                    #
+
+                    if missing > 0:
+                        ############################################################
+                        # Second stage: Averaged and simple extrapolation
+                        ############################################################
+                        fixed = np.inf
+                        while fixed > 0:
+                            #-----------------------------------------------------------
+                            # 1) Averaged extrapolation
+                            #-----------------------------------------------------------
+                            # - First iteration:
+                            #       Real values + interpolated values will be considered to derive missing values
+                            # - Following iterations:
+                            #       Real values + + interpolated values + previous averaged/simple extrapoled values will
+                            #       be considered to derive missing values
+                            processed_values, fixed, missing = __extrapolate(processed_values, logg_range, teff_range, logg_index, teff_index, value_num, min_value, max_value, only_averaged=True)
+
+                            # For posterior proximity calculations
+                            if value_num == 0 and layer_num == 0:
+                                averaged_extrapolated_filter = np.logical_and(real_atmospheres == 0.0, processed_values.mask)
+                                iteration += 1.
+                                real_atmospheres[averaged_extrapolated_filter] = iteration # Gap that has been derived by averaged extrapolation
+                            #
+
+                            if missing != 0 and fixed == 0:
+                                #-----------------------------------------------------------
+                                # 2) Simple extrapolation
+                                #-----------------------------------------------------------
+                                # - First iteration:
+                                #       Real values + interpolated values + previous averaged extrapoled values will
+                                #       be considered to derive missing values
+                                # - Following iterations:
+                                #       Real values + interpolated values + previous averaged extrapoled + previous
+                                #       simple extrapolated values will be considered to derive
+                                #       missing values
+                                processed_values, fixed, missing = __extrapolate(processed_values, logg_range, teff_range, logg_index, teff_index, value_num, min_value, max_value, only_averaged=False)
+
+                                # For posterior proximity calculations
+                                if value_num == 0 and layer_num == 0:
+                                    simple_extrapolated_filter = np.logical_and(real_atmospheres == 0.0, processed_values.mask)
+                                    iteration += 1.
+                                    real_atmospheres[simple_extrapolated_filter] = iteration # Gap that has been derived by averaged extrapolation
+                                #
+
+                    if missing > 0:
+                        ############################################################
+                        # Third stage
+                        ############################################################
+                        # - For the remaining missing values, the only possibility is to copy a nearby value
+                        #   or just assign a default value to try to minimize the impact in the Bivariate Spline
+                        # - Real values + interpolated values + previous averaged extrapoled + previous
+                        #   simple extrapolated values will be considered to derive missing values
+                        processed_values, fixed, missing = __copy_closest(processed_values, logg_range, teff_range, logg_index, teff_index)
+
+                    if missing > 0:
+                        raise Exception("At this point there should be no missing values")
+
 
                     ############################################################
                     # Build a spline model to be able to estimate a value for a given teff/logg combination
-                    single_model = interpolate.RectBivariateSpline(teff_range, logg_range, structured_single_values_interpolated2.data)
+                    single_model = interpolate.RectBivariateSpline(teff_range, logg_range, processed_values.data, s=0) # Smooth factor
+
+                    # Proximity calculation:
+                    # Build a spline model to be able to estimate how close we are from a real atmosphere
+                    if value_num == 0 and layer_num == 0:
+                        # Normalize making 1.0 mean very close to a real atmosphere:
+                        #max_iterations = np.max(real_atmospheres)
+                        #real_atmospheres = (max_iterations + -1.0 * real_atmospheres) / max_iterations
+                        # Modelize
+                        proximity_atmospheres_model = interpolate.RectBivariateSpline(teff_range, logg_range, real_atmospheres, s=0) # Smooth factor
                 # Add to current model and used values
                 models_single_layer.append(single_model)
                 values_single_layer.append(single_values)
-                structured_values_single_layer.append(structured_single_values_interpolated2)
+                structured_values_single_layer.append(processed_values)
             # Save models and used values for the whole layer
             models_atm.append(models_single_layer)
             values_atm.append(values_single_layer)
             structured_values_atm.append(structured_values_single_layer)
-
+        #
+        proximity_atm_same_metallicity.append(proximity_atmospheres_model)
         models_atm_same_metallicity.append(models_atm)
         values_atm_same_metallicity.append(values_atm)
         structured_values_atm_same_metallicity.append(structured_values_atm)
         params_atm_same_metallicity.append(params_atm)
 
-    return models_atm_same_metallicity, structured_values_atm_same_metallicity
+    return models_atm_same_metallicity, structured_values_atm_same_metallicity, proximity_atm_same_metallicity
 
 
 def valid_atmosphere_target(modeled_layers_pack, teff_target, logg_target, MH_target):
@@ -446,7 +626,7 @@ def valid_atmosphere_target(modeled_layers_pack, teff_target, logg_target, MH_ta
         True if the target teff, logg and metallicity can be obtained with the
         models
     """
-    modeled_layers, used_values_for_layers, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
+    modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
 
     nteff = len(teff_range)
     nlogg = len(logg_range)
@@ -478,6 +658,34 @@ def valid_atmosphere_target(modeled_layers_pack, teff_target, logg_target, MH_ta
 
     return True
 
+def estimate_proximity_to_real_atmospheres(modeled_layers_pack, teff_target, logg_target, MH_target):
+    """
+    Checks if the objectif teff, logg and metallicity can be obtained by using the loaded model
+
+    :param modeled_layers_pack:
+        Output from load_modeled_layers_pack
+    :type modeled_layers_pack: array
+
+    :returns:
+        True if the target teff, logg and metallicity can be obtained with the
+        models
+    """
+    modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
+
+    nMH  = len(MH_range)
+
+    proximity_distance = []
+    for metal_num in np.arange(nMH):
+        max_proximity_original_grid = np.max(proximity[metal_num](teff_range, logg_range))
+        p = proximity[metal_num](teff_target, logg_target)[0][0]
+        p = np.max([p, 0.])
+        p = np.min([max_proximity_original_grid, p])
+        proximity_distance.append(p)
+    p = np.interp(MH_target, MH_range, proximity_distance)
+    p = np.max([p, 0.])
+
+    return p
+
 
 def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target, MH_target):
     """
@@ -490,7 +698,7 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
     :returns:
         Interpolated model atmosphere
     """
-    modeled_layers, used_values_for_layers, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
+    modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
 
     nMH  = len(MH_range)
     nvalues = 7
@@ -543,9 +751,9 @@ def write_atmosphere(teff, logg, MH, layers):
 
 
 # Serialize modeled layers and stats
-def dump_modeled_layers_pack(modeled_layers, used_values_for_layers, teff_range, logg_range, MH_range, filename, required_layers=56):
+def dump_modeled_layers_pack(modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, filename, required_layers=56):
     """
-    Build a list of modeled_layers, used_values_for_layers, teff_range, logg_range, MH_range and nlayers
+    Build a list of modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range and nlayers
     in order to serialize it to disk for easier later recovery.
 
     :param filename:
@@ -555,7 +763,7 @@ def dump_modeled_layers_pack(modeled_layers, used_values_for_layers, teff_range,
     """
     nlayers = required_layers
 
-    modeled_layers_pack = (modeled_layers, used_values_for_layers, teff_range, logg_range, MH_range, nlayers)
+    modeled_layers_pack = (modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, nlayers)
     pickle.dump(modeled_layers_pack, open(filename, 'w'))
 
 def load_modeled_layers_pack(filename):
@@ -567,7 +775,7 @@ def load_modeled_layers_pack(filename):
     :type filename: string
 
     :returns:
-        List of modeled_layers, used_values_for_layers, teff_range, logg_range, MH_range and nlayers
+        List of modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range and nlayers
     """
     sys.modules['__main__'].ConstantValue = ConstantValue
     modeled_layers_pack = pickle.load(open(filename))

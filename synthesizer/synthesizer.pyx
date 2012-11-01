@@ -138,6 +138,7 @@ def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, char* atmosphere_model_file
     synthesize_spectrum(atmosphere_model_file, linelist_file, abundances_file, 
             microturbulence_vel, verbose, num_measures, <double*> waveobs.data, 
             <double*> fluxes.data, callback, <void*>update_progress_func)
+
     if macroturbulence > 0:
         macroturbulence_spectrum(<double*> waveobs.data, <double*> fluxes.data, 
             num_measures, macroturbulence, verbose, callback, <void*>update_progress_func)
