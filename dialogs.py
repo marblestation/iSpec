@@ -26,7 +26,7 @@ import sys
 
 import wx
 import numpy as np
-
+import scipy.stats as stats
 
 # The recommended way to use wx with mpl is with the WXAgg backend.
 import matplotlib
@@ -528,7 +528,7 @@ class DetermineBarycentricCorrectionDialog(wx.Dialog):
 
 
 class VelocityProfileDialog(wx.Dialog):
-    def __init__(self, parent, id, title, xcoord, fluxes, models, num_used_lines, rv_step, telluric_fwhm=0.0, snr=0.0):
+    def __init__(self, parent, id, title, xcoord, fluxes, errors, models, num_used_lines, rv_step, telluric_fwhm=0.0, snr=0.0):
         wx.Dialog.__init__(self, parent, id, title, size=(600, 600))
 
         self.recalculate = False
@@ -587,6 +587,8 @@ class VelocityProfileDialog(wx.Dialog):
 
         ## Draw
         self.axes.plot(xcoord, fluxes, lw=1, color='b', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=1)
+        self.axes.fill_between(xcoord, fluxes+errors, fluxes-errors, color='#CCCCCC')
+
         if rv_step >= 0.1:
             xcoord_mod = np.arange(np.min(xcoord), np.max(xcoord), 0.1)
             for model in models:
@@ -610,9 +612,17 @@ class VelocityProfileDialog(wx.Dialog):
             self.stats.InsertStringItem(num_items, "Mean (km/s)")
             self.stats.SetStringItem(num_items, 1, str(np.round(model.mu(), 2)))
             num_items += 1
-            self.stats.InsertStringItem(num_items, "Min. error (+/- km/s)")
-            self.stats.SetStringItem(num_items, 1, str(np.round(rv_step, 2)))
+
+            used_measures = len(model.residuals())
+            tipical_error = model.sig() / used_measures
+            df = used_measures - 1
+            interval_confiance = 0.99
+            tstudent = stats.t(df).ppf(interval_confiance + (1.-interval_confiance)/2.) # Confiance of 99% (let out 0.005 at each tail)
+            margin_error = tipical_error * tstudent # The true model.mu() is in the interval mu +/- margin_error with a confiance of 99%
+            self.stats.InsertStringItem(num_items, "Min. error with 99% confiance (+/- km/s)")
+            self.stats.SetStringItem(num_items, 1, str(np.round(margin_error, 2)))
             num_items += 1
+
             self.stats.InsertStringItem(num_items, "Baseline")
             self.stats.SetStringItem(num_items, 1, str(np.round(model.baseline(), 2)))
             num_items += 1

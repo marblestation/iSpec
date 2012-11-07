@@ -108,15 +108,18 @@ long intdiv();
 long mmin(),mmax();
 
 // - For abundances:
-double eqwidth(model,line,atom,wave,V,POP);
-int bwline(wave,line,atom,ew,qf);
+//double eqwidth(model,line,atom,wave,V,POP);
+//int bwline(wave,line,atom,ew,qf);
 
+
+long num;
 int Ntau;
 float **bkap;
 float **bkap2;
 float **bkap3;
 float **bkap4;
 double inc;
+
 //////////////////////////////////
 
 int flagr;
@@ -342,7 +345,7 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
         
         fluxes[pos] = 1.0 - Depth;
         
-        if (pos % 100 == 0) {
+        if (pos % 4000 == 0) {
             if(flagw == 1) printf("Wavelength %9.3f - Work completed %.2f\%\n", wave, ((1.0*pos)/num_measures)*100.0);
             user_func(((1.0*pos)/num_measures)*100.0, user_data);
         }
@@ -363,6 +366,62 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
     free(velgrad);
     free(isotope);
 }
+
+
+/// FUNCTIONS for V SIN(i) - Rotation
+void convolv(waveobs,y,ys,num,vsini,u)
+double *waveobs;
+double *y,*ys;
+double vsini,u;
+long num;
+{
+  double beta,gam,w,s,t,dlc,c1,c2,dv,r1,r2,f,v;
+  long i,n1,n2,n;
+  char tmp[10];
+  double st = waveobs[0];
+  double dw = waveobs[1] - waveobs[0];
+  long nd = waveobs[num-1] * vsini/(dw*lightspeed) + 5.5;
+
+  beta = (1.0-u)/(1.0 - 0.333333*u);
+  gam = u/(1.0 - 0.333333*u);
+  
+  /* End Effect */
+
+  n1 = nd + 1;
+  for(i=1;i<=nd;i++) ys[i] = y[i];
+  n2 = num - nd -1;
+  for(i=n2;i<=num;i++) ys[i] = y[i];
+  if(vsini < 0.5) {
+    for(i=1;i<=num;i++) ys[i] = y[i];
+    return;
+  }
+
+  /* convolve with rotation profile */
+
+   w = st + (n1-1)*dw;
+   for(n=n1;n<=n2;n++) {
+     w = w+dw;
+     s = 0.0;
+     t = 0.0;
+     dlc = w*vsini/lightspeed;
+     c1 = 0.63661977*beta/dlc;
+     c2 = 0.5*gam/dlc;
+     dv = dw/dlc;
+
+     for(i=-nd;i<=nd;i++) {
+       v = i*dv;
+       r2 = 1.0 - v*v;
+       if(r2 > 0.0) {
+         f = c1*sqrt(r2) + c2*r2;
+         t = t+f;
+         s = s + f*y[n+i];
+       }
+     }
+     ys[n] = s/t;
+   }
+   return;
+}
+
 
 // Expects waveobs to be homogeneusly spaced and at least of length 2
 int macroturbulence_spectrum(const double waveobs[], double fluxes[], int num_measures, double macroturbulence, int verbose, progressfunc user_func, void *user_data) {
@@ -510,10 +569,63 @@ int resolution_spectrum(const double waveobs[], double fluxes[], int num_measure
     return(0);
 }
 
+
+
 #define FACTOR 1.6
 #define JMAX 100
 int flagCNO = 0;
 // Abundance determination
+double eqwidth(model,line,atom,wave,V,POP)
+atmosphere *model;
+linedata *line;
+atominfo *atom;
+double wave;
+pfunc *V;
+population *POP;
+//double eqwidth(atmosphere *model, linedata *line, atominfo *atom, double wave, pfunc *V, population *POP)
+{
+  double dwave = 0.005;
+  double w1,w2,w,d0,Flux;
+  int i,m;
+  int n = 0;
+
+  if(flagCNO == 1) {
+    m = 0;
+    if(line[0].code == 6.0) m = 5;
+    if(line[0].code == 7.0) m = 6;
+    if(line[0].code == 8.0) m = 7;
+    if(m == 0) {
+      printf("\nCNO error in Blackwel ... now exiting\n");
+      exit(1);
+    }
+  }
+  tauwave(model,wave);
+  Flux = flux(model,wave);
+  pop(line,0,model,V,POP);
+  /* Note that in pop8, for codes 6.0, 7.0 & 8.0, line[0].xnum is hardwired,
+     and so eqwidth returns the same equivalent width for CI, NI and OI lines
+     without the correction below.  Correction added Nov 7, 2006 */
+  if(flagCNO == 1) {
+    for(i=0;i<Ntau;i++) line[0].xnum[i] *= line[0].abund/atom[m].abund;
+  }
+  broad(model,line,0,line[0].sig,line[0].alp,line[0].fac);
+  capnu(line,0,model);
+
+  w = w1 = w2 = 0.0;
+  while(1) {
+    eqtaukap(wave,model,line);
+    w2 = depth(model,wave,Flux);
+    if(n == 0) d0 = w2;
+    if(n > 0) w += 0.5*(w1 + w2)*dwave;
+    w1 = w2;
+    /* if(w2 < 0.10*d0) dwave = 0.01;
+       if(w2 < 0.02*d0) dwave = 0.05; */
+    if(w2 < 0.00001) return(2000*w);
+    wave += dwave;
+    n++;
+  }
+}
+
 int abundances_determination(char *atmosphere_model_file, char *linelist_file, int num_measures, char *abundances_file, double microturbulence_vel, int verbose, double abundances[], double normal_abundances[], double relative_abundances[], progressfunc user_func, void *user_data) {
   int i,j,k,flag;
   int code;
@@ -853,60 +965,6 @@ double qsimp(double (*func)(double), double a, double b)
   return 0.0;
 }
 
-/// FUNCTIONS for V SIN(i) - Rotation
-void convolv(waveobs,y,ys,num,vsini,u)
-double *waveobs;
-double *y,*ys;
-double vsini,u;
-long num;
-{
-  double beta,gam,w,s,t,dlc,c1,c2,dv,r1,r2,f,v;
-  long i,n1,n2,n;
-  char tmp[10];
-  double st = waveobs[0];
-  double dw = waveobs[1] - waveobs[0];
-  long nd = waveobs[num-1] * vsini/(dw*lightspeed) + 5.5;
-
-  beta = (1.0-u)/(1.0 - 0.333333*u);
-  gam = u/(1.0 - 0.333333*u);
-  
-  /* End Effect */
-
-  n1 = nd + 1;
-  for(i=1;i<=nd;i++) ys[i] = y[i];
-  n2 = num - nd -1;
-  for(i=n2;i<=num;i++) ys[i] = y[i];
-  if(vsini < 0.5) {
-    for(i=1;i<=num;i++) ys[i] = y[i];
-    return;
-  }
-
-  /* convolve with rotation profile */
-
-   w = st + (n1-1)*dw;
-   for(n=n1;n<=n2;n++) {
-     w = w+dw;
-     s = 0.0;
-     t = 0.0;
-     dlc = w*vsini/lightspeed;
-     c1 = 0.63661977*beta/dlc;
-     c2 = 0.5*gam/dlc;
-     dv = dw/dlc;
-
-     for(i=-nd;i<=nd;i++) {
-       v = i*dv;
-       r2 = 1.0 - v*v;
-       if(r2 > 0.0) {
-         f = c1*sqrt(r2) + c2*r2;
-         t = t+f;
-         s = s + f*y[n+i];
-       }
-     }
-     ys[n] = s/t;
-   }
-   return;
-}
-
 
 
 /// FUNCTIONS for RESOLUTION
@@ -1001,53 +1059,3 @@ FILE *qf;
   return(1);
 }
 
-double eqwidth(model,line,atom,wave,V,POP)
-atmosphere *model;
-linedata *line;
-atominfo *atom;
-double wave;
-pfunc *V;
-population *POP;
-//double eqwidth(atmosphere *model, linedata *line, atominfo *atom, double wave, pfunc *V, population *POP)
-{
-  double dwave = 0.005;
-  double w1,w2,w,d0,Flux;
-  int i,m;
-  int n = 0;
-
-  if(flagCNO == 1) {
-    m = 0;
-    if(line[0].code == 6.0) m = 5;
-    if(line[0].code == 7.0) m = 6;
-    if(line[0].code == 8.0) m = 7;
-    if(m == 0) {
-      printf("\nCNO error in Blackwel ... now exiting\n");
-      exit(1);
-    }
-  }
-  tauwave(model,wave);
-  Flux = flux(model,wave);
-  pop(line,0,model,V,POP);
-  /* Note that in pop8, for codes 6.0, 7.0 & 8.0, line[0].xnum is hardwired,
-     and so eqwidth returns the same equivalent width for CI, NI and OI lines
-     without the correction below.  Correction added Nov 7, 2006 */
-  if(flagCNO == 1) {
-    for(i=0;i<Ntau;i++) line[0].xnum[i] *= line[0].abund/atom[m].abund;
-  }
-  broad(model,line,0,line[0].sig,line[0].alp,line[0].fac);
-  capnu(line,0,model);
-
-  w = w1 = w2 = 0.0;
-  while(1) {
-    eqtaukap(wave,model,line);
-    w2 = depth(model,wave,Flux);
-    if(n == 0) d0 = w2;
-    if(n > 0) w += 0.5*(w1 + w2)*dwave;
-    w1 = w2;
-    /* if(w2 < 0.10*d0) dwave = 0.01;
-       if(w2 < 0.02*d0) dwave = 0.05; */
-    if(w2 < 0.00001) return(2000*w);
-    wave += dwave;
-    n++;
-  }
-}

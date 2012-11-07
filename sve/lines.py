@@ -19,6 +19,7 @@ import asciitable
 import numpy as np
 import numpy.lib.recfunctions as rfn # Extra functions
 import scipy.ndimage.filters
+import scipy.stats as stats
 import cPickle as pickle
 import gzip
 import os
@@ -1011,6 +1012,7 @@ def __create_cross_correlation_mask(data_wave, data_value, wave_grid, velocity_s
     """
     # Speed of light in m/s
     c = 299792458.0
+    #c = 300000000.0
 
     if velocity_step != None:
         total_points = len(data_wave)
@@ -1020,7 +1022,10 @@ def __create_cross_correlation_mask(data_wave, data_value, wave_grid, velocity_s
         i = 0
         wave_base = wave_general_base
         while wave_base < wave_general_top and i < total_points:
-            wave_top = wave_base + wave_base * ((velocity_step*1000) / c) # nm
+            ## Newtonian version:
+            #wave_top = wave_base + wave_base * ((velocity_step*1000.) / c) # nm
+            ## Relativistic version:
+            wave_top = wave_base + wave_base * (1.-np.sqrt((1.-(velocity_step*1000.)/c)/(1.+(velocity_step*1000.)/c)))
             while i < total_points and data_wave[i] < wave_base:
                 i += 1
             mask_value = 0.0
@@ -1057,7 +1062,7 @@ def __create_cross_correlation_mask(data_wave, data_value, wave_grid, velocity_s
                 break
     return mask
 
-def __cross_correlation_function(spectrum, mask, lower_velocity_limit, upper_velocity_limit, velocity_step, frame=None):
+def __cross_correlation_function(spectrum, mask, lower_velocity_limit, upper_velocity_limit, velocity_step, s=None, l=None, frame=None):
     """
     Calculates the cross correlation value between the spectrum and the specified mask
     by shifting the mask from lower to upper velocity.
@@ -1082,9 +1087,14 @@ def __cross_correlation_function(spectrum, mask, lower_velocity_limit, upper_vel
     shifts = np.int32(velocity / velocity_step)
 
 
+    #import ipdb
+    ## TODO: delete parameters s and l from the method
+    #ipdb.set_trace()
+
     num_shifts = len(shifts)
     # Cross-correlation function
     ccf = np.zeros(num_shifts)
+    ccf_err = np.zeros(num_shifts)
     for shift, i in zip(shifts, np.arange(num_shifts)):
         if shift == 0:
             shifted_mask = mask['value']
@@ -1093,6 +1103,7 @@ def __cross_correlation_function(spectrum, mask, lower_velocity_limit, upper_vel
         else:
             shifted_mask = np.hstack((mask['value'][-1*shift:], -1*shift*[0]))
         ccf[i] = np.correlate(spectrum['flux'], shifted_mask)[0]
+        ccf_err[i] = np.correlate(spectrum['err'], shifted_mask)[0] # Propagate errors
         current_work_progress = ((i*1.0)/num_shifts) * 100
         if report_progress(current_work_progress, last_reported_progress):
             last_reported_progress = current_work_progress
@@ -1100,9 +1111,11 @@ def __cross_correlation_function(spectrum, mask, lower_velocity_limit, upper_vel
             if frame != None:
                 frame.update_progress(current_work_progress)
 
-    ccf = ccf/np.max(ccf) # Normalize
+    max_ccf = np.max(ccf)
+    ccf = ccf/max_ccf # Normalize
+    ccf_err = ccf_err/max_ccf # Propagate errors
 
-    return velocity, ccf
+    return velocity, ccf, ccf_err
 
 
 def build_velocity_profile(spectrum, linelist, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, frame=None):
@@ -1123,23 +1136,25 @@ def build_velocity_profile(spectrum, linelist, lower_velocity_limit = -200, uppe
     interpolated_spectrum = resample_spectrum(spectrum, linelist_mask['wave'])
 
     # Obtain the cross-correlate function by shifting the mask
-    velocity, ccf = __cross_correlation_function(interpolated_spectrum, linelist_mask, lower_velocity_limit = lower_velocity_limit, upper_velocity_limit =upper_velocity_limit, velocity_step = velocity_step, frame=frame)
-    return velocity, ccf, len(linelist_mask)
+    velocity, ccf, ccf_err = __cross_correlation_function(interpolated_spectrum, linelist_mask, lower_velocity_limit = lower_velocity_limit, upper_velocity_limit =upper_velocity_limit, velocity_step = velocity_step, frame=frame, s=spectrum, l=linelist)
+    return velocity, ccf, ccf_err, len(linelist_mask)
 
 
-def modelize_velocity_profile(xcoord, fluxes, only_one_peak=False):
+def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False):
     """
     Fits Gaussians to the deepest peaks in the velocity profile.
 
     * For Radial Velocity profiles, more than 1 outlier peak implies that the star is a spectroscopic binary.
 
     :returns:
-        Array of fitted models.
+        Array of fitted models and an array with the margin errors for model.mu() to be able to know the interval
+        of 99% confiance.
 
     """
     models = []
+    models_err = []
     if len(xcoord) == 0 or len(fluxes) == 0:
-        return models
+        return models, models_err
 
     # Smooth flux
     sig = 1
@@ -1148,7 +1163,7 @@ def modelize_velocity_profile(xcoord, fluxes, only_one_peak=False):
     peaks, base_points = __find_peaks_and_base_points(xcoord, smoothed_fluxes)
 
     if len(peaks) == 0:
-        return models
+        return models, models_err
 
     # Fit continuum to normalize
     try:
@@ -1156,20 +1171,21 @@ def modelize_velocity_profile(xcoord, fluxes, only_one_peak=False):
         continuum_model = UniformCDFKnotSplineModel(nknots)
         continuum_model.fitData(xcoord[base_points], fluxes[base_points])
         fluxes /= continuum_model(xcoord)
+        errors /= continuum_model(xcoord)
     except Exception:
         logging.warn("Velocity profile cannot be normalized")
         pass
 
     if len(peaks) != 0:
-        # Adjusting edges
         base = base_points[:-1]
         top = base_points[1:]
-        new_base = np.zeros(len(base), dtype=int)
-        new_top = np.zeros(len(base), dtype=int)
-        for i in np.arange(len(peaks)):
-            new_base[i], new_top[i] = __improve_linemask_edges(xcoord, fluxes, base[i], top[i], peaks[i])
-        base = new_base
-        top = new_top
+        # Adjusting edges: Discarded to avoid weird effects in the margin error calculation
+        #new_base = np.zeros(len(base), dtype=int)
+        #new_top = np.zeros(len(base), dtype=int)
+        #for i in np.arange(len(peaks)):
+            #new_base[i], new_top[i] = __improve_linemask_edges(xcoord, fluxes, base[i], top[i], peaks[i])
+        #base = new_base
+        #top = new_top
 
         if only_one_peak:
             # Just try with the deepest line
@@ -1240,8 +1256,20 @@ def modelize_velocity_profile(xcoord, fluxes, only_one_peak=False):
 
         try:
             #model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=parinfo, weights=weights)
-            model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=parinfo)
+            if np.any(errors[base[i]:top[i]+1] == 0.0):
+                model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=parinfo)
+            else:
+                model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=parinfo, weights=1/errors[base[i]:top[i]+1])
             models.append(model)
+            # Estimate error for finding a interval of 99% confiance
+            used_measures = len(xcoord[base[i]:top[i]+1])
+            tipical_error = model.sig() / used_measures
+            df = used_measures - 1
+            interval_confiance = 0.99
+            tstudent = stats.t(df).ppf(interval_confiance + (1.-interval_confiance)/2.) # Confiance of 99% (let out 0.005 at each tail)
+            margin_error = tipical_error * tstudent # The true model.mu() is in the interval mu +/- margin_error with a confiance of 99%
+            #print model.mu(), "::", model.mu()-margin_error, model.mu()+margin_error, "::", margin_error
+            models_err.append(margin_error)
         except Exception, e:
             print e.message
 
@@ -1251,7 +1279,7 @@ def modelize_velocity_profile(xcoord, fluxes, only_one_peak=False):
     #plt.scatter(xcoord[base_points], fluxes[base_points])
     #plt.show()
 
-    return np.asarray(models)
+    return np.asarray(models), np.asarray(models_err)
 
 def select_good_velocity_profile_models(models, xcoord, fluxes):
     """

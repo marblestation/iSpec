@@ -60,11 +60,11 @@ logging.info("Radial velocity determination...")
 vald_linelist_file = "input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
 linelist_atomic = sve.read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
 
-xcoord, fluxes, num_used_lines = sve.build_velocity_profile(mu_cas_a_spectrum, \
-                                        linelist_atomic, lower_velocity_limit=-200.0, \
-                                        upper_velocity_limit=200.0, velocity_step=1.0)
+xcoord, fluxes, errors, num_used_lines = sve.build_velocity_profile(mu_cas_a_spectrum, \
+                                            linelist_atomic, lower_velocity_limit=-200.0, \
+                                            upper_velocity_limit=200.0, velocity_step=1.0)
 
-models = sve.modelize_velocity_profile(xcoord, fluxes)
+models, models_err = sve.modelize_velocity_profile(xcoord, fluxes, errors)
 good = sve.select_good_velocity_profile_models(models, xcoord, fluxes)
 models = models[good]
 

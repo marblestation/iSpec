@@ -391,6 +391,9 @@ def resample_spectrum(spectrum, xaxis, linear=True, frame=None):
         resampled_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
         resampled_spectrum['waveobs'] = xaxis
         resampled_spectrum['flux'] = np.interp(xaxis, spectrum['waveobs'], spectrum['flux'], left=0.0, right=0.0) # No extrapolation, just returns zeros
+        #from scipy import interpolate
+        #f = interpolate.InterpolatedUnivariateSpline(spectrum['waveobs'], spectrum['flux'], k=3)
+        #resampled_spectrum['flux'] = f(xaxis)
 
         current_work_progress = 90.0
         logging.info("%.2f%%" % current_work_progress)
@@ -421,11 +424,14 @@ def correct_velocity(spectrum, velocity):
     """
     # Speed of light in m/s
     c = 299792458.0
-    # Radial/barycentric velocity from km/s to m/s
-    velocity = velocity * 1000
 
     # Correct wavelength scale for radial velocity
-    spectrum['waveobs'] = spectrum['waveobs'] / ((velocity / c) + 1)
+    # - Newtonian version:
+    ##Radial/barycentric velocity from km/s to m/s
+    ##velocity = velocity * 1000
+    #spectrum['waveobs'] = spectrum['waveobs'] / ((velocity / c) + 1)
+    # - Relativistic version:
+    spectrum['waveobs'] = spectrum['waveobs'] * np.sqrt((1.-(velocity*1000.)/c)/(1.+(velocity*1000.)/c))
     return spectrum
 
 def correct_velocity_regions(regions, velocity, with_peak=False):

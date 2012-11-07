@@ -396,12 +396,14 @@ class Spectrum():
         self.resolution_telluric = 0.0
         self.velocity_profile_atomic_xcoord = None
         self.velocity_profile_atomic_fluxes = None
+        self.velocity_profile_atomic_errors = None
         self.velocity_profile_atomic_models = None
         self.velocity_profile_atomic_num_used_lines = None
         self.velocity_profile_atomic_rv_step = None
         self.velocity_profile_atomic_snr = 0.0
         self.velocity_profile_telluric_xcoord = None
         self.velocity_profile_telluric_fluxes = None
+        self.velocity_profile_telluric_errors = None
         self.velocity_profile_telluric_models = None
         self.velocity_profile_telluric_num_used_lines = None
         self.velocity_profile_telluric_rv_step = None
@@ -3082,6 +3084,7 @@ max_wave_range=max_wave_range)
             if relative_to_atomic_data:
                 xcoord = self.active_spectrum.velocity_profile_atomic_xcoord
                 fluxes = self.active_spectrum.velocity_profile_atomic_fluxes
+                errors = self.active_spectrum.velocity_profile_atomic_errors
                 models = self.active_spectrum.velocity_profile_atomic_models
                 num_used_lines = self.active_spectrum.velocity_profile_atomic_num_used_lines
                 velocity_step = self.active_spectrum.velocity_profile_atomic_rv_step
@@ -3091,6 +3094,7 @@ max_wave_range=max_wave_range)
             else:
                 xcoord = self.active_spectrum.velocity_profile_telluric_xcoord
                 fluxes = self.active_spectrum.velocity_profile_telluric_fluxes
+                errors = self.active_spectrum.velocity_profile_telluric_errors
                 models = self.active_spectrum.velocity_profile_telluric_models
                 num_used_lines = self.active_spectrum.velocity_profile_telluric_num_used_lines
                 velocity_step = self.active_spectrum.velocity_profile_telluric_rv_step
@@ -3098,7 +3102,7 @@ max_wave_range=max_wave_range)
                 snr = 0.0
                 title = "Velocity profile relative to telluric lines"
 
-            dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, models, num_used_lines, velocity_step, telluric_fwhm, snr=snr)
+            dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, errors, models, num_used_lines, velocity_step, telluric_fwhm, snr=snr)
             dlg.ShowModal()
             recalculate = dlg.recalculate
             dlg.Destroy()
@@ -3209,20 +3213,20 @@ max_wave_range=max_wave_range)
             velocity_step = self.velocity_telluric_step
             linelist = self.filter_telluric_lines(self.linelist_telluric, self.active_spectrum.data, velocity_lower_limit, velocity_upper_limit)
 
-        xcoord, fluxes, num_used_lines = sve.build_velocity_profile(self.active_spectrum.data, linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, frame=self)
-        wx.CallAfter(self.on_determine_velocity_finish, xcoord, fluxes, relative_to_atomic_data, num_used_lines, linelist)
+        xcoord, fluxes, errors, num_used_lines = sve.build_velocity_profile(self.active_spectrum.data, linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, frame=self)
+        wx.CallAfter(self.on_determine_velocity_finish, xcoord, fluxes, errors, relative_to_atomic_data, num_used_lines, linelist)
 
-    def on_determine_velocity_finish(self, xcoord, fluxes, relative_to_atomic_data, num_used_lines, linelist):
+    def on_determine_velocity_finish(self, xcoord, fluxes, errors, relative_to_atomic_data, num_used_lines, linelist):
         # Modelize
         if relative_to_atomic_data:
-            models = sve.modelize_velocity_profile(xcoord, fluxes)
+            models, models_err = sve.modelize_velocity_profile(xcoord, fluxes, errors)
             accept = sve.select_good_velocity_profile_models(models, xcoord, fluxes)
             if len(models[accept]) == 0:
                 models = models[:1]
             else:
                 models = models[accept]
         else:
-            models = sve.modelize_velocity_profile(xcoord, fluxes, only_one_peak=True)
+            models, models_err = sve.modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=True)
 
         if len(models) == 0:
             fwhm = 0.0
@@ -3277,6 +3281,7 @@ max_wave_range=max_wave_range)
                 self.active_spectrum.resolution_atomic = R
             self.active_spectrum.velocity_profile_atomic_xcoord = xcoord
             self.active_spectrum.velocity_profile_atomic_fluxes = fluxes
+            self.active_spectrum.velocity_profile_atomic_errors = errors
             self.active_spectrum.velocity_profile_atomic_models = models
             self.active_spectrum.velocity_profile_atomic_num_used_lines = num_used_lines
             self.active_spectrum.velocity_profile_atomic_rv_step = self.velocity_atomic_step
@@ -3290,6 +3295,7 @@ max_wave_range=max_wave_range)
                 self.active_spectrum.resolution_telluric = R
             self.active_spectrum.velocity_profile_telluric_xcoord = xcoord
             self.active_spectrum.velocity_profile_telluric_fluxes = fluxes
+            self.active_spectrum.velocity_profile_telluric_errors = errors
             self.active_spectrum.velocity_profile_telluric_models = models
             self.active_spectrum.velocity_profile_telluric_num_used_lines = num_used_lines
             self.active_spectrum.velocity_profile_telluric_rv_step = self.velocity_atomic_step
@@ -3297,7 +3303,7 @@ max_wave_range=max_wave_range)
             velocity_step = self.velocity_telluric_step
             title = "Velocity profile relative to telluric lines"
 
-        dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, models, num_used_lines, velocity_step, telluric_fwhm=telluric_fwhm, snr=snr)
+        dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, errors, models, num_used_lines, velocity_step, telluric_fwhm=telluric_fwhm, snr=snr)
         dlg.ShowModal()
         recalculate = dlg.recalculate
         dlg.Destroy()
@@ -3418,7 +3424,8 @@ max_wave_range=max_wave_range)
             vsini = 2.0
             limb_darkening_coeff = 0.0
             microturbulence_vel = 2.0
-            resolution = 47000
+            #resolution = 47000
+            resolution = 0
             wave_step = 0.001
             dlg = SyntheticSpectrumDialog(self, -1, "Synthetic spectrum generator", wave_base, wave_top, wave_step, resolution, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff)
             dlg.ShowModal()
@@ -3454,12 +3461,12 @@ max_wave_range=max_wave_range)
                 self.flash_status_message("Bad value.")
                 return
 
-            if wave_step > 0.01:
-                msg = "Wavelength step cannot be bigger than 0.01 nm"
-                title = 'Wavelength step error'
-                self.error(title, msg)
-                self.flash_status_message("Bad values.")
-                return
+            #if wave_step > 0.01:
+                #msg = "Wavelength step cannot be bigger than 0.01 nm"
+                #title = 'Wavelength step error'
+                #self.error(title, msg)
+                #self.flash_status_message("Bad values.")
+                #return
 
             if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
                 logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
