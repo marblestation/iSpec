@@ -22,17 +22,26 @@ import numpy as np
 import logging
 
 #--- SVE directory --------------------------------------------------------
-sve_dir = '/home/user/SVE_v20120919/'
+#sve_dir = '/home/user/SVE_v20120919/'
+sve_dir = './'
 sys.path.insert(0, os.path.abspath(sve_dir))
 import sve
 
+
+#--- Change LOG level --------------------------------------------------------
+#LOG_LEVEL = "warning"
+LOG_LEVEL = "info"
+logger = logging.getLogger() # root logger, common for all
+logger.setLevel(logging.getLevelName(LOG_LEVEL.upper()))
+
+
 #--- Reading spectra --------------------------------------------------------
 logging.info("Reading spectra")
-sun_spectrum = sve.read_spectrum("input/spectra/examples/narval_sun.s.gz")
-mu_cas_a_spectrum = sve.read_spectrum("input/spectra/examples/narval_mu_cas.s.gz")
+sun_spectrum = sve.read_spectrum(sve_dir + "/input/spectra/examples/narval_sun.s.gz")
+mu_cas_a_spectrum = sve.read_spectrum(sve_dir + "/input/spectra/examples/narval_mu_cas.s.gz")
 
 
-#--- Plotting (requires graphical interface) --------------------------------
+##--- Plotting (requires graphical interface) --------------------------------
 #logging.info("Plotting...")
 #sve.plot_spectra([sun_spectrum, mu_cas_a_spectrum])
 #sve.show_histogram(sun_spectrum['flux'])
@@ -54,17 +63,26 @@ wfilter = np.logical_and(mu_cas_a_spectrum['waveobs'] >= 480, \
 mu_cas_a_spectrum = mu_cas_a_spectrum[wfilter]
 
 
-#--- Radial Velocity determination and correction ---------------------------
-logging.info("Radial velocity determination...")
-# - Atomic
-vald_linelist_file = "input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
-linelist_atomic = sve.read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
+#--- Radial Velocity determination with linelist mask ---------------------------
+logging.info("Radial velocity determination with linelist mask...")
+# - Read atomic data
+vald_linelist_file = sve_dir + "input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
+linelist = sve.read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
+# - Filter lines that may be affected by telluric lines
+telluric_lines_file = sve_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
+linelist_telluric = sve.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
+dfilter = linelist_telluric['depth'] > np.percentile(linelist_telluric['depth'], 75)
+linelist_telluric = linelist_telluric[dfilter]
 
-xcoord, fluxes, errors, num_used_lines = sve.build_velocity_profile(mu_cas_a_spectrum, \
-                                            linelist_atomic, lower_velocity_limit=-200.0, \
+tfilter = sve.create_filter_for_regions_affected_by_tellurics(linelist['wave_peak'], \
+                            linelist_telluric, min_velocity=-30.0, max_velocity=30.0)
+linelist[tfilter]['depth'] = 0.0
+
+xcoord, fluxes, errors = sve.build_velocity_profile(mu_cas_a_spectrum, \
+                                            linelist=linelist, lower_velocity_limit=-200.0, \
                                             upper_velocity_limit=200.0, velocity_step=1.0)
 
-models, models_err = sve.modelize_velocity_profile(xcoord, fluxes, errors)
+models = sve.modelize_velocity_profile(xcoord, fluxes, errors)
 good = sve.select_good_velocity_profile_models(models, xcoord, fluxes)
 models = models[good]
 
@@ -72,6 +90,38 @@ models = models[good]
 spectroscopic_nary = str(len(models) >= 2)
 rv = np.round(models[0].mu(), 2) # km/s
 
+#--- Radial Velocity determination with template ---------------------------
+logging.info("Radial velocity determination with template...")
+# - Read atomic data
+template = sve.read_spectrum("input/spectra/synthetic/synth_5777.0_4.44_0.02_2.0.txt.gz")
+#template = sve.read_spectrum("input/spectra/examples/narval_sun.s.gz")
+
+# - Read telluric lines and use only the 25% of the deepest ones
+telluric_lines_file = sve_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
+linelist_telluric = sve.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
+dfilter = linelist_telluric['depth'] > np.percentile(linelist_telluric['depth'], 75)
+linelist_telluric = linelist_telluric[dfilter]
+
+# - Filter regions that may be affected by telluric lines
+tfilter = sve.create_filter_for_regions_affected_by_tellurics(template['waveobs'], \
+                            linelist_telluric, min_velocity=-30.0, max_velocity=30.0)
+template['flux'][tfilter] = 0.0
+
+
+xcoord, fluxes, errors = sve.build_velocity_profile(mu_cas_a_spectrum, \
+                                            template=template, lower_velocity_limit=-200.0, \
+                                            upper_velocity_limit=200.0, velocity_step=1.0)
+
+models = sve.modelize_velocity_profile(xcoord, fluxes, errors)
+good = sve.select_good_velocity_profile_models(models, xcoord, fluxes)
+models = models[good]
+
+# Number of models represent the number of components
+spectroscopic_nary = str(len(models) >= 2)
+rv = np.round(models[0].mu(), 2) # km/s
+
+
+#--- Radial Velocity correction ---------------------------
 logging.info("Radial velocity correction...")
 mu_cas_a_spectrum = sve.correct_velocity(mu_cas_a_spectrum, rv)
 
@@ -79,14 +129,14 @@ mu_cas_a_spectrum = sve.correct_velocity(mu_cas_a_spectrum, rv)
 #--- Barycentric Velocity determination -------------------------------------
 logging.info("Barycentric velocity determination...")
 # - Telluric
-telluric_linelist_file = "input/linelists/telluric/standard_atm_air_model.lst"
+telluric_linelist_file = sve_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
 linelist_telluric = sve.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
 
-xcoord, fluxes, num_used_lines = sve.build_velocity_profile(sun_spectrum, \
-                                        linelist_telluric, lower_velocity_limit=-100.0, \
+xcoord, fluxes, errors = sve.build_velocity_profile(sun_spectrum, \
+                                        linelist=linelist_telluric, lower_velocity_limit=-100.0, \
                                         upper_velocity_limit=100.0, velocity_step=0.5)
 
-models = sve.modelize_velocity_profile(xcoord, fluxes, only_one_peak=True)
+models = sve.modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=True)
 bv = np.round(models[0].mu(), 2) # km/s
 
 
@@ -128,7 +178,7 @@ normalized_sun_spectrum['err'] = sun_spectrum['err'] \
                                     / sun_continuum_model(sun_spectrum['waveobs'])
 
 # Or limit the fitting to given regions
-continuum_regions = sve.read_continuum_regions("input/regions/continuum_regions.txt")
+continuum_regions = sve.read_continuum_regions(sve_dir + "/input/regions/continuum_regions.txt")
 sun_continuum_model = sve.fit_continuum(sun_spectrum, segments=continuum_regions)
 
 
@@ -157,10 +207,10 @@ sve.write_continuum_regions(limited_sun_continuum_regions, "limited_sun_continuu
 #--- Find linemasks ---------------------------------------------------------
 logging.info("Finding line masks...")
 sun_continuum_model = sve.fit_continuum(sun_spectrum)
-vald_linelist_file = "input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
-chemical_elements_file = "input/abundances/chemical_elements_symbols.dat"
-molecules_file = "input/abundances/molecular_symbols.dat"
-telluric_linelist_file = "input/linelists/telluric/standard_atm_air_model.lst"
+vald_linelist_file = sve_dir + "/input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
+chemical_elements_file = sve_dir + "/input/abundances/chemical_elements_symbols.dat"
+molecules_file = sve_dir + "/input/abundances/molecular_symbols.dat"
+telluric_linelist_file = sve_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
 resolution = 80000
 smoothed_sun_spectrum = sve.convolve_spectrum(sun_spectrum, resolution)
 min_depth = 0.05
@@ -218,16 +268,30 @@ efilter = (sun_spectrum['err'] > err_base) & (sun_spectrum['err'] <= err_top)
 wfilter = np.logical_and(ffilter, efilter)
 sun_spectrum = sun_spectrum[wfilter]
 
+##--- Clean regions that may be affected by tellurics ----------------------------------------------
+logging.info("Cleaning tellurics...")
+
+telluric_lines_file = sve_dir + "input/linelists/telluric/standard_atm_air_model.lst"
+linelist_telluric = sve.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
+
+# - Filter regions that may be affected by telluric lines
+rv = 0.0
+min_vel = -30.0
+max_vel = +30.0
+dfilter = linelist_telluric['depth'] > np.percentile(linelist_telluric['depth'], 75) # (only the 25% of the deepest ones)
+tfilter = sve.create_filter_for_regions_affected_by_tellurics(sun_spectrum['waveobs'], \
+                            linelist_telluric[dfilter], min_velocity=-rv+min_vel, max_velocity=-rv+max_vel)
+#sun_spectrum = sun_spectrum[tfilter]
 
 ##--- Fit lines -------------------------------------------------------------
 logging.info("Fitting lines...")
-vald_linelist_file = "input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
-chemical_elements_file = "input/abundances/chemical_elements_symbols.dat"
-molecules_file = "input/abundances/molecular_symbols.dat"
-telluric_linelist_file = "input/linelists/telluric/standard_atm_air_model.lst"
+vald_linelist_file = sve_dir + "/input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
+chemical_elements_file = sve_dir + "/input/abundances/chemical_elements_symbols.dat"
+molecules_file = sve_dir + "/input/abundances/molecular_symbols.dat"
+telluric_linelist_file = sve_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
 vel_atomic = 0.00 # km/s
 vel_telluric = 17.79 # km/s
-line_regions = sve.read_line_regions("input/regions/line_masks.txt")
+line_regions = sve.read_line_regions(sve_dir + "/input/regions/line_masks.txt")
 linemasks = sve.fit_lines(line_regions, sun_spectrum, sun_continuum_model, vel_atomic, \
                             vel_telluric, vald_linelist_file, chemical_elements_file, \
                             molecules_file, telluric_linelist_file, discard_gaussian=False, \

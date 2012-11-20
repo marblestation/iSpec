@@ -24,7 +24,7 @@ read i;
 # Directory of the script
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Default exeuction
-SVE='/usr/bin/env python '$DIR'/interactive.py'
+SVE='/usr/bin/env python "'$DIR'/interactive.py"'
 
 if [ ! -f interactive.py ]; then
     platform=`uname`
@@ -36,12 +36,15 @@ if [ ! -f interactive.py ]; then
 fi
 
 case $i in
-1) $SVE $DIR/input/spectra/examples/harps_procyon.s.gz ;;
-2) $SVE $DIR/input/spectra/examples/narval_sun.s.gz ;;
-3) $SVE $DIR/input/spectra/examples/narval_mu_cas.s.gz ;;
-4) $SVE $DIR/input/spectra/examples/narval_arcturus.s.gz ;;
-5) $SVE $DIR/input/spectra/examples/espadons_mu_leo.s.gz ;;
-6) $SVE $DIR/input/spectra/examples/espadons_mu_leo.s.gz $DIR/input/spectra/examples/narval_arcturus.s.gz $DIR/input/spectra/examples/harps_procyon.s.gz $DIR/input/spectra/examples/narval_mu_cas.s.gz $DIR/input/spectra/examples/narval_sun.s.gz ;;
-7) $SVE --continuum=$DIR/input/regions/continuum_regions.txt --lines=$DIR/input/regions/line_masks.txt --segments=$DIR/input/regions/segments.txt $DIR/input/spectra/examples/narval_sun.s.gz ;;
+1) EXEC=$SVE' "'$DIR/input/spectra/examples/harps_procyon.s.gz'"';;
+2) EXEC=$SVE' "'$DIR/input/spectra/examples/narval_sun.s.gz'"' ;;
+3) EXEC=$SVE' "'$DIR/input/spectra/examples/narval_mu_cas.s.gz'"' ;;
+4) EXEC=$SVE' "'$DIR/input/spectra/examples/narval_arcturus.s.gz'"' ;;
+5) EXEC=$SVE' "'$DIR/input/spectra/examples/espadons_mu_leo.s.gz'"' ;;
+6) EXEC=$SVE' "'$DIR/input/spectra/examples/espadons_mu_leo.s.gz'" "'$DIR/input/spectra/examples/narval_arcturus.s.gz'" "'$DIR/input/spectra/examples/harps_procyon.s.gz'" "'$DIR/input/spectra/examples/narval_mu_cas.s.gz'" "'$DIR/input/spectra/examples/narval_sun.s.gz'"' ;;
+7) EXEC=$SVE' --continuum="'$DIR/input/regions/continuum_regions.txt'" --lines="'$DIR/input/regions/line_masks.txt'" --segments="'$DIR/input/regions/segments.txt'" "'$DIR/input/spectra/examples/narval_sun.s.gz'"' ;;
 8) exit
 esac
+
+eval $EXEC
+

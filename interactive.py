@@ -408,6 +408,15 @@ class Spectrum():
         self.velocity_profile_telluric_num_used_lines = None
         self.velocity_profile_telluric_rv_step = None
         self.velocity_profile_telluric_fwhm_correction = 0.0
+        self.velocity_profile_template_xcoord = None
+        self.velocity_profile_template_fluxes = None
+        self.velocity_profile_template_errors = None
+        self.velocity_profile_template_models = None
+        self.velocity_profile_template_num_used_lines = None
+        self.velocity_profile_template_rv_step = None
+        self.velocity_profile_template_snr = 0.0
+        self.velocity_profile_template = None
+        self.velocity_profile_internal_template = None
         self.snr = None
         self.linemasks = None # Linemasks that has been fitted and cross-matched with atomic & telluric data
         self.abundances = None
@@ -559,11 +568,14 @@ class SpectraFrame(wx.Frame):
         self.velocity_telluric_lower_limit = -100 # km/s
         self.velocity_telluric_upper_limit = 100 # km/s
         self.velocity_telluric_step = 0.5 # km/s
+        self.linelist_telluric = None
         self.velocity_atomic_lower_limit = -200 # km/s
         self.velocity_atomic_upper_limit = 200 # km/s
         self.velocity_atomic_step = 1.0 # km/s
         self.linelist_atomic = None
-        self.linelist_telluric = None
+        self.velocity_template_lower_limit = -200 # km/s
+        self.velocity_template_upper_limit = 200 # km/s
+        self.velocity_template_step = 1.0 # km/s
         self.modeled_layers_pack = {} # Synthesize spectrum (atmospheric models)
         self.find_continuum_regions_wave_step = 0.05
         self.find_continuum_regions_sigma = 0.001
@@ -799,11 +811,14 @@ class SpectraFrame(wx.Frame):
         m_expt = menu_edit.AppendMenu(-1, 'Determine velocity relative to...', menu_determine_velocity)
         self.spectrum_function_items.append(m_expt)
 
-        m_determine_rv = menu_determine_velocity.Append(-1, "&Atomic lines (radial velocity)", "Determine radial velocity using atomic lines")
+        m_determine_rv = menu_determine_velocity.Append(-1, "&Atomic line mask (radial velocity)", "Determine radial velocity using atomic lines")
         self.Bind(wx.EVT_MENU, self.on_determine_velocity_atomic, m_determine_rv)
 
-        m_determine_rv = menu_determine_velocity.Append(-1, "&Telluric lines  (barycentric velocity)", "Determine radial/barycentric velocity using telluric lines")
+        m_determine_rv = menu_determine_velocity.Append(-1, "&Telluric line mask  (barycentric velocity)", "Determine radial/barycentric velocity using telluric lines")
         self.Bind(wx.EVT_MENU, self.on_determine_velocity_telluric, m_determine_rv)
+
+        m_determine_rv = menu_determine_velocity.Append(-1, "&Template", "Determine radial/barycentric velocity using a spectrum template")
+        self.Bind(wx.EVT_MENU, self.on_determine_velocity_template, m_determine_rv)
         #####
         #####
         menu_correct_velocity = wx.Menu()
@@ -850,6 +865,9 @@ class SpectraFrame(wx.Frame):
         m_clean_spectrum = menu_edit.Append(-1, "Clean fluxes and errors", "Filter out measurements with fluxes and errors out of range")
         self.Bind(wx.EVT_MENU, self.on_clean_spectrum, m_clean_spectrum)
         self.spectrum_function_items.append(m_clean_spectrum)
+        m_clean_tellurics = menu_edit.Append(-1, "Clean telluric regions", "Filter out regions that may be affected by tellurics")
+        self.Bind(wx.EVT_MENU, self.on_clean_tellurics, m_clean_tellurics)
+        self.spectrum_function_items.append(m_clean_tellurics)
         m_cut_spectrum = menu_edit.Append(-1, "Wavelength range reduction", "Reduce the wavelength range")
         self.Bind(wx.EVT_MENU, self.on_cut_spectrum, m_cut_spectrum)
         self.spectrum_function_items.append(m_cut_spectrum)
@@ -2039,8 +2057,10 @@ class SpectraFrame(wx.Frame):
             dlg.Destroy()
             return
 
+        filter_by_flux = dlg.filter_by_flux.GetValue()
         flux_base = self.text2float(dlg.flux_base.GetValue(), 'Base flux value is not a valid one.')
         flux_top = self.text2float(dlg.flux_top.GetValue(), 'Top flux value is not a valid one.')
+        filter_by_error = dlg.filter_by_error.GetValue()
         err_base = self.text2float(dlg.err_base.GetValue(), 'Base error value is not a valid one.')
         err_top = self.text2float(dlg.err_top.GetValue(), 'Top error value is not a valid one.')
         dlg.Destroy()
@@ -2065,10 +2085,92 @@ class SpectraFrame(wx.Frame):
         # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
         self.remove_fitted_lines()
 
-        ffilter = (self.active_spectrum.data['flux'] > flux_base) & (self.active_spectrum.data['flux'] <= flux_top)
-        efilter = (self.active_spectrum.data['err'] > err_base) & (self.active_spectrum.data['err'] <= err_top)
-        wfilter = np.logical_and(ffilter, efilter)
+        if filter_by_flux and filter_by_error:
+            ffilter = (self.active_spectrum.data['flux'] > flux_base) & (self.active_spectrum.data['flux'] <= flux_top)
+            efilter = (self.active_spectrum.data['err'] > err_base) & (self.active_spectrum.data['err'] <= err_top)
+            wfilter = np.logical_and(ffilter, efilter)
+        elif filter_by_flux:
+            wfilter = (self.active_spectrum.data['flux'] > flux_base) & (self.active_spectrum.data['flux'] <= flux_top)
+        elif filter_by_error:
+            wfilter = (self.active_spectrum.data['err'] > err_base) & (self.active_spectrum.data['err'] <= err_top)
+        else:
+            wfilter = np.logical_not(np.isnan(self.active_spectrum.data['err']))
+
+        if len(self.active_spectrum.data[wfilter]) == 0:
+            msg = "This action cannot be done since it would produce a spectrum without measurements."
+            title = "Wrong flux/error ranges"
+            self.error(title, msg)
+            self.flash_status_message("Bad value.")
+            return
+
         self.active_spectrum.data = self.active_spectrum.data[wfilter]
+        self.active_spectrum.not_saved = True
+        self.draw_active_spectrum()
+
+        self.update_title()
+        self.update_scale()
+        self.flash_status_message("Spectrum cleaned.")
+
+    def on_clean_tellurics(self, event):
+        if not self.check_active_spectrum_exists():
+            return
+        if self.check_operation_in_progress():
+            return
+
+        rv = self.active_spectrum.velocity_atomic
+        dlg = CleanTelluricsDialog(self, -1, "Clean fluxes and errors", rv, -30.0, 30.0, 0.02)
+        dlg.ShowModal()
+
+        if not dlg.action_accepted:
+            dlg.Destroy()
+            return
+
+        rv = self.text2float(dlg.rv.GetValue(), 'Radial velocity value is not a valid one.')
+        min_vel = self.text2float(dlg.min_vel.GetValue(), 'Minimum velocity value is not a valid one.')
+        max_vel = self.text2float(dlg.max_vel.GetValue(), 'Maximum velocity value is not a valid one.')
+        min_depth = self.text2float(dlg.min_depth.GetValue(), 'Minimum tellurics depth value is not a valid one.')
+        dlg.Destroy()
+
+        if rv == None or min_depth == None or min_vel == None or max_vel == None or min_vel >= max_vel:
+            self.flash_status_message("Bad value.")
+            return
+
+        # Check if spectrum is saved
+        if self.active_spectrum.not_saved:
+            msg = "The active spectrum has not been saved, are you sure you want to clean it now anyway?"
+            title = "Changes not saved"
+            if not self.question(title, msg):
+                return
+
+        self.status_message("Cleaning spectrum...")
+
+        # Remove current continuum from plot if exists
+        self.remove_continuum_spectrum()
+
+        # Remove current drawn fitted lines if they exist
+        # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
+        self.remove_fitted_lines()
+
+        if self.linelist_telluric == None:
+            telluric_lines_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
+            self.linelist_telluric = sve.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
+
+        # - Filter regions that may be affected by telluric lines
+        #dfilter = self.linelist_telluric['depth'] > np.percentile(self.linelist_telluric['depth'], 75) # (only the 25% of the deepest ones)
+        dfilter = self.linelist_telluric['depth'] > min_depth
+        tfilter = sve.create_filter_for_regions_affected_by_tellurics(self.active_spectrum.data['waveobs'], \
+                                    self.linelist_telluric[dfilter], min_velocity=-rv+min_vel, max_velocity=-rv+max_vel)
+
+        if len(self.active_spectrum.data[tfilter]) == 0:
+            msg = "This action cannot be done since it would produce a spectrum without measurements."
+            title = "Wrong ranges"
+            self.error(title, msg)
+            self.flash_status_message("Bad value.")
+            return
+        #self.active_spectrum.data['flux'][tfilter] = 0.0
+        #self.active_spectrum.data['err'][tfilter] = 0.0
+        self.active_spectrum.data = self.active_spectrum.data[~tfilter]
+
         self.active_spectrum.not_saved = True
         self.draw_active_spectrum()
 
@@ -2565,8 +2667,9 @@ class SpectraFrame(wx.Frame):
                 del region.line_plot_id[self.active_spectrum]
                 del region.line_model[self.active_spectrum]
                 del region.line_extra[self.active_spectrum]
-        self.active_spectrum.linemasks = None
-        self.active_spectrum.abundances = None
+        if self.active_spectrum != None:
+            self.active_spectrum.linemasks = None
+            self.active_spectrum.abundances = None
 
     def draw_fitted_lines(self):
         for region in self.region_widgets["lines"]:
@@ -3073,36 +3176,53 @@ max_wave_range=max_wave_range)
             self.remove_drawn_errors_spectra()
 
     def on_determine_velocity_atomic(self, event):
-        self.on_determine_velocity(event, relative_to_atomic_data = True)
+        self.on_determine_velocity(event, relative_to_atomic_data = True, relative_to_telluric_data = False, relative_to_template=False)
 
     def on_determine_velocity_telluric(self, event):
-        self.on_determine_velocity(event, relative_to_atomic_data = False)
+        self.on_determine_velocity(event, relative_to_atomic_data = False, relative_to_telluric_data = True, relative_to_template=False)
 
-    def on_determine_velocity(self, event, relative_to_atomic_data = True, show_previous_results=True):
+    def on_determine_velocity_template(self, event):
+        self.on_determine_velocity(event, relative_to_atomic_data = False, relative_to_telluric_data = False, relative_to_template=True)
+
+    def on_determine_velocity(self, event, relative_to_atomic_data = True, relative_to_telluric_data = False, relative_to_template=False, show_previous_results=True):
         # Check if velocity has been previously determined and show those results
-        if show_previous_results and ((relative_to_atomic_data and self.active_spectrum.velocity_profile_atomic_models != None) or (not relative_to_atomic_data and self.active_spectrum.velocity_profile_telluric_models != None)) :
+        if show_previous_results and ((relative_to_atomic_data and self.active_spectrum.velocity_profile_atomic_models != None) \
+                or (relative_to_telluric_data and self.active_spectrum.velocity_profile_telluric_models != None) \
+                or (relative_to_template and self.active_spectrum.velocity_profile_template_models != None)) :
             if relative_to_atomic_data:
                 xcoord = self.active_spectrum.velocity_profile_atomic_xcoord
                 fluxes = self.active_spectrum.velocity_profile_atomic_fluxes
                 errors = self.active_spectrum.velocity_profile_atomic_errors
                 models = self.active_spectrum.velocity_profile_atomic_models
-                num_used_lines = self.active_spectrum.velocity_profile_atomic_num_used_lines
                 velocity_step = self.active_spectrum.velocity_profile_atomic_rv_step
                 telluric_fwhm = 0.0
                 snr = self.active_spectrum.velocity_profile_atomic_snr
+                template = None
                 title = "Velocity profile relative to atomic lines"
-            else:
+            elif relative_to_telluric_data:
                 xcoord = self.active_spectrum.velocity_profile_telluric_xcoord
                 fluxes = self.active_spectrum.velocity_profile_telluric_fluxes
                 errors = self.active_spectrum.velocity_profile_telluric_errors
                 models = self.active_spectrum.velocity_profile_telluric_models
-                num_used_lines = self.active_spectrum.velocity_profile_telluric_num_used_lines
                 velocity_step = self.active_spectrum.velocity_profile_telluric_rv_step
                 telluric_fwhm = self.active_spectrum.velocity_profile_telluric_fwhm_correction
                 snr = 0.0
+                template = None
                 title = "Velocity profile relative to telluric lines"
+            elif relative_to_template:
+                xcoord = self.active_spectrum.velocity_profile_template_xcoord
+                fluxes = self.active_spectrum.velocity_profile_template_fluxes
+                errors = self.active_spectrum.velocity_profile_template_errors
+                models = self.active_spectrum.velocity_profile_template_models
+                velocity_step = self.active_spectrum.velocity_profile_template_rv_step
+                telluric_fwhm = 0.0
+                snr = self.active_spectrum.velocity_profile_template_snr
+                template = self.active_spectrum.velocity_profile_template
+                title = "Velocity profile relative to template"
+            else:
+                raise Exception("Velocity should be determined relative to something!")
 
-            dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, errors, models, num_used_lines, velocity_step, telluric_fwhm, snr=snr)
+            dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, errors, models, velocity_step, telluric_fwhm, snr=snr, template=template)
             dlg.ShowModal()
             recalculate = dlg.recalculate
             dlg.Destroy()
@@ -3117,13 +3237,28 @@ max_wave_range=max_wave_range)
             velocity_lower_limit = self.velocity_atomic_lower_limit
             velocity_upper_limit = self.velocity_atomic_upper_limit
             velocity_step = self.velocity_atomic_step
-        else:
+            templates = []
+        elif relative_to_telluric_data:
             linelist = self.linelist_telluric
             velocity_lower_limit = self.velocity_telluric_lower_limit
             velocity_upper_limit = self.velocity_telluric_upper_limit
             velocity_step = self.velocity_telluric_step
+            templates = []
+        elif relative_to_template:
+            linelist = self.linelist_atomic
+            velocity_lower_limit = self.velocity_atomic_lower_limit
+            velocity_upper_limit = self.velocity_atomic_upper_limit
+            velocity_step = self.velocity_atomic_step
+            templates = ["[Internal template]"]
+            # Add as many options as spectra
+            for i in np.arange(len(self.spectra)):
+                if self.spectra[i] == None:
+                    continue
+                templates.append(self.spectra[i].name)
+        else:
+            raise Exception("Velocity should be determined relative to something!")
 
-        dlg = DetermineVelocityDialog(self, -1, "Velocity determination", rv_lower_limit=velocity_lower_limit, rv_upper_limit=velocity_upper_limit, rv_step=velocity_step)
+        dlg = DetermineVelocityDialog(self, -1, "Velocity determination", rv_lower_limit=velocity_lower_limit, rv_upper_limit=velocity_upper_limit, rv_step=velocity_step, templates=templates)
         dlg.ShowModal()
 
         if not dlg.action_accepted:
@@ -3133,6 +3268,8 @@ max_wave_range=max_wave_range)
         rv_lower_limit = self.text2float(dlg.rv_lower_limit.GetValue(), 'Velocity lower limit is not a valid one.')
         rv_upper_limit = self.text2float(dlg.rv_upper_limit.GetValue(), 'Velocity upper limit is not a valid one.')
         rv_step = self.text2float(dlg.rv_step.GetValue(), 'Velocity step is not a valid one.')
+        if relative_to_template:
+            self.active_spectrum.velocity_profile_template = dlg.templates.GetValue()
         dlg.Destroy()
 
         if rv_lower_limit == None or rv_upper_limit == None or rv_step == None:
@@ -3155,13 +3292,19 @@ max_wave_range=max_wave_range)
             self.velocity_atomic_lower_limit = rv_lower_limit
             self.velocity_atomic_upper_limit = rv_upper_limit
             self.velocity_atomic_step = rv_step
-        else:
+        elif relative_to_telluric_data:
             self.velocity_telluric_lower_limit = rv_lower_limit
             self.velocity_telluric_upper_limit = rv_upper_limit
             self.velocity_telluric_step = rv_step
+        elif relative_to_template:
+            self.velocity_atomic_lower_limit = rv_lower_limit
+            self.velocity_atomic_upper_limit = rv_upper_limit
+            self.velocity_atomic_step = rv_step
+        else:
+            raise Exception("Velocity should be determined relative to something!")
 
         self.operation_in_progress = True
-        thread = threading.Thread(target=self.on_determine_velocity_thread, args=(relative_to_atomic_data,))
+        thread = threading.Thread(target=self.on_determine_velocity_thread, args=(relative_to_atomic_data, relative_to_telluric_data, relative_to_template))
         thread.setDaemon(True)
         thread.start()
 
@@ -3193,7 +3336,7 @@ max_wave_range=max_wave_range)
         return linelist
 
 
-    def on_determine_velocity_thread(self, relative_to_atomic_data):
+    def on_determine_velocity_thread(self, relative_to_atomic_data, relative_to_telluric_data, relative_to_template):
         wx.CallAfter(self.status_message, "Determining velocity...")
 
         if relative_to_atomic_data:
@@ -3204,7 +3347,7 @@ max_wave_range=max_wave_range)
             velocity_lower_limit = self.velocity_atomic_lower_limit
             velocity_upper_limit = self.velocity_atomic_upper_limit
             velocity_step = self.velocity_atomic_step
-        else:
+        elif relative_to_telluric_data:
             if self.linelist_telluric == None:
                 telluric_lines_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
                 self.linelist_telluric = sve.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
@@ -3212,21 +3355,60 @@ max_wave_range=max_wave_range)
             velocity_upper_limit = self.velocity_telluric_upper_limit
             velocity_step = self.velocity_telluric_step
             linelist = self.filter_telluric_lines(self.linelist_telluric, self.active_spectrum.data, velocity_lower_limit, velocity_upper_limit)
-
-        xcoord, fluxes, errors, num_used_lines = sve.build_velocity_profile(self.active_spectrum.data, linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, frame=self)
-        wx.CallAfter(self.on_determine_velocity_finish, xcoord, fluxes, errors, relative_to_atomic_data, num_used_lines, linelist)
-
-    def on_determine_velocity_finish(self, xcoord, fluxes, errors, relative_to_atomic_data, num_used_lines, linelist):
-        # Modelize
-        if relative_to_atomic_data:
-            models, models_err = sve.modelize_velocity_profile(xcoord, fluxes, errors)
-            accept = sve.select_good_velocity_profile_models(models, xcoord, fluxes)
-            if len(models[accept]) == 0:
-                models = models[:1]
-            else:
-                models = models[accept]
+        elif relative_to_template:
+            linelist = None
+            velocity_lower_limit = self.velocity_template_lower_limit
+            velocity_upper_limit = self.velocity_template_upper_limit
+            velocity_step = self.velocity_template_step
         else:
-            models, models_err = sve.modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=True)
+            raise Exception("Velocity should be determined relative to something!")
+
+        if relative_to_template:
+            template = self.active_spectrum.velocity_profile_template
+            if template == "[Internal template]":
+                # Internal template (solar type)
+                if self.active_spectrum.velocity_profile_internal_template == None:
+                    self.active_spectrum.velocity_profile_internal_template = sve.read_spectrum(resource_path("input/spectra/synthetic/synth_5777.0_4.44_0.02_2.0.txt.gz"))
+                    if self.linelist_telluric == None:
+                        telluric_lines_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
+                        self.linelist_telluric = sve.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
+
+                    # - Filter regions that may be affected by telluric lines
+                    #   (only the 25% of the deepest ones)
+                    dfilter = self.linelist_telluric['depth'] > np.percentile(self.linelist_telluric['depth'], 75)
+                    tfilter = sve.create_filter_for_regions_affected_by_tellurics(self.active_spectrum.velocity_profile_internal_template['waveobs'], \
+                                                self.linelist_telluric[dfilter], min_velocity=-30.0, max_velocity=30.0)
+                    self.active_spectrum.velocity_profile_internal_template['flux'][tfilter] = 0.0
+                template_spectrum = self.active_spectrum.velocity_profile_internal_template
+            else:
+                # Add as many options as spectra
+                for i in np.arange(len(self.spectra)):
+                    if self.spectra[i] == None:
+                        continue
+                    if self.spectra[i].name == template:
+                        template_spectrum = self.spectra[i].data
+                        break
+            xcoord, fluxes, errors = sve.build_velocity_profile(self.active_spectrum.data, template=template_spectrum, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, frame=self)
+        else:
+            xcoord, fluxes, errors = sve.build_velocity_profile(self.active_spectrum.data, linelist=linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, frame=self)
+
+        wx.CallAfter(self.on_determine_velocity_finish, xcoord, fluxes, errors, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, linelist)
+
+    def on_determine_velocity_finish(self, xcoord, fluxes, errors, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, linelist):
+        # Modelize
+        if relative_to_atomic_data or relative_to_template:
+            models = sve.modelize_velocity_profile(xcoord, fluxes, errors)
+            if len(models) > 1:
+                accept = sve.select_good_velocity_profile_models(models, xcoord, fluxes)
+                if len(models[accept]) == 0:
+                    models = models[:1]
+                else:
+                    models = models[accept]
+        else:
+            models = sve.modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=True)
+        #import ipdb
+        #ipdb.set_trace()
+
 
         if len(models) == 0:
             fwhm = 0.0
@@ -3239,9 +3421,9 @@ max_wave_range=max_wave_range)
             # Resolving power
             c = 299792458.0 # m/s
             fwhm = models[0].fwhm()[0] # km/s (because xcoord is already velocity)
-            if relative_to_atomic_data:
+            if relative_to_atomic_data or relative_to_template:
                 telluric_fwhm = 0.0
-                R = np.int(c/(1000.0*np.round(fwhm, 2)))
+                R = np.int(c/(1000.0*fwhm))
                 ##### Estimate SNR for the lines and nearby regions
                 ##### It is only of interest in case of atomic lines
                 # Build the fluxes for the composite models
@@ -3283,12 +3465,12 @@ max_wave_range=max_wave_range)
             self.active_spectrum.velocity_profile_atomic_fluxes = fluxes
             self.active_spectrum.velocity_profile_atomic_errors = errors
             self.active_spectrum.velocity_profile_atomic_models = models
-            self.active_spectrum.velocity_profile_atomic_num_used_lines = num_used_lines
             self.active_spectrum.velocity_profile_atomic_rv_step = self.velocity_atomic_step
             self.active_spectrum.velocity_profile_atomic_snr = snr
             velocity_step = self.velocity_atomic_step
+            template = None
             title = "Velocity profile relative to atomic lines"
-        else:
+        elif relative_to_telluric_data:
             self.active_spectrum.velocity_telluric = velocity
             self.barycentric_vel = velocity # So it will appear in the barycentric vel. correction dialog
             if R != 0:
@@ -3297,18 +3479,29 @@ max_wave_range=max_wave_range)
             self.active_spectrum.velocity_profile_telluric_fluxes = fluxes
             self.active_spectrum.velocity_profile_telluric_errors = errors
             self.active_spectrum.velocity_profile_telluric_models = models
-            self.active_spectrum.velocity_profile_telluric_num_used_lines = num_used_lines
             self.active_spectrum.velocity_profile_telluric_rv_step = self.velocity_atomic_step
             self.active_spectrum.velocity_profile_telluric_fwhm_correction = telluric_fwhm
             velocity_step = self.velocity_telluric_step
+            template = None
             title = "Velocity profile relative to telluric lines"
+        elif relative_to_template:
+            self.active_spectrum.velocity_template = velocity
+            self.active_spectrum.velocity_profile_template_xcoord = xcoord
+            self.active_spectrum.velocity_profile_template_fluxes = fluxes
+            self.active_spectrum.velocity_profile_template_errors = errors
+            self.active_spectrum.velocity_profile_template_models = models
+            self.active_spectrum.velocity_profile_template_rv_step = self.velocity_template_step
+            self.active_spectrum.velocity_profile_template_snr = snr
+            velocity_step = self.velocity_template_step
+            template = self.active_spectrum.velocity_profile_template
+            title = "Velocity profile relative to template"
 
-        dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, errors, models, num_used_lines, velocity_step, telluric_fwhm=telluric_fwhm, snr=snr)
+        dlg = VelocityProfileDialog(self, -1, title, xcoord, fluxes, errors, models, velocity_step, telluric_fwhm=telluric_fwhm, snr=snr, template=template)
         dlg.ShowModal()
         recalculate = dlg.recalculate
         dlg.Destroy()
         if recalculate:
-            self.on_determine_velocity(None, relative_to_atomic_data=relative_to_atomic_data, show_previous_results=False)
+            self.on_determine_velocity(None, relative_to_atomic_data=relative_to_atomic_data, relative_to_telluric_data = relative_to_telluric_data, relative_to_template = relative_to_template, show_previous_results=False)
 
 
     def on_correct_rv(self, event):

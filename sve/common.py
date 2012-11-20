@@ -222,7 +222,7 @@ def find_local_max_values(x):
         while j >= 0 and x[j] == x[i]:
             j -= 1
 
-        if j < 0 or x[j] > x[i]:
+        if (j < 0 or x[j] > x[i]) and i > 0:
             is_max = False
 
         # right side
@@ -231,7 +231,7 @@ def find_local_max_values(x):
             # If value is equal, search for the next different value
             while j < n and x[j] == x[i]:
                 j += 1
-            if j >= n or x[j] > x[i]:
+            if (j >= n or x[j] > x[i]) and i < n-1:
                 is_max = False
 
         if is_max:

@@ -391,7 +391,7 @@ class CorrectVelocityDialog(wx.Dialog):
         self.EndModal(wx.ID_OK)
 
 class DetermineVelocityDialog(wx.Dialog):
-    def __init__(self, parent, id, title, rv_upper_limit, rv_lower_limit, rv_step):
+    def __init__(self, parent, id, title, rv_upper_limit, rv_lower_limit, rv_step, templates):
         wx.Dialog.__init__(self, parent, id, title)
 
         self.action_accepted = False
@@ -435,6 +435,21 @@ class DetermineVelocityDialog(wx.Dialog):
         self.hbox.Add(self.rv_step, 0, border=3, flag=flags)
 
         self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        ### Template
+        if len(templates) > 0:
+            self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+            self.text_templates = wx.StaticText(self, -1, "Cross-correlate with: ", style=wx.ALIGN_LEFT)
+            self.templates = wx.ComboBox (self, wx.ID_ANY, templates[0], choices=templates, style=wx.CB_READONLY)
+
+            self.hbox.AddSpacer(10)
+            self.hbox.Add(self.text_templates, 0, border=3, flag=flags)
+            self.hbox.Add(self.templates, 0, border=3, flag=flags)
+
+            self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+            self.vbox.AddSpacer(30)
 
         sizer =  self.CreateButtonSizer(wx.CANCEL|wx.OK)
         self.vbox.Add(sizer, 0, wx.ALIGN_CENTER)
@@ -528,7 +543,7 @@ class DetermineBarycentricCorrectionDialog(wx.Dialog):
 
 
 class VelocityProfileDialog(wx.Dialog):
-    def __init__(self, parent, id, title, xcoord, fluxes, errors, models, num_used_lines, rv_step, telluric_fwhm=0.0, snr=0.0):
+    def __init__(self, parent, id, title, xcoord, fluxes, errors, models, rv_step, telluric_fwhm=0.0, snr=0.0, template=None):
         wx.Dialog.__init__(self, parent, id, title, size=(600, 600))
 
         self.recalculate = False
@@ -608,19 +623,17 @@ class VelocityProfileDialog(wx.Dialog):
             self.stats.InsertStringItem(num_items, "Estimated local SNR")
             self.stats.SetStringItem(num_items, 1, str(np.round(snr, 2)))
             num_items += 1
-        for model in models:
+        if template != None:
+            self.stats.InsertStringItem(num_items, "Template")
+            self.stats.SetStringItem(num_items, 1, template)
+            num_items += 1
+        for i, model in enumerate(models):
             self.stats.InsertStringItem(num_items, "Mean (km/s)")
             self.stats.SetStringItem(num_items, 1, str(np.round(model.mu(), 2)))
             num_items += 1
 
-            used_measures = len(model.residuals())
-            tipical_error = model.sig() / used_measures
-            df = used_measures - 1
-            interval_confiance = 0.99
-            tstudent = stats.t(df).ppf(interval_confiance + (1.-interval_confiance)/2.) # Confiance of 99% (let out 0.005 at each tail)
-            margin_error = tipical_error * tstudent # The true model.mu() is in the interval mu +/- margin_error with a confiance of 99%
-            self.stats.InsertStringItem(num_items, "Min. error with 99% confiance (+/- km/s)")
-            self.stats.SetStringItem(num_items, 1, str(np.round(margin_error, 2)))
+            self.stats.InsertStringItem(num_items, "Min. error (+/- km/s)")
+            self.stats.SetStringItem(num_items, 1, str(np.round(rv_step/2, 4)))
             num_items += 1
 
             self.stats.InsertStringItem(num_items, "Baseline")
@@ -632,8 +645,18 @@ class VelocityProfileDialog(wx.Dialog):
             self.stats.InsertStringItem(num_items, "Sigma (km/s)")
             self.stats.SetStringItem(num_items, 1, str(np.round(model.sig(), 2)))
             num_items += 1
+
+            try:
+                # If model is VoigtModel
+                self.stats.InsertStringItem(num_items, "Gamma")
+                self.stats.SetStringItem(num_items, 1, str(np.round(model.gamma(), 2)))
+                num_items += 1
+            except AttributeError:
+                # model is GaussianModel
+                pass
+
             fwhm = model.fwhm()[0] # km/s (because xcoord is already velocity)
-            self.stats.InsertStringItem(num_items, "FWHM (km/s)")
+            self.stats.InsertStringItem(num_items, "Measured FWHM (km/s)")
             self.stats.SetStringItem(num_items, 1, str(np.round(fwhm, 2)))
             num_items += 1
             if telluric_fwhm != 0:
@@ -645,9 +668,10 @@ class VelocityProfileDialog(wx.Dialog):
                 num_items += 1
             self.stats.InsertStringItem(num_items, "Estimated resolving power (R)")
             c = 299792458.0 # m/s
-            R = np.int(c/(1000.0*np.round(fwhm - telluric_fwhm, 2)))
+            R = np.int(c/(1000.0*fwhm - telluric_fwhm))
             self.stats.SetStringItem(num_items, 1, str(np.round(R, 2)))
             num_items += 1
+
             rms = model.rms
             self.stats.InsertStringItem(num_items, "RMS")
             self.stats.SetStringItem(num_items, 1, str(np.round(rms, 5)))
@@ -655,8 +679,6 @@ class VelocityProfileDialog(wx.Dialog):
             self.stats.InsertStringItem(num_items, "-------------------------------------------------------")
             self.stats.SetStringItem(num_items, 1, "---------------")
             num_items += 1
-        self.stats.InsertStringItem(num_items, "Number of lines used")
-        self.stats.SetStringItem(num_items, 1, str(num_used_lines))
 
     def on_no(self, event):
         self.recalculate = False
@@ -675,6 +697,16 @@ class CleanSpectrumDialog(wx.Dialog):
         self.vbox = wx.BoxSizer(wx.VERTICAL)
 
         flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
+
+        ### Flux filter
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.filter_by_flux = wx.CheckBox(self, -1, 'Filter by flux', style=wx.ALIGN_LEFT)
+        self.filter_by_flux.SetValue(True)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.filter_by_flux, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
 
         ### flux lower limit
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
@@ -700,6 +732,16 @@ class CleanSpectrumDialog(wx.Dialog):
 
         self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
 
+        ### Error filter
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.filter_by_error = wx.CheckBox(self, -1, 'Filter by error', style=wx.ALIGN_LEFT)
+        self.filter_by_error.SetValue(True)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.filter_by_error, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
         ### err lower limit
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
 
@@ -721,6 +763,78 @@ class CleanSpectrumDialog(wx.Dialog):
         self.hbox.AddSpacer(10)
         self.hbox.Add(self.text_err_top, 0, border=3, flag=flags)
         self.hbox.Add(self.err_top, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        self.vbox.AddSpacer(10)
+
+        sizer =  self.CreateButtonSizer(wx.CANCEL|wx.OK)
+        self.vbox.Add(sizer, 0, wx.ALIGN_CENTER)
+        self.vbox.AddSpacer(10)
+        self.SetSizer(self.vbox)
+        self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
+
+
+    def on_ok(self, event):
+        self.action_accepted = True
+        self.EndModal(wx.ID_OK)
+
+class CleanTelluricsDialog(wx.Dialog):
+    def __init__(self, parent, id, title, rv, min_vel, max_vel, min_depth):
+        wx.Dialog.__init__(self, parent, id, title)
+
+        self.action_accepted = False
+
+        self.vbox = wx.BoxSizer(wx.VERTICAL)
+
+        flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
+
+
+        ### RV
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_rv = wx.StaticText(self, -1, "Radial velocity: ", style=wx.ALIGN_LEFT)
+        self.rv = wx.TextCtrl(self, -1, str(rv),  style=wx.TE_RIGHT)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_rv, 0, border=3, flag=flags)
+        self.hbox.Add(self.rv, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        ### Min vel
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_min_vel = wx.StaticText(self, -1, "Minimum velocity: ", style=wx.ALIGN_LEFT)
+        self.min_vel = wx.TextCtrl(self, -1, str(min_vel),  style=wx.TE_RIGHT)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_min_vel, 0, border=3, flag=flags)
+        self.hbox.Add(self.min_vel, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        ### Max vel
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_max_vel = wx.StaticText(self, -1, "Maximum velocity: ", style=wx.ALIGN_LEFT)
+        self.max_vel = wx.TextCtrl(self, -1, str(max_vel),  style=wx.TE_RIGHT)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_max_vel, 0, border=3, flag=flags)
+        self.hbox.Add(self.max_vel, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        ### Min depth
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_min_depth = wx.StaticText(self, -1, "Minimum tellurics depth: ", style=wx.ALIGN_LEFT)
+        self.min_depth = wx.TextCtrl(self, -1, str(min_depth),  style=wx.TE_RIGHT)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_min_depth, 0, border=3, flag=flags)
+        self.hbox.Add(self.min_depth, 0, border=3, flag=flags)
 
         self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
 
@@ -938,7 +1052,7 @@ class SendSpectrumDialog(wx.Dialog):
         flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
 
 
-        ### Model atmosphere
+        ### Application
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
 
         self.text_application = wx.StaticText(self, -1, "Application: ", style=wx.ALIGN_LEFT)

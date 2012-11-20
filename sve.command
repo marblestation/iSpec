@@ -1,8 +1,8 @@
 #!/bin/bash
 # Directory of the script
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-# Default exeuction
-SVE='/usr/bin/env python '$DIR'/interactive.py'
+# Default execution
+SVE='/usr/bin/env python "'$DIR'/interactive.py"'
 
 if [ ! -f interactive.py ]; then
     platform=`uname`
@@ -13,4 +13,4 @@ if [ ! -f interactive.py ]; then
     fi
 fi
 
-$SVE "$@"
+eval $SVE "$@"

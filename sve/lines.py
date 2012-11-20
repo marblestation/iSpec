@@ -31,6 +31,7 @@ from spectrum import *
 import matplotlib.pyplot as plt
 from pymodelfit import UniformKnotSplineModel
 from pymodelfit import UniformCDFKnotSplineModel
+from pymodelfit import LinearModel
 from mpfitmodels import GaussianModel
 from mpfitmodels import VoigtModel
 import log
@@ -235,9 +236,10 @@ def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None):
     parinfo[2]['limited'] = [True, True]
     parinfo[2]['limits'] = [0., x[-1] - x[0]]
     parinfo[3]['value'] = mu # Peak only within the spectrum slice
-    parinfo[3]['limited'] = [True, True]
-    #parinfo[3]['limits'] = [x[0], x[-1]]
-    parinfo[3]['limits'] = [mu - 0.005, mu + 0.005]
+    parinfo[3]['fixed'] = True
+    #parinfo[3]['limited'] = [True, True]
+    ##parinfo[3]['limits'] = [x[0], x[-1]]
+    #parinfo[3]['limits'] = [mu - 0.005, mu + 0.005]
 
     # If there are only 3 data point, fix 'mu'
     # - if not, the fit will fail with an exception because there are not
@@ -281,9 +283,10 @@ def __fit_voigt(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=Non
     parinfo[2]['limited'] = [True, True]
     parinfo[2]['limits'] = [0., x[-1] - x[0]]
     parinfo[3]['value'] = mu # Peak only within the spectrum slice
-    parinfo[3]['limited'] = [True, True]
-    #parinfo[3]['limits'] = [x[0], x[-1]]
-    parinfo[3]['limits'] = [mu - 0.005, mu + 0.005]
+    parinfo[3]['fixed'] = True
+    #parinfo[3]['limited'] = [True, True]
+    ##parinfo[3]['limits'] = [x[0], x[-1]]
+    #parinfo[3]['limits'] = [mu - 0.005, mu + 0.005]
     parinfo[4]['value'] = gamma # Only positives (not zero, otherwise its a gaussian) and small (for nm, it should be <= 0.01 aprox but I leave it in relative terms considering the spectrum slice)
     parinfo[4]['limited'] = [True, True]
     parinfo[4]['limits'] = [0.001, x[-1] - x[0]]
@@ -355,10 +358,13 @@ def __remove_consecutives_features(features):
     Remove features (i.e. peaks or base points) that are consecutive, it makes
     no sense to have two peaks or two base points together.
     """
-    duplicated_features = (np.abs(features[:-1] - features[1:]) == 1)
-    duplicated_features = np.array([False] + duplicated_features.tolist())
-    cleaned_features = features[~duplicated_features]
-    return cleaned_features
+    if len(features) >= 2:
+        duplicated_features = (np.abs(features[:-1] - features[1:]) == 1)
+        duplicated_features = np.array([False] + duplicated_features.tolist())
+        cleaned_features = features[~duplicated_features]
+        return cleaned_features
+    else:
+        return features
 
 
 def __detect_false_and_noisy_features(spectrum, linemasks):
@@ -412,6 +418,9 @@ def __assert_structure(xcoord, yvalues, peaks, base_points):
     - The first and last feature is a base point: base_points[0] < peaks[0] < base_points[1] < ... < base_points[n-1] < peaks[n-1] < base_points[n] where n = len(base_points)
     - len(base_points) = len(peaks) + 1
     """
+    if len(peaks) == 0 or len(base_points) == 0:
+        return [], []
+
     # Limit the base_points array to the ones that are useful, considering that
     # the first and last peak are always removed
     first_wave_peak = xcoord[peaks][0]
@@ -544,7 +553,7 @@ def find_linemasks(spectrum, continuum_model, vald_linelist_file, chemical_eleme
     # - len(base_points) = len(peaks) + 1
     peaks, base_points = __find_peaks_and_base_points(smoothed_spectrum['waveobs'], smoothed_spectrum['flux'])
     # If no peaks found, just finnish
-    if len(peaks) == 0:
+    if len(peaks) == 0 or len(base_points) == 0:
         return None
 
     # Depth of the peak with respect to the total continuum in % over the total continuum
@@ -1030,11 +1039,16 @@ def __create_cross_correlation_mask(data_wave, data_value, wave_grid, velocity_s
                 i += 1
             mask_value = 0.0
             while i < total_points and data_wave[i] >= wave_base and data_wave[i] < wave_top:
-                mask_value += data_value[i]
+                if data_value[i] > mask_value:
+                    mask_value = data_value[i]
+                #mask_value += data_value[i]
                 #mask_value += 1.0
                 #mask_value = 1.0
                 i += 1
+            #grid.append((wave_base, mask_value))
             grid.append(((wave_base+wave_top)/2., mask_value))
+            #grid.append((wave_top, mask_value))
+            #grid.append((wave_top+(wave_top-wave_base), mask_value))
             wave_base = wave_top
 
         mask = np.array(grid, dtype=[('wave', float), ('value', float)])
@@ -1062,7 +1076,55 @@ def __create_cross_correlation_mask(data_wave, data_value, wave_grid, velocity_s
                 break
     return mask
 
-def __cross_correlation_function(spectrum, mask, lower_velocity_limit, upper_velocity_limit, velocity_step, s=None, l=None, frame=None):
+
+def __cross_correlation_function_template(spectrum, template, lower_velocity_limit, upper_velocity_limit, velocity_step, frame=None):
+    """
+    Calculates the cross correlation value between the spectrum and the specified template
+    by shifting the template from lower to upper velocity.
+
+    - The spectrum and the template should be uniformly spaced in terms of velocity (which
+      implies non-uniformly distributed in terms of wavelength).
+    - The velocity step used for the construction of the template should be the same
+      as the one specified in this function.
+    - The lower/upper/step velocity is only used to determine how many shifts
+      should be done (in array positions) and return a velocity grid.
+    """
+
+    last_reported_progress = -1
+    if frame != None:
+        frame.update_progress(0)
+
+    # Speed of light in m/s
+    c = 299792458.0
+
+    velocity = np.arange(lower_velocity_limit, upper_velocity_limit+velocity_step, velocity_step)
+    # 1 shift = 0.5 km/s (or the specified value)
+    shifts = np.int32(velocity / velocity_step)
+
+    num_shifts = len(shifts)
+    # Cross-correlation function
+    ccf = np.zeros(num_shifts)
+    ccf_err = np.zeros(num_shifts)
+    depth = np.abs(np.max(template['flux']) - template['flux'])
+    for i, vel in enumerate(velocity):
+        factor = np.sqrt((1.-(vel*1000.)/c)/(1.+(vel*1000.)/c))
+        shifted_template = np.interp(spectrum['waveobs'], template['waveobs']/factor, depth, left=0.0, right=0.0)
+        ccf[i] = np.correlate(spectrum['flux'], shifted_template)[0]
+        ccf_err[i] = np.correlate(spectrum['err'], shifted_template)[0] # Propagate errors
+        current_work_progress = ((i*1.0)/num_shifts) * 100
+        if report_progress(current_work_progress, last_reported_progress):
+            last_reported_progress = current_work_progress
+            logging.info("%.2f%%" % current_work_progress)
+            if frame != None:
+                frame.update_progress(current_work_progress)
+
+    max_ccf = np.max(ccf)
+    ccf = ccf/max_ccf # Normalize
+    ccf_err = ccf_err/max_ccf # Propagate errors
+
+    return velocity, ccf, ccf_err
+
+def __cross_correlation_function_mask(spectrum, mask, lower_velocity_limit, upper_velocity_limit, velocity_step, frame=None):
     """
     Calculates the cross correlation value between the spectrum and the specified mask
     by shifting the mask from lower to upper velocity.
@@ -1082,14 +1144,10 @@ def __cross_correlation_function(spectrum, mask, lower_velocity_limit, upper_vel
     # Speed of light in m/s
     c = 299792458.0
 
-    velocity = np.arange(lower_velocity_limit, upper_velocity_limit, velocity_step)
+    velocity = np.arange(lower_velocity_limit, upper_velocity_limit+velocity_step, velocity_step)
     # 1 shift = 0.5 km/s (or the specified value)
     shifts = np.int32(velocity / velocity_step)
 
-
-    #import ipdb
-    ## TODO: delete parameters s and l from the method
-    #ipdb.set_trace()
 
     num_shifts = len(shifts)
     # Cross-correlation function
@@ -1118,29 +1176,73 @@ def __cross_correlation_function(spectrum, mask, lower_velocity_limit, upper_vel
     return velocity, ccf, ccf_err
 
 
-def build_velocity_profile(spectrum, linelist, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, frame=None):
+def create_filter_for_regions_affected_by_tellurics(wavelengths, linelist_telluric, min_velocity=-30.0, max_velocity=30.0, frame=None):
     """
-    Determines the velocity profile by cross-correlating the spectrum with a mask
-    built from a line list.
+    Returns a boolean array of the same size of wavelengths. True will be assigned
+    to those positions thay may be affected by telluric lines in a range from
+    min_velocity to max_velocity
+    """
+    # Light speed in vacuum
+    c = 299792458.0 # m/s
+
+    tfilter = wavelengths == np.nan
+    tfilter2 = wavelengths == np.nan
+    wave_bases = linelist_telluric['wave_peak'] * np.sqrt((1.-(max_velocity*1000.)/c)/(1.+(max_velocity*1000.)/c))
+    wave_tops = linelist_telluric['wave_peak'] * np.sqrt((1.-(min_velocity*1000.)/c)/(1.+(min_velocity*1000.)/c))
+    last_reported_progress = -1
+    total_regions = len(wave_bases)
+    last = 0 # Optimization
+    for i, (wave_base, wave_top) in enumerate(zip(wave_bases, wave_tops)):
+        begin = wavelengths[last:].searchsorted(wave_base)
+        end = wavelengths[last:].searchsorted(wave_top)
+        tfilter[last+begin:last+end] = True
+        #wfilter = np.logical_and(wavelengths >= wave_base, wavelengths <= wave_top)
+        #tfilter = np.logical_or(wfilter, tfilter)
+
+        current_work_progress = ((i*1.0)/total_regions) * 100
+        if report_progress(current_work_progress, last_reported_progress):
+            last_reported_progress = current_work_progress
+            logging.info("%.2f%%" % current_work_progress)
+            if frame != None:
+                frame.update_progress(current_work_progress)
+        last += end
+    return tfilter
+
+
+def build_velocity_profile(spectrum, linelist=None, template=None, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, frame=None):
+    """
+    Determines the velocity profile by cross-correlating the spectrum with:
+
+    * a mask built from a line list if linelist is specified
+    * a spectrum template if template is specified
 
     :returns:
         Velocity coordenates, normalized fluxes (relative intensities) and number of used lines.
 
     """
-    # Build a mask with non-uniform wavelength increments but constant in terms of velocity
-    linelist_mask = __create_cross_correlation_mask(linelist['wave_peak'], linelist['depth'], spectrum['waveobs'], velocity_step=velocity_step)
 
-    # Resampling spectrum to match the wavelength grid of the mask
-    # Speed of light in m/s
-    c = 299792458.0
-    interpolated_spectrum = resample_spectrum(spectrum, linelist_mask['wave'])
+    if linelist != None:
+        if template != None:
+            logging.warn("Building velocity profile with mask (ignoring template)")
+        # Build a mask with non-uniform wavelength increments but constant in terms of velocity
+        linelist_mask = __create_cross_correlation_mask(linelist['wave_peak'], linelist['depth'], spectrum['waveobs'], velocity_step=velocity_step)
 
-    # Obtain the cross-correlate function by shifting the mask
-    velocity, ccf, ccf_err = __cross_correlation_function(interpolated_spectrum, linelist_mask, lower_velocity_limit = lower_velocity_limit, upper_velocity_limit =upper_velocity_limit, velocity_step = velocity_step, frame=frame, s=spectrum, l=linelist)
-    return velocity, ccf, ccf_err, len(linelist_mask)
+        ## Resampling spectrum to match the wavelength grid of the mask
+        interpolated_spectrum = resample_spectrum(spectrum, linelist_mask['wave'])
+
+        ## Obtain the cross-correlate function by shifting the mask
+        velocity, ccf, ccf_err = __cross_correlation_function_mask(interpolated_spectrum, linelist_mask, lower_velocity_limit = lower_velocity_limit, upper_velocity_limit=upper_velocity_limit, velocity_step = velocity_step, frame=frame)
+        return velocity, ccf, ccf_err
+    elif template != None:
+        ## Obtain the cross-correlate function by shifting the template
+        velocity, ccf, ccf_err = __cross_correlation_function_template(spectrum, template, lower_velocity_limit = lower_velocity_limit, upper_velocity_limit=upper_velocity_limit, velocity_step = velocity_step, frame=frame)
+
+        return velocity, ccf, ccf_err
+    else:
+        raise Exception("A linelist or template should be specified")
 
 
-def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False):
+def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False, depth_percent_limit=10):
     """
     Fits Gaussians to the deepest peaks in the velocity profile.
 
@@ -1152,61 +1254,58 @@ def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False):
 
     """
     models = []
-    models_err = []
     if len(xcoord) == 0 or len(fluxes) == 0:
-        return models, models_err
+        return models
 
     # Smooth flux
     sig = 1
     smoothed_fluxes = scipy.ndimage.filters.gaussian_filter1d(fluxes, sig)
+    #smoothed_fluxes = fluxes
     # Finding peaks and base points
     peaks, base_points = __find_peaks_and_base_points(xcoord, smoothed_fluxes)
 
-    if len(peaks) == 0:
-        return models, models_err
+    if len(peaks) == 0 or len(base_points) == 0:
+        return models
 
-    # Fit continuum to normalize
+    # Fit continuum to try to remove trends that may affect the peak detection
     try:
-        nknots = 2
-        continuum_model = UniformCDFKnotSplineModel(nknots)
+        #nknots = 2
+        #continuum_model = UniformCDFKnotSplineModel(nknots)
+        #continuum_model.fitData(xcoord[base_points], fluxes[base_points])
+        #continuum = continuum_model(xcoord)
+
+        continuum_model = LinearModel()
         continuum_model.fitData(xcoord[base_points], fluxes[base_points])
-        fluxes /= continuum_model(xcoord)
-        errors /= continuum_model(xcoord)
+        continuum = continuum_model(xcoord)
+        if not np.any(continuum == 0) and not np.any(np.isnan(continuum)):
+            smoothed_fluxes /= continuum
+            fluxes /= continuum
+            errors /= continuum
+        else:
+            raise Exception()
     except Exception:
         logging.warn("Velocity profile cannot be normalized")
-        pass
 
     if len(peaks) != 0:
         base = base_points[:-1]
         top = base_points[1:]
-        # Adjusting edges: Discarded to avoid weird effects in the margin error calculation
-        #new_base = np.zeros(len(base), dtype=int)
-        #new_top = np.zeros(len(base), dtype=int)
-        #for i in np.arange(len(peaks)):
-            #new_base[i], new_top[i] = __improve_linemask_edges(xcoord, fluxes, base[i], top[i], peaks[i])
-        #base = new_base
-        #top = new_top
+        # Adjusting edges
+        new_base = np.zeros(len(base), dtype=int)
+        new_top = np.zeros(len(base), dtype=int)
+        for i in np.arange(len(peaks)):
+            new_base[i], new_top[i] = __improve_linemask_edges(xcoord, smoothed_fluxes, base[i], top[i], peaks[i])
+        base = new_base
+        top = new_top
 
         if only_one_peak:
             # Just try with the deepest line
             selected_peaks_indices = []
         else:
-            # Identify peak outliers
-            #fluxes_not_outliers, selected_fluxes_not_outliers = sigma_clipping(fluxes[peaks], sig=3, meanfunc=np.median)
-            fluxes_not_outliers, selected_fluxes_not_outliers = interquartile_range_filtering(fluxes[peaks], k=1.5)
-            selected_peaks_indices = np.arange(len(peaks))[~selected_fluxes_not_outliers]
-            # FILTER: Make sure that the outliers selected are outliers because they are
-            # deeper than the rest (we do not want outliers because they are less deep than the rest)
-            interesting_outliers = fluxes[peaks[selected_peaks_indices]] < np.median(fluxes[peaks])
-            selected_peaks_indices = selected_peaks_indices[interesting_outliers]
+            # Identify peak that belong to a % of the deepest fluxes (10% by default)
+            selected_peaks_indices = np.where(fluxes[peaks] + errors[peaks] < np.percentile(fluxes, depth_percent_limit))[0]
             # Sort the interesting peaks from more to less deep
             sorted_peaks_indices = np.argsort(fluxes[peaks[selected_peaks_indices]])
             selected_peaks_indices = selected_peaks_indices[sorted_peaks_indices]
-            # Discard too small peaks (less than a third of the main peak)
-            if len(selected_peaks_indices) >= 2:
-                diff = (fluxes[peaks[selected_peaks_indices]] - fluxes[peaks[selected_peaks_indices]][0])
-                wfilter = diff < fluxes[peaks[selected_peaks_indices]][0] / 3
-                selected_peaks_indices = selected_peaks_indices[wfilter]
 
         if len(selected_peaks_indices) == 0:
             # Try with the deepest line
@@ -1222,7 +1321,8 @@ def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False):
         selected_peaks_indices = [0]
 
     for i in np.asarray(selected_peaks_indices):
-        model = GaussianModel()
+        gaussian_model = GaussianModel()
+        voigt_model = VoigtModel()
 
         # Parameters estimators
         baseline = np.median(fluxes[base_points])
@@ -1230,7 +1330,7 @@ def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False):
         sig = np.abs(xcoord[top[i]] - xcoord[base[i]])/3.0
         mu = xcoord[peaks[i]]
 
-        parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for j in np.arange(4)]
+        parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for j in np.arange(5)]
         parinfo[0]['value'] = 1#fluxes[base[i]] # baseline # Continuum
         parinfo[0]['fixed'] = True
         #parinfo[0]['limited'] = [False, True]
@@ -1242,44 +1342,44 @@ def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False):
         parinfo[2]['limited'] = [True, False]
         parinfo[2]['limits'] = [0., 0.]
         parinfo[3]['value'] = mu # Peak only within the xcoord slice
+        #parinfo[3]['fixed'] = True
         parinfo[3]['limited'] = [True, True]
-        parinfo[3]['limits'] = [xcoord[base[i]], xcoord[top[i]]]
+        #parinfo[3]['limits'] = [xcoord[base[i]], xcoord[top[i]]]
+        parinfo[3]['limits'] = [xcoord[peaks[i]-1], xcoord[peaks[i]+1]]
 
-        f = fluxes[base[i]:top[i]+1]
-        min_flux = np.min(f)
-        # More weight to the deeper fluxes
-        if min_flux < 0:
-            weights = f + -1*(min_flux) + 0.01 # Above zero
-            weights = np.min(weights) / weights
-        else:
-            weights = min_flux / f
+        # Only used by the voigt model:
+        parinfo[4]['value'] = (xcoord[top[i]] - xcoord[base[i]])/2.0 # Only positives (not zero, otherwise its a gaussian) and small (for nm, it should be <= 0.01 aprox but I leave it in relative terms considering the spectrum slice)
+        parinfo[4]['limited'] = [True, True]
+        parinfo[4]['limits'] = [0.0, xcoord[top[i]] - xcoord[base[i]]]
+
+        #f = fluxes[base[i]:top[i]+1]
+        #min_flux = np.min(f)
+        ## More weight to the deeper fluxes
+        #if min_flux < 0:
+            #weights = f + -1*(min_flux) + 0.01 # Above zero
+            #weights = np.min(weights) / weights
+        #else:
+            #weights = min_flux / f
 
         try:
-            #model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=parinfo, weights=weights)
-            if np.any(errors[base[i]:top[i]+1] == 0.0):
-                model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=parinfo)
+            # Fit a gaussian and a voigt, but choose the one with the best fit
+            gaussian_model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=parinfo)
+            voigt_model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=parinfo)
+            rms_gaussian = np.sqrt(np.sum(np.power(gaussian_model.residuals(), 2)) / len(gaussian_model.residuals()))
+            rms_voigt = np.sqrt(np.sum(np.power(voigt_model.residuals(), 2)) / len(voigt_model.residuals()))
+            if rms_gaussian > rms_voigt:
+                model = voigt_model
+                #logging.info("Voigt profile fitted with RMS %.5f" % (rms_voigt))
             else:
-                model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=parinfo, weights=1/errors[base[i]:top[i]+1])
+                model = gaussian_model
+                #logging.info("Gaussian profile fitted with RMS %.5f" % (rms_gaussian))
+            #logging.info("Peak found at %.2f km/s (fitted at %.2f km/s)" % (xcoord[peaks[i]], model.mu()))
             models.append(model)
-            # Estimate error for finding a interval of 99% confiance
-            used_measures = len(xcoord[base[i]:top[i]+1])
-            tipical_error = model.sig() / used_measures
-            df = used_measures - 1
-            interval_confiance = 0.99
-            tstudent = stats.t(df).ppf(interval_confiance + (1.-interval_confiance)/2.) # Confiance of 99% (let out 0.005 at each tail)
-            margin_error = tipical_error * tstudent # The true model.mu() is in the interval mu +/- margin_error with a confiance of 99%
-            #print model.mu(), "::", model.mu()-margin_error, model.mu()+margin_error, "::", margin_error
-            models_err.append(margin_error)
         except Exception, e:
-            print e.message
+            print type(e), e.message
 
-    #plt.plot(xcoord, fluxes)
-    #if len(models) >= 1:
-        #plt.plot(xcoord, models[0](xcoord))
-    #plt.scatter(xcoord[base_points], fluxes[base_points])
-    #plt.show()
 
-    return np.asarray(models), np.asarray(models_err)
+    return np.asarray(models)
 
 def select_good_velocity_profile_models(models, xcoord, fluxes):
     """
