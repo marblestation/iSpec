@@ -960,7 +960,7 @@ class ResampleSpectrumDialog(wx.Dialog):
 
 class CombineSpectraDialog(wx.Dialog):
     def __init__(self, parent, id, title, wave_base, wave_top, wave_step):
-        wx.Dialog.__init__(self, parent, id, title, size=(350,550))
+        wx.Dialog.__init__(self, parent, id, title, size=(400,450))
 
         self.action_accepted = False
 
@@ -1004,30 +1004,122 @@ class CombineSpectraDialog(wx.Dialog):
 
         self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
 
-
+        # Operation
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
-        self.text_where = wx.StaticText(self, -1, "Operation: ", style=wx.ALIGN_LEFT)
+
+        self.text_operation = wx.StaticText(self, -1, "Method: ", style=wx.ALIGN_LEFT)
+        self.operation = wx.ComboBox (self, wx.ID_ANY, "Median", choices=["Median", "Mean", "Subtract", "Add", "Divide"], style=wx.CB_READONLY)
+
         self.hbox.AddSpacer(10)
-        self.hbox.Add(self.text_where, 0, border=3, flag=flags)
-
-        self.vbox2 = wx.BoxSizer(wx.VERTICAL)
-        self.radio_button_median = wx.RadioButton(self, -1, 'Median', style=wx.RB_GROUP)
-        self.vbox2.Add(self.radio_button_median, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
-        self.radio_button_mean = wx.RadioButton(self, -1, 'Mean')
-        self.vbox2.Add(self.radio_button_mean, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
-        self.radio_button_subtract = wx.RadioButton(self, -1, 'Subtract')
-        self.vbox2.Add(self.radio_button_subtract, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
-        self.radio_button_add = wx.RadioButton(self, -1, 'Add')
-        self.vbox2.Add(self.radio_button_add, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
-        self.radio_button_divide = wx.RadioButton(self, -1, 'Divide')
-        self.vbox2.Add(self.radio_button_divide, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
-
-        self.radio_button_median.SetValue(True)
-        self.hbox.Add(self.vbox2, 0, border=3, flag=flags)
+        self.hbox.Add(self.text_operation, 0, border=3, flag=flags)
+        self.hbox.Add(self.operation, 0, border=3, flag=flags)
 
         self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
 
+        self.vbox.AddSpacer(30)
+
+
+        sizer =  self.CreateButtonSizer(wx.CANCEL|wx.OK)
+        self.vbox.Add(sizer, 0, wx.ALIGN_CENTER)
         self.vbox.AddSpacer(10)
+        self.SetSizer(self.vbox)
+        self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
+
+
+    def on_ok(self, event):
+        self.action_accepted = True
+        self.EndModal(wx.ID_OK)
+
+class OperateSpectrumDialog(wx.Dialog):
+    def __init__(self, parent, id, title, operations_description, waveobs, flux, err):
+        wx.Dialog.__init__(self, parent, id, title, size=(700,200))
+
+        self.action_accepted = False
+
+        self.vbox = wx.BoxSizer(wx.VERTICAL)
+
+        flags = wx.ALIGN_LEFT | wx.ALL | wx.ALIGN_CENTER_VERTICAL
+
+        # Operation
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_operation = wx.StaticText(self, -1, "Functions: ", style=wx.ALIGN_LEFT)
+        self.operation = wx.ComboBox (self, wx.ID_ANY, operations_description[0], choices=operations_description, style=wx.CB_READONLY)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_operation, 0, border=3, flag=flags)
+        self.hbox.Add(self.operation, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+
+        #### Operate waveobs
+        #self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        #self.operate_waveobs = wx.CheckBox(self, -1, 'Modify wavelengths', style=wx.ALIGN_LEFT)
+        #self.operate_waveobs.SetValue(True)
+
+        #self.hbox.AddSpacer(10)
+        #self.hbox.Add(self.operate_waveobs, 0, border=3, flag=flags)
+
+        #self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        ### Value
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_waveobs = wx.StaticText(self, -1, "Waveobs\t = ", style=wx.ALIGN_LEFT)
+        self.waveobs = wx.TextCtrl(self, -1, str(waveobs),  style=wx.TE_LEFT, size = wx.Size(500, 30))
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_waveobs, 0, border=3, flag=flags)
+        self.hbox.Add(self.waveobs, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        #### Flux operate
+        #self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        #self.operate_flux = wx.CheckBox(self, -1, 'Modify fluxes', style=wx.ALIGN_LEFT)
+        #self.operate_flux.SetValue(True)
+
+        #self.hbox.AddSpacer(10)
+        #self.hbox.Add(self.operate_flux, 0, border=3, flag=flags)
+
+        #self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        ### Value
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_flux = wx.StaticText(self, -1, "Flux\t\t = ", style=wx.ALIGN_LEFT)
+        self.flux = wx.TextCtrl(self, -1, str(flux),  style=wx.TE_LEFT, size = wx.Size(500, 30))
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_flux, 0, border=3, flag=flags)
+        self.hbox.Add(self.flux, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        #### Err operate
+        #self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        #self.operate_err = wx.CheckBox(self, -1, 'Modify errors', style=wx.ALIGN_LEFT)
+        #self.operate_err.SetValue(True)
+
+        #self.hbox.AddSpacer(10)
+        #self.hbox.Add(self.operate_err, 0, border=3, flag=flags)
+
+        #self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        ### Value
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_err = wx.StaticText(self, -1, "Error\t\t = ", style=wx.ALIGN_LEFT)
+        self.err = wx.TextCtrl(self, -1, str(err),  style=wx.TE_LEFT, size = wx.Size(500, 30))
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_err, 0, border=3, flag=flags)
+        self.hbox.Add(self.err, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        self.vbox.AddSpacer(20)
 
         sizer =  self.CreateButtonSizer(wx.CANCEL|wx.OK)
         self.vbox.Add(sizer, 0, wx.ALIGN_CENTER)

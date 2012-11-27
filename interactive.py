@@ -599,6 +599,74 @@ class SpectraFrame(wx.Frame):
         self.dec_seconds = 5.96
         self.barycentric_vel = 0.0 # km/s
 
+        # Operations
+        self.operation_waveobs = "waveobs"
+        self.operation_flux = "flux"
+        self.operation_err = "err"
+        self.safe_operations_description = []
+        self.safe_operations = {}
+        self.safe_operations_description.append("sin(x)\t\t\t\tTrigonometric sine, element-wise.")
+        self.safe_operations['sin'] = np.sin
+        self.safe_operations_description.append("cos(x)\t\t\t\tCosine elementwise.")
+        self.safe_operations['cos'] = np.cos
+        self.safe_operations_description.append("tan(x)\t\t\t\tCompute tangent element-wise.")
+        self.safe_operations['tan'] = np.tan
+        self.safe_operations_description.append("arcsin(x)\t\t\tInverse sine, element-wise.")
+        self.safe_operations['arcsin'] = np.arcsin
+        self.safe_operations_description.append("arccos(x)\t\t\tTrigonometric inverse cosine, element-wise.")
+        self.safe_operations['arccos'] = np.arccos
+        self.safe_operations_description.append("arctan(x)\t\t\tTrigonometric inverse tangent, element-wise.")
+        self.safe_operations['arctan'] = np.arctan
+        self.safe_operations_description.append("arctan2(x1, x2)\tArc tangent of x1/x2 choosing the correct quadrant")
+        self.safe_operations['arctan2'] = np.arctan2
+
+        self.safe_operations_description.append("sinh(x)\t\t\t\tHyperbolic sine, element-wise.")
+        self.safe_operations['sinh'] = np.sinh
+        self.safe_operations_description.append("cosh(x)\t\t\tHyperbolic cosine, element-wise.")
+        self.safe_operations['cosh'] = np.cosh
+        self.safe_operations_description.append("tanh(x)\t\t\tCompute hyperbolic tangent element-wise.")
+        self.safe_operations['tanh'] = np.tanh
+        self.safe_operations_description.append("arcsinh(x)\t\t\tInverse hyperbolic sine elementwise.")
+        self.safe_operations['arcsinh'] = np.arcsinh
+        self.safe_operations_description.append("arccosh(x)\t\tInverse hyperbolic cosine, elementwise.")
+        self.safe_operations['arccosh'] = np.arccosh
+        self.safe_operations_description.append("arctanh(x)\t\t\tInverse hyperbolic tangent elementwise.")
+        self.safe_operations['arctanh'] = np.arctanh
+
+        self.safe_operations_description.append("around(a[, dec])\tEvenly round to the given number of decimals.")
+        self.safe_operations['around'] = np.around
+        self.safe_operations_description.append("floor(x)\t\t\tReturn the floor of the input, element-wise.")
+        self.safe_operations['floor'] = np.floor
+        self.safe_operations_description.append("ceil(x)\t\t\t\tReturn the ceiling of the input, element-wise.")
+        self.safe_operations['ceil'] = np.ceil
+
+        self.safe_operations_description.append("exp(x)\t\t\t\tCalculate the exponential of all elements in the input array.")
+        self.safe_operations['exp'] = np.exp
+        self.safe_operations_description.append("log(x)\t\t\t\tNatural logarithm, element-wise.")
+        self.safe_operations['log'] = np.log
+        self.safe_operations_description.append("log10(x)\t\t\tReturn the base 10 logarithm of the input array, element-wise.")
+        self.safe_operations['log10'] = np.log10
+        self.safe_operations_description.append("log2(x)\t\t\tBase-2 logarithm of x.")
+        self.safe_operations['log2'] = np.log2
+
+        self.safe_operations_description.append("sqrt(x)\t\t\tReturn the positive square-root of an array, element-wise.")
+        self.safe_operations['sqrt'] = np.sqrt
+        self.safe_operations_description.append("absolute(x)\t\tCompute the absolute values elementwise.")
+        self.safe_operations['absolute'] = np.absolute
+
+        self.safe_operations_description.append("add(x1, x2)\t\tAdd arguments element-wise.")
+        self.safe_operations['add'] = np.add
+        self.safe_operations_description.append("multiply(x1, x2)\tMultiply arguments element-wise.")
+        self.safe_operations['multiply'] = np.multiply
+        self.safe_operations_description.append("divide(x1, x2)\t\tDivide arguments element-wise.")
+        self.safe_operations['divide'] = np.divide
+        self.safe_operations_description.append("power(x1, x2)\t\tArray elements raised to 'x2' powers.")
+        self.safe_operations['power'] = np.power
+        self.safe_operations_description.append("subtract(x1, x2)\tSubtract arguments, element-wise.")
+        self.safe_operations['subtract'] = np.subtract
+        self.safe_operations_description.append("mod(x1, x2)\t\tReturn element-wise remainder of division.")
+        self.safe_operations['mod'] = np.mod
+
         self.operation_in_progress = False
 
         wx.Frame.__init__(self, None, -1, self.title)
@@ -871,9 +939,9 @@ class SpectraFrame(wx.Frame):
         m_cut_spectrum = menu_edit.Append(-1, "Wavelength range reduction", "Reduce the wavelength range")
         self.Bind(wx.EVT_MENU, self.on_cut_spectrum, m_cut_spectrum)
         self.spectrum_function_items.append(m_cut_spectrum)
-        m_convert_to_nm = menu_edit.Append(-1, "Convert from armstrong to nanometers", "Divide wavelength by 10")
-        self.Bind(wx.EVT_MENU, self.on_convert_to_nm, m_convert_to_nm)
-        self.spectrum_function_items.append(m_convert_to_nm)
+        m_operate = menu_edit.Append(-1, "Operate spectrum mathematically", "Modify the wavelength, fluxes or errors by performing a mathematical calculation")
+        self.Bind(wx.EVT_MENU, self.on_operate_spectrum, m_operate)
+        self.spectrum_function_items.append(m_operate)
         m_resample_spectrum = menu_edit.Append(-1, "Resample spectrum", "Resample wavelength grid")
         self.Bind(wx.EVT_MENU, self.on_resample_spectrum, m_resample_spectrum)
         self.spectrum_function_items.append(m_resample_spectrum)
@@ -2323,11 +2391,30 @@ class SpectraFrame(wx.Frame):
         wave_base = self.text2float(dlg.wave_base.GetValue(), 'Base wavelength value is not a valid one.')
         wave_top = self.text2float(dlg.wave_top.GetValue(), 'Top wavelength value is not a valid one.')
         wave_step = self.text2float(dlg.wave_step.GetValue(), 'Wavelength step value is not a valid one.')
-        operation_median = dlg.radio_button_median.GetValue()
-        operation_mean = dlg.radio_button_mean.GetValue()
-        operation_subtract = dlg.radio_button_subtract.GetValue()
-        operation_add = dlg.radio_button_add.GetValue()
-        operation_divide = dlg.radio_button_divide.GetValue()
+        operation_median = False
+        operation_mean = False
+        operation_subtract = False
+        operation_add = False
+        operation_divide = False
+        operation = dlg.operation.GetValue()
+        if operation == "Median":
+            operation_median = True
+        elif operation == "Mean":
+            operation_mean = True
+        elif operation == "Subtract":
+            operation_subtract = True
+        elif operation == "Add":
+            operation_add = True
+        elif operation == "Divide":
+            operation_divide = True
+        else:
+            raise Exception("Unknown combine operation")
+
+        #operation_median = dlg.radio_button_median.GetValue()
+        #operation_mean = dlg.radio_button_mean.GetValue()
+        #operation_subtract = dlg.radio_button_subtract.GetValue()
+        #operation_add = dlg.radio_button_add.GetValue()
+        #operation_divide = dlg.radio_button_divide.GetValue()
         dlg.Destroy()
 
         if wave_base == None or wave_top == None or wave_top <= wave_base or wave_step <= 0:
@@ -3564,25 +3651,76 @@ max_wave_range=max_wave_range)
         self.canvas.draw()
         self.flash_status_message("Applied a " + vel_type + " velocity correction of %s." % barycentric_vel)
 
-    def on_convert_to_nm(self, event):
+    def on_operate_spectrum(self, event):
         if not self.check_active_spectrum_exists():
             return
         if self.check_operation_in_progress():
             return
 
+        flux = self.active_spectrum.data['flux']
+        waveobs = self.active_spectrum.data['waveobs']
+        err = self.active_spectrum.data['err']
+        self.safe_operations['flux'] = flux
+        self.safe_operations['waveobs'] = waveobs
+        self.safe_operations['err'] = err
+        operation_waveobs = self.operation_waveobs
+        operation_flux = self.operation_flux
+        operation_err = self.operation_err
+
+        dlg = OperateSpectrumDialog(self, -1, "Operate spectrum mathematically", self.safe_operations_description, operation_waveobs, operation_flux, operation_err)
+        dlg.ShowModal()
+
+        if not dlg.action_accepted:
+            dlg.Destroy()
+            return
+
+        operation_waveobs = dlg.waveobs.GetValue()
+        operation_flux = dlg.flux.GetValue()
+        operation_err = dlg.err.GetValue()
+        #operate_waveobs = dlg.operate_waveobs.GetValue()
+        #operate_flux = dlg.operate_flux.GetValue()
+        #operate_err = dlg.operate_err.GetValue()
+        operate_waveobs = True
+        operate_flux = True
+        operate_err = True
+        if operation_waveobs == "waveobs":
+            operate_waveobs = False
+        if operation_flux == "flux":
+            operate_flux = False
+        if operation_err == "err":
+            operate_err = False
+
+        dlg.Destroy()
+
+        if not operate_waveobs and not operate_flux and not operate_err:
+            return
+
         # Check if spectrum is saved
         if self.active_spectrum.not_saved:
-            msg = "The active spectrum has not been saved, are you sure you want to divide all the wavelength by 10 anyway?"
+            msg = "The active spectrum has not been saved, are you sure you want to modify it anyway?"
             title = "Changes not saved"
             if not self.question(title, msg):
                 return
-        else:
-            msg = "This operation is going to divide all the wavelengths of the active spectrum by 10. Are you sure?"
-            title = "Confirmation"
-            if not self.question(title, msg):
-                return
 
-        self.status_message("Converting to nanometers...")
+        self.status_message("Operating...")
+
+        try:
+            if operate_waveobs:
+                new_waveobs = eval(operation_waveobs,{"__builtins__":None},self.safe_operations)
+                if len(waveobs) != len(new_waveobs):
+                    raise Exception("Invalid operation!")
+            if operate_flux:
+                new_flux = eval(operation_flux,{"__builtins__":None},self.safe_operations)
+                if len(waveobs) != len(new_flux):
+                    raise Exception("Invalid operation!")
+            if operate_err:
+                new_err = eval(operation_err,{"__builtins__":None},self.safe_operations)
+                if len(waveobs) != len(new_err):
+                    raise Exception("Invalid operation!")
+        except Exception:
+            self.flash_status_message("Invalid operation.")
+            return
+
 
         # Remove current continuum from plot if exists
         self.remove_continuum_spectrum()
@@ -3591,13 +3729,21 @@ max_wave_range=max_wave_range)
         # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
         self.remove_fitted_lines()
 
-        self.active_spectrum.data['waveobs'] = self.active_spectrum.data['waveobs'] / 10
+        if operate_waveobs:
+            self.active_spectrum.data['waveobs'] = new_waveobs
+            self.operation_waveobs = operation_waveobs
+        if operate_flux:
+            self.active_spectrum.data['flux'] = new_flux
+            self.operation_flux = operation_flux
+        if operate_err:
+            self.active_spectrum.data['err'] = new_err
+            self.operation_err = operation_err
         self.active_spectrum.not_saved = True
         self.draw_active_spectrum()
 
         self.update_title()
         self.update_scale()
-        self.flash_status_message("Wavelength divided by 10.")
+        self.flash_status_message("Operation succesfully executed.")
 
     def on_synthesize(self, event):
         if self.check_operation_in_progress():
