@@ -30,13 +30,16 @@ import logging
 def __read_spectrum(spectrum_filename):
     try:
         spectrum = np.array([tuple(line.rstrip('\r\n').split("\t")) for line in open(spectrum_filename,)][1:], dtype=[('waveobs', float),('flux', float),('err', float)])
+        if len(spectrum) == 0:
+            raise Exception("Empty spectrum or incompatible format")
     except Exception as err:
-        # Try without error column
-        spectrum_tmp = np.array([tuple(line.rstrip('\r\n').split("\t")) for line in open(spectrum_filename,)][1:], dtype=[('waveobs', float),('flux', float)])
-        spectrum = np.recarray((len(spectrum_tmp), ), dtype=[('waveobs', float),('flux', float),('err', float)])
-        spectrum['waveobs'] = spectrum_tmp['waveobs']
-        spectrum['flux'] = spectrum_tmp['flux']
-        spectrum['err'] = 0.0
+        # Try narval plain text format:
+        # - Ignores 2 first lines (header)
+        # - Ignores last line (empty)
+        # - Lines separated by \r
+        # - Columns separated by space
+        narval = open(spectrum_filename,).readlines()[0].split('\r')
+        spectrum = np.array([tuple(line.rstrip('\r').split()) for line in narval[2:-1]], dtype=[('waveobs', float),('flux', float),('err', float)])
     return spectrum
 
 def read_spectrum(spectrum_filename):
