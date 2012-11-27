@@ -939,7 +939,7 @@ class SpectraFrame(wx.Frame):
         m_cut_spectrum = menu_edit.Append(-1, "Wavelength range reduction", "Reduce the wavelength range")
         self.Bind(wx.EVT_MENU, self.on_cut_spectrum, m_cut_spectrum)
         self.spectrum_function_items.append(m_cut_spectrum)
-        m_operate = menu_edit.Append(-1, "Operate spectrum mathematically", "Modify the wavelength, fluxes or errors by performing a mathematical calculation")
+        m_operate = menu_edit.Append(-1, "Apply mathematical expression", "Modify the wavelength, fluxes or errors by performing a mathematical calculation")
         self.Bind(wx.EVT_MENU, self.on_operate_spectrum, m_operate)
         self.spectrum_function_items.append(m_operate)
         m_resample_spectrum = menu_edit.Append(-1, "Resample spectrum", "Resample wavelength grid")
@@ -2186,7 +2186,7 @@ class SpectraFrame(wx.Frame):
             return
 
         rv = self.active_spectrum.velocity_atomic
-        dlg = CleanTelluricsDialog(self, -1, "Clean fluxes and errors", rv, -30.0, 30.0, 0.02)
+        dlg = CleanTelluricsDialog(self, -1, "Clean telluric regions", rv, -30.0, 30.0, 0.02)
         dlg.ShowModal()
 
         if not dlg.action_accepted:
@@ -2305,7 +2305,18 @@ class SpectraFrame(wx.Frame):
         if self.check_operation_in_progress():
             return
 
-        dlg = ResampleSpectrumDialog(self, -1, "Resample spectrum", np.round(np.min(self.active_spectrum.data['waveobs']), 2), np.round(np.max(self.active_spectrum.data['waveobs']), 2), 0.001)
+        steps = self.active_spectrum.data['waveobs'][1:] - self.active_spectrum.data['waveobs'][:-1]
+        # Round to the first decimal found
+        median_step = np.median(steps)
+        median_step = np.round(median_step, decimals=np.max([0, int(-1*np.floor(np.log10(median_step)))]))
+        mean_step = np.mean(steps)
+        mean_step = np.round(mean_step, decimals=np.max([0, int(-1*np.floor(np.log10(mean_step)))]))
+        min_step = np.min(steps)
+        min_step = np.round(min_step, decimals=np.max([0, int(-1*np.floor(np.log10(min_step)))]))
+        max_step = np.max(steps)
+        max_step = np.round(max_step, decimals=np.max([0, int(-1*np.floor(np.log10(max_step)))]))
+
+        dlg = ResampleSpectrumDialog(self, -1, "Resample spectrum", np.round(np.min(self.active_spectrum.data['waveobs']), 2), np.round(np.max(self.active_spectrum.data['waveobs']), 2), 0.001, median_step, mean_step, min_step, max_step)
         dlg.ShowModal()
 
         if not dlg.action_accepted:
@@ -2315,6 +2326,7 @@ class SpectraFrame(wx.Frame):
         wave_base = self.text2float(dlg.wave_base.GetValue(), 'Base wavelength value is not a valid one.')
         wave_top = self.text2float(dlg.wave_top.GetValue(), 'Top wavelength value is not a valid one.')
         wave_step = self.text2float(dlg.wave_step.GetValue(), 'Wavelength step value is not a valid one.')
+        method = dlg.method.GetValue()
         dlg.Destroy()
 
         if wave_base == None or wave_top == None or wave_top <= wave_base or wave_step <= 0:
@@ -2339,16 +2351,16 @@ class SpectraFrame(wx.Frame):
         # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
         self.remove_fitted_lines()
 
-        thread = threading.Thread(target=self.on_resample_spectrum_thread, args=(wave_base, wave_top, wave_step,))
+        thread = threading.Thread(target=self.on_resample_spectrum_thread, args=(wave_base, wave_top, wave_step, method,))
         thread.setDaemon(True)
         thread.start()
 
-    def on_resample_spectrum_thread(self, wave_base, wave_top, wave_step):
+    def on_resample_spectrum_thread(self, wave_base, wave_top, wave_step, method):
         # Homogenize
         wx.CallAfter(self.status_message, "Resampling spectrum...")
         wx.CallAfter(self.update_progress, 10)
         xaxis = np.arange(wave_base, wave_top, wave_step)
-        resampled_spectrum_data = sve.resample_spectrum(self.active_spectrum.data, xaxis, linear=True, frame=self)
+        resampled_spectrum_data = sve.resample_spectrum(self.active_spectrum.data, xaxis, method=method, frame=self)
         self.active_spectrum.data = resampled_spectrum_data
         wx.CallAfter(self.on_resample_spectrum_finnish)
 
@@ -3667,7 +3679,7 @@ max_wave_range=max_wave_range)
         operation_flux = self.operation_flux
         operation_err = self.operation_err
 
-        dlg = OperateSpectrumDialog(self, -1, "Operate spectrum mathematically", self.safe_operations_description, operation_waveobs, operation_flux, operation_err)
+        dlg = OperateSpectrumDialog(self, -1, "Apply mathematical expression", self.safe_operations_description, operation_waveobs, operation_flux, operation_err)
         dlg.ShowModal()
 
         if not dlg.action_accepted:

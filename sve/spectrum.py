@@ -21,7 +21,7 @@ import scipy.ndimage as ndi
 from spectrum import *
 from plotting import *
 from common import *
-from scipy.interpolate import UnivariateSpline
+from scipy import interpolate
 import numpy as np
 import matplotlib.pyplot as plt
 import log
@@ -375,7 +375,7 @@ def __interpolate_flux(spectrum, wavelength):
     return flux, index
 
 
-def resample_spectrum(spectrum, xaxis, linear=True, frame=None):
+def resample_spectrum(spectrum, xaxis, method="linear", frame=None):
     """
     Returns a new spectrum with measures at the given xaxis wavelength
     Interpolation is completely linear by default (fastest option) but a Bessel's
@@ -386,23 +386,30 @@ def resample_spectrum(spectrum, xaxis, linear=True, frame=None):
     total_points = len(xaxis)
     last_reported_progress = -1
 
-    if linear:
-        current_work_progress = 10.0
-        logging.info("%.2f%%" % current_work_progress)
-        if frame != None:
-            frame.update_progress(current_work_progress)
-        resampled_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-        resampled_spectrum['waveobs'] = xaxis
-        resampled_spectrum['flux'] = np.interp(xaxis, spectrum['waveobs'], spectrum['flux'], left=0.0, right=0.0) # No extrapolation, just returns zeros
-        #from scipy import interpolate
-        #f = interpolate.InterpolatedUnivariateSpline(spectrum['waveobs'], spectrum['flux'], k=3)
+    current_work_progress = 10.0
+    logging.info("%.2f%%" % current_work_progress)
+    if frame != None:
+        frame.update_progress(current_work_progress)
+    resampled_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+    resampled_spectrum['waveobs'] = xaxis
+    if method.lower() == "linear":
+        ## Scipy linear interpolation (same result as numpy):
+        #f = interpolate.interp1d(spectrum['waveobs'], spectrum['flux'], kind='linear', bounds_error=False, fill_value=0.0)
         #resampled_spectrum['flux'] = f(xaxis)
-
+        ## Numpy linear interpolation:
+        resampled_spectrum['flux'] = np.interp(xaxis, spectrum['waveobs'], spectrum['flux'], left=0.0, right=0.0) # No extrapolation, just returns zeros
         current_work_progress = 90.0
         logging.info("%.2f%%" % current_work_progress)
         if frame != None:
             frame.update_progress(current_work_progress)
-    else:
+    elif method.lower() == "spline":
+        f = interpolate.InterpolatedUnivariateSpline(spectrum['waveobs'], spectrum['flux'], k=3)
+        resampled_spectrum['flux'] = f(xaxis)
+        current_work_progress = 90.0
+        logging.info("%.2f%%" % current_work_progress)
+        if frame != None:
+            frame.update_progress(current_work_progress)
+    elif method.lower() == "bessel":
         resampled_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
         resampled_spectrum['waveobs'] = xaxis
 
@@ -417,6 +424,8 @@ def resample_spectrum(spectrum, xaxis, linear=True, frame=None):
                 logging.info("%.2f%%" % current_work_progress)
                 if frame != None:
                     frame.update_progress(current_work_progress)
+    else:
+        raise Exception("Unknown method")
 
     resampled_spectrum['err'] = np.interp(xaxis, spectrum['waveobs'], spectrum['err'])
     return resampled_spectrum

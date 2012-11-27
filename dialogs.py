@@ -900,7 +900,7 @@ class CutSpectrumDialog(wx.Dialog):
         self.EndModal(wx.ID_OK)
 
 class ResampleSpectrumDialog(wx.Dialog):
-    def __init__(self, parent, id, title, wave_base, wave_top, wave_step):
+    def __init__(self, parent, id, title, wave_base, wave_top, wave_step, median_step, mean_step, min_step, max_step):
         wx.Dialog.__init__(self, parent, id, title)
 
         self.action_accepted = False
@@ -943,7 +943,24 @@ class ResampleSpectrumDialog(wx.Dialog):
         self.hbox.Add(self.text_wave_step, 0, border=3, flag=flags)
         self.hbox.Add(self.wave_step, 0, border=3, flag=flags)
 
+        self.text_from_resolution_explanation = wx.StaticText(self, -1, "min:" + str(min_step) + " | max:" + str(max_step) + "\nmedian:" + str(median_step) + "", style=wx.ALIGN_LEFT)
+        self.hbox.Add(self.text_from_resolution_explanation, 0, border=3, flag=flags)
+
         self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
+        ### Method
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.text_method = wx.StaticText(self, -1, "Method: ", style=wx.ALIGN_LEFT)
+        #self.method = wx.ComboBox (self, wx.ID_ANY, "Linear", choices=["Linear", "Spline", "Bessel"], style=wx.CB_READONLY)
+        self.method = wx.ComboBox (self, wx.ID_ANY, "Linear", choices=["Linear", "Spline"], style=wx.CB_READONLY)
+
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_method, 0, border=3, flag=flags)
+        self.hbox.Add(self.method, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
 
         self.vbox.AddSpacer(10)
 
