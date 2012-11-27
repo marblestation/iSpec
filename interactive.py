@@ -605,66 +605,66 @@ class SpectraFrame(wx.Frame):
         self.operation_err = "err"
         self.safe_operations_description = []
         self.safe_operations = {}
-        self.safe_operations_description.append("sin(x)\t\t\t\tTrigonometric sine, element-wise.")
+        self.safe_operations_description.append("sin(x)  ::  Trigonometric sine, element-wise.")
         self.safe_operations['sin'] = np.sin
-        self.safe_operations_description.append("cos(x)\t\t\t\tCosine elementwise.")
+        self.safe_operations_description.append("cos(x)  ::  Cosine elementwise.")
         self.safe_operations['cos'] = np.cos
-        self.safe_operations_description.append("tan(x)\t\t\t\tCompute tangent element-wise.")
+        self.safe_operations_description.append("tan(x)  ::  Compute tangent element-wise.")
         self.safe_operations['tan'] = np.tan
-        self.safe_operations_description.append("arcsin(x)\t\t\tInverse sine, element-wise.")
+        self.safe_operations_description.append("arcsin(x)  ::  Inverse sine, element-wise.")
         self.safe_operations['arcsin'] = np.arcsin
-        self.safe_operations_description.append("arccos(x)\t\t\tTrigonometric inverse cosine, element-wise.")
+        self.safe_operations_description.append("arccos(x)  ::  Trigonometric inverse cosine, element-wise.")
         self.safe_operations['arccos'] = np.arccos
-        self.safe_operations_description.append("arctan(x)\t\t\tTrigonometric inverse tangent, element-wise.")
+        self.safe_operations_description.append("arctan(x)  ::  Trigonometric inverse tangent, element-wise.")
         self.safe_operations['arctan'] = np.arctan
-        self.safe_operations_description.append("arctan2(x1, x2)\tArc tangent of x1/x2 choosing the correct quadrant")
+        self.safe_operations_description.append("arctan2(x1, x2)  ::  Arc tangent of x1/x2 choosing the correct quadrant")
         self.safe_operations['arctan2'] = np.arctan2
 
-        self.safe_operations_description.append("sinh(x)\t\t\t\tHyperbolic sine, element-wise.")
+        self.safe_operations_description.append("sinh(x)  ::  Hyperbolic sine, element-wise.")
         self.safe_operations['sinh'] = np.sinh
-        self.safe_operations_description.append("cosh(x)\t\t\tHyperbolic cosine, element-wise.")
+        self.safe_operations_description.append("cosh(x)  ::  Hyperbolic cosine, element-wise.")
         self.safe_operations['cosh'] = np.cosh
-        self.safe_operations_description.append("tanh(x)\t\t\tCompute hyperbolic tangent element-wise.")
+        self.safe_operations_description.append("tanh(x)  ::  Compute hyperbolic tangent element-wise.")
         self.safe_operations['tanh'] = np.tanh
-        self.safe_operations_description.append("arcsinh(x)\t\t\tInverse hyperbolic sine elementwise.")
+        self.safe_operations_description.append("arcsinh(x)  ::  Inverse hyperbolic sine elementwise.")
         self.safe_operations['arcsinh'] = np.arcsinh
-        self.safe_operations_description.append("arccosh(x)\t\tInverse hyperbolic cosine, elementwise.")
+        self.safe_operations_description.append("arccosh(x)  ::  Inverse hyperbolic cosine, elementwise.")
         self.safe_operations['arccosh'] = np.arccosh
-        self.safe_operations_description.append("arctanh(x)\t\t\tInverse hyperbolic tangent elementwise.")
+        self.safe_operations_description.append("arctanh(x)  ::  Inverse hyperbolic tangent elementwise.")
         self.safe_operations['arctanh'] = np.arctanh
 
-        self.safe_operations_description.append("around(a[, dec])\tEvenly round to the given number of decimals.")
+        self.safe_operations_description.append("around(a[, dec])  ::  Evenly round to the given number of decimals.")
         self.safe_operations['around'] = np.around
-        self.safe_operations_description.append("floor(x)\t\t\tReturn the floor of the input, element-wise.")
+        self.safe_operations_description.append("floor(x)  ::  Return the floor of the input, element-wise.")
         self.safe_operations['floor'] = np.floor
-        self.safe_operations_description.append("ceil(x)\t\t\t\tReturn the ceiling of the input, element-wise.")
+        self.safe_operations_description.append("ceil(x)  ::  Return the ceiling of the input, element-wise.")
         self.safe_operations['ceil'] = np.ceil
 
-        self.safe_operations_description.append("exp(x)\t\t\t\tCalculate the exponential of all elements in the input array.")
+        self.safe_operations_description.append("exp(x)  ::  Calculate the exponential of all elements in the input array.")
         self.safe_operations['exp'] = np.exp
-        self.safe_operations_description.append("log(x)\t\t\t\tNatural logarithm, element-wise.")
+        self.safe_operations_description.append("log(x)  ::  Natural logarithm, element-wise.")
         self.safe_operations['log'] = np.log
-        self.safe_operations_description.append("log10(x)\t\t\tReturn the base 10 logarithm of the input array, element-wise.")
+        self.safe_operations_description.append("log10(x)  ::  Return the base 10 logarithm of the input array, element-wise.")
         self.safe_operations['log10'] = np.log10
-        self.safe_operations_description.append("log2(x)\t\t\tBase-2 logarithm of x.")
+        self.safe_operations_description.append("log2(x)  ::  Base-2 logarithm of x.")
         self.safe_operations['log2'] = np.log2
 
-        self.safe_operations_description.append("sqrt(x)\t\t\tReturn the positive square-root of an array, element-wise.")
+        self.safe_operations_description.append("sqrt(x)  ::  Return the positive square-root of an array, element-wise.")
         self.safe_operations['sqrt'] = np.sqrt
-        self.safe_operations_description.append("absolute(x)\t\tCompute the absolute values elementwise.")
+        self.safe_operations_description.append("absolute(x)  ::  Compute the absolute values elementwise.")
         self.safe_operations['absolute'] = np.absolute
 
-        self.safe_operations_description.append("add(x1, x2)\t\tAdd arguments element-wise.")
+        self.safe_operations_description.append("add(x1, x2)  ::  Add arguments element-wise.")
         self.safe_operations['add'] = np.add
-        self.safe_operations_description.append("multiply(x1, x2)\tMultiply arguments element-wise.")
+        self.safe_operations_description.append("multiply(x1, x2)  ::  Multiply arguments element-wise.")
         self.safe_operations['multiply'] = np.multiply
-        self.safe_operations_description.append("divide(x1, x2)\t\tDivide arguments element-wise.")
+        self.safe_operations_description.append("divide(x1, x2)  ::  Divide arguments element-wise.")
         self.safe_operations['divide'] = np.divide
-        self.safe_operations_description.append("power(x1, x2)\t\tArray elements raised to 'x2' powers.")
+        self.safe_operations_description.append("power(x1, x2)  ::  Array elements raised to 'x2' powers.")
         self.safe_operations['power'] = np.power
-        self.safe_operations_description.append("subtract(x1, x2)\tSubtract arguments, element-wise.")
+        self.safe_operations_description.append("subtract(x1, x2)  ::  Subtract arguments, element-wise.")
         self.safe_operations['subtract'] = np.subtract
-        self.safe_operations_description.append("mod(x1, x2)\t\tReturn element-wise remainder of division.")
+        self.safe_operations_description.append("mod(x1, x2)  ::  Return element-wise remainder of division.")
         self.safe_operations['mod'] = np.mod
 
         self.operation_in_progress = False

@@ -1043,7 +1043,7 @@ class OperateSpectrumDialog(wx.Dialog):
         # Operation
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
 
-        self.text_operation = wx.StaticText(self, -1, "Functions: ", style=wx.ALIGN_LEFT)
+        self.text_operation = wx.StaticText(self, -1, "Available functions: ", style=wx.ALIGN_LEFT)
         self.operation = wx.ComboBox (self, wx.ID_ANY, operations_description[0], choices=operations_description, style=wx.CB_READONLY)
 
         self.hbox.AddSpacer(10)
@@ -1066,8 +1066,8 @@ class OperateSpectrumDialog(wx.Dialog):
         ### Value
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
 
-        self.text_waveobs = wx.StaticText(self, -1, "Waveobs\t = ", style=wx.ALIGN_LEFT)
-        self.waveobs = wx.TextCtrl(self, -1, str(waveobs),  style=wx.TE_LEFT, size = wx.Size(500, 30))
+        self.text_waveobs = wx.StaticText(self, -1, "Waves\t = ", style=wx.ALIGN_LEFT)
+        self.waveobs = wx.TextCtrl(self, -1, str(waveobs),  style=wx.TE_LEFT, size = wx.Size(500, -1))
 
         self.hbox.AddSpacer(10)
         self.hbox.Add(self.text_waveobs, 0, border=3, flag=flags)
@@ -1088,8 +1088,8 @@ class OperateSpectrumDialog(wx.Dialog):
         ### Value
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
 
-        self.text_flux = wx.StaticText(self, -1, "Flux\t\t = ", style=wx.ALIGN_LEFT)
-        self.flux = wx.TextCtrl(self, -1, str(flux),  style=wx.TE_LEFT, size = wx.Size(500, 30))
+        self.text_flux = wx.StaticText(self, -1, "Fluxes\t = ", style=wx.ALIGN_LEFT)
+        self.flux = wx.TextCtrl(self, -1, str(flux),  style=wx.TE_LEFT, size = wx.Size(500, -1))
 
         self.hbox.AddSpacer(10)
         self.hbox.Add(self.text_flux, 0, border=3, flag=flags)
@@ -1110,8 +1110,8 @@ class OperateSpectrumDialog(wx.Dialog):
         ### Value
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
 
-        self.text_err = wx.StaticText(self, -1, "Error\t\t = ", style=wx.ALIGN_LEFT)
-        self.err = wx.TextCtrl(self, -1, str(err),  style=wx.TE_LEFT, size = wx.Size(500, 30))
+        self.text_err = wx.StaticText(self, -1, "Errors\t = ", style=wx.ALIGN_LEFT)
+        self.err = wx.TextCtrl(self, -1, str(err),  style=wx.TE_LEFT, size = wx.Size(500, -1))
 
         self.hbox.AddSpacer(10)
         self.hbox.Add(self.text_err, 0, border=3, flag=flags)
