@@ -1745,9 +1745,11 @@ class SpectraFrame(wx.Frame):
         path = self.active_spectrum.path
         color = self.get_color()
         self.active_spectrum = Spectrum(new_spectrum_data, name, path = path, color=color)
+        self.active_spectrum.not_saved = False
         self.spectra.append(self.active_spectrum)
         self.active_spectrum_history.append(self.active_spectrum)
         self.update_menu_active_spectrum()
+        self.update_title()
         self.draw_active_spectrum()
         #self.draw_continuum_spectrum()
         #self.draw_fitted_lines()
@@ -2321,9 +2323,35 @@ class SpectraFrame(wx.Frame):
 
         wave_base = self.text2float(dlg.wave_base.GetValue(), 'Base wavelength value is not a valid one.')
         wave_top = self.text2float(dlg.wave_top.GetValue(), 'Top wavelength value is not a valid one.')
+        in_segments = dlg.radio_button_segments.GetValue()
         dlg.Destroy()
 
-        if wave_base == None or wave_top == None or wave_top <= wave_base:
+        if not in_segments and (wave_base == None or wave_top == None or wave_top <= wave_base):
+            self.flash_status_message("Bad value.")
+            return
+
+        if in_segments and (self.region_widgets["segments"] == None or len(self.region_widgets["segments"]) == 0):
+            wx.CallAfter(self.flash_status_message, "No segments found.")
+            return
+
+        if not in_segments:
+            wfilter = (self.active_spectrum.data['waveobs'] >= wave_base) & (self.active_spectrum.data['waveobs'] <= wave_top)
+        else:
+            # Build wavelength points from regions
+            wfilter = None
+            for region in self.region_widgets["segments"]:
+                wave_base = region.get_wave_base()
+                wave_top = region.get_wave_top()
+
+                if wfilter == None:
+                    wfilter = np.logical_and(self.active_spectrum.data['waveobs'] >= wave_base, self.active_spectrum.data['waveobs'] <= wave_top)
+                else:
+                    wfilter = np.logical_or(wfilter, np.logical_and(self.active_spectrum.data['waveobs'] >= wave_base, self.active_spectrum.data['waveobs'] <= wave_top))
+
+        if len(self.active_spectrum.data[wfilter]) == 0:
+            msg = "This action cannot be done since it would produce a spectrum without measurements."
+            title = "Wrong wavelength range"
+            self.error(title, msg)
             self.flash_status_message("Bad value.")
             return
 
@@ -2333,14 +2361,6 @@ class SpectraFrame(wx.Frame):
             title = "Changes not saved"
             if not self.question(title, msg):
                 return
-
-        wfilter = (self.active_spectrum.data['waveobs'] >= wave_base) & (self.active_spectrum.data['waveobs'] <= wave_top)
-        if len(self.active_spectrum.data[wfilter]) == 0:
-            msg = "This action cannot be done since it would produce a spectrum without measurements."
-            title = "Wrong wavelength range"
-            self.error(title, msg)
-            self.flash_status_message("Bad value.")
-            return
 
         self.status_message("Cutting spectrum...")
 
@@ -3864,18 +3884,16 @@ max_wave_range=max_wave_range)
             abundances_file = resource_path("input/abundances/" + selected_atmosphere_models + "/stdatom.dat")
 
             in_segments = dlg.radio_button_segments.GetValue() # else in spectrum
+            if in_segments:
+                elements_type = "segments"
+            in_lines = dlg.radio_button_lines.GetValue() # else in spectrum
+            if in_lines:
+                elements_type = "lines"
             dlg.Destroy()
 
             if teff == None or logg == None or MH == None or microturbulence_vel == None or resolution == None or wave_base == None or wave_top == None:
                 self.flash_status_message("Bad value.")
                 return
-
-            #if wave_step > 0.01:
-                #msg = "Wavelength step cannot be bigger than 0.01 nm"
-                #title = 'Wavelength step error'
-                #self.error(title, msg)
-                #self.flash_status_message("Bad values.")
-                #return
 
             if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
                 logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
@@ -3903,41 +3921,6 @@ max_wave_range=max_wave_range)
             self.status_message("Interpolating atmosphere model...")
             atmosphere_layers = sve.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH)
 
-            # Generate
-            #if not in_segments:
-                #if wave_base >= wave_top:
-                    #msg = "Bad wavelength range definition, maximum value cannot be lower than minimum value."
-                    #title = 'Wavelength range'
-                    #self.error(title, msg)
-                    #self.flash_status_message("Bad values.")
-                    #return
-
-                #waveobs = np.arange(wave_base, wave_top, wave_step)
-
-                #wfilter = np.logical_and(linelist['wave (A)'] >= wave_base*10.., linelist['wave (A)'] <= wave_top*10.)
-                #linelist = linelist[wfilter]
-            #else:
-                ##in_segments
-                #if len(self.region_widgets["segments"]) == 0:
-                    #self.flash_status_message("No segments present for synthetic spectrum generation.")
-                    #return
-
-                ## Build wavelength points from regions
-                #waveobs = None
-                #wfilter = None
-                #for region in self.region_widgets["segments"]:
-                    #wave_base = region.get_wave_base()
-                    #wave_top = region.get_wave_top()
-
-                    #new_waveobs = np.arange(wave_base-10, wave_top+10, wave_step)
-                    #if waveobs == None:
-                        #waveobs = new_waveobs
-                        #wfilter = np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.)
-                    #else:
-                        #waveobs = np.hstack((waveobs, new_waveobs))
-                        #wfilter = np.logical_or(wfilter, np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.))
-                #linelist = linelist[wfilter]
-
             if wave_base >= wave_top:
                 msg = "Bad wavelength range definition, maximum value cannot be lower than minimum value."
                 title = 'Wavelength range'
@@ -3946,18 +3929,18 @@ max_wave_range=max_wave_range)
                 return
             waveobs = np.arange(wave_base, wave_top, wave_step)
 
-            if not in_segments:
+            if not in_segments and not in_lines:
                 lfilter = np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.)
                 waveobs_mask = np.ones(len(waveobs)) # Compute fluxes for all the wavelengths
             else:
-                #in_segments
-                if len(self.region_widgets["segments"]) == 0:
-                    self.flash_status_message("No segments present for synthetic spectrum generation.")
+                #in_segments or in_lines
+                if len(self.region_widgets[elements_type]) == 0:
+                    self.flash_status_message("No segments/line masks present for synthetic spectrum generation.")
                     return
 
                 # Build wavelength points from regions
                 wfilter = None
-                for region in self.region_widgets["segments"]:
+                for region in self.region_widgets[elements_type]:
                     wave_base = region.get_wave_base()
                     wave_top = region.get_wave_top()
 

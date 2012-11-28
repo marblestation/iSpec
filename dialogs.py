@@ -889,6 +889,22 @@ class CutSpectrumDialog(wx.Dialog):
 
         self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
 
+        ### Wavelength range
+        self.hbox = wx.BoxSizer(wx.HORIZONTAL)
+        self.text_where = wx.StaticText(self, -1, "Consider: ", style=wx.ALIGN_LEFT)
+        self.hbox.AddSpacer(10)
+        self.hbox.Add(self.text_where, 0, border=3, flag=flags)
+
+        self.vbox2 = wx.BoxSizer(wx.VERTICAL)
+        self.radio_button_custom_range = wx.RadioButton(self, -1, 'Custom range (defined above)', style=wx.RB_GROUP)
+        self.vbox2.Add(self.radio_button_custom_range, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
+        self.radio_button_segments = wx.RadioButton(self, -1, 'Segments')
+        self.vbox2.Add(self.radio_button_segments, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
+        self.radio_button_custom_range.SetValue(True)
+        self.hbox.Add(self.vbox2, 0, border=3, flag=flags)
+
+        self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
+
         self.vbox.AddSpacer(10)
 
         sizer =  self.CreateButtonSizer(wx.CANCEL|wx.OK)
@@ -1368,6 +1384,8 @@ class SyntheticSpectrumDialog(wx.Dialog):
         self.vbox2.Add(self.radio_button_custom_range, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
         self.radio_button_segments = wx.RadioButton(self, -1, 'Segments')
         self.vbox2.Add(self.radio_button_segments, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
+        self.radio_button_lines = wx.RadioButton(self, -1, 'Line masks')
+        self.vbox2.Add(self.radio_button_lines, 0, border=3, flag=wx.LEFT | wx.TOP | wx.GROW)
         self.radio_button_custom_range.SetValue(True)
         self.hbox.Add(self.vbox2, 0, border=3, flag=flags)
 
