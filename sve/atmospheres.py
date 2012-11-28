@@ -731,9 +731,10 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
     return layers
 
 
-def write_atmosphere(teff, logg, MH, layers):
+def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None):
     """
-    Write a model atmosphere to a temporary file
+    Write a model atmosphere to file
+    If filename is not specified, a temporary file is created and the name is returned.
 
     :param layers:
         Output from interpolate_atmosphere_layers
@@ -742,10 +743,15 @@ def write_atmosphere(teff, logg, MH, layers):
     :returns:
         Name of the temporary file
     """
-    atm_file = tempfile.NamedTemporaryFile(delete=False)
-    atm_file.write("%.1f  %.5f  %.2f  %i\n" % (teff, logg, MH, len(layers)) )
-    for layer in layers:
-        atm_file.write("%.8e   %.1f %.3e %.3e %.3e %.3e %.3e\n" % (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]) )
+    if atmosphere_filename != None:
+        atm_file = open(atmosphere_filename, "w")
+    else:
+        # Temporary file
+        atm_file = tempfile.NamedTemporaryFile(delete=False)
+    atm_file.write("%.1f  %.5f  %.2f  %i\n" % (teff, logg, MH, len(atmosphere_layers)) )
+    atm_file.write("\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]))) for layer in atmosphere_layers]))
+    #for layer in layers:
+        #atm_file.write("%.8e   %.1f %.3e %.3e %.3e %.3e %.3e\n" % (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]) )
     atm_file.close()
     return atm_file.name
 

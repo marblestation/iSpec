@@ -152,7 +152,7 @@ FILE *opout;
 linedata *oneline;
 
 
-int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, double microturbulence_vel, int verbose, int num_measures, const double waveobs[], double fluxes[], progressfunc user_func, void *user_data) {
+int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, char* fixed_abundances_file, double microturbulence_vel, int verbose, int num_measures, const double waveobs[], const double waveobs_mask[], double fluxes[], progressfunc user_func, void *user_data) {
     int i;
     int nline = 0;
     int nlist = 0;
@@ -259,6 +259,8 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
     ah = 0.911;
     ahe = 0.089;
     inatom(abundances_file,atom,model->MH,&ah,&ahe);
+    infix(fixed_abundances_file,atom,ah);
+
     if(flaga == 1) printf("\nHydrogen abundance = %5.3f     Helium = %5.3f\n",ah,ahe);
 
     if(flagx == 1) infix(fixfile,atom,ah);
@@ -315,35 +317,38 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
             }
         }
         inc = dwave;
-        
-        Depth = 1.0;
 
-        tauwave(model,wave);
-        //printf("*** %f\n", model->tauwave[1]);
-        
-        Flux = flux(model,wave);
-        //printf("*** %f\n", Flux);
-        //exit(1);
-        
-        if (pos == 0) {
-            // Reset static vars such as last wave (argument 8)
-            linelst(wave,list,&nlist,atom,model->teff,model->logg,qf,1,isotope,model,Flux,V,POP,dwave);
-        } else {
-            linelst(wave,list,&nlist,atom,model->teff,model->logg,qf,0,isotope,model,Flux,V,POP,dwave);
-        }
-        inlin(wave,line,&nline,list,nlist,atom,isotope);
-        for(i=0;i<nline;i++) {
-            if(line[i].flag == 0) {
-                pop(line,i,model,V,POP);
-                broad(model,line,i,line[i].sig,line[i].alp,line[i].fac);
-                capnu(line,i,model);
+        // Only compute not masked wavelengths
+        if (waveobs_mask[pos] == 1.0) {
+            Depth = 1.0;
+
+            tauwave(model,wave);
+            //printf("*** %f\n", model->tauwave[1]);
+            
+            Flux = flux(model,wave);
+            //printf("*** %f\n", Flux);
+            //exit(1);
+            
+            if (pos == 0) {
+                // Reset static vars such as last wave (argument 8)
+                linelst(wave,list,&nlist,atom,model->teff,model->logg,qf,1,isotope,model,Flux,V,POP,dwave);
+            } else {
+                linelst(wave,list,&nlist,atom,model->teff,model->logg,qf,0,isotope,model,Flux,V,POP,dwave);
             }
+            inlin(wave,line,&nline,list,nlist,atom,isotope);
+            for(i=0;i<nline;i++) {
+                if(line[i].flag == 0) {
+                    pop(line,i,model,V,POP);
+                    broad(model,line,i,line[i].sig,line[i].alp,line[i].fac);
+                    capnu(line,i,model);
+                }
+            }
+            taukap(wave,model,atom,line,nline,strgln,V,He,POP);
+            Depth = depth(model,wave,Flux);
+            fluxes[pos] = 1.0 - Depth;
+        } else {
+            fluxes[pos] = 1.0;
         }
-        taukap(wave,model,atom,line,nline,strgln,V,He,POP);
-        Depth = depth(model,wave,Flux);
-        
-        
-        fluxes[pos] = 1.0 - Depth;
         
         if (pos % 4000 == 0) {
             if(flagw == 1) printf("Wavelength %9.3f - Work completed %.2f\%\n", wave, ((1.0*pos)/num_measures)*100.0);
@@ -498,7 +503,8 @@ int rotation_spectrum(const double waveobs[], double fluxes[], int num_measures,
     double modified_fluxes[num_measures];
     convolv(waveobs, fluxes, modified_fluxes, num_measures, vsini, limb_darkening_coeff);
 
-    for(i=0;i<num_measures;i++){
+    // Do not modify first position to avoid edge distorsions
+    for(i=1;i<num_measures;i++){
         fluxes[i] = modified_fluxes[i];
     }
 

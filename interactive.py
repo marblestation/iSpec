@@ -588,6 +588,9 @@ class SpectraFrame(wx.Frame):
         self.find_lines_max_depth = 1.00 # (% of the continuum)
         self.show_errors = False
 
+        self.linelist_SPECTRUM = {}
+        self.abundances_SPECTRUM = {}
+
         # Barycentric velocity determination (default params)
         self.day = 15
         self.month = 2
@@ -3859,10 +3862,6 @@ max_wave_range=max_wave_range)
             selected_linelist = dlg.linelist.GetValue()
             linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + "/300_1100nm.lst")
             abundances_file = resource_path("input/abundances/" + selected_atmosphere_models + "/stdatom.dat")
-            if selected_atmosphere_models == "MARCS":
-                nlayers = 56
-            else:
-                nlayers = 72
 
             in_segments = dlg.radio_button_segments.GetValue() # else in spectrum
             dlg.Destroy()
@@ -3890,21 +3889,66 @@ max_wave_range=max_wave_range)
                 self.flash_status_message("Bad values.")
                 return
 
+            # Load SPECTRUM linelist
+            if not linelist_file in self.linelist_SPECTRUM.keys():
+                self.linelist_SPECTRUM[linelist_file] = sve.read_SPECTRUM_linelist(linelist_file)
+            linelist = self.linelist_SPECTRUM[linelist_file]
+
+            # Load SPECTRUM abundances
+            if not abundances_file in self.abundances_SPECTRUM.keys():
+                self.abundances_SPECTRUM[abundances_file] = sve.read_SPECTRUM_abundances(abundances_file)
+            abundances = self.abundances_SPECTRUM[abundances_file]
+
             # Prepare atmosphere model
             self.status_message("Interpolating atmosphere model...")
-            layers = sve.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH)
-            atm_filename = sve.write_atmosphere(teff, logg, MH, layers)
+            atmosphere_layers = sve.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH)
 
             # Generate
-            if not in_segments:
-                if wave_base >= wave_top:
-                    msg = "Bad wavelength range definition, maximum value cannot be lower than minimum value."
-                    title = 'Wavelength range'
-                    self.error(title, msg)
-                    self.flash_status_message("Bad values.")
-                    return
+            #if not in_segments:
+                #if wave_base >= wave_top:
+                    #msg = "Bad wavelength range definition, maximum value cannot be lower than minimum value."
+                    #title = 'Wavelength range'
+                    #self.error(title, msg)
+                    #self.flash_status_message("Bad values.")
+                    #return
 
-                waveobs = np.arange(wave_base, wave_top, wave_step)
+                #waveobs = np.arange(wave_base, wave_top, wave_step)
+
+                #wfilter = np.logical_and(linelist['wave (A)'] >= wave_base*10.., linelist['wave (A)'] <= wave_top*10.)
+                #linelist = linelist[wfilter]
+            #else:
+                ##in_segments
+                #if len(self.region_widgets["segments"]) == 0:
+                    #self.flash_status_message("No segments present for synthetic spectrum generation.")
+                    #return
+
+                ## Build wavelength points from regions
+                #waveobs = None
+                #wfilter = None
+                #for region in self.region_widgets["segments"]:
+                    #wave_base = region.get_wave_base()
+                    #wave_top = region.get_wave_top()
+
+                    #new_waveobs = np.arange(wave_base-10, wave_top+10, wave_step)
+                    #if waveobs == None:
+                        #waveobs = new_waveobs
+                        #wfilter = np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.)
+                    #else:
+                        #waveobs = np.hstack((waveobs, new_waveobs))
+                        #wfilter = np.logical_or(wfilter, np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.))
+                #linelist = linelist[wfilter]
+
+            if wave_base >= wave_top:
+                msg = "Bad wavelength range definition, maximum value cannot be lower than minimum value."
+                title = 'Wavelength range'
+                self.error(title, msg)
+                self.flash_status_message("Bad values.")
+                return
+            waveobs = np.arange(wave_base, wave_top, wave_step)
+
+            if not in_segments:
+                lfilter = np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.)
+                waveobs_mask = np.ones(len(waveobs)) # Compute fluxes for all the wavelengths
             else:
                 #in_segments
                 if len(self.region_widgets["segments"]) == 0:
@@ -3912,16 +3956,21 @@ max_wave_range=max_wave_range)
                     return
 
                 # Build wavelength points from regions
-                waveobs = None
+                wfilter = None
                 for region in self.region_widgets["segments"]:
                     wave_base = region.get_wave_base()
                     wave_top = region.get_wave_top()
 
-                    new_waveobs = np.arange(wave_base, wave_top, wave_step)
-                    if waveobs == None:
-                        waveobs = new_waveobs
+                    if wfilter == None:
+                        lfilter = np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.)
+                        wfilter = np.logical_and(waveobs >= wave_base, waveobs <= wave_top)
                     else:
-                        waveobs = np.hstack((waveobs, new_waveobs))
+                        lfilter = np.logical_or(lfilter, np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.))
+                        wfilter = np.logical_or(wfilter, np.logical_and(waveobs >= wave_base, waveobs <= wave_top))
+                waveobs_mask = np.zeros(len(waveobs))
+                waveobs_mask[wfilter] = 1.0 # Compute fluxes only for selected segments
+            linelist = linelist[lfilter]
+
 
             # If wavelength out of the linelist file are used, SPECTRUM starts to generate flat spectrum
             if np.min(waveobs) < 300.0 or np.max(waveobs) > 1100.0:
@@ -3946,24 +3995,26 @@ max_wave_range=max_wave_range)
             self.operation_in_progress = True
             self.status_message("Synthesizing spectrum...")
             self.update_progress(10)
-            thread = threading.Thread(target=self.on_synthesize_thread, args=(waveobs, linelist_file, abundances_file, atm_filename, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, nlayers))
+            thread = threading.Thread(target=self.on_synthesize_thread, args=(waveobs, waveobs_mask, linelist, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, ))
             thread.setDaemon(True)
             thread.start()
 
-    def on_synthesize_thread(self, waveobs, linelist_file, abundances_file, atm_filename, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution, nlayers):
+    def on_synthesize_thread(self, waveobs, waveobs_mask, linelist, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
         total_points = len(waveobs)
 
         synth_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
         synth_spectrum['waveobs'] = waveobs
 
+        # No fixed abundances
+        fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
+
         # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
-        synth_spectrum['flux'] = sve.generate_spectrum(synth_spectrum['waveobs']*10.0, atm_filename, linelist_file=linelist_file, abundances_file=abundances_file, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, nlayers=nlayers, verbose=1, update_progress_func=self.update_progress)
+        synth_spectrum['flux'] = sve.generate_spectrum(synth_spectrum['waveobs']*10.0, waveobs_mask, atmosphere_layers, teff, logg, MH, linelist=linelist, abundances=abundances, fixed_abundances=fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, verbose=1, update_progress_func=self.update_progress)
 
 
         synth_spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
 
         # Remove atmosphere model temporary file
-        os.remove(atm_filename)
         wx.CallAfter(self.on_synthesize_finnish, synth_spectrum, teff, logg, MH, microturbulence_vel)
 
     def on_synthesize_finnish(self, synth_spectrum, teff, logg, MH, microturbulence_vel):
@@ -4044,10 +4095,6 @@ max_wave_range=max_wave_range)
         microturbulence_vel = self.text2float(dlg.microturbulence_vel.GetValue(), 'Microturbulence velocity value is not a valid one.')
         selected_atmosphere_models = dlg.atmospheres.GetValue()
         abundances_file = resource_path("input/abundances/" + selected_atmosphere_models + "/stdatom.dat")
-        if selected_atmosphere_models == "MARCS":
-            nlayers = 56
-        else:
-            nlayers = 72
         dlg.Destroy()
 
         if teff == None or logg == None or MH == None or microturbulence_vel == None:
@@ -4071,35 +4118,31 @@ max_wave_range=max_wave_range)
             self.flash_status_message("Bad values.")
             return
 
+        # Load SPECTRUM abundances
+        if not abundances_file in self.abundances_SPECTRUM.keys():
+            self.abundances_SPECTRUM[abundances_file] = sve.read_SPECTRUM_abundances(abundances_file)
+        abundances = self.abundances_SPECTRUM[abundances_file]
+
         # Prepare atmosphere model
         self.status_message("Interpolating atmosphere model...")
-        layers = sve.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH)
-        atm_filename = sve.write_atmosphere(teff, logg, MH, layers)
+        atmosphere_layers = sve.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH)
 
         self.operation_in_progress = True
         self.status_message("Determining abundances...")
         self.update_progress(10)
 
-        thread = threading.Thread(target=self.on_determine_abundances_thread, args=(atm_filename, abundances_file, microturbulence_vel, nlayers))
+        thread = threading.Thread(target=self.on_determine_abundances_thread, args=(atmosphere_layers, teff, logg, MH, abundances, microturbulence_vel,))
         thread.setDaemon(True)
         thread.start()
 
 
-    def on_determine_abundances_thread(self, atmosphere_model_file, abundances_file, microturbulence_vel, nlayers):
-        linelist_file = tempfile.NamedTemporaryFile(delete=False)
-        linelist_file.close()
-        linelist_filename = linelist_file.name
-        self.active_spectrum.linemasks['ew'] = 1000. * 10. * self.active_spectrum.linemasks['ew'] # From nm to mA
-        self.active_spectrum.linemasks['VALD_wave_peak'] = 10 * self.active_spectrum.linemasks['VALD_wave_peak'] # From nm to Angstrom
-        sve.write_abundance_lines(self.active_spectrum.linemasks, linelist_filename)
-        self.active_spectrum.linemasks['ew'] = self.active_spectrum.linemasks['ew'] / (1000. * 10.) # From mA to nm
-        self.active_spectrum.linemasks['VALD_wave_peak'] = self.active_spectrum.linemasks['VALD_wave_peak'] / 10 # From Angstrom to nm
-        num_measures = len(self.active_spectrum.linemasks)
-        abundances, normal_abundances, relative_abundances = sve.determine_abundances(atmosphere_model_file, linelist_filename, num_measures, abundances_file, microturbulence_vel = 2.0, nlayers=nlayers, verbose=1, update_progress_func=self.update_progress)
+    def on_determine_abundances_thread(self, atmosphere_layers, teff, logg, MH, abundances, microturbulence_vel):
+        linemasks = self.active_spectrum.linemasks.copy()
+        linemasks['ew'] = 1000. * 10. * linemasks['ew'] # From nm to mA
+        linemasks['VALD_wave_peak'] = 10 * linemasks['VALD_wave_peak'] # From nm to Angstrom
 
-        # Remove atmosphere model temporary file
-        os.remove(atmosphere_model_file,)
-        os.remove(linelist_filename,)
+        abundances, normal_abundances, relative_abundances = sve.determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, verbose=1, update_progress_func=self.update_progress)
+
         wx.CallAfter(self.on_determine_abundances_finnish, abundances, normal_abundances, relative_abundances)
 
     def on_determine_abundances_finnish(self, abundances, normal_abundances, relative_abundances):

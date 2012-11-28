@@ -68,7 +68,7 @@ cdef extern from "spectrum276e/spectrum.h":
 
 cdef extern from "synthesizer_func.h":
     ctypedef void (*progressfunc)(double num, void *user_data)
-    int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, double microturbulence_vel, int verbose, int num_measures, double* waveobs, double *fluxes, progressfunc user_func, void *user_data)
+    int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, char *fixed_abundances_file, double microturbulence_vel, int verbose, int num_measures, double* waveobs, double* waveobs_mask, double *fluxes, progressfunc user_func, void *user_data)
     int macroturbulence_spectrum(double *waveobs, double *fluxes, int num_measures, double macroturbulence, int verbose, progressfunc user_func, void *user_data)
     int rotation_spectrum(double *waveobs, double *fluxes, int num_measures, double vsini, double limb_darkening_coeff, int verbose, progressfunc user_func, void *user_data)
     int resolution_spectrum(double *waveobs, double *fluxes, int num_measures, int R, int verbose, progressfunc user_func, void *user_data)
@@ -84,7 +84,7 @@ cdef void callback(double num, void *f):
 
 # waveobs in armstrong
 # microtturbulence velocity in km/s
-def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, char* atmosphere_model_file, char* linelist_file = "input/linelists/default.300_1100nm.lst", char* abundances_file = "input/abundances/default.stdatom.dat", double microturbulence_vel = 2.0, double macroturbulence = 3.0, double vsini = 2.0, double limb_darkening_coeff = 0.0, int R=500000, int nlayers = 56, int verbose = 0, update_progress_func=None):
+def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.double_t,ndim=1] waveobs_mask, char* atmosphere_model_file, char* linelist_file = "input/linelists/default.300_1100nm.lst", char* abundances_file = "input/abundances/default.stdatom.dat", char* fixed_abundances_file="none", double microturbulence_vel = 2.0, double macroturbulence = 3.0, double vsini = 2.0, double limb_darkening_coeff = 0.0, int R=500000, int nlayers = 56, int verbose = 0, update_progress_func=None):
     if not os.path.exists(atmosphere_model_file):
         raise Exception("Atmosphere model file '%s' does not exists!" % atmosphere_model_file)
     if not os.path.exists(linelist_file):
@@ -136,7 +136,9 @@ def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, char* atmosphere_model_file
         update_progress_func = dummy_func
     
     synthesize_spectrum(atmosphere_model_file, linelist_file, abundances_file, 
+            fixed_abundances_file,
             microturbulence_vel, verbose, num_measures, <double*> waveobs.data, 
+            <double*> waveobs_mask.data, 
             <double*> fluxes.data, callback, <void*>update_progress_func)
 
     if macroturbulence > 0:
