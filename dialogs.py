@@ -501,6 +501,9 @@ class DetermineBarycentricCorrectionDialog(wx.Dialog):
 
         self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
 
+        self.text_explanation = wx.StaticText(self, -1, "\tCoordinates in J2000.0 epoch:")
+        self.vbox.Add(self.text_explanation, 0, wx.CENTER )
+
         # Right Ascension
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
         self.text_ra = wx.StaticText(self, -1, "Right Ascension: ", style=wx.ALIGN_LEFT)
@@ -943,8 +946,8 @@ class ResampleSpectrumDialog(wx.Dialog):
         self.hbox.Add(self.text_wave_step, 0, border=3, flag=flags)
         self.hbox.Add(self.wave_step, 0, border=3, flag=flags)
 
-        self.text_from_resolution_explanation = wx.StaticText(self, -1, "min:" + str(min_step) + " | max:" + str(max_step) + "\nmedian:" + str(median_step) + "", style=wx.ALIGN_LEFT)
-        self.hbox.Add(self.text_from_resolution_explanation, 0, border=3, flag=flags)
+        self.text_explanation = wx.StaticText(self, -1, "min:" + str(min_step) + " | max:" + str(max_step) + "\nmedian:" + str(median_step) + "", style=wx.ALIGN_LEFT)
+        self.hbox.Add(self.text_explanation, 0, border=3, flag=flags)
 
         self.vbox.Add(self.hbox, 1,  wx.LEFT | wx.TOP | wx.GROW)
 

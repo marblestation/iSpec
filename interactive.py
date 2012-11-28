@@ -518,8 +518,11 @@ class SpectraFrame(wx.Frame):
 
         self.spectra_colors = ('#0000FF', '#A52A2A', '#A020F0', '#34764A', '#000000', '#90EE90', '#FFA500', '#1E90FF',   '#FFC0CB', '#7F7F7F', '#00FF00',)
 
+        self.dupiclated_name_separator = "#"
+
         self.spectra = []
         self.active_spectrum = None
+        self.active_spectrum_history = [] # History to be able to come back to the previous active when the current is closed
         for i in np.arange(len(spectra)):
             path = filenames["spectra"][i]
             name = path.split('/')[-1]
@@ -527,6 +530,7 @@ class SpectraFrame(wx.Frame):
             color = self.get_color()
             self.active_spectrum = Spectrum(spectra[i], name, path=path, color=color)
             self.spectra.append(self.active_spectrum)
+            self.active_spectrum_history.append(self.active_spectrum)
 
 
         if regions == None:
@@ -667,6 +671,11 @@ class SpectraFrame(wx.Frame):
         self.safe_operations_description.append("mod(x1, x2)  ::  Return element-wise remainder of division.")
         self.safe_operations['mod'] = np.mod
 
+        self.safe_operations_description.append("pi  ::  Pi value.")
+        self.safe_operations['pi'] = np.pi
+        self.safe_operations_description.append("e  ::  Euler's number.")
+        self.safe_operations['e'] = np.e
+
         self.operation_in_progress = False
 
         wx.Frame.__init__(self, None, -1, self.title)
@@ -755,7 +764,7 @@ class SpectraFrame(wx.Frame):
             if spec.name.startswith(name):
                 try:
                     # Does it has already a suffix?
-                    num = int(spec.name.split("-")[-1])
+                    num = int(spec.name.split(self.dupiclated_name_separator)[-1])
                     if num > max_num:
                         max_num = num
                 except ValueError as e:
@@ -763,7 +772,10 @@ class SpectraFrame(wx.Frame):
                 num_repeated += 1
 
         if num_repeated > 0: # There are repeated names
-            name = name + "-" + str(max_num+1) # Add identificator number + 1
+            if len(name.split(self.dupiclated_name_separator)) == 0:
+                name = name + self.dupiclated_name_separator + str(max_num+1) # Add identificator number + 1
+            else:
+                name = name.split(self.dupiclated_name_separator)[0] + self.dupiclated_name_separator + str(max_num+1) # Add identificator number + 1
         return name
 
 
@@ -827,6 +839,9 @@ class SpectraFrame(wx.Frame):
         m_expt = menu_edit.AppendMenu(-1, 'Select spectrum', self.menu_active_spectrum)
         self.spectrum_function_items.append(m_expt)
 
+        m_duplicate_spectrum = menu_edit.Append(-1, "Duplicate spectrum", "Duplicate current active spectrum")
+        self.Bind(wx.EVT_MENU, self.on_duplicate_spectrum, m_duplicate_spectrum)
+        self.spectrum_function_items.append(m_duplicate_spectrum)
         m_close_spectrum = menu_edit.Append(-1, "Close spectrum", "Close current active spectrum")
         self.Bind(wx.EVT_MENU, self.on_close_spectrum, m_close_spectrum)
         self.spectrum_function_items.append(m_close_spectrum)
@@ -1642,6 +1657,7 @@ class SpectraFrame(wx.Frame):
                             color = self.get_color()
                             self.active_spectrum = Spectrum(new_spectrum_data, name, path = path, color=color)
                             self.spectra.append(self.active_spectrum)
+                            self.active_spectrum_history.append(self.active_spectrum)
                             self.update_menu_active_spectrum()
                             self.draw_active_spectrum()
                         self.update_scale()
@@ -1706,6 +1722,36 @@ class SpectraFrame(wx.Frame):
             return
         self.open_file("segments")
 
+    def on_duplicate_spectrum(self, event):
+        if not self.check_active_spectrum_exists():
+            return
+        if self.check_operation_in_progress():
+            return
+
+        # Remove current continuum from plot if exists
+        self.remove_drawn_continuum_spectrum()
+
+        # Remove current drawn fitted lines if they exist
+        self.remove_drawn_fitted_lines()
+
+        # Remove "[A]  " from spectrum name (legend) if it exists
+        if self.active_spectrum != None and self.active_spectrum.plot_id != None:
+            self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
+        new_spectrum_data = self.active_spectrum.data.copy()
+        name = self.get_name(self.active_spectrum.name) # If it already exists, add a suffix
+        path = self.active_spectrum.path
+        color = self.get_color()
+        self.active_spectrum = Spectrum(new_spectrum_data, name, path = path, color=color)
+        self.spectra.append(self.active_spectrum)
+        self.active_spectrum_history.append(self.active_spectrum)
+        self.update_menu_active_spectrum()
+        self.draw_active_spectrum()
+        #self.draw_continuum_spectrum()
+        #self.draw_fitted_lines()
+        self.update_scale()
+        self.flash_status_message("Spectrum duplicated!")
+
+
     def on_close_spectrum(self, event):
         if not self.check_active_spectrum_exists():
             return
@@ -1730,8 +1776,18 @@ class SpectraFrame(wx.Frame):
         self.remove_fitted_lines()
         if len(self.spectra) == 0:
             self.active_spectrum = None
+            self.active_spectrum_history = []
         else:
-            self.active_spectrum = self.spectra[0]
+            while True:
+                try:
+                    self.active_spectrum_history.remove(self.active_spectrum)
+                except ValueError:
+                    break # All references to current active spectra removed from history
+            if len(self.active_spectrum_history) > 0:
+                # Activate the previous active spectrum
+                self.active_spectrum = self.active_spectrum_history[-1]
+            else:
+                self.active_spectrum = self.spectra[0]
 
         self.update_menu_active_spectrum()
         self.update_title()
@@ -1789,6 +1845,7 @@ class SpectraFrame(wx.Frame):
                     del region.line_extra[spec]
         self.spectra = []
         self.active_spectrum = None
+        self.active_spectrum_history = []
 
         self.update_menu_active_spectrum()
         self.update_title()
@@ -1851,7 +1908,7 @@ class SpectraFrame(wx.Frame):
             filename_length = len(filename)
             dirname = self.active_spectrum.path[:-filename_length]
         else:
-            filename = self.active_spectrum.name + ".txt"
+            filename = self.active_spectrum.name.split(self.dupiclated_name_separator)[0] + ".txt"
             dirname = os.getcwd()
 
         action_ended = False
@@ -2568,6 +2625,7 @@ class SpectraFrame(wx.Frame):
         self.active_spectrum = Spectrum(combined_spectrum, name, color=color)
         self.active_spectrum.not_saved = True
         self.spectra.append(self.active_spectrum)
+        self.active_spectrum_history.append(self.active_spectrum)
         self.draw_active_spectrum()
 
         self.update_menu_active_spectrum()
@@ -2804,6 +2862,7 @@ class SpectraFrame(wx.Frame):
                 self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
                 # Change active spectrum
                 self.active_spectrum = self.spectra[i]
+                self.active_spectrum_history.append(self.active_spectrum)
                 self.draw_active_spectrum()
 
                 self.draw_continuum_spectrum()
@@ -3931,6 +3990,7 @@ max_wave_range=max_wave_range)
         self.active_spectrum = Spectrum(synth_spectrum, name, color=color)
 
         self.spectra.append(self.active_spectrum)
+        self.active_spectrum_history.append(self.active_spectrum)
         self.active_spectrum.not_saved = True
         self.update_title()
         self.update_menu_active_spectrum()
@@ -4089,6 +4149,7 @@ max_wave_range=max_wave_range)
         self.active_spectrum = Spectrum(new_spectrum_data, name, color=color)
         self.active_spectrum.not_saved = True
         self.spectra.append(self.active_spectrum)
+        self.active_spectrum_history.append(self.active_spectrum)
         self.update_menu_active_spectrum()
         self.draw_active_spectrum()
         self.update_scale()

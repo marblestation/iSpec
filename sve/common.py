@@ -292,7 +292,7 @@ def __precession_matrix(equinox1, equinox2, fk4=False):
     The code has been copied from: `astrolib <http://code.google.com/p/astrolibpy/source/browse/trunk/astrolib/>`_
     """
 
-    deg_to_rad = pi / 180.0e0
+    deg_to_rad = np.pi / 180.0e0
     sec_to_rad = deg_to_rad / 3600.e0
 
     t = 0.001e0 * (equinox2 - equinox1)
@@ -508,7 +508,7 @@ def calculate_barycentric_velocity_correction(datetime, coordinates, deq=0):
     Calculates barycentric velocity correction for a given star.
     The code is based on: `astrolib <http://code.google.com/p/astrolibpy/source/browse/astrolib/baryvel.py>`_
     """
-    dvelh, dvelb = __baryvel(datetime)
+    dvelh, dvelb = __baryvel(datetime, deq=2000) # J2000.0
 
     # Calculate velocity toward a star in a given position
     ra_hours, ra_minutes, ra_seconds, dec_degrees,  dec_minutes, dec_seconds = coordinates

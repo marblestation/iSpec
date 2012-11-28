@@ -378,10 +378,21 @@ def __interpolate_flux(spectrum, wavelength):
 def resample_spectrum(spectrum, xaxis, method="linear", frame=None):
     """
     Returns a new spectrum with measures at the given xaxis wavelength
-    Interpolation is completely linear by default (fastest option) but a Bessel's
-    Central-Difference Interpolation with 4 points can be activated by
-    specifying "linear=False", in that case interpolation is linear only
-    when there are not enough points (i.e. beginning/end of spectrum).
+    Interpolation is completely linear by default (fastest option) but
+    it can also be:
+
+    * method = "bessel": A Bessel's Central-Difference Interpolation with
+    4 points. In this case interpolation is linear only when there are
+    not enough points (i.e. beginning/end of spectrum).
+    * method = "spline": A spline interpolation that may may be usefull
+    for obtaining a smooth oversampled spectra by following this simple
+    procedure:
+        - If the original spectrum is not uniformly sampled, apply first
+        the linear interpolation with a wave step equal to the median step
+        of the spectrum.
+        - Once the spectrum is uniformly sampled, apply the spline interpolation
+        with a wave step smaller than the current wave step.
+
     """
     total_points = len(xaxis)
     last_reported_progress = -1
