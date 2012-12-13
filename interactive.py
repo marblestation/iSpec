@@ -1936,7 +1936,7 @@ class SpectraFrame(wx.Frame):
 
                 self.status_message("Saving %s..." % path)
                 # Save, compress if the filename ends with ".gz"
-                sve.write_spectrum(self.active_spectrum.data, path, compress=(path.split('.')[-1] == "gz"))
+                sve.write_spectrum(self.active_spectrum.data, path)
                 self.active_spectrum.not_saved = False
                 self.update_title()
 

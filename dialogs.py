@@ -1694,7 +1694,8 @@ class AbundancesDialog(wx.Dialog):
             flines = linemasks['element'] == element
             element_linemasks = linemasks[flines]
             element_abundances = abundances[flines]
-            self.axes.plot(element_linemasks['VALD_wave_peak'], element_abundances, linestyle='', marker='o', markersize=5, zorder=1, label=element)
+            #self.axes.plot(element_linemasks['VALD_wave_peak'], element_abundances, linestyle='', marker='o', markersize=5, zorder=1, label=element)
+            self.axes.plot(element_linemasks['lower state (eV)'], element_abundances, linestyle='', marker='o', markersize=5, zorder=1, label=element)
             self.stats.InsertStringItem(num_items, element + " abundance (%)")
             self.stats.SetStringItem(num_items, 1, str(np.round(100.*np.power(10, np.median(element_abundances)), 5)))
             num_items += 1

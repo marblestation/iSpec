@@ -16,6 +16,7 @@
 #    along with SVE. If not, see <http://www.gnu.org/licenses/>.
 #
 import numpy as np
+import numpy.lib.recfunctions as rfn # Extra functions
 import pyfits
 import scipy.ndimage as ndi
 from spectrum import *
@@ -27,22 +28,118 @@ import matplotlib.pyplot as plt
 import log
 import logging
 
+def __read_fits_spectrum(spectrum_filename, fluxhdu="PRIMARY", errorhdu=None):
+    """
+    Reads the 'PRIMARY' HDU of the FITS file, considering that it contains the fluxes.
+
+    The wavelength are derived from the headers, if not possible it checks if the
+    data from the HDU contains 2 axes and takes the first as the wavelength
+    and the second as the flux.
+
+    It tries to find the errors in other HDU by checking the names and the length,
+    if none are found then they are set to zero.
+
+    Inspired by pyspeckit:
+        https://bitbucket.org/pyspeckit/pyspeckit.bitbucket.org/src/ae1e0714410b58905466740b04b54318d5f318f8/pyspeckit/spectrum/readers/fits_reader.py?at=default
+    """
+    hdulist = pyfits.open(spectrum_filename)
+
+    data = hdulist[fluxhdu].data
+    hdr = hdulist[fluxhdu].header
+
+    axis = 1
+    specaxis = str(axis)
+    # Try to determine if wavelength is in Angstrom (by default) or nm
+    ctype = hdr.get('CTYPE%i' % axis)
+    cunit = hdr.get('CUNIT%i' % axis)
+    if str(cunit).upper() in ['NM']:
+        unit = "nm"
+    else:
+        #if str(ctype).upper() in ['AWAV', 'ANGSTROM', '0.1 NM'] or str(cunit).upper() in ['AWAV', 'ANGSTROM', '0.1 NM']:
+        unit = "Angstrom"
+
+    flux = data.flatten()
+    waveobs = None
+    # NOTE: One can use hdr.get('ORIGIN') for special treatments
+    if hdr.get(str('CD%s_%s' % (specaxis,specaxis))) != None:
+        wave_step = hdr['CD%s_%s' % (specaxis,specaxis)]
+        wave_base = hdr['CRVAL%s' % (specaxis)]
+        reference_pixel = hdr['CRPIX%s' % (specaxis)]
+        logging.info("Using the FITS CD matrix.  PIX=%f VAL=%f DELT=%f UNIT=%s" % (reference_pixel,wave_base,wave_step,unit))
+    elif hdr.get(str('CDELT%s' % (specaxis))) != None:
+        wave_step = hdr['CDELT%s' % (specaxis)]
+        wave_base = hdr['CRVAL%s' % (specaxis)]
+        reference_pixel = hdr['CRPIX%s' % (specaxis)]
+        logging.info("Using the FITS CDELT value.  PIX=%f VAL=%f DELT=%f UNIT=%s" % (reference_pixel,wave_base,wave_step,unit))
+    elif len(data.shape) > 1:
+        logging.info("No CDELT or CD in header.  Assuming 2D input with 1st line representing the spectral axis.")
+        # try assuming first axis is X axis
+        if hdr.get('CUNIT%s' % (specaxis)) != None:
+            waveobs = data[0,:]
+            flux = data[1,:]
+            if data.shape[0] > 2:
+                errspec = data[2,:]
+        else:
+            raise Exception("Unknown FITS file format")
+    else:
+        raise Exception("Unknown FITS file format")
+
+    # Angstrom to nm
+    if unit != "nm":
+        wave_base /= 10
+        wave_step /= 10
+
+    # Deal with logarithmic wavelength binning if necessary
+    if waveobs is None:
+        if hdr.get('WFITTYPE') == 'LOG-LINEAR':
+            xconv = lambda v: 10**((v-reference_pixel+1)*wave_step+wave_base)
+            waveobs = xconv(np.arange(len(flux)))
+        else:
+            xconv = lambda v: ((v-reference_pixel+1)*wave_step+wave_base)
+            waveobs = xconv(np.arange(len(flux)))
+
+
+    num_measures = len(flux)
+    spectrum = np.recarray((num_measures, ), dtype=[('waveobs', float),('flux', float),('err', float)])
+    spectrum['waveobs'] = waveobs
+    spectrum['flux'] = flux
+
+    if errorhdu == None:
+        spectrum['err'] = np.zeros(len(flux))
+        # Try to find the errors in the extensions (HDU different than the PRIMARY):
+        for i in xrange(len(hdulist)):
+            name = hdulist[i].name.upper()
+            if name == str(fluxhdu) or len(hdulist[i].data.flatten()) != len(flux):
+                continue
+            if 'IVAR' in name or 'VARIANCE' in name:
+                spectrum['err'] = 1. / hdulist[i].data.flatten()
+                break
+            if 'NOISE' in name or 'ERR' in name or 'SIGMA' in name:
+                spectrum['err'] = hdulist[i].data.flatten()
+                break
+    else:
+        spectrum['err'] = hdulist[errorhdu].data.flatten()
+
+    hdulist.close()
+
+    return spectrum
+
 def __read_spectrum(spectrum_filename):
     try:
         spectrum = np.array([tuple(line.rstrip('\r\n').split("\t")) for line in open(spectrum_filename,)][1:], dtype=[('waveobs', float),('flux', float),('err', float)])
         if len(spectrum) == 0:
-            raise Exception("Empty spectrum or incompatible format")
-    except Exception as err:
-        # Try narval plain text format:
-        # - Ignores 2 first lines (header)
-        # - Ignores last line (empty)
-        # - Lines separated by \r
-        # - Columns separated by space
+            raise exception("empty spectrum or incompatible format")
+    except exception as err:
+        # try narval plain text format:
+        # - ignores 2 first lines (header)
+        # - ignores last line (empty)
+        # - lines separated by \r
+        # - columns separated by space
         narval = open(spectrum_filename,).readlines()[0].split('\r')
         spectrum = np.array([tuple(line.rstrip('\r').split()) for line in narval[2:-1]], dtype=[('waveobs', float),('flux', float),('err', float)])
     return spectrum
 
-def read_spectrum(spectrum_filename):
+def read_spectrum(spectrum_filename, fits_options={"fluxhdu": "PRIMARY", "errorhdu": None}):
     """
     Return spectrum recarray structure from a filename.
     The file format shouldd be plain text files with **tab** character as column delimiter.
@@ -61,11 +158,18 @@ def read_spectrum(spectrum_filename):
 
     If the specified file does not exists, it checks if there is a compressed version
     with the extension '.gz' (gzip) and if it exists, it will be automatically uncompressed.
+
+    ** It can recognise FITS files by the filename (extensions .FITS or .FIT), if this is
+    the case, then it tries to load the PRIMARY spectra by default and tries to search the errors
+    in the extensions of the FITS file (this behaviour can be modified by specifying
+    the HDU for the flux and the errors via "fits_options").
     """
     # If it is not compressed
-    if os.path.exists(spectrum_filename) and spectrum_filename[-3:] != ".gz":
+    if os.path.exists(spectrum_filename) and (spectrum_filename[-4:].lower() == ".fit" or spectrum_filename[-5:].lower() == ".fits") :
+        spectrum = __read_fits_spectrum(spectrum_filename, fluxhdu = fits_options["fluxhdu"], errorhdu = fits_options["errorhdu"])
+    elif os.path.exists(spectrum_filename) and spectrum_filename[-3:].lower() != ".gz":
         spectrum = __read_spectrum(spectrum_filename)
-    elif (os.path.exists(spectrum_filename) and spectrum_filename[-3:] == ".gz") or (os.path.exists(spectrum_filename + ".gz")):
+    elif (os.path.exists(spectrum_filename) and spectrum_filename[-3:].lower() == ".gz") or (os.path.exists(spectrum_filename.lower() + ".gz")):
         if spectrum_filename[-3:] != ".gz":
             spectrum_filename = spectrum_filename + ".gz"
 
@@ -79,6 +183,8 @@ def read_spectrum(spectrum_filename):
 
         spectrum = __read_spectrum(tmp_spec)
         os.remove(tmp_spec)
+    else:
+        raise Exception("Spectrum file does not exists!")
 
     # Filtering...
     valid = ~np.isnan(spectrum['flux'])
@@ -106,7 +212,7 @@ def read_spectrum(spectrum_filename):
 
     return spectrum
 
-def write_spectrum(spectrum, spectrum_filename, compress=True):
+def write_spectrum(spectrum, spectrum_filename):
     """
     Write spectrum to a file with the following file format:
     ::
@@ -117,11 +223,58 @@ def write_spectrum(spectrum, spectrum_filename, compress=True):
         370.003794872 1.18323884263 1.47304952231
         370.005692308 1.16766911881 1.49393329036
 
+    ** If the filename has the extension ".FIT" or ".FITS", then the file is saved
+    in FITS format. If the spectrum is not regularly sampled, then it will save
+    the flux and the wavelengths as a matrix in the primary HDU. If the errors
+    are different from zero, they will be saved as an extension.
     """
-    if compress:
-        if spectrum_filename[-3:] != ".gz":
-            spectrum_filename = spectrum_filename + ".gz"
+    if spectrum_filename[-4:].lower() == ".fit" or spectrum_filename[-5:].lower() == ".fits":
+        wave_diff = spectrum['waveobs'][1:] - spectrum['waveobs'][:-1]
+        if np.all(np.abs(wave_diff - np.median(wave_diff)) < 0.0000001):
+            # Regularly sampled spectrum
+            data = spectrum['flux']
+            header = pyfits.Header()
+            header.update('TTYPE1', "FLUX")
+            header.update('TUNIT1', "COUNTS")
+            header.update('CD1_1', spectrum['waveobs'][1] - spectrum['waveobs'][0])
+            header.update('CRVAL1', spectrum['waveobs'][0])
+            header.update('CRPIX1', 1)
 
+            header.update('NAXIS', 1)
+            header.update('NAXIS1', len(spectrum['flux']))
+        else:
+            # Since it is not regularly sampled, add the wavelength and flux together
+            # in a matrix
+            data = np.vstack([spectrum['waveobs'], spectrum['flux']])
+            header = pyfits.Header()
+            header.update('TTYPE1', "WAVELENGTH")
+            header.update('TUNIT1', "NM")
+            header.update('TTYPE2', "FLUX")
+            header.update('TUNIT2', "COUNTS")
+            header.update('NAXIS', 2)
+            header.update('NAXIS1', len(spectrum['waveobs']))
+            header.update('NAXIS2', 2) # waveobs and flux
+        header.update('CUNIT1', "NM")
+        header.update('CTYPE1', "WAVELENGTH")
+        primary_hdu = pyfits.PrimaryHDU(data=data, header=header)
+
+        # Add an HDU extension with errors if they exist
+        if np.any(spectrum['err'] != 0):
+            # Error extension
+            data = spectrum['err']
+            header = pyfits.Header()
+            header.update('TTYPE1', "FLUX")
+            header.update('TUNIT1', "COUNTS")
+            header.update('NAXIS', 1)
+            header.update('NAXIS1', len(spectrum['err']))
+
+            sigma_hdu = pyfits.ImageHDU(data=data, header=header, name="SIGMA")
+            fits = pyfits.HDUList([primary_hdu, sigma_hdu])
+        else:
+            fits = pyfits.HDUList(primary_hdu)
+
+        fits.writeto(spectrum_filename, clobber=True)
+    elif spectrum_filename[-3:].lower() == ".gz":
         tmp_spec = tempfile.mktemp() + str(int(random.random() * 100000000))
         out = open(tmp_spec, "w")
         out.write("waveobs\tflux\terr\n")

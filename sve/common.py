@@ -82,8 +82,10 @@ def interquartile_range_filtering(data, k=1.5):
     Interquartile range (IQR) is used to find outliers in data. By default, outliers
     are observations that fall below Quartile1 - k*(IQR) or above Quartile3 + k*(IQR).
 
-    - k = 1.5 represents +/-2.698 * sigma (or standard dev) of a gaussian
+    * k = 1.5 represents +/-2.698 * sigma (or standard dev) of a gaussian\
     distribution, which includes the 99.3% of the data.
+
+
     """
     # First and third quartile (the second is the median)
     q1 = np.percentile(data, 25) # 25% of the data (left to right)

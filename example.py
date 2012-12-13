@@ -278,9 +278,11 @@ linelist_telluric = sve.read_telluric_linelist(telluric_lines_file, minimum_dept
 rv = 0.0
 min_vel = -30.0
 max_vel = +30.0
-dfilter = linelist_telluric['depth'] > np.percentile(linelist_telluric['depth'], 75) # (only the 25% of the deepest ones)
+# Only the 25% of the deepest ones:
+dfilter = linelist_telluric['depth'] > np.percentile(linelist_telluric['depth'], 75)
 tfilter = sve.create_filter_for_regions_affected_by_tellurics(sun_spectrum['waveobs'], \
-                            linelist_telluric[dfilter], min_velocity=-rv+min_vel, max_velocity=-rv+max_vel)
+                            linelist_telluric[dfilter], min_velocity=-rv+min_vel, \
+                            max_velocity=-rv+max_vel)
 #sun_spectrum = sun_spectrum[tfilter]
 
 ##--- Fit lines -------------------------------------------------------------
@@ -304,6 +306,6 @@ linemasks = linemasks[~rejected_by_atomic_line_not_found]
 
 ##--- Save spectrum ---------------------------------------------------------
 logging.info("Saving spectrum...")
-sve.write_spectrum(sun_spectrum, "sun.s", compress=False)
-sve.write_spectrum(mu_cas_a_spectrum, "mu_cas_a.s", compress=False)
+sve.write_spectrum(sun_spectrum, "sun.s")
+sve.write_spectrum(mu_cas_a_spectrum, "mu_cas_a.s")
 
