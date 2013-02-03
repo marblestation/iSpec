@@ -30,6 +30,7 @@ class MPFitModel(object):
         self.y = None
         self.weights = None
         self.rms = None
+        self.m = None # MPFIT object
 
     def __call__(self, x):
         return self._model_function(x)
@@ -53,7 +54,19 @@ class MPFitModel(object):
         else:
             return([status, (self.y - model)])
 
-    def fitData(self, x, y, weights=None, parinfo=None):
+    def fitData(self, x, y, weights=None, parinfo=None, ftol=1.e-10, xtol=1.e-10, gtol=1.e-10, damp=0, maxiter=200, quiet=True):
+        """
+        - ftol: Termination occurs when both the actual
+                and predicted relative reductions in the sum of squares are at most
+                ftol
+        - xtol: Termination occurs when the relative error
+                between two consecutive iterates is at most xtol
+        - gtol: Termination occurs when the cosine of
+                the angle between fvec and any column of the jacobian is at most gtol
+                in absolute value
+        - damp: Residuals bigger than "damp" are not considered (damped)
+        - maxiter: Maximum number of iterations
+        """
         self.x = x
         self.y = y
         self.weights = weights
@@ -62,7 +75,7 @@ class MPFitModel(object):
         if parinfo != None:
             self._parinfo = parinfo
 
-        m = mpfit.mpfit(self._model_evaluation_function, parinfo=self._parinfo, quiet=True)
+        m = mpfit.mpfit(self._model_evaluation_function, parinfo=self._parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=maxiter, quiet=quiet)
 
         if (m.status <= 0):
            raise Exception(m.errmsg)
@@ -71,6 +84,7 @@ class MPFitModel(object):
                 self._parinfo[i]['value'] = m.params[i]
             # Num iterations: m.niter
             # Uncertainties: m.perror
+        self.m = m
         # Save RMS
         residuals = np.abs(self.residuals())
         self.rms = np.mean(residuals) + np.std(residuals)
@@ -255,6 +269,8 @@ class VoigtModel(MPFitModel):
     def resolution_olivero(self):
         fwhm, fwhm_kms = self.fwhm_olivero()
         return self.mu() / fwhm
+
+
 
 
 if __name__ == '__main__':

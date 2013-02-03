@@ -3948,7 +3948,7 @@ max_wave_range=max_wave_range)
                         lfilter = np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.)
                         wfilter = np.logical_and(waveobs >= wave_base, waveobs <= wave_top)
                     else:
-                        lfilter = np.logical_or(lfilter, np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.))
+                        lfilter = np.logical_or(lfilter, np.logical_and(linelist['wave (A)'] >= wave_base*11., linelist['wave (A)'] <= wave_top*10.))
                         wfilter = np.logical_or(wfilter, np.logical_and(waveobs >= wave_base, waveobs <= wave_top))
                 waveobs_mask = np.zeros(len(waveobs))
                 waveobs_mask[wfilter] = 1.0 # Compute fluxes only for selected segments

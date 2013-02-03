@@ -23,8 +23,8 @@ from spectrum import *
 from plotting import *
 from common import *
 from scipy import interpolate
-import numpy as np
 import matplotlib.pyplot as plt
+import time
 import log
 import logging
 
@@ -166,6 +166,10 @@ def read_spectrum(spectrum_filename, fits_options={"fluxhdu": "PRIMARY", "errorh
     """
     # If it is not compressed
     if os.path.exists(spectrum_filename) and (spectrum_filename[-4:].lower() == ".fit" or spectrum_filename[-5:].lower() == ".fits") :
+        # Make sure that "fluxhdu" and "errorhdu" exist:
+        default = {"fluxhdu": "PRIMARY", "errorhdu": None}
+        default.update(fits_options) # Overwrite with user input values
+        fits_options = default
         spectrum = __read_fits_spectrum(spectrum_filename, fluxhdu = fits_options["fluxhdu"], errorhdu = fits_options["errorhdu"])
     elif os.path.exists(spectrum_filename) and spectrum_filename[-3:].lower() != ".gz":
         spectrum = __read_spectrum(spectrum_filename)
@@ -256,6 +260,9 @@ def write_spectrum(spectrum, spectrum_filename):
             header.update('NAXIS2', 2) # waveobs and flux
         header.update('CUNIT1', "NM")
         header.update('CTYPE1', "WAVELENGTH")
+        header.update('ORIGIN', "SVE")
+        #header.update('VERSION', "SVE")
+        header.update('UTCSAVED', time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
         primary_hdu = pyfits.PrimaryHDU(data=data, header=header)
 
         # Add an HDU extension with errors if they exist
