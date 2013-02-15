@@ -141,6 +141,21 @@ def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.double_t,ndim
             <double*> waveobs_mask.data, 
             <double*> fluxes.data, callback, <void*>update_progress_func)
 
+    fluxes = apply_post_fundamental_effects(waveobs, fluxes, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, R, verbose, update_progress_func)
+    return fluxes
+
+
+
+def apply_post_fundamental_effects(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.double_t,ndim=1] fluxes, double microturbulence_vel = 2.0, double macroturbulence = 3.0, double vsini = 2.0, double limb_darkening_coeff = 0.0, int R=500000, int verbose = 0, update_progress_func=None):
+
+    cdef int num_measures = len(waveobs)
+    if num_measures <= 1:
+        # We need at least 2 wavelengths, if not return the same fluxes
+        return fluxes
+
+    if update_progress_func==None:
+        update_progress_func = dummy_func
+
     if macroturbulence > 0:
         macroturbulence_spectrum(<double*> waveobs.data, <double*> fluxes.data, 
             num_measures, macroturbulence, verbose, callback, <void*>update_progress_func)
@@ -151,7 +166,8 @@ def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.double_t,ndim
         resolution_spectrum(<double*> waveobs.data, <double*> fluxes.data, 
             num_measures, R, verbose, callback, <void*>update_progress_func)
     return fluxes
-    
+
+
     
 # microtturbulence velocity in km/s
 def abundances(char* atmosphere_model_file, char* linelist_file, int num_measures, char* abundances_file, double microturbulence_vel = 2.0, int nlayers=56, int verbose = 0, update_progress_func=None):

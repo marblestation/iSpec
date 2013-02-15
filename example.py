@@ -93,7 +93,7 @@ rv = np.round(models[0].mu(), 2) # km/s
 #--- Radial Velocity determination with template ---------------------------
 logging.info("Radial velocity determination with template...")
 # - Read atomic data
-template = sve.read_spectrum("input/spectra/synthetic/synth_5777.0_4.44_0.02_2.0.txt.gz")
+template = sve.read_spectrum(sve_dir + "/input/spectra/synthetic/synth_5777.0_4.44_0.02_2.0.txt.gz")
 #template = sve.read_spectrum("input/spectra/examples/narval_sun.s.gz")
 
 # - Read telluric lines and use only the 25% of the deepest ones
@@ -196,7 +196,7 @@ sun_continuum_regions = sve.find_continuum(sun_spectrum, resolution, \
 sve.write_continuum_regions(sun_continuum_regions, "sun_continuum_regions.txt")
 
 # Or limit the search to given segments
-segments = sve.read_segment_regions("input/regions/segments.txt")
+segments = sve.read_segment_regions(sve_dir + "input/regions/segments.txt")
 limited_sun_continuum_regions = sve.find_continuum(sun_spectrum, resolution, \
                                         segments=segments, max_std_continuum = sigma, \
                                         continuum_model = sun_continuum_model, \

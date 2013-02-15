@@ -3427,9 +3427,9 @@ max_wave_range=max_wave_range)
             templates = []
         elif relative_to_template:
             linelist = self.linelist_atomic
-            velocity_lower_limit = self.velocity_atomic_lower_limit
-            velocity_upper_limit = self.velocity_atomic_upper_limit
-            velocity_step = self.velocity_atomic_step
+            velocity_lower_limit = self.velocity_template_lower_limit
+            velocity_upper_limit = self.velocity_template_upper_limit
+            velocity_step = self.velocity_template_step
             templates = ["[Internal template]"]
             # Add as many options as spectra
             for i in np.arange(len(self.spectra)):
@@ -3478,9 +3478,9 @@ max_wave_range=max_wave_range)
             self.velocity_telluric_upper_limit = rv_upper_limit
             self.velocity_telluric_step = rv_step
         elif relative_to_template:
-            self.velocity_atomic_lower_limit = rv_lower_limit
-            self.velocity_atomic_upper_limit = rv_upper_limit
-            self.velocity_atomic_step = rv_step
+            self.velocity_template_lower_limit = rv_lower_limit
+            self.velocity_template_upper_limit = rv_upper_limit
+            self.velocity_template_step = rv_step
         else:
             raise Exception("Velocity should be determined relative to something!")
 
@@ -3992,7 +3992,7 @@ max_wave_range=max_wave_range)
         fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
 
         # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
-        synth_spectrum['flux'] = sve.generate_spectrum(synth_spectrum['waveobs']*10.0, waveobs_mask, atmosphere_layers, teff, logg, MH, linelist=linelist, abundances=abundances, fixed_abundances=fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, verbose=1, update_progress_func=self.update_progress)
+        synth_spectrum['flux'] = sve.generate_spectrum(synth_spectrum['waveobs'], waveobs_mask, atmosphere_layers, teff, logg, MH, linelist=linelist, abundances=abundances, fixed_abundances=fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, verbose=1, update_progress_func=self.update_progress)
 
 
         synth_spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength

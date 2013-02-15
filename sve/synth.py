@@ -56,6 +56,23 @@ def write_SPECTRUM_linelist(linelist, linelist_filename=None):
     return out.name
 
 
+def generate_fundamental_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel, verbose=0, update_progress_func=None, timeout=600, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None):
+    """
+    Generates a synthetic spectrum for the wavelength specified in waveobs only
+    if waveobs_mask contains the value 1.0 at the same position.
+
+    No macroturbulence, rotation (vsini), limb darkening coefficient or resolution is considered
+    in this process. That's why it is named as "fundamental" spectrum.
+
+    The atmosphere model, linelist, abundances and fixed abundances can be specified
+    as numpy recarray tables and they will be saved to disk to be used by SPECTRUM. In case the
+    user already has the information saved onto the disk, the filenames can be
+    specified to reduce input/output time (and the numpy recarray tables will be ignored)
+
+    Fixed abundances can be empty.
+    """
+    return generate_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence = 0.0, vsini = 0.0, limb_darkening_coeff = 0.0, R=0, verbose=verbose, update_progress_func=update_progress_func, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file)
+
 
 def generate_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, update_progress_func=None, timeout=600, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None):
     """
@@ -135,13 +152,63 @@ def generate_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, 
 
 def __generate_spectrum(result_queue, waveobs, waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, nlayers=56, verbose=0, update_progress_func=None):
     """
-    Generate synthetic spectrum.
+    Generate synthetic spectrum and apply macroturbulence, rotation (visini), limb darkening coeff and resolution except
+    if all those parameters are set to zero, in that case the fundamental synthetic spectrum is returned.
     """
     import synthesizer
-    fluxes = synthesizer.spectrum(waveobs, waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, R, nlayers, verbose, update_progress_func)
+    fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, R, nlayers, verbose, update_progress_func)
     result_queue.put(fluxes)
 
 
+
+def apply_post_fundamental_effects(waveobs, fluxes, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, update_progress_func=None, timeout=600):
+    """
+    Apply macroturbulence, rotation (vsini), limb darkening coefficient and/or resolution
+    """
+
+    # Generate spectrum should be run in a separate process in order
+    # to force the reload of the "synthesizer" module which
+    # contains C code with static variables in functions that should
+    # be reinitialized to work properly
+    # * The best solution would be to improve the C code but since it is too complex
+    #   this hack has been implemented
+    result_queue = Queue()
+
+    # TODO: Allow communications between process in order to update the GUI progress bar
+    update_progress_func = None
+
+    p = Process(target=__apply_post_fundamental_effects, args=(result_queue, waveobs, fluxes), kwargs={'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'verbose': verbose, 'update_progress_func':update_progress_func})
+    p.start()
+    num_seconds = 0
+    # Constantly check that the process has not died without returning any result and blocking the queue call
+    while p.is_alive() and num_seconds < timeout:
+        try:
+            fluxes = result_queue.get(timeout=1)
+        except Empty:
+            # No results, continue waiting
+            num_seconds += 1
+        else:
+            # Results received!
+            break
+    if num_seconds >= timeout:
+        logging.error("A timeout has occurred in the application of post fundamental effects.")
+        p.terminate()
+    elif np.all(fluxes == 0):
+        logging.error("The application of post fundamental effects has failed.")
+        p.terminate()
+    else:
+        p.join()
+
+    return fluxes
+
+
+def __apply_post_fundamental_effects(result_queue, waveobs, fluxes, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, update_progress_func=None):
+    """
+    Apply macroturbulence, rotation (visini), limb darkening coeff and resolution to already generated fundamental synthetic spectrum.
+    """
+    import synthesizer
+    fluxes = synthesizer.apply_post_fundamental_effects(waveobs*10., fluxes, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, R, verbose, update_progress_func)
+    result_queue.put(fluxes)
 
 
 class SynthModel(MPFitModel):
@@ -160,6 +227,9 @@ class SynthModel(MPFitModel):
         self.waveobs_mask = None
         self.cache = {}
         p = [teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, R]
+        #
+        self.abundances_file = None
+        self.linelist_file = None
         super(SynthModel, self).__init__(p)
 
     def _model_function(self, x, p=None):
@@ -175,21 +245,24 @@ class SynthModel(MPFitModel):
             self._parinfo[6]['value'] = p[6]
             self._parinfo[7]['value'] = p[7]
 
-        key = "%.2f %.2f %.2f %.2f %.2f %.2f %.2f %i" % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
+        complete_key = "%.2f %.2f %.2f %.2f %.2f %.2f %.2f %i" % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
+        key = "%.2f %.2f %.2f %.2f" % (self.teff(), self.logg(), self.MH(), self.vmic())
         if self.cache.has_key(key):
-            print "Cache:", key
+            print "Cache:", complete_key
             self.last_fluxes = self.cache[key]
         else:
-            print "Generating:", key
+            print "Generating:", complete_key
             # No fixed abundances
             fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
             # Atmosphere
             atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH())
-            # Synthetic fluxes
-            self.last_fluxes = generate_spectrum(self.waveobs*10.0, self.waveobs_mask, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.linelist, self.abundances, self.fixed_abundances, microturbulence_vel=self.vmic(), macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), verbose=0)
+            # Fundamental synthetic fluxes
+            self.last_fluxes = generate_fundamental_spectrum(self.waveobs, self.waveobs_mask, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.linelist, self.abundances, self.fixed_abundances, microturbulence_vel=self.vmic(), abundances_file=self.abundances_file, linelist_file=self.linelist_file, verbose=0)
             # Optimization to avoid too small changes in parameters or repetition
             self.cache[key] = self.last_fluxes
-        return self.last_fluxes[self.comparing_mask]
+
+        self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), verbose=0)
+        return self.last_final_fluxes[self.comparing_mask]
 
     def fitData(self, waveobs, waveobs_mask, comparing_mask, fluxes, weights=None, parinfo=None, quiet=True):
         if len(self._parinfo) != 8:
@@ -213,7 +286,29 @@ class SynthModel(MPFitModel):
                      # * Spectrum must be a normalized one
         maxiter = 20 # Maximum number of iterations
         _t0 = default_timer()
+
+        # Write abundances and linelist to avoid writing the same info in each iteration
+        self.abundances_file = write_SPECTRUM_abundances(self.abundances)
+        self.linelist_file = write_SPECTRUM_linelist(self.linelist)
+
         super(SynthModel, self).fitData(waveobs[self.comparing_mask], fluxes[self.comparing_mask], weights=weights[self.comparing_mask], parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=maxiter, quiet=quiet)
+
+        residuals = self.last_final_fluxes[self.comparing_mask] - fluxes[self.comparing_mask]
+        self.rms = np.mean(residuals) + np.std(residuals)
+        # Chisq without using tanh
+        self.chisq = np.sum(np.tanh(weights[self.comparing_mask] * residuals)**2)
+        self.reduced_chisq = self.chisq / self.m.dof
+        # Chisq without using tanh for minimizing outliers
+        self.basic_chisq = np.sum((weights[self.comparing_mask] * residuals)**2)
+        self.reduced_basic_chisq = self.basic_chisq / self.m.dof
+
+        self.cache = {}
+
+        os.remove(self.abundances_file)
+        os.remove(self.linelist_file)
+        self.abundances_file = None
+        self.linelist_file = None
+
         _t1 = default_timer()
         sec = timedelta(seconds=int(_t1 - _t0))
         self.calculation_time = datetime(1,1,1) + sec
@@ -244,6 +339,11 @@ class SynthModel(MPFitModel):
         print "Solution:", solution
         print "Errors:  ", errors
         print "Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second)
+        header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","chisq(tanh)","rchisq(tanh)","chisq","rchisq","rms")
+        stats = "%8i\t%8i\t%8i\t%8.2f\t%8.4f\t%8.2f\t%8.4f\t%8.4f" % (self.m.dof, self.m.niter, self.m.nfev, self.chisq, self.reduced_chisq, self.basic_chisq, self.reduced_basic_chisq, self.rms)
+        print "         ", header
+        print "Stats:   ", stats
+        print "Return code:", self.m.status
 
 def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, teff_range, logg_range, MH_range):
     """
@@ -360,6 +460,54 @@ def __create_comparing_mask(waveobs, linemasks):
 
     return waveobs_linemask
 
+def __get_stats_per_linemask(waveobs, fluxes, synthetic_fluxes, weights, free_params, linemasks, verbose=False):
+
+    results = np.recarray((len(linemasks), ), dtype=[('wave_peak', float),('wave_base', float),('wave_top', float),('chisq(tanh)', float),('rchisq(tanh)', float),('chisq', float),('rchisq', float),('rms', float)])
+    results['wave_peak'] = linemasks['wave_peak']
+    results['wave_base'] = linemasks['wave_base']
+    results['wave_top'] = linemasks['wave_top']
+
+    i = 0
+    for region in linemasks:
+        wave_peak = region['wave_peak']
+        wave_base = region['wave_base']
+        wave_top = region['wave_top']
+
+        wfilter = np.logical_and(waveobs >= wave_base, waveobs <= wave_top)
+
+        # Degrees of freedom
+        dof = len(waveobs[wfilter]) - len(free_params)
+        if dof > 0:
+            residuals = synthetic_fluxes[wfilter] - fluxes[wfilter]
+            rms = np.mean(residuals) + np.std(residuals)
+            # Chisq without using tanh
+            chisq = np.sum(np.tanh(weights[wfilter] * residuals)**2)
+            reduced_chisq = chisq / dof
+            # Chisq without using tanh for minimizing outliers
+            basic_chisq = np.sum((weights[wfilter] * residuals)**2)
+            reduced_basic_chisq = basic_chisq / dof
+        else:
+            rms = -9999
+            chisq = -9999
+            reduced_chisq = -9999
+            basic_chisq = -9999
+            reduced_basic_chisq = -9999
+
+        results['rms'][i] = rms
+        results['chisq(tanh)'][i] = chisq
+        results['rchisq(tanh)'][i] = reduced_chisq
+        results['chisq'][i] = basic_chisq
+        results['rchisq'][i] = reduced_basic_chisq
+        if verbose:
+            header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("wave_peak","wave_base","wave_top","chisq(tanh)","rchisq(tanh)","chisq","rchisq","rms")
+            stats = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.4f\t%8.2f\t%8.4f\t%8.4f" % (wave_peak, wave_base, wave_top, chisq, reduced_chisq, basic_chisq, reduced_basic_chisq, rms)
+            if i == 0:
+                print "         ", header
+            print "Line     ", stats
+        i += 1
+
+    return results
+
 def modelize_spectrum(spectrum, modeled_layers_pack, linelist, abundances, fixed_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=None, linemasks=None):
 
     waveobs = spectrum['waveobs']
@@ -369,6 +517,10 @@ def modelize_spectrum(spectrum, modeled_layers_pack, linelist, abundances, fixed
     #else:
         #weights = np.ones(len(waveobs))
     weights = np.ones(len(waveobs))
+    #weights = 1. / (flux * 0.10)
+    #snr = 100
+    #weights = 1. / (flux / snr)
+    #weights = 1. / spectrum['err']
 
     if segments == None:
         waveobs_mask = np.ones(len(waveobs)) # Compute fluxes for all the wavelengths
@@ -395,6 +547,7 @@ def modelize_spectrum(spectrum, modeled_layers_pack, linelist, abundances, fixed
 
     synth_model = SynthModel(modeled_layers_pack, linelist, abundances, fixed_abundances)
     synth_model.fitData(waveobs, waveobs_mask, comparing_mask, flux, weights=weights, parinfo=parinfo, quiet=False)
+    stats_linemasks = __get_stats_per_linemask(waveobs, flux, synth_model.last_final_fluxes, weights, free_params, linemasks, verbose=True)
     synth_model.print_solution()
 
     # Collect information to be returned
@@ -425,15 +578,18 @@ def modelize_spectrum(spectrum, modeled_layers_pack, linelist, abundances, fixed
     status['seconds'] = synth_model.calculation_time.second
     status['dof'] = synth_model.m.dof
     status['error'] = synth_model.m.errmsg
-    status['chisq'] = synth_model.m.fnorm
+    status['chisq(tanh)'] = synth_model.chisq
+    status['rchisq(tanh)'] = synth_model.reduced_chisq
+    status['chisq'] = synth_model.basic_chisq
+    status['rchisq'] = synth_model.reduced_basic_chisq
     status['niter'] = synth_model.m.niter
     status['nsynthesis'] = synth_model.m.nfev
     status['status'] = synth_model.m.status
 
     synth_spectrum = np.recarray((len(waveobs), ), dtype=[('waveobs', float),('flux', float),('err', float)])
     synth_spectrum['waveobs'] = waveobs
-    synth_spectrum['flux'] = synth_model.last_fluxes
+    synth_spectrum['flux'] = synth_model.last_final_fluxes
     synth_spectrum['err'] = 0.0
 
-    return synth_spectrum, params, errors, status
+    return synth_spectrum, params, errors, status, stats_linemasks
 

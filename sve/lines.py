@@ -1074,6 +1074,10 @@ def __create_cross_correlation_mask(data_wave, data_value, wave_grid, velocity_s
                 j += 1
             if j >= max_j:
                 break
+    # TODO: Decide
+    # Select the 0.10% of the depest lines and use 1.0 as value
+    mask['value'][mask['value'] < np.percentile(mask['value'], 99.9)] = 0.0
+    mask['value'][mask['value'] != 0.] = 1.0
     return mask
 
 
@@ -1248,6 +1252,8 @@ def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False, depth
 
     * For Radial Velocity profiles, more than 1 outlier peak implies that the star is a spectroscopic binary.
 
+    WARNING: fluxes and errors are going to be modified by a linear normalization process
+
     :returns:
         Array of fitted models and an array with the margin errors for model.mu() to be able to know the interval
         of 99% confiance.
@@ -1294,6 +1300,8 @@ def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False, depth
         new_top = np.zeros(len(base), dtype=int)
         for i in np.arange(len(peaks)):
             new_base[i], new_top[i] = __improve_linemask_edges(xcoord, smoothed_fluxes, base[i], top[i], peaks[i])
+            #new_base[i] = base[i]
+            #new_top[i] = top[i]
         base = new_base
         top = new_top
 
@@ -1328,7 +1336,13 @@ def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False, depth
         baseline = np.median(fluxes[base_points])
         A = fluxes[peaks[i]] - baseline
         sig = np.abs(xcoord[top[i]] - xcoord[base[i]])/3.0
-        mu = xcoord[peaks[i]]
+
+        # Find mu by interpolating (using 3 points)
+        #mu = xcoord[peaks[i]]
+        from scipy import interpolate
+        f = interpolate.InterpolatedUnivariateSpline(xcoord, fluxes, k=3)
+        peak_xcoord = np.arange(xcoord[peaks[i]-1], xcoord[peaks[i]+1], 0.01)
+        mu = peak_xcoord[np.argmin(f(peak_xcoord))]
 
         parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for j in np.arange(5)]
         parinfo[0]['value'] = 1#fluxes[base[i]] # baseline # Continuum
@@ -1342,7 +1356,7 @@ def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False, depth
         parinfo[2]['limited'] = [True, False]
         parinfo[2]['limits'] = [0., 0.]
         parinfo[3]['value'] = mu # Peak only within the xcoord slice
-        #parinfo[3]['fixed'] = True
+        parinfo[3]['fixed'] = True
         parinfo[3]['limited'] = [True, True]
         #parinfo[3]['limits'] = [xcoord[base[i]], xcoord[top[i]]]
         parinfo[3]['limits'] = [xcoord[peaks[i]-1], xcoord[peaks[i]+1]]
