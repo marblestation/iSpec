@@ -23,6 +23,7 @@ import numpy as np
 from mpfitmodels import *
 from abundances import *
 from atmospheres import *
+from spectrum import *
 from multiprocessing import Process
 from multiprocessing import Queue
 from Queue import Empty
@@ -249,7 +250,7 @@ class SynthModel(MPFitModel):
         key = "%.2f %.2f %.2f %.2f" % (self.teff(), self.logg(), self.MH(), self.vmic())
         if self.cache.has_key(key):
             print "Cache:", complete_key
-            self.last_fluxes = self.cache[key]
+            self.last_fluxes = self.cache[key].copy()
         else:
             print "Generating:", complete_key
             # No fixed abundances
@@ -259,9 +260,16 @@ class SynthModel(MPFitModel):
             # Fundamental synthetic fluxes
             self.last_fluxes = generate_fundamental_spectrum(self.waveobs, self.waveobs_mask, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.linelist, self.abundances, self.fixed_abundances, microturbulence_vel=self.vmic(), abundances_file=self.abundances_file, linelist_file=self.linelist_file, verbose=0)
             # Optimization to avoid too small changes in parameters or repetition
-            self.cache[key] = self.last_fluxes
+            self.cache[key] = self.last_fluxes.copy()
 
-        self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), verbose=0)
+        self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=0, verbose=0)
+        if self.R()>0:
+            synth_spectrum = np.recarray((len(self.waveobs), ), dtype=[('waveobs', float),('flux', float),('err', float)])
+            synth_spectrum['waveobs'] = self.waveobs
+            synth_spectrum['flux'] = self.last_final_fluxes
+            synth_spectrum['err'] = 0.0
+            convolved_synth_spectrum = convolve_spectrum(synth_spectrum, self.R())
+            self.last_final_fluxes = convolved_synth_spectrum['flux']
         return self.last_final_fluxes[self.comparing_mask]
 
     def fitData(self, waveobs, waveobs_mask, comparing_mask, fluxes, weights=None, parinfo=None, quiet=True):
@@ -294,7 +302,7 @@ class SynthModel(MPFitModel):
         super(SynthModel, self).fitData(waveobs[self.comparing_mask], fluxes[self.comparing_mask], weights=weights[self.comparing_mask], parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=maxiter, quiet=quiet)
 
         residuals = self.last_final_fluxes[self.comparing_mask] - fluxes[self.comparing_mask]
-        self.rms = np.mean(residuals) + np.std(residuals)
+        self.rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
         # Chisq without using tanh
         self.chisq = np.sum(np.tanh(weights[self.comparing_mask] * residuals)**2)
         self.reduced_chisq = self.chisq / self.m.dof
@@ -355,49 +363,49 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[0]['parname'] = "teff"
     parinfo[0]['value'] = initial_teff
     parinfo[0]['fixed'] = not parinfo[0]['parname'].lower() in free_params
-    parinfo[0]['step'] = 1.0 # For auto-derivatives
+    parinfo[0]['step'] = 100.0 # For auto-derivatives
     parinfo[0]['limited'] = [True, True]
     parinfo[0]['limits'] = [np.min(teff_range), np.max(teff_range)]
     #
     parinfo[1]['parname'] = "logg"
     parinfo[1]['value'] = initial_logg
     parinfo[1]['fixed'] = not parinfo[1]['parname'].lower() in free_params
-    parinfo[1]['step'] = 0.01 # For auto-derivatives
+    parinfo[1]['step'] = 0.50 # For auto-derivatives
     parinfo[1]['limited'] = [True, True]
     parinfo[1]['limits'] = [np.min(logg_range), np.max(logg_range)]
     #
     parinfo[2]['parname'] = "MH"
     parinfo[2]['value'] = initial_MH
     parinfo[2]['fixed'] = not parinfo[2]['parname'].lower() in free_params
-    parinfo[2]['step'] = 0.01 # For auto-derivatives
+    parinfo[2]['step'] = 0.05 # For auto-derivatives
     parinfo[2]['limited'] = [True, True]
     parinfo[2]['limits'] = [np.min(MH_range), np.max(MH_range)]
     #
     parinfo[3]['parname'] = "Vmic"
     parinfo[3]['value'] = initial_vmic
     parinfo[3]['fixed'] = not parinfo[3]['parname'].lower() in free_params
-    parinfo[3]['step'] = 0.01 # For auto-derivatives
+    parinfo[3]['step'] = 0.5 # For auto-derivatives
     parinfo[3]['limited'] = [True, True]
     parinfo[3]['limits'] = [0.0, 50.0]
     #
     parinfo[4]['parname'] = "Vmac"
     parinfo[4]['value'] = initial_vmac
     parinfo[4]['fixed'] = not parinfo[4]['parname'].lower() in free_params
-    parinfo[4]['step'] = 0.01 # For auto-derivatives
+    parinfo[4]['step'] = 2.00 # For auto-derivatives
     parinfo[4]['limited'] = [True, True]
     parinfo[4]['limits'] = [0.0, 50.0]
     #
     parinfo[5]['parname'] = "Vsini"
     parinfo[5]['value'] = initial_vsini
     parinfo[5]['fixed'] = not parinfo[5]['parname'].lower() in free_params
-    parinfo[5]['step'] = 0.01 # For auto-derivatives
+    parinfo[5]['step'] = 0.5 # For auto-derivatives
     parinfo[5]['limited'] = [True, True]
     parinfo[5]['limits'] = [0.0, 50.0]
     #
     parinfo[6]['parname'] = "limb_darkening_coef"
     parinfo[6]['value'] = initial_limb_darkening_coeff
     parinfo[6]['fixed'] = not parinfo[6]['parname'].lower() in free_params
-    parinfo[6]['step'] = 0.01 # For auto-derivatives
+    parinfo[6]['step'] = 0.10 # For auto-derivatives
     parinfo[6]['limited'] = [True, True]
     parinfo[6]['limits'] = [0.0, 1.0]
     #
@@ -479,7 +487,7 @@ def __get_stats_per_linemask(waveobs, fluxes, synthetic_fluxes, weights, free_pa
         dof = len(waveobs[wfilter]) - len(free_params)
         if dof > 0:
             residuals = synthetic_fluxes[wfilter] - fluxes[wfilter]
-            rms = np.mean(residuals) + np.std(residuals)
+            rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
             # Chisq without using tanh
             chisq = np.sum(np.tanh(weights[wfilter] * residuals)**2)
             reduced_chisq = chisq / dof

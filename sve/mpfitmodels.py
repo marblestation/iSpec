@@ -86,8 +86,8 @@ class MPFitModel(object):
             # Uncertainties: m.perror
         self.m = m
         # Save RMS
-        residuals = np.abs(self.residuals())
-        self.rms = np.mean(residuals) + np.std(residuals)
+        residuals = self.residuals()
+        self.rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
 
     def residuals(self):
         model = self._model_function(self.x)

@@ -1231,7 +1231,7 @@ class SyntheticSpectrumDialog(wx.Dialog):
         self.hbox = wx.BoxSizer(wx.HORIZONTAL)
 
         self.text_linelist = wx.StaticText(self, -1, "Line list: ", style=wx.ALIGN_LEFT)
-        self.linelist = wx.ComboBox (self, wx.ID_ANY, 'VALD', choices=['SPECTRUM', 'VALD'], style=wx.CB_READONLY)
+        self.linelist = wx.ComboBox (self, wx.ID_ANY, 'VALD', choices=['Kurucz', 'SPECTRUM', 'VALD'], style=wx.CB_READONLY)
 
         self.hbox.AddSpacer(10)
         self.hbox.Add(self.text_linelist, 0, border=3, flag=flags)

@@ -128,8 +128,8 @@ def __read_spectrum(spectrum_filename):
     try:
         spectrum = np.array([tuple(line.rstrip('\r\n').split("\t")) for line in open(spectrum_filename,)][1:], dtype=[('waveobs', float),('flux', float),('err', float)])
         if len(spectrum) == 0:
-            raise exception("empty spectrum or incompatible format")
-    except exception as err:
+            raise Exception("empty spectrum or incompatible format")
+    except Exception as err:
         # try narval plain text format:
         # - ignores 2 first lines (header)
         # - ignores last line (empty)

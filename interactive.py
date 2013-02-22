@@ -1577,7 +1577,7 @@ class SpectraFrame(wx.Frame):
                 mean_continuum = np.mean(self.active_spectrum.continuum_model(spectrum_window['waveobs']))
                 self.add_stats("Continuum mean for the region", "%.4f" % mean_continuum)
             residuals = np.abs(self.active_spectrum.continuum_model.residuals())
-            rms = np.mean(residuals) + np.std(residuals)
+            rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
             self.add_stats("Continuum fit root mean square (RMS)", "%.4f" % rms)
 
 
@@ -3464,7 +3464,7 @@ max_wave_range=max_wave_range)
             return
 
         if (np.abs(rv_lower_limit) + np.abs(rv_upper_limit)) <= 4*rv_step:
-            msg = "Velocity step too small for the established limits"
+            msg = "Velocity step too big for the established limits"
             title = "Velocity error"
             self.error(title, msg)
             return
