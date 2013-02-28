@@ -10,7 +10,6 @@ import numpy as np
 import pyfits
 import threading
 import logging
-import sve
 
 
 
