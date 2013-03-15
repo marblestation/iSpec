@@ -35,6 +35,8 @@ class AbundancesDialog(CustomDialog):
         vmic = float(self.__components[6]["default"])
 
         ## Stats
+        for i in xrange(len(self.__stats)):
+            self.__stats.pop()
         self.__stats.append("%-50s: %10.2f" % ("Effective temperature (k)", np.round(teff, 1)))
         self.__stats.append("%-50s: %10.2f" % ("Surface gravity (log g)", np.round(logg, 2)))
         self.__stats.append("%-50s: %10.2f" % ("Metallicity [Fe/H]", np.round(feh, 2)))

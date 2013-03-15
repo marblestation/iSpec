@@ -346,6 +346,10 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
             taukap(wave,model,atom,line,nline,strgln,V,He,POP);
             Depth = depth(model,wave,Flux);
             fluxes[pos] = 1.0 - Depth;
+            if (Depth > 1.0)
+                printf("*");
+            if (fluxes[pos] < 0.0)
+                printf("!");
         } else {
             fluxes[pos] = 1.0;
         }

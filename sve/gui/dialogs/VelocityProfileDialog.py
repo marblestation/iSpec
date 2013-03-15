@@ -27,7 +27,7 @@ class VelocityProfileDialog(CustomDialog):
         self.__models = models
         # The default values have been previously updated with the user selected values
         self.__velocity_step = float(self.__components[4]["default"])
-        if len(self.__components) == 6:
+        if len(self.__components) == 8 and self.__components[7]["text"] == "Cross-correlate with":
             self.__template = self.__components[5]["default"]
         else:
             self.__template = None
@@ -36,6 +36,8 @@ class VelocityProfileDialog(CustomDialog):
         self.__components[0]["function"] = self.plot
 
         ## Stats
+        for i in xrange(len(self.__stats)):
+            self.__stats.pop()
         if self.__template != None:
             self.__stats.append("%-50s: %s" % ("Template", str(self.__template)))
         for i, model in enumerate(models):
@@ -47,7 +49,7 @@ class VelocityProfileDialog(CustomDialog):
 
             try:
                 # If model is VoigtModel
-                self.__stats.append("%-50s: %10.2s" % ("Gamma", np.round(model.gamma(), 2)))
+                self.__stats.append("%-50s: %10.2f" % ("Gamma", np.round(model.gamma(), 2)))
             except AttributeError:
                 # model is GaussianModel
                 pass
@@ -64,7 +66,7 @@ class VelocityProfileDialog(CustomDialog):
             self.__stats.append("%-50s: %10.5f" % ("RMS", np.round(model.rms, 5)))
             self.__stats.append("%-50s  %s" % ("------------------------------", "----------"))
 
-    def __init__(self, parent, title, rv_upper_limit, rv_lower_limit, rv_step, templates):
+    def __init__(self, parent, title, rv_upper_limit, rv_lower_limit, rv_step, templates, masks, mask_size=2.0, mask_depth=0.01):
         self.__parent = parent
         self.__title = title
         self.__plot = None
@@ -102,12 +104,47 @@ class VelocityProfileDialog(CustomDialog):
         component["minvalue"] = 0.001
         component["maxvalue"] = np.inf
         self.__components.append(component)
+        component = {}
+        component["type"] = "OptionMenu"
+        component["text"] = "Fitting model"
+        component["options"] = ['2nd order polynomial + auto fit', '2nd order polynomial + gaussian fit', '2nd order polynomial + voigt fit']
+        component["default"] = '2nd order polynomial + auto fit'
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "CCF in Fourier space"
+        component["default"] = False
+        self.__components.append(component)
         if len(templates) > 1:
             component = {}
             component["type"] = "OptionMenu"
             component["text"] = "Cross-correlate with"
             component["options"] = templates
             component["default"] = templates[0]
+            self.__components.append(component)
+        else:
+            if len(masks) > 1:
+                component = {}
+                component["type"] = "OptionMenu"
+                component["text"] = "Mask linelist"
+                component["options"] = masks
+                component["default"] = masks[0]
+                self.__components.append(component)
+            component = {}
+            component["type"] = "Entry"
+            component["text"] = "Mask size (km/s)"
+            component["text-type"] = "float" # float, int or str
+            component["default"] = mask_size
+            component["minvalue"] = 0.001
+            component["maxvalue"] = np.inf
+            self.__components.append(component)
+            component = {}
+            component["type"] = "Entry"
+            component["text"] = "Minimum depth"
+            component["text-type"] = "float" # float, int or str
+            component["default"] = mask_depth
+            component["minvalue"] = 0.001
+            component["maxvalue"] = 1.0
             self.__components.append(component)
 
     def show(self, updated_templates=None):

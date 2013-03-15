@@ -164,21 +164,43 @@ def __determine_continuum_base_points(spectrum, discard_outliers=True, median_wa
     return continuum_base_points
 
 
-def fit_continuum(spectrum, segments=None, nknots=None, median_wave_range=0.1, max_wave_range=1):
+def fit_continuum(spectrum, segments=None, nknots=None, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy'):
     """
-    Fit the continuum by following these steps:
+    If fixed_value is specified, the continuum is fixed to the given value (always
+    the same for any wavelength). If not, fit the continuum by following these steps:
 
     1) Determine continuum base points:
         a. Find base points by selecting local max. values (3 points).
         b. Find the median value per each 0.1 nm (avoid noisy peaks).
         c. Find the max. value per each 1 nm (avoid blended base points).
         d. Discard outliers considering the median +/- 3 x sigma.
-    2) Spline fitting:
-        a. The number of splines can be specified, if not it will use 1 spline every 10 nm.
-        b. The algorithm automatically distributes and assigns more splines to regions more populated with base points.
-        c. If there are not enough data points to fit, the whole process is repeated but without discarding outliers.
+    2) Fitting (depending model value):
+        1. Fixed value
+        2. Spline fitting:
+            a. The number of splines can be specified, if not it will use 1 spline every 10 nm.
+            b. The algorithm automatically distributes and assigns more splines to regions more populated with base points.
+            c. If there are not enough data points to fit, the whole process is repeated but without discarding outliers.
+        3. Polynomial fitting
     3) Returns the fitted model.
     """
+    if not model in ['Splines', 'Polynomy', 'Fixed value']:
+        raise Exception("Wrong model name!")
+
+    if model == 'Fixed value' and fixed_value == None:
+        raise Exception("Fixed value needed!")
+
+    class ConstantValue:
+        """ Constant class used for microturbulent velocities because they are
+            constant for all layers and atmospheres """
+        def __init__(self, value):
+            self.value = value
+
+        def __call__(self, x):
+            return np.asarray([self.value] * len(x))
+
+    if model == 'Fixed value':
+        return ConstantValue(fixed_value)
+
     if segments != None:
         spectrum_regions = None
         for segment in segments:
@@ -211,19 +233,27 @@ def fit_continuum(spectrum, segments=None, nknots=None, median_wave_range=0.1, m
     #    - x=0.98 means wavelength where we reach the 98% of the total number of points
     # 5) Use those interpolated wavelengths for putting the knots, therefore we will have a knot
     #    in those regions were there are an increment on the number of points (avoiding empty regions)
+
+
     continuum_model = UniformCDFKnotSplineModel(nknots)
     fitting_error = False
     try:
-        continuum_model.fitData(spectrum['waveobs'][continuum_base_points], spectrum['flux'][continuum_base_points])
+        if model == "Splines":
+            continuum_model.fitData(spectrum['waveobs'][continuum_base_points], spectrum['flux'][continuum_base_points])
+        else:
+            continuum_model = np.poly1d(np.polyfit(spectrum['waveobs'][continuum_base_points], spectrum['flux'][continuum_base_points], nknots))
     except Exception, e:
         fitting_error = True
 
     # If there is no fit (because too few points)
-    if fitting_error or np.any(np.isnan(continuum_model.residuals())):
+    if fitting_error or ("residuals" in dir(continuum_model) and np.any(np.isnan(continuum_model.residuals()))):
         # Try without discarding outliers:
         continuum_base_points = __determine_continuum_base_points(spectrum, discard_outliers=False, median_wave_range=median_wave_range,
 max_wave_range=max_wave_range)
-        continuum_model.fitData(spectrum['waveobs'][continuum_base_points], spectrum['flux'][continuum_base_points])
+        if model == "Splines":
+            continuum_model.fitData(spectrum['waveobs'][continuum_base_points], spectrum['flux'][continuum_base_points])
+        else:
+            continuum_model = np.poly1d(np.polyfit(spectrum['waveobs'][continuum_base_points], spectrum['flux'][continuum_base_points], nknots))
         if np.any(np.isnan(continuum_model.residuals())):
             raise Exception("Not enough points to fit")
 

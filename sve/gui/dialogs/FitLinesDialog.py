@@ -22,6 +22,12 @@ class FitLinesDialog(CustomDialog):
         component["minvalue"] = 0.0
         component["maxvalue"] = np.inf
         self.__components.append(component)
+        component = {}
+        component["type"] = "OptionMenu"
+        component["text"] = "Line list"
+        component["options"] = ["VALD.300_1100nm"]
+        component["default"] = component["options"][0]
+        self.__components.append(component)
 
     def show(self, updated_vel_telluric=None, updated_vel_atomic=None):
         self.results = None

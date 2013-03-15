@@ -18,6 +18,8 @@
 import asciitable
 import numpy as np
 import numpy.lib.recfunctions as rfn # Extra functions
+from scipy.fftpack import fft
+from scipy.fftpack import ifft
 import scipy.ndimage.filters
 import scipy.stats as stats
 import cPickle as pickle
@@ -37,62 +39,6 @@ from mpfitmodels import VoigtModel
 import log
 import logging
 
-try:
-    import pyximport
-    import numpy as np
-    pyximport.install(setup_args={'include_dirs':[np.get_include()]})
-    from lines_c import cross_correlate
-except:
-    print "*********************************************************************"
-    print "Not optimized version loaded!"
-    print "*********************************************************************"
-
-    def cross_correlate(mask_wave, mask_values, spectrum_wave, spectrum_flux, spectrum_err, velocity):
-        ## Result
-        ccf = 0.0
-        ccf_err = 0.0
-
-        ## Speed of light in m/s
-        c = 299792458.0
-
-        ## Consider masks of X km/s around the peak
-        velocity_mask_size = 2.0
-        points_per_mask = 100
-
-        ## Correct mask with the appropiate velocity
-        # Relativistic correction
-        shifted_mask_wave = mask_wave / np.sqrt((1.-(velocity*1000.)/c)/(1.+(velocity*1000.)/c))
-
-        # Mask limits
-        shifted_mask_wave_step = (shifted_mask_wave * (1.-np.sqrt((1.-(velocity_mask_size*1000.)/c)/(1.+(velocity_mask_size*1000.)/c))))/2.0
-        # NOTE: I don't understand why the mask that works is the second one (with the first one there is a systematic shift of around 1 km/s):
-        #   Lines in mask:            x          x          x
-        #   Mask that should work:  |   |      |   |      |   |
-        #   Mask that works:          |   |      |   |      |   |
-        shifted_mask_wave_base = shifted_mask_wave - 0*shifted_mask_wave_step
-        shifted_mask_wave_top = shifted_mask_wave + 2*shifted_mask_wave_step
-
-        wstep = spectrum_wave[1] - spectrum_wave[0]
-        wbase = spectrum_wave[0]
-
-        i = 0
-        base_index = 0
-        top_index = 0
-        for i in xrange(len(mask_wave)):
-            # Find indexes for the spectrum
-            base_index = np.min((np.max((int((shifted_mask_wave_base[i] - wbase)/wstep), 0)), len(spectrum_wave)))
-            top_index = np.min((np.max((int((shifted_mask_wave_top[i] - wbase)/wstep), 0)), len(spectrum_wave)))
-            if base_index >= len(spectrum_wave) or top_index >= len(spectrum_wave) or base_index >= top_index:
-                continue
-            # Make sure we consider always 100 points per mask
-            # to avoid systematic effects
-            wrange = np.arange(points_per_mask)*((spectrum_flux[top_index]-spectrum_flux[base_index])/points_per_mask) + spectrum_flux[base_index]
-            fluxes = np.interp(wrange, spectrum_wave[base_index:top_index], spectrum_flux[base_index:top_index])
-            errors = np.interp(wrange, spectrum_wave[base_index:top_index], spectrum_err[base_index:top_index])
-            ccf += np.sum(mask_values[i] * fluxes)
-            ccf_err += np.sum(mask_values[i] * errors)
-
-        return ccf, ccf_err
 
 
 
@@ -1128,6 +1074,154 @@ def __cross_correlation_function_template(spectrum, template, lower_velocity_lim
     return velocity, ccf, ccf_err
 
 
+def sampling_uniform_in_velocity(wave_base, wave_top, velocity_step):
+    """
+    Create a uniformly spaced grid in terms of velocity:
+
+    - An increment in position (i => i+1) supposes a constant velocity increment (velocity_step).
+    - An increment in position (i => i+1) does not implies a constant wavelength increment.
+    - It is uniform in log(wave) since:
+          Wobs = Wrest * (1 + Vr/c)^[1,2,3..]
+          log10(Wobs) = log10(Wrest) + [1,2,3..] * log10(1 + Vr/c)
+      The last term is constant when dealing with wavelenght in log10.
+    - Useful for building the cross correlate function used for determining the radial velocity of a star.
+    """
+    # Speed of light in km/s
+    c = 299792.4580
+    #c = 299792458.0
+
+    ### Numpy optimized:
+    # number of elements to go from wave_base to wave_top in increments of velocity_step
+    i = int(np.ceil( (c * (wave_top - wave_base)) / (wave_base*velocity_step)))
+    grid = wave_base * np.power((1 + (velocity_step / c)), np.arange(i)+1)
+
+    ### Non optimized:
+    #grid = []
+    #next_wave = wave_base
+    #while next_wave <= wave_top:
+        #grid.append(next_wave)
+        ### Newtonian version:
+        #next_wave = next_wave + next_wave * ((velocity_step) / c) # nm
+        ### Relativistic version:
+        ##next_wave = next_wave + next_wave * (1.-np.sqrt((1.-(velocity_step*1000.)/c)/(1.+(velocity_step*1000.)/c)))
+
+    return np.asarray(grid)
+
+def __cross_correlation_function_uniform_in_velocity(spectrum, mask, lower_velocity_limit, upper_velocity_limit, velocity_step, mask_size=2.0, mask_depth=0.01, template=False, fourier=False, frame=None):
+    """
+    Calculates the cross correlation value between the spectrum and the specified mask
+    by shifting the mask from lower to upper velocity.
+
+    - The spectrum and the mask should be uniformly spaced in terms of velocity (which
+      implies non-uniformly distributed in terms of wavelength).
+    - The velocity step used for the construction of the mask should be the same
+      as the one specified in this function.
+    - The lower/upper/step velocity is only used to determine how many shifts
+      should be done (in array positions) and return a velocity grid.
+
+    If fourier is set, the calculation is done in the fourier space. More info:
+
+        VELOCITIES FROM CROSS-CORRELATION: A GUIDE FOR SELF-IMPROVEMENT
+        CARLOS ALLENDE PRIETO
+        http://iopscience.iop.org/1538-3881/134/5/1843/fulltext/205881.text.html
+        http://iopscience.iop.org/1538-3881/134/5/1843/fulltext/sourcecode.tar.gz
+    """
+
+    last_reported_progress = -1
+    if frame != None:
+        frame.update_progress(0)
+
+    # Speed of light in m/s
+    c = 299792458.0
+
+    # 1 shift = 1.0 km/s (or the specified value)
+    shifts = np.arange(np.int32(np.floor(lower_velocity_limit)/velocity_step), np.int32(np.ceil(upper_velocity_limit)/velocity_step)+1)
+    velocity = shifts * velocity_step
+
+    waveobs = sampling_uniform_in_velocity(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), velocity_step)
+    flux = np.interp(waveobs, spectrum['waveobs'], spectrum['flux'], left=0.0, right=0.0)
+    err = np.interp(waveobs, spectrum['waveobs'], spectrum['err'], left=0.0, right=0.0)
+
+
+    if template:
+        depth = np.abs(np.max(mask['flux']) - mask['flux'])
+        resampled_mask = np.interp(waveobs, mask['waveobs'], depth, left=0.0, right=0.0)
+    else:
+        selected = __select_lines_for_mask(mask, minimum_depth=mask_depth, velocity_mask_size = mask_size, min_velocity_separation = 1.0)
+        resampled_mask = __create_mask(waveobs, mask['wave_peak'][selected], mask['depth'][selected], velocity_mask_size=mask_size)
+
+    if fourier:
+        # Transformed flux and mask
+        tflux = fft(flux)
+        tresampled_mask = fft(resampled_mask)
+        conj_tresampled_mask = np.conj(tresampled_mask)
+        num = len(resampled_mask)/2+1
+        tmp = abs(ifft(tflux*conj_tresampled_mask))
+        ccf = np.hstack((tmp[num:], tmp[:num]))
+
+        # Transformed flux and mask powered by 2 (second)
+        #ccf_err = np.zeros(len(ccf))
+        # Conservative error propagation
+        terr = fft(err)
+        tmp = abs(ifft(terr*conj_tresampled_mask))
+        ccf_err = np.hstack((tmp[num:], tmp[:num]))
+        ## Error propagation
+        #tflux_s = fft(np.power(flux, 2))
+        #tresampled_mask_s = fft(np.power(resampled_mask, 2))
+        #tflux_err_s = fft(np.power(err, 2))
+        #tresampled_mask_err_s = fft(np.ones(len(err))*0.05) # Errors of 5% for masks
+
+        #tmp = abs(ifft(tflux_s*np.conj(tresampled_mask_err_s)))
+        #tmp += abs(ifft(tflux_err_s*np.conj(tresampled_mask_s)))
+        #ccf_err = np.hstack((tmp[num:], tmp[:num]))
+        #ccf_err = np.sqrt(ccf_err)
+
+        # Velocities
+        velocities = velocity_step * (np.arange(len(resampled_mask), dtype=float)+1 - num)
+
+        # Filter to area of interest
+        xfilter = np.logical_and(velocities >= lower_velocity_limit, velocities <= upper_velocity_limit)
+        ccf = ccf[xfilter]
+        ccf_err = ccf_err[xfilter]
+        velocities = velocities[xfilter]
+    else:
+        num_shifts = len(shifts)
+        # Cross-correlation function
+        ccf = np.zeros(num_shifts)
+        ccf_err = np.zeros(num_shifts)
+
+        for shift, i in zip(shifts, np.arange(num_shifts)):
+            #shifted_mask = resampled_mask
+            if shift == 0:
+                shifted_mask = resampled_mask
+            elif shift > 0:
+                #shifted_mask = np.hstack((shift*[0], resampled_mask[:-1*shift]))
+                shifted_mask = np.hstack((resampled_mask[-1*shift:], resampled_mask[:-1*shift]))
+            else:
+                #shifted_mask = np.hstack((resampled_mask[-1*shift:], -1*shift*[0]))
+                shifted_mask = np.hstack((resampled_mask[-1*shift:], resampled_mask[:-1*shift]))
+            #ccf[i] = np.correlate(flux, shifted_mask)[0]
+            #ccf_err[i] = np.correlate(err, shifted_mask)[0] # Propagate errors
+            ccf[i] = np.average(flux*shifted_mask)
+            ccf_err[i] = np.average(err*shifted_mask) # Propagate errors
+            #ccf[i] = np.average(np.tanh(flux*shifted_mask))
+            #ccf_err[i] = np.average(np.tanh(err*shifted_mask)) # Propagate errors
+
+            current_work_progress = ((i*1.0)/num_shifts) * 100
+            if report_progress(current_work_progress, last_reported_progress):
+                last_reported_progress = current_work_progress
+                logging.info("%.2f%%" % current_work_progress)
+                if frame != None:
+                    frame.update_progress(current_work_progress)
+
+    max_ccf = np.max(ccf)
+    ccf = ccf/max_ccf # Normalize
+    ccf_err = ccf_err/max_ccf # Propagate errors
+
+    return velocity, ccf, ccf_err
+
+
+
 def create_filter_for_regions_affected_by_tellurics(wavelengths, linelist_telluric, min_velocity=-30.0, max_velocity=30.0, frame=None):
     """
     Returns a boolean array of the same size of wavelengths. True will be assigned
@@ -1161,54 +1255,122 @@ def create_filter_for_regions_affected_by_tellurics(wavelengths, linelist_tellur
     return tfilter
 
 
-def __cross_correlation_function_mask(spectrum, mask, lower_velocity_limit, upper_velocity_limit, velocity_step, frame=None):
+
+try:
+    import pyximport
+    import numpy as np
+    pyximport.install(setup_args={'include_dirs':[np.get_include()]})
+    from lines_c import create_mask as __create_mask
+except:
+    print "*********************************************************************"
+    print "Not optimized version loaded!"
+    print "*********************************************************************"
+
+    def __create_mask(spectrum_wave, mask_wave, mask_values, velocity_mask_size=2.0):
+        """
+        It constructs a zero flux spectrum and assign mask values to the wavelengths
+        belonging to that value and its surounds (determined by the velocity_mask_size).
+        """
+        ## Speed of light in m/s
+        c = 299792458.0
+
+        resampled_mask = np.zeros(len(spectrum_wave))
+
+        # Mask limits
+        mask_wave_step = (mask_wave * (1.-np.sqrt((1.-(velocity_mask_size*1000.)/c)/(1.+(velocity_mask_size*1000.)/c))))/2.0
+        mask_wave_base = mask_wave - 1*mask_wave_step
+        mask_wave_top = mask_wave + 1*mask_wave_step
+
+        i = 0
+        j = 0
+        for i in xrange(len(mask_wave)):
+            #j = 0
+            while j < len(spectrum_wave) and spectrum_wave[j] < mask_wave_base[i]:
+                j += 1
+            while j < len(spectrum_wave) and spectrum_wave[j] >= mask_wave_base[i] and spectrum_wave[j] <= mask_wave_top[i]:
+                resampled_mask[j] = mask_values[i]
+                j += 1
+
+        return resampled_mask
+
+def __select_lines_for_mask(linemasks, minimum_depth=0.01, velocity_mask_size = 2.0, min_velocity_separation = 1.0):
     """
-    Calculates the cross correlation value between the spectrum and the specified mask
-    by shifting the mask from lower to upper velocity.
+    Select the lines that are goint to be used for building a mask for doing
+    cross-correlation. It filters by depth and validate that the lines are
+    suficiently apart from its neighbors to avoid overlapping.
 
-    - The spectrum and the mask should be uniformly spaced in terms of velocity (which
-      implies non-uniformly distributed in terms of wavelength).
-    - The velocity step used for the construction of the mask should be the same
-      as the one specified in this function.
-    - The lower/upper/step velocity is only used to determine how many shifts
-      should be done (in array positions) and return a velocity grid.
+    For that purpose, 'velocity_mask_size' represents the masks size in km/s
+    around the peak and optionally, 'min_velocity_separation' indicates the
+    minimum separation needed between two consecutive masks.
+
+    It returns a boolean array indicating what lines have been finally selected.
     """
+    total_velocity_separation = velocity_mask_size + min_velocity_separation / 2.0
+    selected = linemasks['depth'] >= minimum_depth
 
-    last_reported_progress = -1
-    if frame != None:
-        frame.update_progress(0)
-
-
-    # Speed of light in m/s
+    ## Speed of light in m/s
     c = 299792458.0
 
-    velocity = np.arange(lower_velocity_limit, upper_velocity_limit+velocity_step, velocity_step)
-    num_shifts = len(velocity)
+    # Mask limits
+    mask_wave_step = (linemasks['wave_peak'] * (1.-np.sqrt((1.-(total_velocity_separation*1000.)/c)/(1.+(total_velocity_separation*1000.)/c))))/2.0
+    mask_wave_base = linemasks['wave_peak'] - 1*mask_wave_step
+    mask_wave_top = linemasks['wave_peak'] + 1*mask_wave_step
+    #mask_wave_base = linemasks['wave_base'] - 1*mask_wave_step
+    #mask_wave_top = linemasks['wave_top'] + 1*mask_wave_step
 
-    original_mask = mask
-    mask = original_mask.copy()
+    i = 0
+    while i < len(linemasks):
+        if selected[i]:
+            # Right
+            r = i
+            max_r = r
+            max_depth_r = linemasks['depth'][i]
+            while r < len(linemasks) and mask_wave_base[r] <= mask_wave_top[i]:
+                if selected[r] and linemasks['depth'][r] > max_depth_r:
+                    max_depth_r = linemasks['depth'][r]
+                    max_r = r
+                r += 1
+            # Left
+            l = i
+            max_l = l
+            max_depth_l = linemasks['depth'][i]
+            while l >= 0 and mask_wave_top[l] >= mask_wave_base[i]:
+                if selected[l] and linemasks['depth'][l] > max_depth_l:
+                    max_depth_l = linemasks['depth'][l]
+                    max_l = l
+                l -= 1
 
-    # Cross-correlation function
-    ccf = np.zeros(num_shifts)
-    ccf_err = np.zeros(num_shifts)
-    wfilter = np.logical_and(mask['wave_peak'] >= np.min(spectrum['waveobs']), mask['wave_peak'] < np.max(spectrum['waveobs']))
-    mask = mask[wfilter]
-    for i in xrange(num_shifts):
-        ccf[i], ccf_err[i] = cross_correlate(mask['wave_peak'], mask['depth'], spectrum['waveobs'], spectrum['flux'], spectrum['err'], velocity[i])
+            if i - 1 == l and i + 1 == r:
+                # No conflict
+                i += 1
+            else:
+                #print "*",
+                if i + 1 != l and i - 1 != r:
+                    #print "both", i, i - l, r - i
+                    for x in xrange(r - i):
+                        selected[i+x] = False
+                    for x in xrange(i - l):
+                        selected[i-x] = False
+                    if max_depth_l > max_depth_r:
+                        selected[max_l] = True
+                    else:
+                        selected[max_r] = True
+                elif i + 1 != l:
+                    #print "left"
+                    for x in xrange(i - l):
+                        selected[i-x] = False
+                    selected[max_l] = True
+                else:
+                    #print "right"
+                    for x in xrange(r - i):
+                        selected[i+x] = False
+                    selected[max_r] = True
+                i = r
+        else:
+            i += 1
+    return selected
 
-        current_work_progress = ((i*1.0)/num_shifts) * 100
-        if report_progress(current_work_progress, last_reported_progress):
-            last_reported_progress = current_work_progress
-            logging.info("%.2f%%" % current_work_progress)
-            if frame != None:
-                frame.update_progress(current_work_progress)
-
-    max_ccf = np.max(ccf)
-    ccf = ccf/max_ccf # Normalize
-    ccf_err = ccf_err/max_ccf # Propagate errors
-    return velocity, ccf, ccf_err
-
-def build_velocity_profile(spectrum, linelist=None, template=None, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, frame=None):
+def build_velocity_profile(spectrum, linelist=None, template=None, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, mask_size=2.0, mask_depth=0.01, fourier=False, frame=None):
     """
     Determines the velocity profile by cross-correlating the spectrum with:
 
@@ -1224,32 +1386,49 @@ def build_velocity_profile(spectrum, linelist=None, template=None, lower_velocit
             logging.warn("Building velocity profile with mask (ignoring template)")
 
         #linelist_file = sve_dir + "input/linelists/Kurucz.lst"
-        #import asciitable
+        import asciitable
         #linelist = asciitable.read(linelist_file, names=["wave_peak", "element", "depth"])
-        #linelist = asciitable.read("input/Gerard.lst", names=["wave_peak", "depth"])
+        if len(linelist) > 500: # Not tellurics
+            #linelist = asciitable.read("input/Gerard.lst", names=["wave_peak", "depth"])
+            #linelist = asciitable.read("input/sun.lst", names=["wave_peak", "depth"])
+            #linelist = asciitable.read("input/masks/narval.sun.370_1048.txt", delimiter="\t")
+            #linelist = asciitable.read("input/arcturus.lst", names=["wave_peak", "depth"])
+            #linelist = asciitable.read("/home/sblancoc/apps/sve/input/Gerard.lst", names=["wave_peak", "depth"])
+            pass
 
         #xaxis = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), 0.000005)
         #xaxis = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), 0.00005)
-        xaxis = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), 0.0001)
-        spectrum = resample_spectrum(spectrum, xaxis) # It can introduce zero fluxes
-        wfilter = spectrum['flux'] > 0.0
-        spectrum = spectrum[wfilter]
+        #xaxis = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), 0.0001)
+        #spectrum = resample_spectrum(spectrum, xaxis) # It can introduce zero fluxes
+        #wfilter = spectrum['flux'] > 0.0
+        #spectrum = spectrum[wfilter]
         linelist = linelist[linelist['depth'] > 0.01]
+        #linelist = linelist[linelist['depth'] < 0.9]
+        lfilter = np.logical_and(linelist['wave_peak'] >= np.min(spectrum['waveobs']), linelist['wave_peak'] <= np.max(spectrum['waveobs']))
+        #linelist = linelist[lfilter]
+        #lfilter = np.logical_and(lfilter, linelist['element'] == "Fe 1")
+        linelist = linelist[lfilter]
 
-        velocity, ccf, ccf_err = __cross_correlation_function_mask(spectrum, linelist, lower_velocity_limit, upper_velocity_limit, velocity_step, frame=frame)
+        velocity, ccf, ccf_err = __cross_correlation_function_uniform_in_velocity(spectrum, linelist, lower_velocity_limit, upper_velocity_limit, velocity_step, mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, frame=frame)
         return velocity, ccf, ccf_err
     elif template != None:
         ## Obtain the cross-correlate function by shifting the template
-        velocity, ccf, ccf_err = __cross_correlation_function_template(spectrum, template, lower_velocity_limit = lower_velocity_limit, upper_velocity_limit=upper_velocity_limit, velocity_step = velocity_step, frame=frame)
+        velocity, ccf, ccf_err = __cross_correlation_function_uniform_in_velocity(spectrum, template, lower_velocity_limit, upper_velocity_limit, velocity_step, template=True, fourier=False, frame=frame)
+        #velocity, ccf, ccf_err = __cross_correlation_function_template(spectrum, template, lower_velocity_limit = lower_velocity_limit, upper_velocity_limit=upper_velocity_limit, velocity_step = velocity_step, frame=frame)
 
         return velocity, ccf, ccf_err
     else:
         raise Exception("A linelist or template should be specified")
 
 
-def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False, depth_percent_limit=10):
+def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False, depth_percent_limit=10, model='Auto'):
     """
-    Fits Gaussians to the deepest peaks in the velocity profile.
+    Fits a model ('Gaussian' or 'Voigt') to the deepest peaks in the velocity
+    profile. If it is 'Auto', a gaussian and a voigt will be fitted and the best
+    one used.
+
+    In all cases, the peak is located by fitting a 2nd degree polynomial. Afterwards,
+    the gaussian/voigt fitting is done for obtaining more info (such as sigma, etc.)
 
     * For Radial Velocity profiles, more than 1 outlier peak implies that the star is a spectroscopic binary.
 
@@ -1330,6 +1509,41 @@ def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False, depth
         selected_peaks_indices = [0]
 
     for i in np.asarray(selected_peaks_indices):
+        #########################################################
+        ####### 2nd degree polinomial fit to determine the peak
+        #########################################################
+        poly_step = 0.01
+        # Use only 9 points for fitting (4 + 1 + 4)
+        diff_base = peaks[i] - base[i]
+        diff_top = top[i] - peaks[i]
+        if diff_base > 4 and diff_top > 4:
+            poly_base = peaks[i] - 4
+            poly_top = peaks[i] + 4
+        else:
+            # There are less than 9 points but let's make sure that there are
+            # the same number of point in each side to avoid asymetries that may
+            # affect the fitting of the center
+            if diff_base >= diff_top:
+                poly_base = peaks[i] - diff_top
+                poly_top = peaks[i] + diff_top
+            elif diff_base < diff_top:
+                poly_base = peaks[i] - diff_base
+                poly_top = peaks[i] + diff_base
+        p = np.poly1d(np.polyfit(xcoord[poly_base:poly_top+1], fluxes[poly_base:poly_top+1], 2))
+        poly_vel = np.arange(xcoord[poly_base], xcoord[poly_top]+poly_step, poly_step)
+        poly_ccf = p(poly_vel)
+        mu = poly_vel[np.argmin(poly_ccf)]
+        # Sometimes the polynomial fitting can give a point that it is not logical
+        # (far away from the detected peak), so we do a validation check
+        if mu < xcoord[peaks[i]-1] or mu > xcoord[peaks[i]+1]:
+            mu = xcoord[peaks[i]]
+            poly_step = xcoord[peaks[i]+1] - xcoord[peaks[i]] # Temporary just to the next iteration
+        #########################################################
+
+        #########################################################
+        ####### Gaussian/Voigt fit to determine other params.
+        #########################################################
+        # Models to fit
         gaussian_model = GaussianModel()
         voigt_model = VoigtModel()
 
@@ -1338,63 +1552,63 @@ def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False, depth
         A = fluxes[peaks[i]] - baseline
         sig = np.abs(xcoord[top[i]] - xcoord[base[i]])/3.0
 
-        # Find mu by interpolating (using 3 points)
-        mu = xcoord[peaks[i]]
-        #from scipy import interpolate
-        #f = interpolate.InterpolatedUnivariateSpline(xcoord, fluxes, k=3)
-        #peak_xcoord = np.arange(xcoord[peaks[i]-1], xcoord[peaks[i]+1], 0.01)
-        ##peak_xcoord = np.arange(xcoord[peaks[i]-5], xcoord[peaks[i]+5], 0.01)
-        #mu = peak_xcoord[np.argmin(f(peak_xcoord))]
-        #plt.plot(xcoord, fluxes)
-        #plt.plot(np.arange(xcoord[0], xcoord[-1], 0.01), f(np.arange(xcoord[0], xcoord[-1], 0.01)))
-        #plt.show()
-
         parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for j in np.arange(5)]
-        parinfo[0]['value'] = 1#fluxes[base[i]] # baseline # Continuum
+        parinfo[0]['value'] = 1.0 #fluxes[base[i]] # baseline # Continuum
         parinfo[0]['fixed'] = True
-        #parinfo[0]['limited'] = [False, True]
-        #parinfo[0]['limits'] = [np.min([fluxes[base[i]], fluxes[top[i]]]), np.max([fluxes[base[i]], fluxes[top[i]]])]
+        #parinfo[0]['limited'] = [True, True]
+        #parinfo[0]['limits'] = [fluxes[peaks[i]], 1.0]
         parinfo[1]['value'] = A # Only negative (absorption lines) and greater than the lowest point + 25%
         parinfo[1]['limited'] = [False, True]
         parinfo[1]['limits'] = [0., 0.]
         parinfo[2]['value'] = sig # Only positives (absorption lines)
         parinfo[2]['limited'] = [True, False]
-        parinfo[2]['limits'] = [0., 0.]
+        parinfo[2]['limits'] = [1.0e-10, 0.]
         parinfo[3]['value'] = mu # Peak only within the xcoord slice
         #parinfo[3]['fixed'] = True
         parinfo[3]['fixed'] = False
         parinfo[3]['limited'] = [True, True]
-        parinfo[3]['limits'] = [xcoord[base[i]], xcoord[top[i]]]
+        #parinfo[3]['limits'] = [xcoord[base[i]], xcoord[top[i]]]
         #parinfo[3]['limits'] = [xcoord[peaks[i]-1], xcoord[peaks[i]+1]]
+        parinfo[3]['limits'] = [mu-poly_step, mu+poly_step]
 
-        # Only used by the voigt model:
+        # Only used by the voigt model (gamma):
         parinfo[4]['value'] = (xcoord[top[i]] - xcoord[base[i]])/2.0 # Only positives (not zero, otherwise its a gaussian) and small (for nm, it should be <= 0.01 aprox but I leave it in relative terms considering the spectrum slice)
+        parinfo[4]['fixed'] = False
         parinfo[4]['limited'] = [True, True]
         parinfo[4]['limits'] = [0.0, xcoord[top[i]] - xcoord[base[i]]]
 
-        #f = fluxes[base[i]:top[i]+1]
-        #min_flux = np.min(f)
-        ## More weight to the deeper fluxes
-        #if min_flux < 0:
-            #weights = f + -1*(min_flux) + 0.01 # Above zero
-            #weights = np.min(weights) / weights
-        #else:
-            #weights = min_flux / f
+        f = fluxes[base[i]:top[i]+1]
+        min_flux = np.min(f)
+        # More weight to the deeper fluxes
+        if min_flux < 0:
+            weights = f + -1*(min_flux) + 0.01 # Above zero
+            weights = np.min(weights) / weights
+        else:
+            weights = min_flux / f
+        weights -= np.min(weights)
+        weights = weights /np.max(weights)
+
 
         try:
             # Fit a gaussian and a voigt, but choose the one with the best fit
-            gaussian_model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=parinfo)
-            voigt_model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=parinfo)
-            rms_gaussian = np.sqrt(np.sum(np.power(gaussian_model.residuals(), 2)) / len(gaussian_model.residuals()))
-            rms_voigt = np.sqrt(np.sum(np.power(voigt_model.residuals(), 2)) / len(voigt_model.residuals()))
-            if rms_gaussian > rms_voigt:
-                model = voigt_model
+            import copy
+            if model in ['2nd order polynomial + auto fit', '2nd order polynomial + gaussian fit']:
+                gaussian_model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=copy.deepcopy(parinfo[:4]), weights=weights)
+                #gaussian_model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=copy.deepcopy(parinfo[:4]))
+                rms_gaussian = np.sqrt(np.sum(np.power(gaussian_model.residuals(), 2)) / len(gaussian_model.residuals()))
+            if model in ['2nd order polynomial + auto fit', '2nd order polynomial + voigt fit']:
+                voigt_model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=copy.deepcopy(parinfo), weights=weights)
+                #voigt_model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=copy.deepcopy(parinfo))
+                rms_voigt = np.sqrt(np.sum(np.power(voigt_model.residuals(), 2)) / len(voigt_model.residuals()))
+
+            if model == '2nd order polynomial + voigt fit' or (model == '2nd order polynomial + auto fit' and rms_gaussian > rms_voigt):
+                final_model = voigt_model
                 #logging.info("Voigt profile fitted with RMS %.5f" % (rms_voigt))
             else:
-                model = gaussian_model
+                final_model = gaussian_model
                 #logging.info("Gaussian profile fitted with RMS %.5f" % (rms_gaussian))
-            #logging.info("Peak found at %.2f km/s (fitted at %.2f km/s)" % (xcoord[peaks[i]], model.mu()))
-            models.append(model)
+            #logging.info("Peak found at %.2f km/s (fitted at %.2f km/s)" % (xcoord[peaks[i]], final_model.mu()))
+            models.append(final_model)
         except Exception, e:
             print type(e), e.message
 
@@ -1412,17 +1626,16 @@ def select_good_velocity_profile_models(models, xcoord, fluxes):
 
     ## We want to calculate the mean and standard deviation of the velocity profile
     ## but discounting the effect of the deepest detected lines:
-    # Build the fluxes for the composite models but ONLY for lines deeper than 0.97
+    # Build the fluxes for the composite models
     line_fluxes = None
     for model in models:
-        if model(model.mu()) >= 0.97:
-            continue
         if line_fluxes == None:
+            # first peak
             line_fluxes = model(xcoord)
             continue
 
         current_line_fluxes = model(xcoord)
-        wfilter = line_fluxes > current_line_fluxes
+        wfilter = np.where(line_fluxes > current_line_fluxes)[0]
         line_fluxes[wfilter] = current_line_fluxes[wfilter]
     ### Substract the line models conserving the base level
     if line_fluxes != None:
@@ -1433,13 +1646,17 @@ def select_good_velocity_profile_models(models, xcoord, fluxes):
     check_mean = np.mean(values)
     check_std = np.std(values)
     for (i, model) in enumerate(models):
+        # The first peak is always accepted
+        if i == 0:
+            accept.append(True)
+            continue
+
         mu = model.mu()
         peak = model(mu)
 
         # Discard peak if it is not deeper than mean flux + 6*standard deviation
-        # unless it is the only detected peak
         limit = check_mean - 6*check_std
-        if len(models) > 1 and (limit < 0.05 or peak >= limit):
+        if limit < 0.05 or peak >= limit:
             accept.append(False)
         else:
             accept.append(True)

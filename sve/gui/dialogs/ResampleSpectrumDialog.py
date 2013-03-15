@@ -40,9 +40,9 @@ class ResampleSpectrumDialog(CustomDialog):
         component["text"] = "Current wavelength step:\n min:" + str(self.__min_step) + " | max:" + str(self.__max_step) + "\nmedian:" + str(self.__median_step) + " | mean:" + str(self.__mean_step)
         self.__components.append(component)
         component = {}
-        component["type"] = "Radiobutton"
+        component["type"] = "OptionMenu"
         component["text"] = "Method"
-        component["options"] = ["Linear", "Spline"]
+        component["options"] = ["Bessel", "Linear", "Spline"]
         component["default"] = component["options"][0]
         self.__components.append(component)
 

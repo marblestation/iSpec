@@ -68,6 +68,7 @@ class CustomDialog(Dialog):
                 stats_scrollbar = Tkinter.Scrollbar(stats_frame, orient=Tkinter.VERTICAL)
                 component["object"] = Tkinter.Listbox(stats_frame, height=5, yscrollcommand=stats_scrollbar.set, font=('courier',10,'normal'), selectmode=Tkinter.EXTENDED)
                 stats_scrollbar.pack(side=Tkinter.RIGHT, fill=Tkinter.Y)
+                component["object"].delete(0, Tkinter.END) # Delete all
                 for text in component["options"]:
                     component["object"].insert(Tkinter.END, text)
                 component["object"].pack(fill=Tkinter.BOTH, expand=1)

@@ -24,56 +24,37 @@ cdef inline int int_min(int a, int b): return a if a <= b else b
 cimport cython
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def cross_correlate(np.ndarray[np.double_t,ndim=1] mask_wave, np.ndarray[np.double_t,ndim=1] mask_values, np.ndarray[np.double_t,ndim=1] spectrum_wave, np.ndarray[np.double_t,ndim=1] spectrum_flux, np.ndarray[np.double_t,ndim=1] spectrum_err, double velocity):
+def create_mask(np.ndarray[np.double_t,ndim=1] spectrum_wave, np.ndarray[np.double_t,ndim=1] mask_wave, np.ndarray[np.double_t,ndim=1] mask_values, velocity_mask_size=2.0):
+    """
+    It constructs a zero flux spectrum and assign mask values to the wavelengths
+    belonging to that value and its surounds (determined by the velocity_mask_size).
+    """
 
-    ## Result
-    cdef double ccf = 0.0
-    cdef double ccf_err = 0.0
-    
     ## Speed of light in m/s
     cdef double c = 299792458.0
     
-    ## Consider masks of X km/s around the peak
-    cdef double velocity_mask_size = 2.0
-    cdef int points_per_mask = 10
-    
-    cdef np.ndarray[np.double_t,ndim=1] shifted_mask_wave
-    cdef np.ndarray[np.double_t,ndim=1] shifted_mask_wave_step
-    cdef np.ndarray[np.double_t,ndim=1] shifted_mask_wave_base
-    cdef np.ndarray[np.double_t,ndim=1] shifted_mask_wave_top
+    cdef np.ndarray[np.double_t,ndim=1] mask_wave_step
+    cdef np.ndarray[np.double_t,ndim=1] mask_wave_base
+    cdef np.ndarray[np.double_t,ndim=1] mask_wave_top
+    cdef np.ndarray[np.double_t,ndim=1] resampled_mask = np.zeros(len(spectrum_wave))
 
-    ## Correct mask with the appropiate velocity
-    # Relativistic correction
-    shifted_mask_wave = mask_wave / np.sqrt((1.-(velocity*1000.)/c)/(1.+(velocity*1000.)/c))
-    
     # Mask limits
-    shifted_mask_wave_step = (shifted_mask_wave * (1.-np.sqrt((1.-(velocity_mask_size*1000.)/c)/(1.+(velocity_mask_size*1000.)/c))))/2.0
-    # NOTE: I don't understand why the mask that works is the second one (with the first one there is a systematic shift of around 1 km/s):
-    #   Lines in mask:            x          x          x
-    #   Mask that should work:  |   |      |   |      |   |
-    #   Mask that works:          |   |      |   |      |   |
-    shifted_mask_wave_base = shifted_mask_wave - 0*shifted_mask_wave_step
-    shifted_mask_wave_top = shifted_mask_wave + 2*shifted_mask_wave_step
+    mask_wave_step = (mask_wave * (1.-np.sqrt((1.-(velocity_mask_size*1000.)/c)/(1.+(velocity_mask_size*1000.)/c))))/2.0
+    mask_wave_base = mask_wave - 1*mask_wave_step
+    mask_wave_top = mask_wave + 1*mask_wave_step
     
     cdef double wstep = spectrum_wave[1] - spectrum_wave[0]
     cdef double wbase = spectrum_wave[0]
 
     cdef int i = 0
-    cdef int base_index = 0
-    cdef int top_index = 0
-    for i in xrange(len(mask_wave)):
-        # Find indexes for the spectrum
-        base_index = int_min(int_max(int((shifted_mask_wave_base[i] - wbase)/wstep), 0), len(spectrum_wave))
-        top_index = int_min(int_max(int((shifted_mask_wave_top[i] - wbase)/wstep), 0), len(spectrum_wave))
-        if base_index >= len(spectrum_wave) or top_index >= len(spectrum_wave) or base_index >= top_index:
-            continue
-        # Make sure we consider always 100 points per mask
-        # to avoid systematic effects
-        wrange = np.arange(points_per_mask)*((spectrum_flux[top_index]-spectrum_flux[base_index])/points_per_mask) + spectrum_flux[base_index]
-        fluxes = np.interp(wrange, spectrum_wave[base_index:top_index], spectrum_flux[base_index:top_index])
-        errors = np.interp(wrange, spectrum_wave[base_index:top_index], spectrum_err[base_index:top_index])
-        ccf += np.sum(mask_values[i] * fluxes)
-        ccf_err += np.sum(mask_values[i] * errors)
+    cdef int j = 0
+    for i from 0 <= i < len(mask_wave) by 1:
+        #j = 0
+        while j < len(spectrum_wave) and spectrum_wave[j] < mask_wave_base[i]:
+            j += 1
+        while j < len(spectrum_wave) and spectrum_wave[j] >= mask_wave_base[i] and spectrum_wave[j] <= mask_wave_top[i]:
+            resampled_mask[j] = mask_values[i]
+            j += 1
 
-    return ccf, ccf_err
+    return resampled_mask
 

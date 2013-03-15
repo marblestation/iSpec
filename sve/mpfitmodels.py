@@ -117,7 +117,7 @@ class GaussianModel(MPFitModel):
             return self.baseline() + ((self.A()*1.)/np.sqrt(2*np.pi*self.sig()**2))*np.exp(-(x-self.mu())**2/(2*self.sig()**2))
 
     def fitData(self, x, y, weights=None, parinfo=None):
-        if len(self._parinfo) != 4:
+        if len(parinfo) != 4:
             raise Exception("Wrong number of parameters!")
         super(GaussianModel, self).fitData(x, y, weights, parinfo)
 
@@ -187,7 +187,7 @@ class VoigtModel(MPFitModel):
         return voigt_result
 
     def fitData(self, x, y, weights=None, parinfo=None):
-        if len(self._parinfo) != 5:
+        if len(parinfo) != 5:
             raise Exception("Wrong number of parameters!")
         super(VoigtModel, self).fitData(x, y, weights, parinfo)
 

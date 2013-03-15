@@ -8,11 +8,11 @@ class FitContinuumDialog(CustomDialog):
         self.__components = []
         component = {}
         component["type"] = "Label"
-        component["text"] = "Suggested number of splines: %i" % nknots
+        component["text"] = "Suggested number of polynomial degrees/splines: %i" % nknots
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
-        component["text"] = "Number of splines"
+        component["text"] = "Number of polynomial degrees/splines"
         component["text-type"] = "int" # float, int or str
         component["default"] = nknots
         component["minvalue"] = 1.0
@@ -40,11 +40,25 @@ class FitContinuumDialog(CustomDialog):
         component["options"] = ["The whole spectra", "Only continuum regions"]
         component["default"] = component["options"][0]
         self.__components.append(component)
+        component = {}
+        component["type"] = "OptionMenu"
+        component["text"] = "Fitting model"
+        component["options"] = ["Polynomy", "Splines", "Fixed value"]
+        component["default"] = component["options"][0]
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Entry"
+        component["text"] = "Fixed value"
+        component["text-type"] = "float" # float, int or str
+        component["default"] = 1.0
+        component["minvalue"] = -np.inf
+        component["maxvalue"] = np.inf
+        self.__components.append(component)
 
     def show(self, suggested_nknots=None):
         self.results = None
         if suggested_nknots != None:
-            self.__components[0]["text"] = "Suggested number of splines\n based on the wavelength range: %i" % suggested_nknots
+            self.__components[0]["text"] = "Suggested number of polynomial degrees/splines\n based on the wavelength range: %i" % suggested_nknots
         CustomDialog.__init__(self, self.__parent, self.__title, self.__components)
 
 

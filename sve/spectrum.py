@@ -356,194 +356,292 @@ def __fwhm_to_sigma(fwhm):
     sigma = fwhm / (2*np.sqrt(2*np.log(2)))
     return sigma
 
+try:
+    import pyximport
+    import numpy as np
+    pyximport.install(setup_args={'include_dirs':[np.get_include()]})
+    from spectrum_c import convolve_spectrum as __convolve_spectrum
+    from spectrum_c import bessel_interpolation as __bessel_interpolation
+except:
+    print "*********************************************************************"
+    print "Not optimized version loaded!"
+    print "*********************************************************************"
 
-def convolve_spectrum(spectrum, from_resolution, to_resolution=None, frame=None):
+    def __bessel_interpolation(waveobs, fluxes, err, resampled_waveobs, frame=None):
+        """
+        Interpolate flux for a given wavelength by using Bessel's Central-Difference Interpolation.
+        It considers:
+
+        - 4 points in general
+        - 2 when there are not more (i.e. at the beginning of the array or outside)
+        """
+        last_reported_progress = -1
+        current_work_progress = 10.0
+
+        total_points = len(waveobs)
+        new_total_points = len(resampled_waveobs)
+        resampled_flux = np.zeros(new_total_points)
+        resampled_err = np.zeros(new_total_points)
+        from_index = 0 # Optimization: discard regions already processed
+        for i in np.arange(new_total_points):
+            # Target wavelength
+            objective_wavelength = resampled_waveobs[i]
+
+            # Find the index position of the first wave length equal or higher than the objective
+            index = waveobs[from_index:].searchsorted(objective_wavelength)
+            index += from_index
+
+            if index == total_points:
+                # DISCARD: Linear extrapolation using index-1 and index-2
+                # flux = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index-1]-fluxes[index-2])/(waveobs[index-1]-waveobs[index-2]))
+                # JUST DUPLICATE:
+                resampled_flux[i] = fluxes[index-1]
+            elif index == 1 or index == total_points-1:
+                # Linear interpolation between index and index-1
+                # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
+                resampled_flux[i] = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index]-fluxes[index-1])/(waveobs[index]-waveobs[index-1]))
+            elif index == 0 and waveobs[index] != objective_wavelength:
+                # DISCARD: Linear extrapolation using index+1 and index
+                # flux = fluxes[index] + (objective_wavelength - waveobs[index]) * ((fluxes[index+1]-fluxes[index])/(waveobs[index+1]-waveobs[index]))
+                # JUST DUPLICATE:
+                resampled_flux[i] = fluxes[index]
+            elif waveobs[index] == objective_wavelength:
+                resampled_flux[i] = fluxes[index]
+            else:
+                # Bessel's Central-Difference Interpolation with 4 points
+                #   p = [(x - x0) / (x1 - x0)]
+                #   f(x) = f(x0) + p ( f(x1) - f(x0) ) + [ p ( p - 1 ) / 4 ] ( f(x2) - f(x1) - f(x0) + f(x-1) )
+                # where x-1 < x0 < objective_wavelength = x < x1 < x2 and f() is the flux
+                #   http://physics.gmu.edu/~amin/phys251/Topics/NumAnalysis/Approximation/polynomialInterp.html
+
+                #  x-1= index - 2
+                #  x0 = index - 1
+                #  x  = objective_wavelength
+                #  x1 = index
+                #  x2 = index + 1
+
+                ## Array access optimization
+                flux_x_1 = fluxes[index - 2]
+                wave_x0 = waveobs[index-1]
+                flux_x0 = fluxes[index - 1]
+                wave_x1 = waveobs[index]
+                flux_x1 = fluxes[index]
+                flux_x2 = fluxes[index + 1]
+
+                p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
+                resampled_flux[i] = flux_x0 + p * (flux_x1 - flux_x0) + (p * (p - 1) / 4) * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
+
+            if index > 4:
+                from_index = index - 4
+
+            current_work_progress = np.min([(i*1.0 / new_total_points) * 100, 90.0])
+            if report_progress(current_work_progress, last_reported_progress):
+                last_reported_progress = current_work_progress
+                logging.info("%.2f%%" % current_work_progress)
+                if frame != None:
+                    frame.update_progress(current_work_progress)
+
+        return resampled_waveobs, resampled_flux, resampled_err
+
+    def __convolve_spectrum_slow(waveobs, flux, err, to_resolution, from_resolution=None, frame=None):
+        """
+        Slower implementation of the convolution but easier to understand
+        """
+        total_points = len(waveobs)
+        convolved_flux = np.zeros(total_points)
+        convolved_err = np.zeros(total_points)
+
+        last_reported_progress = -1
+        if frame != None:
+            frame.update_progress(0)
+
+        # FWHM of the gaussian for the given resolution
+        if from_resolution == None:
+            # Convolve using instrumental resolution (smooth but not degrade)
+            fwhm = waveobs / to_resolution
+        else:
+            # Degrade resolution
+            fwhm = __get_fwhm(waveobs, from_resolution, to_resolution)
+        sigma = __fwhm_to_sigma(fwhm)
+
+        for i in np.arange(total_points):
+            if flux[i] <= 0:
+                continue
+
+            lambda_peak = waveobs[i] # Current lambda (wavelength) to be modified
+
+            # Only work with a limited window considering 2 times the fwhm in each side of the current
+            # position to be modified and saved in the convolved spectra
+            wave_filter_base = waveobs.searchsorted(lambda_peak - 2*fwhm[i])
+            wave_filter_top = waveobs.searchsorted(lambda_peak + 2*fwhm[i])
+            waveobs_window = waveobs[wave_filter_base:wave_filter_top]
+            flux_window = flux[wave_filter_base:wave_filter_top]
+
+            # Construct the gaussian
+            gaussian = np.exp(- ((waveobs_window - lambda_peak)**2) / (2*sigma[i]**2)) / np.sqrt(2*np.pi*sigma[i]**2)
+            gaussian = gaussian / np.sum(gaussian)
+            # Convolve
+            convolved_flux[i] = np.sum(flux_window * gaussian)
+            if err[i] > 0:
+                # * Propagate error Only if the current value has a valid error value assigned
+                #
+                # Error propagation considering that measures are dependent (more conservative approach)
+                # because it is common to find spectra with errors calculated from a SNR which
+                # at the same time has been estimated from all the measurements in the same spectra
+                #
+                err_window = err[wave_filter_base:wave_filter_top]
+                convolved_err[i] = np.sum(err_window * gaussian)
+
+            current_work_progress = (i*1.0 / total_points) * 100
+            if report_progress(current_work_progress, last_reported_progress):
+                last_reported_progress = current_work_progress
+                logging.info("%.2f%%" % current_work_progress)
+                if frame != None:
+                    frame.update_progress(current_work_progress)
+
+        return waveobs, convolved_flux, convolved_err
+
+    def __convolve_spectrum(waveobs, flux, err, to_resolution, from_resolution=None, frame=None):
+        """
+        Spectra resolution smoothness/degradation. Procedure:
+
+        1) Define a bin per measure which marks the wavelength range that it covers.
+        2) For each point, identify the window segment to convolve by using the bin widths and the FWHM.
+        3) Build a gaussian using the sigma value and the wavelength values of the spectrum window.
+        4) Convolve the spectrum window with the gaussian and save the convolved value.
+
+        If "from_resolution" is not specified or its equal to "to_resolution", then the spectrum
+        is convolved with the instrumental gaussian defined by "to_resolution".
+
+        If "to_resolution" is specified, the convolution is made with the difference of
+        both resolutions in order to degrade the spectrum.
+        """
+        if from_resolution != None and from_resolution <= to_resolution:
+            raise Exception("This method cannot deal with final resolutions that are bigger than original")
+
+        total_points = len(waveobs)
+        convolved_flux = np.zeros(total_points)
+        convolved_err = np.zeros(total_points)
+
+        last_reported_progress = -1
+        if frame != None:
+            frame.update_progress(0)
+
+        # Consider the wavelength of the measurements as the center of the bins
+        # Calculate the wavelength distance between the center of each bin
+        wave_distance = waveobs[1:] - waveobs[:-1]
+        # Define the edge of each bin as half the wavelength distance to the bin next to it
+        edges_tmp = waveobs[:-1] + 0.5 * (wave_distance)
+        # Define the edges for the first and last measure which where out of the previous calculations
+        first_edge = waveobs[0] - 0.5*wave_distance[0]
+        last_edge = waveobs[-1] + 0.5*wave_distance[-1]
+        # Build the final edges array
+        edges = np.array([first_edge] + edges_tmp.tolist() + [last_edge])
+
+        # Bin width
+        bin_width = edges[1:] - edges[:-1]          # width per pixel
+
+        # FWHM of the gaussian for the given resolution
+        if from_resolution == None:
+            # Convolve using instrumental resolution (smooth but not degrade)
+            fwhm = waveobs / to_resolution
+        else:
+            # Degrade resolution
+            fwhm = __get_fwhm(waveobs, from_resolution, to_resolution)
+        sigma = __fwhm_to_sigma(fwhm)
+        # Convert from wavelength units to bins
+        fwhm_bin = fwhm / bin_width
+
+        # Round number of bins per FWHM
+        nbins = np.ceil(fwhm_bin) #npixels
+
+        # Number of measures
+        nwaveobs = len(waveobs)
+
+        # In theory, len(nbins) == len(waveobs)
+        for i in np.arange(len(nbins)):
+            current_nbins = 2 * nbins[i] # Each side
+            current_center = waveobs[i] # Center
+            current_sigma = sigma[i]
+
+            # Find lower and uper index for the gaussian, taking care of the current spectrum limits
+            lower_pos = int(max(0, i - current_nbins))
+            upper_pos = int(min(nwaveobs, i + current_nbins + 1))
+
+            # Select only the flux values for the segment that we are going to convolve
+            flux_segment = flux[lower_pos:upper_pos+1]
+            err_segment = err[lower_pos:upper_pos+1]
+            waveobs_segment = waveobs[lower_pos:upper_pos+1]
+
+            nsegments = len(flux_segment)
+
+            # Build the gaussian corresponding to the instrumental spread function
+            gaussian = np.exp(- ((waveobs_segment - current_center)**2) / (2*current_sigma**2)) / np.sqrt(2*np.pi*current_sigma**2)
+            gaussian = gaussian / np.sum(gaussian)
+
+            # Convolve the current position by using the segment and the gaussian
+            if flux[i] > 0:
+                weighted_flux = flux_segment * gaussian
+                current_convolved_flux = weighted_flux.sum()
+                convolved_flux[i] = current_convolved_flux
+            else:
+                convolved_err[i] = 0.0
+
+            if err[i] > 0:
+                # * Propagate error Only if the current value has a valid error value assigned
+                #
+                # Error propagation considering that measures are dependent (more conservative approach)
+                # because it is common to find spectra with errors calculated from a SNR which
+                # at the same time has been estimated from all the measurements in the same spectra
+                #
+                weighted_err = err_segment * gaussian
+                current_convolved_err = weighted_err.sum()
+                #current_convolved_err = np.sqrt(np.power(weighted_err, 2).sum()) # Case for independent errors
+                convolved_err[i] = current_convolved_err
+            else:
+                convolved_err[i] = 0.0
+
+            current_work_progress = (i*1.0 / total_points) * 100
+            if report_progress(current_work_progress, last_reported_progress):
+                last_reported_progress = current_work_progress
+                #logging.info("%.2f%%" % current_work_progress)
+                if frame != None:
+                    frame.update_progress(current_work_progress)
+        logging.info("Spectra convolved!")
+
+        return waveobs, convolved_flux, convolved_err
+
+def convolve_spectrum(spectrum, to_resolution, from_resolution=None, frame=None):
     """
-    Spectra resolution smoothness/degradation. Procedure:
+    Spectra resolution smoothness/degradation.
 
-    1) Define a bin per measure which marks the wavelength range that it covers.
-    2) For each point, identify the window segment to convolve by using the bin widths and the FWHM.
-    3) Build a gaussian using the sigma value and the wavelength values of the spectrum window.
-    4) Convolve the spectrum window with the gaussian and save the convolved value.
-
-    If "to_resolution" is not specified or its equal to "from_resolution", then the spectrum
-    is convolved with the instrumental gaussian defined by "from_resolution".
+    If "from_resolution" is not specified or its equal to "to_resolution", then the spectrum
+    is convolved with the instrumental gaussian defined by "to_resolution".
 
     If "to_resolution" is specified, the convolution is made with the difference of
     both resolutions in order to degrade the spectrum.
     """
-    if to_resolution != None and from_resolution <= to_resolution:
+    if from_resolution != None and from_resolution <= to_resolution:
         raise Exception("This method cannot deal with final resolutions that are bigger than original")
 
-    total_points = len(spectrum)
-    convolved_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-    convolved_spectrum['waveobs'] = spectrum['waveobs']
-    convolved_spectrum['err'] = spectrum['err']
-
-    last_reported_progress = -1
-    if frame != None:
-        frame.update_progress(0)
-
-    flux = spectrum['flux']
-    err = spectrum['err']
-    # Consider the wavelength of the measurements as the center of the bins
-    waveobs = spectrum['waveobs']
-    # Calculate the wavelength distance between the center of each bin
-    wave_distance = waveobs[1:] - waveobs[:-1]
-    # Define the edge of each bin as half the wavelength distance to the bin next to it
-    edges_tmp = waveobs[:-1] + 0.5 * (wave_distance)
-    # Define the edges for the first and last measure which where out of the previous calculations
-    first_edge = waveobs[0] - 0.5*wave_distance[0]
-    last_edge = waveobs[-1] + 0.5*wave_distance[-1]
-    # Build the final edges array
-    edges = np.array([first_edge] + edges_tmp.tolist() + [last_edge])
-
-    # Bin width
-    bin_width = edges[1:] - edges[:-1]          # width per pixel
-
-    # FWHM of the gaussian for the given resolution
-    if to_resolution == None:
-        # Convolve using instrumental resolution (smooth but not degrade)
-        fwhm = waveobs / from_resolution
-    else:
-        # Degrade resolution
-        fwhm = __get_fwhm(waveobs, from_resolution, to_resolution)
-    sigma = __fwhm_to_sigma(fwhm)
-    # Convert from wavelength units to bins
-    fwhm_bin = fwhm / bin_width
-
-    # Round number of bins per FWHM
-    nbins = np.ceil(fwhm_bin) #npixels
-
-    # Number of measures
-    nwaveobs = len(waveobs)
-
-    # In theory, len(nbins) == len(spectrum)
-    for i in np.arange(len(nbins)):
-        current_nbins = 2 * nbins[i] # Each side
-        current_center = waveobs[i] # Center
-        current_sigma = sigma[i]
-
-        # Find lower and uper index for the gaussian, taking care of the current spectrum limits
-        lower_pos = int(max(0, i - current_nbins))
-        upper_pos = int(min(nwaveobs, i + current_nbins + 1))
-
-        # Select only the flux values for the segment that we are going to convolve
-        flux_segment = flux[lower_pos:upper_pos+1]
-        err_segment = err[lower_pos:upper_pos+1]
-        waveobs_segment = waveobs[lower_pos:upper_pos+1]
-
-        nsegments = len(flux_segment)
-
-        # Build the gaussian corresponding to the instrumental spread function
-        gaussian = np.exp(- ((waveobs_segment - current_center)**2) / (2*current_sigma**2)) / np.sqrt(2*np.pi*current_sigma**2)
-        gaussian = gaussian / np.sum(gaussian)
-
-        # Convolve the current position by using the segment and the gaussian
-        if flux[i] > 0:
-            weighted_flux = flux_segment * gaussian
-            current_convolved_flux = weighted_flux.sum()
-            convolved_spectrum['flux'][i] = current_convolved_flux
-        else:
-            convolved_spectrum['flux'][i] = 0.0
-
-        if err[i] > 0:
-            # * Propagate error Only if the current value has a valid error value assigned
-            #
-            # Error propagation considering that measures are dependent (more conservative approach)
-            # because it is common to find spectra with errors calculated from a SNR which
-            # at the same time has been estimated from all the measurements in the same spectra
-            #
-            weighted_err = err_segment * gaussian
-            current_convolved_err = weighted_err.sum()
-            #current_convolved_err = np.sqrt(np.power(weighted_err, 2).sum()) # Case for independent errors
-            convolved_spectrum['err'][i] = current_convolved_err
-        else:
-            convolved_spectrum['err'][i] = 0.0
-
-        current_work_progress = (i*1.0 / total_points) * 100
-        if report_progress(current_work_progress, last_reported_progress):
-            last_reported_progress = current_work_progress
-            logging.info("%.2f%%" % current_work_progress)
-            if frame != None:
-                frame.update_progress(current_work_progress)
-    logging.info("Spectra convolved!")
-
+    waveobs, flux, err = __convolve_spectrum(spectrum['waveobs'], spectrum['flux'], spectrum['err'], to_resolution, from_resolution=from_resolution, frame=frame)
+    convolved_spectrum = np.recarray((len(waveobs), ), dtype=[('waveobs', float),('flux', float),('err', float)])
+    convolved_spectrum['waveobs'] = waveobs
+    convolved_spectrum['flux'] = flux
+    convolved_spectrum['err'] = err
     return convolved_spectrum
 
 
-def __interpolate_flux(spectrum, wavelength):
-    """
-    Interpolate flux for a given wavelength by using Bessel's Central-Difference Interpolation.
-    It considers:
 
-    - 4 points in general
-    - 2 when there are not more (i.e. at the beginning of the array or outside)
-    """
-    # Target wavelength
-    objective_wavelength = wavelength
-    fluxes = spectrum['flux']
-    waveobs = spectrum['waveobs']
-
-    # Find the index position of the first wave length equal or higher than the objective
-#    index = np.where(waveobs >= objective_wavelength)[0][0]
-    index = waveobs.searchsorted(objective_wavelength)
-
-    total_points = len(spectrum)
-    if index == total_points:
-        # DISCARD: Linear extrapolation using index-1 and index-2
-        # flux = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index-1]-fluxes[index-2])/(waveobs[index-1]-waveobs[index-2]))
-        # JUST DUPLICATE:
-        flux = fluxes[index-1]
-    elif index == 1 or index == total_points-1:
-        # Linear interpolation between index and index-1
-        # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
-        flux = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index]-fluxes[index-1])/(waveobs[index]-waveobs[index-1]))
-    elif index == 0 and waveobs[index] != objective_wavelength:
-        # DISCARD: Linear extrapolation using index+1 and index
-        # flux = fluxes[index] + (objective_wavelength - waveobs[index]) * ((fluxes[index+1]-fluxes[index])/(waveobs[index+1]-waveobs[index]))
-        # JUST DUPLICATE:
-        flux = fluxes[index]
-    elif waveobs[index] == objective_wavelength:
-        flux = fluxes[index]
-    else:
-        # Bessel's Central-Difference Interpolation with 4 points
-        #   p = [(x - x0) / (x1 - x0)]
-        #   f(x) = f(x0) + p ( f(x1) - f(x0) ) + [ p ( p - 1 ) / 4 ] ( f(x2) - f(x1) - f(x0) + f(x-1) )
-        # where x-1 < x0 < objective_wavelength = x < x1 < x2 and f() is the flux
-        #   http://physics.gmu.edu/~amin/phys251/Topics/NumAnalysis/Approximation/polynomialInterp.html
-
-        #  x-1= index - 2
-        #  x0 = index - 1
-        #  x  = objective_wavelength
-        #  x1 = index
-        #  x2 = index + 1
-
-        ## Array access optimization
-        flux_x_1 = fluxes[index - 2]
-        wave_x0 = waveobs[index-1]
-        flux_x0 = fluxes[index - 1]
-        wave_x1 = waveobs[index]
-        flux_x1 = fluxes[index]
-        flux_x2 = fluxes[index + 1]
-
-        p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
-        flux = flux_x0 + p * (flux_x1 - flux_x0) + (p * (p - 1) / 4) * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
-
-
-#    print flux, fluxes[index], wavelength
-    return flux, index
-
-
-def resample_spectrum(spectrum, xaxis, method="linear", frame=None):
+def resample_spectrum(spectrum, xaxis, method="bessel", frame=None):
     """
     Returns a new spectrum with measures at the given xaxis wavelength
-    Interpolation is completely linear by default (fastest option) but
-    it can also be:
+    Interpolation method can be:
 
     * method = "bessel": A Bessel's Central-Difference Interpolation with
     4 points. In this case interpolation is linear only when there are
     not enough points (i.e. beginning/end of spectrum).
+    * method = "linear": Linear interpolation using 2 points
     * method = "spline": A spline interpolation that may may be usefull
     for obtaining a smooth oversampled spectra by following this simple
     procedure:
@@ -581,20 +679,11 @@ def resample_spectrum(spectrum, xaxis, method="linear", frame=None):
         if frame != None:
             frame.update_progress(current_work_progress)
     elif method.lower() == "bessel":
+        waveobs, flux, err = __bessel_interpolation(spectrum['waveobs'], spectrum['flux'], spectrum['err'], xaxis, frame=frame)
         resampled_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-        resampled_spectrum['waveobs'] = xaxis
-
-        from_index = 0 # Optimization: discard regions already processed
-        for i in np.arange(total_points):
-            resampled_spectrum['flux'][i], index = __interpolate_flux(spectrum[from_index:], resampled_spectrum['waveobs'][i])
-            if index > 4:
-                from_index = index - 4
-            current_work_progress = np.min([(i*1.0 / total_points) * 100, 90.0])
-            if report_progress(current_work_progress, last_reported_progress):
-                last_reported_progress = current_work_progress
-                logging.info("%.2f%%" % current_work_progress)
-                if frame != None:
-                    frame.update_progress(current_work_progress)
+        resampled_spectrum['waveobs'] = waveobs
+        resampled_spectrum['flux'] = flux
+        resampled_spectrum['err'] = err
     else:
         raise Exception("Unknown method")
 

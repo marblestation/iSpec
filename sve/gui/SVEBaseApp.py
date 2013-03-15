@@ -1,15 +1,22 @@
 #!/usr/bin/env python
 import Tkinter
+import Tkinter
 import tkMessageBox
 import tkFileDialog
 import tkSimpleDialog
-#import matplotlib
+import matplotlib
 #matplotlib.use('TkAgg')
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg as FigCanvas, NavigationToolbar2TkAgg as NavigationToolbar
 from matplotlib.figure import Figure
 from matplotlib.ticker import ScalarFormatter
 import matplotlib.pyplot as plt
+
+from Queue import Queue # Use this queue instead of multiprocessing or there
+                        # will be problems with synthetic spectrum generation
+                        # from different process
+from Queue import Empty
+import asciitable
 
 import os
 import sys
@@ -53,7 +60,7 @@ class SVEBaseApp(Tkinter.Tk):
         self.velocity_atomic_lower_limit = -200 # km/s
         self.velocity_atomic_upper_limit = 200 # km/s
         self.velocity_atomic_step = 1.0 # km/s
-        self.linelist_atomic = None
+        self.ccf_mask = {}
         self.velocity_template_lower_limit = -200 # km/s
         self.velocity_template_upper_limit = 200 # km/s
         self.velocity_template_step = 1.0 # km/s
@@ -143,6 +150,24 @@ class SVEBaseApp(Tkinter.Tk):
         self.safe_operations['pi'] = np.pi
         self.safe_operations_description.append("e  ::  Euler's number.")
         self.safe_operations['e'] = np.e
+        # Base reference from where to update the spectra list
+        self.menu_active_spectrum_base = 0
+
+    def __periodic_queue_check(self):
+        # 100 ms
+        while self.queue.qsize():
+            try:
+                command = self.queue.get(0)
+                if len(command) == 3:
+                    # func, args, kargs tuple
+                    apply(command[0], command[1], command[2])
+                else:
+                    # string command (usefull when called from other processes
+                    # such as when a synthetic spectrum is generated)
+                    eval(command)
+            except Empty:
+                pass
+        self.after(100, self.__periodic_queue_check)
 
     def __init__(self, spectra, regions, filenames):
         Tkinter.Tk.__init__(self)
@@ -153,6 +178,10 @@ class SVEBaseApp(Tkinter.Tk):
         self.tk.call('wm', 'iconphoto', self._w, img)
         #self.iconbitmap(bitmap="@"+resource_path("images/SVE.xbm")) # Black and white
 
+        self.queue = Queue()
+        # Start the periodic call in the GUI to check if the queue contains
+        # anything
+        self.__periodic_queue_check()
 
         self.__init_attributes__()
 
@@ -291,16 +320,6 @@ class SVEBaseApp(Tkinter.Tk):
         self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
 
         operationmenu.add_separator()
-        velocitymenu = Tkinter.Menu(operationmenu)
-        operationmenu.add_cascade(label="Determine velocity relative to...", menu=velocitymenu)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
-
-        velocitymenu.add_command(label="Atomic line mask (radial velocity)", command=self.on_determine_velocity_atomic)
-        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
-        velocitymenu.add_command(label="Telluric line mask  (barycentric velocity)", command=self.on_determine_velocity_telluric)
-        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
-        velocitymenu.add_command(label="Template", command=self.on_determine_velocity_template)
-        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
 
 
         velocitymenu = Tkinter.Menu(operationmenu)
@@ -314,12 +333,11 @@ class SVEBaseApp(Tkinter.Tk):
         velocitymenu.add_command(label="Template", command=self.on_correct_velocity_template)
         self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
 
-
-        operationmenu.add_command(label="Calculate barycentric velocity", command=self.on_determine_barycentric_vel)
         operationmenu.add_separator()
-        operationmenu.add_command(label="Estimate SNR", command=self.on_estimate_snr)
+
+        operationmenu.add_command(label="Calculate errors based on SNR", command=self.on_calculate_errors)
         self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
-        operationmenu.add_command(label="Estimate errors based on SNR", command=self.on_estimate_errors)
+        operationmenu.add_command(label="Add noise to spectrum fluxes", command=self.on_add_noise)
         self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
         operationmenu.add_separator()
         operationmenu.add_command(label="Degrade resolution", command=self.on_degrade_resolution)
@@ -340,14 +358,29 @@ class SVEBaseApp(Tkinter.Tk):
         self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
 
 
+        parametersmenu = Tkinter.Menu(menu)
+        menu.add_cascade(label="Parameters", menu=parametersmenu)
+
+        velocitymenu = Tkinter.Menu(operationmenu)
+        parametersmenu.add_cascade(label="Determine velocity relative to...", menu=velocitymenu)
+        self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
+
+        velocitymenu.add_command(label="Atomic line mask (radial velocity)", command=self.on_determine_velocity_atomic)
+        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
+        velocitymenu.add_command(label="Telluric line mask  (barycentric velocity)", command=self.on_determine_velocity_telluric)
+        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
+        velocitymenu.add_command(label="Template", command=self.on_determine_velocity_template)
+        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
+        parametersmenu.add_command(label="Calculate barycentric velocity", command=self.on_determine_barycentric_vel)
+        parametersmenu.add_separator()
+        parametersmenu.add_command(label="Estimate SNR", command=self.on_estimate_snr)
+        self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
+        parametersmenu.add_separator()
         if "determine_abundances" in dir(sve):
-            parametersmenu = Tkinter.Menu(menu)
-            menu.add_cascade(label="Parameters", menu=parametersmenu)
             #parametersmenu.add_command(label="Find astrophysical parameters", command=self.on_determine_parameters, state=Tkinter.DISABLED)
             #self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
             parametersmenu.add_command(label="Determine abundances with fitted lines", command=self.on_determine_abundances)
             self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
-
 
         self.menu_active_spectrum_num = Tkinter.IntVar()
         self.menu_active_spectrum_num.set('1')
@@ -373,6 +406,9 @@ class SVEBaseApp(Tkinter.Tk):
         self.menu_active_spectrum.add_checkbutton(label="Show errors in plot", onvalue=True, offvalue=False, variable=self.show_errors, command=self.on_show_errors)
         self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(Tkinter.END, "label")))
         self.menu_active_spectrum.add_separator()
+
+        # Base reference from where to update the spectra list
+        self.menu_active_spectrum_base = self.menu_active_spectrum.index("Show errors in plot") + 2
 
         helpmenu = Tkinter.Menu(menu)
         menu.add_cascade(label="Help", menu=helpmenu)
@@ -771,76 +807,76 @@ SPECTRUM a Stellar Spectral Synthesis Program
                     answer_ok = False
 
             if answer_ok:
-                try:
-                    if elements == "spectra":
-                        paths = np.unique(answer)
-                        some_does_not_exists = False
-                        for i, path in enumerate(paths):
-                            if not os.path.exists(path):
-                                msg = 'File %s does not exist.' % os.path.basename(path)
-                                title = 'File does not exist'
-                                self.error(title, msg)
-                                some_does_not_exists = True
-                                break
-                        if some_does_not_exists:
-                            continue # Give the oportunity to select another file name
-
-                        # Remove current continuum from plot if exists
-                        self.remove_drawn_continuum_spectrum()
-
-                        # Remove current drawn fitted lines if they exist
-                        self.remove_drawn_fitted_lines()
-
-                        for path in paths:
-                            # Remove "[A]  " from spectrum name (legend) if it exists
-                            if self.active_spectrum != None and self.active_spectrum.plot_id != None:
-                                self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
-                            new_spectrum_data = sve.read_spectrum(path)
-                            name = self.get_name(path.split('/')[-1]) # If it already exists, add a suffix
-                            color = self.get_color()
-                            self.active_spectrum = Spectrum(new_spectrum_data, name, path = path, color=color)
-                            self.spectra.append(self.active_spectrum)
-                            self.active_spectrum_history.append(self.active_spectrum)
-                            self.update_menu_active_spectrum()
-                            self.draw_active_spectrum()
-                        self.update_scale()
-
-                        if len(paths) == 1:
-                            self.flash_status_message("Opened file %s" % paths[0])
-                        else:
-                            self.flash_status_message("Opened %i spectra files" % len(paths))
-                    else:
-                        path = answer
+                #try:
+                if elements == "spectra":
+                    paths = np.unique(answer)
+                    some_does_not_exists = False
+                    for i, path in enumerate(paths):
                         if not os.path.exists(path):
                             msg = 'File %s does not exist.' % os.path.basename(path)
                             title = 'File does not exist'
                             self.error(title, msg)
-                            continue # Give the oportunity to select another file name
-                        if elements == "continuum":
-                            self.regions[elements] = sve.read_continuum_regions(path)
-                            self.draw_regions(elements)
-                            self.not_saved[elements] = False
-                            self.update_title()
-                        elif elements == "lines":
-                            self.regions[elements] = sve.read_line_regions(path)
-                            self.draw_regions(elements)
-                            self.not_saved[elements] = False
-                            self.update_title()
-                        else:
-                            # 'segments'
-                            self.regions[elements] = sve.read_segment_regions(path)
-                            self.draw_regions(elements)
-                            self.not_saved[elements] = False
-                            self.update_title()
-                        self.flash_status_message("Opened file %s" % path)
-                    self.filenames[elements] = path
-                    self.canvas.draw()
-                    action_ended = True
-                except Exception as e:
-                    msg = 'A file does not have a compatible format.'
-                    title = 'File formatincompatible'
-                    self.error(title, msg)
-                    continue
+                            some_does_not_exists = True
+                            break
+                    if some_does_not_exists:
+                        continue # Give the oportunity to select another file name
+
+                    # Remove current continuum from plot if exists
+                    self.remove_drawn_continuum_spectrum()
+
+                    # Remove current drawn fitted lines if they exist
+                    self.remove_drawn_fitted_lines()
+
+                    for path in paths:
+                        # Remove "[A]  " from spectrum name (legend) if it exists
+                        if self.active_spectrum != None and self.active_spectrum.plot_id != None:
+                            self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
+                        new_spectrum_data = sve.read_spectrum(path)
+                        name = self.get_name(path.split('/')[-1]) # If it already exists, add a suffix
+                        color = self.get_color()
+                        self.active_spectrum = Spectrum(new_spectrum_data, name, path = path, color=color)
+                        self.spectra.append(self.active_spectrum)
+                        self.active_spectrum_history.append(self.active_spectrum)
+                        self.update_menu_active_spectrum()
+                        self.draw_active_spectrum()
+                    self.update_scale()
+
+                    if len(paths) == 1:
+                        self.flash_status_message("Opened file %s" % paths[0])
+                    else:
+                        self.flash_status_message("Opened %i spectra files" % len(paths))
+                else:
+                    path = answer
+                    if not os.path.exists(path):
+                        msg = 'File %s does not exist.' % os.path.basename(path)
+                        title = 'File does not exist'
+                        self.error(title, msg)
+                        continue # Give the oportunity to select another file name
+                    if elements == "continuum":
+                        self.regions[elements] = sve.read_continuum_regions(path)
+                        self.draw_regions(elements)
+                        self.not_saved[elements] = False
+                        self.update_title()
+                    elif elements == "lines":
+                        self.regions[elements] = sve.read_line_regions(path)
+                        self.draw_regions(elements)
+                        self.not_saved[elements] = False
+                        self.update_title()
+                    else:
+                        # 'segments'
+                        self.regions[elements] = sve.read_segment_regions(path)
+                        self.draw_regions(elements)
+                        self.not_saved[elements] = False
+                        self.update_title()
+                    self.flash_status_message("Opened file %s" % path)
+                self.filenames[elements] = path
+                self.canvas.draw()
+                action_ended = True
+                #except Exception as e:
+                    #msg = 'A file does not have a compatible format.'
+                    #title = 'File formatincompatible'
+                    #self.error(title, msg)
+                    #continue
             else:
                 self.flash_status_message("Discarded.")
                 action_ended = True
@@ -921,14 +957,15 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
                 # Change name and path
                 self.active_spectrum.path = path
-                self.active_spectrum.name = path.split('/')[-1]
+                name = self.get_name(path.split('/')[-1]) # If it already exists, add a suffix
+                self.active_spectrum.name = name
                 self.active_spectrum.plot_id.set_label("[A] " + self.active_spectrum.name)
                 self.update_legend()
                 self.canvas.draw()
 
                 # Menu active spectrum
-                index = int(self.menu_active_spectrum_num.get())
-                self.menu_active_spectrum.entryconfig(index, label=self.active_spectrum.name)
+                index = int(self.menu_active_spectrum_num.get())-1
+                self.menu_active_spectrum.entryconfig(self.menu_active_spectrum_base+index, label=self.active_spectrum.name)
 
                 saved = True
                 self.flash_status_message("Saved to %s" % path)
@@ -1146,8 +1183,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
     def update_menu_active_spectrum(self):
         # Remove everything from the list (but keep commands, last one is show errors)
-        base = self.menu_active_spectrum.index("Show errors in plot") + 2
-        self.menu_active_spectrum.delete(base, Tkinter.END)
+        self.menu_active_spectrum.delete(self.menu_active_spectrum_base, Tkinter.END)
 
         if len(self.spectra) == 0:
             # No spectra loaded
@@ -1272,11 +1308,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
 
     def on_receive_spectrum(self, new_spectrum_data, name):
-        #if self.check_operation_in_progress():
-            #return
-        #self.after_idle(self.set_operation_in_progress)
-        #self.after_idle(self.flash_status_message, "Receiving spectrum from external application...", progress=False)
-        self.after_idle(self.on_receive_spectrum_thread, new_spectrum_data, name)
+        if self.check_operation_in_progress():
+            return
+        self.queue.put((self.flash_status_message, ["Receiving spectrum from external application..."], {'progress':False}))
+        self.operation_in_progress = True
+        self.queue.put((self.on_receive_spectrum_thread, [new_spectrum_data, name], {}))
 
     def on_receive_spectrum_thread(self, new_spectrum_data, name):
         # Remove current continuum from plot if exists
@@ -1362,7 +1398,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.samp_manager.broadcast_spectrum(self.active_spectrum.data, self.active_spectrum.name, application_id, as_table=as_table)
         except Exception:
             errors = True
-        self.after_idle(self.on_send_spectrum_finnish, application, errors)
+        self.queue.put((self.on_send_spectrum_finnish, [application, errors], {}))
 
     def on_send_spectrum_finnish(self, application, errors):
         if errors:
@@ -1447,7 +1483,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         return True
 
     def check_continuum_model_exists(self):
-        if self.active_spectrum.continuum_model == None:
+        if self.active_spectrum.continuum_model is None:
             msg = "Please, execute a general continuum fit first"
             title = "Continuum model not fitted"
             self.error(title, msg)
@@ -1675,7 +1711,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 # zorder = 4, above the line region
                 line_plot_id = self.axes.plot(spectrum_window['waveobs'], line_fluxes, lw=1, color='red', linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=4)[0]
                 region.line_plot_id[self.active_spectrum] = line_plot_id
-                self.canvas.draw()
+        self.canvas.draw()
 
 
     def on_fit_continuum(self):
@@ -1698,24 +1734,33 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.active_spectrum.dialog[key].destroy()
             return
 
-        nknots = self.active_spectrum.dialog[key].results["Number of splines"]
-        median_wave_range = self.active_spectrum.dialog[key].results["Wavelength step for median selection"]
-        max_wave_range = self.active_spectrum.dialog[key].results["Wavelength step for max selection"]
-        in_continuum = self.active_spectrum.dialog[key].results["Fit using"] == "Only continuum regions"
+        model = self.active_spectrum.dialog[key].results["Fitting model"]
+        if model != "Fixed value":
+            fixed_value = None
+            nknots = self.active_spectrum.dialog[key].results["Number of polynomial degrees/splines"]
+            median_wave_range = self.active_spectrum.dialog[key].results["Wavelength step for median selection"]
+            max_wave_range = self.active_spectrum.dialog[key].results["Wavelength step for max selection"]
+            in_continuum = self.active_spectrum.dialog[key].results["Fit using"] == "Only continuum regions"
+            if nknots == None or median_wave_range < 0 or max_wave_range < 0:
+                self.flash_status_message("Bad value.")
+                return
+
+            if in_continuum and len(self.region_widgets["continuum"]) == 0:
+                self.flash_status_message("No continuum regions found.")
+                return
+        else:
+            fixed_value = self.active_spectrum.dialog[key].results["Fixed value"]
+            nknots = None
+            median_wave_range = None
+            max_wave_range = None
+            in_continuum = False
         self.active_spectrum.dialog[key].destroy()
 
-        if nknots == None or median_wave_range < 0 or max_wave_range < 0:
-            self.flash_status_message("Bad value.")
-            return
-
-        if in_continuum and len(self.region_widgets["continuum"]) == 0:
-            self.flash_status_message("No continuum regions found.")
-            return
 
         self.operation_in_progress = True
         self.status_message("Fitting continuum...")
         self.update_progress(10)
-        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'in_continuum':in_continuum, 'median_wave_range':median_wave_range, 'max_wave_range':max_wave_range})
+        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'in_continuum':in_continuum, 'median_wave_range':median_wave_range, 'max_wave_range':max_wave_range, 'fixed_value':fixed_value, 'model':model})
         thread.setDaemon(True)
         thread.start()
 
@@ -1730,26 +1775,26 @@ SPECTRUM a Stellar Spectral Synthesis Program
         spectrum['err'] = np.zeros(total_points)
         return spectrum
 
-    def on_fit_continuum_thread(self, nknots, in_continuum=False, median_wave_range=0.1, max_wave_range=1):
+    def on_fit_continuum_thread(self, nknots, in_continuum=False, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model="Polynomy"):
         try:
             if in_continuum:
                 self.__update_numpy_arrays_from_widgets("continuum")
-                self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, segments=self.regions["continuum"] , nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range)
+                self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, segments=self.regions["continuum"] , nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
             else:
-                self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range)
+                self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
             self.active_spectrum.continuum_data = self.__get_spectrum_from_model(self.active_spectrum.continuum_model, self.active_spectrum.data['waveobs'])
 
-            self.after_idle(self.on_fit_continuum_finish, nknots)
+            self.queue.put((self.on_fit_continuum_finish, [nknots], {}))
         except Exception as e:
             self.operation_in_progress = False
-            self.after_idle(self.flash_status_message, "Not enough data points to fit, reduce the number of nknots or increase the spectrum regions.")
+            self.queue.put((self.flash_status_message, ["Not enough data points to fit, reduce the number of nknots or increase the spectrum regions."], {}))
 
 
     def on_fit_continuum_finish(self, nknots):
         self.draw_continuum_spectrum()
         self.canvas.draw()
         self.operation_in_progress = False
-        self.flash_status_message("Continuum fitted with %s knots uniform Spline model." % str(nknots))
+        self.flash_status_message("Continuum fitted.")
 
     def on_determine_velocity_atomic(self):
         self.on_determine_velocity(relative_to_atomic_data = True, relative_to_telluric_data = False, relative_to_template=False)
@@ -1767,24 +1812,30 @@ SPECTRUM a Stellar Spectral Synthesis Program
         # Default values
         if relative_to_atomic_data:
             title = "Velocity profile relative to atomic lines"
-            linelist = self.linelist_atomic
             velocity_lower_limit = self.velocity_atomic_lower_limit
             velocity_upper_limit = self.velocity_atomic_upper_limit
             velocity_step = self.velocity_atomic_step
             templates = []
+            masks = ["HARPS_SOPHIE.G2.375_679nm", "HARPS_SOPHIE.K0.378_679nm", "Atlas.Sun.372_926nm", "Atlas.Arcturus.372_926nm", "Synthetic.Sun.300_1100nm", "VALD.Sun.300_1100nm", "Narval.Sun.370_1048"]
+            mask_size = 2.0
+            mask_depth = 0.1
         elif relative_to_telluric_data:
             title = "Velocity profile relative to telluric lines"
-            linelist = self.linelist_telluric
             velocity_lower_limit = self.velocity_telluric_lower_limit
             velocity_upper_limit = self.velocity_telluric_upper_limit
             velocity_step = self.velocity_telluric_step
             templates = []
+            masks = ["Tellurics.standard.atm_air_model"]
+            mask_size = 2.0
+            mask_depth = 0.01
         elif relative_to_template:
             title = "Velocity profile relative to template"
-            linelist = self.linelist_atomic
             velocity_lower_limit = self.velocity_template_lower_limit
             velocity_upper_limit = self.velocity_template_upper_limit
             velocity_step = self.velocity_template_step
+            masks = []
+            mask_size = None
+            mask_depth = None
             templates = ["[Internal template]"]
             # Add as many options as spectra
             for i in np.arange(len(self.spectra)):
@@ -1796,7 +1847,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         key = "VelocityProfileDialog:"+str(relative_to_atomic_data)+str(relative_to_telluric_data)+str(relative_to_template)
         if not self.active_spectrum.dialog.has_key(key):
-            self.active_spectrum.dialog[key] = VelocityProfileDialog(self, title, rv_lower_limit=velocity_lower_limit, rv_upper_limit=velocity_upper_limit, rv_step=velocity_step, templates=templates)
+            self.active_spectrum.dialog[key] = VelocityProfileDialog(self, title, rv_lower_limit=velocity_lower_limit, rv_upper_limit=velocity_upper_limit, rv_step=velocity_step, templates=templates, masks=masks, mask_size=mask_size, mask_depth=mask_depth)
             self.active_spectrum.dialog[key].show()
         elif show_previous_results:
             if relative_to_template:
@@ -1812,15 +1863,22 @@ SPECTRUM a Stellar Spectral Synthesis Program
         rv_lower_limit = self.active_spectrum.dialog[key].results["Velocity lower limit (km/s)"]
         rv_upper_limit = self.active_spectrum.dialog[key].results["Velocity upper limit (km/s)"]
         rv_step = self.active_spectrum.dialog[key].results["Velocity steps (km/s)"]
+        fourier = self.active_spectrum.dialog[key].results["CCF in Fourier space"] == 1
+        model = self.active_spectrum.dialog[key].results["Fitting model"]
         if relative_to_template:
             template = self.active_spectrum.dialog[key].results["Cross-correlate with"]
+            mask_name = None
+            mask_size = None
+            mask_depth = None
         else:
             template = None
+            if relative_to_atomic_data:
+                mask_name = self.active_spectrum.dialog[key].results["Mask linelist"]
+            else:
+                mask_name = masks[0]
+            mask_size = self.active_spectrum.dialog[key].results["Mask size (km/s)"]
+            mask_depth = self.active_spectrum.dialog[key].results["Minimum depth"]
         self.active_spectrum.dialog[key].destroy()
-
-        if rv_lower_limit == None or rv_upper_limit == None or rv_step == None:
-            self.flash_status_message("Bad value.")
-            return
 
         if rv_lower_limit >= rv_upper_limit:
             msg = "Upper velocity limit should be greater than lower limit"
@@ -1835,7 +1893,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         self.operation_in_progress = True
-        thread = threading.Thread(target=self.on_determine_velocity_thread, args=(relative_to_atomic_data, relative_to_telluric_data, relative_to_template, rv_lower_limit, rv_upper_limit, rv_step, template))
+        thread = threading.Thread(target=self.on_determine_velocity_thread, args=(relative_to_atomic_data, relative_to_telluric_data, relative_to_template, rv_lower_limit, rv_upper_limit, rv_step, template, mask_name, mask_size, mask_depth, fourier, model))
         thread.setDaemon(True)
         thread.start()
 
@@ -1867,21 +1925,16 @@ SPECTRUM a Stellar Spectral Synthesis Program
         return linelist
 
 
-    def on_determine_velocity_thread(self, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, velocity_lower_limit, velocity_upper_limit, velocity_step, template):
-        self.after_idle(self.status_message, "Determining velocity...")
+    def on_determine_velocity_thread(self, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, velocity_lower_limit, velocity_upper_limit, velocity_step, template, mask_name, mask_size, mask_depth, fourier, model):
+        self.queue.put((self.status_message, ["Determining velocity..."], {}))
 
-        if relative_to_atomic_data:
-            if self.linelist_atomic == None:
-                vald_linelist_file = resource_path("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst")
-                self.linelist_atomic = sve.read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
-            linelist = self.linelist_atomic
-        elif relative_to_telluric_data:
-            if self.linelist_telluric == None:
-                telluric_lines_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
-                self.linelist_telluric = sve.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
-            linelist = self.__filter_telluric_lines(self.linelist_telluric, self.active_spectrum.data, velocity_lower_limit, velocity_upper_limit)
+        if relative_to_atomic_data or relative_to_telluric_data:
+            if not mask_name in self.ccf_mask.keys():
+                mask_file = resource_path("input/linelists/CCF/" + mask_name + ".txt")
+                self.ccf_mask[mask_name] = asciitable.read(mask_file)
+            mask_linelist = self.ccf_mask[mask_name]
         elif relative_to_template:
-            linelist = None
+            mask_linelist = None
         else:
             raise Exception("Velocity should be determined relative to something!")
 
@@ -1889,17 +1942,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             if template == "[Internal template]":
                 # Internal template (solar type)
                 if self.active_spectrum.velocity_profile_internal_template == None:
-                    self.active_spectrum.velocity_profile_internal_template = sve.read_spectrum(resource_path("input/spectra/synthetic/synth_5777.0_4.44_0.02_2.0.txt.gz"))
-                    if self.linelist_telluric == None:
-                        telluric_lines_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
-                        self.linelist_telluric = sve.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
-
-                    # - Filter regions that may be affected by telluric lines
-                    #   (only the 25% of the deepest ones)
-                    dfilter = self.linelist_telluric['depth'] > np.percentile(self.linelist_telluric['depth'], 75)
-                    tfilter = sve.create_filter_for_regions_affected_by_tellurics(self.active_spectrum.velocity_profile_internal_template['waveobs'], \
-                                                self.linelist_telluric[dfilter], min_velocity=-30.0, max_velocity=30.0)
-                    self.active_spectrum.velocity_profile_internal_template['flux'][tfilter] = 0.0
+                    self.active_spectrum.velocity_profile_internal_template = sve.read_spectrum(resource_path("input/spectra/synthetic/Synth_Kurucz_VALD_5777.0_4.44_0.02_2.0.txt.gz"))
                 template_spectrum = self.active_spectrum.velocity_profile_internal_template
             else:
                 # Search template to be used by its name
@@ -1909,16 +1952,16 @@ SPECTRUM a Stellar Spectral Synthesis Program
                     if self.spectra[i].name == template:
                         template_spectrum = self.spectra[i].data
                         break
-            xcoord, fluxes, errors = sve.build_velocity_profile(self.active_spectrum.data, template=template_spectrum, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, frame=self)
+            xcoord, fluxes, errors = sve.build_velocity_profile(self.active_spectrum.data, template=template_spectrum, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, fourier=fourier, frame=self)
         else:
-            xcoord, fluxes, errors = sve.build_velocity_profile(self.active_spectrum.data, linelist=linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, frame=self)
+            xcoord, fluxes, errors = sve.build_velocity_profile(self.active_spectrum.data, linelist=mask_linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, frame=self)
 
-        self.after_idle(self.on_determine_velocity_finish, xcoord, fluxes, errors, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, linelist)
+        self.queue.put((self.on_determine_velocity_finish, [xcoord, fluxes, errors, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, mask_linelist, model], {}))
 
-    def on_determine_velocity_finish(self, xcoord, fluxes, errors, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, linelist):
+    def on_determine_velocity_finish(self, xcoord, fluxes, errors, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, mask_linelist, model):
         # Modelize
         if relative_to_atomic_data or relative_to_template:
-            models = sve.modelize_velocity_profile(xcoord, fluxes, errors)
+            models = sve.modelize_velocity_profile(xcoord, fluxes, errors, model=model)
             if len(models) > 1:
                 accept = sve.select_good_velocity_profile_models(models, xcoord, fluxes)
                 if len(models[accept]) == 0:
@@ -1926,7 +1969,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 else:
                     models = models[accept]
         else:
-            models = sve.modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=True)
+            models = sve.modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=True, model=model)
 
         if len(models) == 0:
             fwhm = 0.0
@@ -1945,7 +1988,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 # If telluric lines have been used, we can substract its natural FWHM
                 # so that we get the real resolution of the instrument (based on the difference in FWHM)
                 c = 299792458.0 # m/s
-                telluric_fwhm = np.mean((c / (linelist['wave_peak'] / linelist['fwhm'])) / 1000.0) # km/s
+                telluric_fwhm = np.mean((c / (mask_linelist['wave_peak'] / mask_linelist['fwhm'])) / 1000.0) # km/s
                 R = np.int(c/(1000.0*np.round(fwhm - telluric_fwhm, 2)))
             # Velocity
             velocity = np.round(models[0].mu(), 2) # km/s
@@ -1995,7 +2038,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         vel_telluric = self.active_spectrum.velocity_telluric
         vel_atomic = self.active_spectrum.velocity_atomic
         if not self.active_spectrum.dialog.has_key(key):
-            self.active_spectrum.dialog[key] = FitLinesDialog(self, "Fit lines and cross-match with VALD linelist", vel_telluric, vel_atomic)
+            self.active_spectrum.dialog[key] = FitLinesDialog(self, "Fit lines", vel_telluric, vel_atomic)
         self.active_spectrum.dialog[key].show(updated_vel_telluric=vel_telluric, updated_vel_atomic=vel_atomic)
 
         if self.active_spectrum.dialog[key].results == None:
@@ -2035,7 +2078,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
         linemasks = linemasks[~rejected_by_atomic_line_not_found]
 
-        self.after_idle(self.on_fit_lines_finnish, linemasks)
+        self.queue.put((self.on_fit_lines_finnish, [linemasks], {}))
 
     def on_fit_lines_finnish(self, linemasks, conserve_previous_regions=True):
         elements = "lines"
@@ -2223,7 +2266,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.active_spectrum.dialog[key].destroy()
 
         if fixed_wave_step == None or sigma == None or max_continuum_diff == None:
-            self.after_idel(self.flash_status_message, "Bad value.")
+            self.queue.put((self.flash_status_message, ["Bad value."], {}))
             return
         # Save values
         self.find_continuum_regions_wave_step = fixed_wave_step
@@ -2233,7 +2276,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         max_continuum_diff = max_continuum_diff / 100
 
         if in_segments and (self.region_widgets["segments"] == None or len(self.region_widgets["segments"]) == 0):
-            self.after_idle(self.flash_status_message, "No segments found.")
+            self.queue.put((self.flash_status_message, ["No segments found."], {}))
             return
 
         self.operation_in_progress = True
@@ -2263,14 +2306,14 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 i += 1
 
     def on_find_continuum_thread(self, resolution, sigma, max_continuum_diff, fixed_wave_step=None, in_segments=False):
-        self.after_idle(self.status_message, "Finding continuum regions...")
+        self.queue.put((self.status_message, ["Finding continuum regions..."], {}))
         if in_segments:
             self.update_numpy_arrays_from_widgets("segments")
             continuum_regions = sve.find_continuum(self.active_spectrum.data, resolution, segments=self.regions["segments"], max_std_continuum = sigma, continuum_model = self.active_spectrum.continuum_model, max_continuum_diff=max_continuum_diff, fixed_wave_step=fixed_wave_step, frame=self)
         else:
             continuum_regions = sve.find_continuum(self.active_spectrum.data, resolution, max_std_continuum = sigma, continuum_model = self.active_spectrum.continuum_model, max_continuum_diff=max_continuum_diff, fixed_wave_step=fixed_wave_step, frame=self)
 
-        self.after_idle(self.on_find_continuum_finish, continuum_regions)
+        self.queue.put((self.on_find_continuum_finish, [continuum_regions], {}))
 
     def on_find_continuum_finish(self, continuum_regions):
         elements = "continuum"
@@ -2325,7 +2368,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.active_spectrum.dialog[key].destroy()
 
         if max_depth == None or min_depth == None or resolution == None or vel_atomic == None or vel_telluric == None or max_depth <= min_depth or max_depth <= 0 or min_depth < 0 or resolution <= 0:
-            self.after_idle(self.flash_status_message, "Bad value.")
+            self.queue.put((self.flash_status_message, ["Bad value."], {}))
             return
         ## Save values
         self.find_lines_max_depth = max_depth
@@ -2336,7 +2379,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.active_spectrum.resolution_atomic = resolution
 
         if in_segments and (self.region_widgets["segments"] == None or len(self.region_widgets["segments"]) == 0):
-            self.after_idle(self.flash_status_message, "No segments found.")
+            self.queue.put((self.flash_status_message, ["No segments found."], {}))
             return
 
         self.operation_in_progress = True
@@ -2362,11 +2405,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
             spectrum = self.active_spectrum.data
 
         logging.info("Smoothing spectrum...")
-        self.after_idle(self.status_message, "Smoothing spectrum...")
+        self.queue.put((self.status_message, ["Smoothing spectrum..."], {}))
         smoothed_spectrum = sve.convolve_spectrum(spectrum, 2*resolution, frame=self)
 
 
-        self.after_idle(self.status_message, "Generating line masks, fitting gaussians and matching VALD lines...")
+        self.queue.put((self.status_message, ["Generating line masks, fitting gaussians and matching VALD lines..."], {}))
         logging.info("Generating line masks, fitting gaussians and matching VALD lines...")
         vald_linelist_file = resource_path("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst")
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
@@ -2376,11 +2419,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         # If no peaks found, just finnish
         if linemasks == None or len(linemasks) == 0:
-            self.after_idle(self.on_find_lines_finish, None)
+            self.queue.put((self.on_find_lines_finish, [None], {}))
             return
 
         logging.info("Applying filters to discard bad line masks...")
-        self.after_idle(self.status_message, "Applying filters to discard bad line masks...")
+        self.queue.put((self.status_message, ["Applying filters to discard bad line masks..."], {}))
 
         rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
         rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
@@ -2418,11 +2461,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         # If no regions found, just finnish
         if total_regions == 0:
-            self.after_idle(self.on_find_lines_finish, None, None, None)
+            self.queue.put((self.on_find_lines_finish, [None, None, None], {}))
             return
 
 
-        self.after_idle(self.on_find_lines_finish, linemasks)
+        self.queue.put((self.on_find_lines_finish, [linemasks], {}))
 
     def on_find_lines_finish(self, linemasks):
         self.on_fit_lines_finnish(linemasks, conserve_previous_regions=False)
@@ -2564,7 +2607,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         num_points = self.active_spectrum.dialog[key].results["Number of points"]
         wave_step = self.active_spectrum.dialog[key].results["Wavelength step (resampling)"]
-        estimate_from_flux = self.active_spectrum.dialog[key].results["Estimate SNR"] == "Directly from reported errors"
+        estimate_from_flux = self.active_spectrum.dialog[key].results["Estimate SNR"] == "From fluxes in blocks of N points"
         self.active_spectrum.dialog[key].destroy()
 
         if num_points == None or wave_step == None:
@@ -2589,14 +2632,14 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
 
     def on_estimate_snr_thread(self, num_points, wave_step):
-        self.after_idle(self.status_message, "Resampling spectrum...")
-        self.after_idle(self.update_progress, 10)
+        self.queue.put((self.status_message, ["Resampling spectrum..."], {}))
+        self.queue.put((self.update_progress, [10], {}))
         xaxis = np.arange(np.min(self.active_spectrum.data["waveobs"]), np.max(self.active_spectrum.data["waveobs"]), wave_step)
         resampled_spectrum_data = sve.resample_spectrum(self.active_spectrum.data, xaxis, frame=self)
 
-        self.after_idle(self.status_message, "Estimating SNR for the whole spectrum...")
+        self.queue.put((self.status_message, ["Estimating SNR for the whole spectrum..."], {}))
         estimated_snr = sve.estimate_snr(self.active_spectrum.data['flux'], num_points=num_points, frame=self)
-        self.after_idle(self.on_estimate_snr_finnish, estimated_snr)
+        self.queue.put((self.on_estimate_snr_finnish, [estimated_snr], {}))
 
     def on_estimate_snr_finnish(self, estimated_snr):
         self.active_spectrum.snr = estimated_snr
@@ -2606,11 +2649,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.flash_status_message(msg)
         self.operation_in_progress = False
 
-    def on_estimate_errors(self):
+    def on_calculate_errors(self):
         if self.check_operation_in_progress():
             return
 
-        if np.all(self.active_spectrum.data['err'] > 0.0) or np.all(self.active_spectrum.data['err'] < np.max(self.active_spectrum.data['flux'])):
+        if np.all(self.active_spectrum.data['err'] > 0.0) and np.all(self.active_spectrum.data['err'] < np.max(self.active_spectrum.data['flux'])):
             mean_err = np.mean(self.active_spectrum.data['err'])
             max_err = np.max(self.active_spectrum.data['err'])
             min_err = np.min(self.active_spectrum.data['err'])
@@ -2622,7 +2665,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         key = "EstimateErrorsDialog"
         if not self.active_spectrum.dialog.has_key(key):
             snr = 10.0
-            self.active_spectrum.dialog[key] = EstimateErrorsDialog(self, "Estimate spectrum errors", snr)
+            self.active_spectrum.dialog[key] = EstimateErrorsDialog(self, "Calculate spectrum errors", snr)
         self.active_spectrum.dialog[key].show()
 
         if self.active_spectrum.dialog[key].results == None:
@@ -2647,6 +2690,39 @@ SPECTRUM a Stellar Spectral Synthesis Program
         msg = "Spectrum's errors estimated!"
         self.flash_status_message(msg)
 
+    def on_add_noise(self):
+        if self.check_operation_in_progress():
+            return
+
+        key = "AddNoiseDialog"
+        if not self.active_spectrum.dialog.has_key(key):
+            snr = 10.0
+            self.active_spectrum.dialog[key] = EstimateErrorsDialog(self, "Add noise to spectrum", snr)
+        self.active_spectrum.dialog[key].show()
+
+        if self.active_spectrum.dialog[key].results == None:
+            self.active_spectrum.dialog[key].destroy()
+            return
+
+        snr = self.active_spectrum.dialog[key].results["SNR (Signal-to-Noise Ratio)"]
+        self.active_spectrum.dialog[key].destroy()
+
+        if snr == None or snr <= 0:
+            msg = "SNR should be greater than zero"
+            title = "SNR error"
+            self.error(title, msg)
+            return
+
+        sigma = self.active_spectrum.data['flux']/snr
+        self.active_spectrum.data['flux'] += np.random.normal(0, sigma, len(self.active_spectrum.data))
+
+        self.active_spectrum.not_saved = True
+
+        self.draw_active_spectrum()
+        self.update_title()
+        self.update_scale()
+        msg = "Noise added to the spectrum!"
+        self.flash_status_message(msg)
 
     def on_degrade_resolution(self):
         if not self.check_active_spectrum_exists():
@@ -2689,13 +2765,13 @@ SPECTRUM a Stellar Spectral Synthesis Program
         thread.start()
 
     def on_degrade_resolution_thread(self, from_resolution, to_resolution):
-        self.after_idle(self.status_message, "Degrading spectrum resolution...")
+        self.queue.put((self.status_message, ["Degrading spectrum resolution..."], {}))
         if from_resolution == 0:
             # Smooth
             convolved_spectrum = sve.convolve_spectrum(self.active_spectrum.data, to_resolution, frame=self)
         else:
-            convolved_spectrum = sve.convolve_spectrum(self.active_spectrum.data, from_resolution, to_resolution=to_resolution, frame=self)
-        self.after_idle(self.on_degrade_resolution_finnish, convolved_spectrum, from_resolution, to_resolution)
+            convolved_spectrum = sve.convolve_spectrum(self.active_spectrum.data, to_resolution, from_resolution=from_resolution, frame=self)
+        self.queue.put((self.on_degrade_resolution_finnish, [convolved_spectrum, from_resolution, to_resolution], {}))
 
     def on_degrade_resolution_finnish(self, convolved_spectrum, from_resolution, to_resolution):
         # Remove current continuum from plot if exists
@@ -2883,7 +2959,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         if in_segments and (self.region_widgets["segments"] == None or len(self.region_widgets["segments"]) == 0):
-            self.after_idle(self.flash_status_message, "No segments found.")
+            self.queue.put((self.flash_status_message, ["No segments found."], {}))
             return
 
         if not in_segments:
@@ -2992,12 +3068,12 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
     def on_resample_spectrum_thread(self, wave_base, wave_top, wave_step, method):
         # Homogenize
-        self.after_idle(self.status_message, "Resampling spectrum...")
-        self.after_idle(self.update_progress, 10)
+        self.queue.put((self.status_message, ["Resampling spectrum..."], {}))
+        self.queue.put((self.update_progress, [10], {}))
         xaxis = np.arange(wave_base, wave_top, wave_step)
         resampled_spectrum_data = sve.resample_spectrum(self.active_spectrum.data, xaxis, method=method, frame=self)
         self.active_spectrum.data = resampled_spectrum_data
-        self.after_idle(self.on_resample_spectrum_finnish)
+        self.queue.put((self.on_resample_spectrum_finnish, [], {}))
 
     def on_resample_spectrum_finnish(self):
         self.active_spectrum.not_saved = True
@@ -3093,7 +3169,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         resampled_spectra = []
         active = 0
         for spec in self.spectra:
-            self.after_idle(self.status_message, "Resampling spectrum %i of %i (%s)..." % (i+1, total, spec.name))
+            self.queue.put((self.status_message, ["Resampling spectrum %i of %i (%s)..." % (i+1, total, spec.name)], {}))
             if spec == self.active_spectrum:
                 active = i
             resampled_spectrum_data = sve.resample_spectrum(spec.data, xaxis, frame=self)
@@ -3101,8 +3177,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
             i += 1
 
         # Combine
-        self.after_idle(self.status_message, "Combining spectra...")
-        self.after_idle(self.update_progress, 10)
+        self.queue.put((self.status_message, ["Combining spectra..."], {}))
+        self.queue.put((self.update_progress, [10], {}))
 
         total_spectra = len(resampled_spectra)
         total_wavelengths = len(resampled_spectra[0]['waveobs'])
@@ -3189,7 +3265,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             del spec
         del resampled_spectra
 
-        self.after_idle(self.on_combine_spectra_finnish, combined_spectrum, combined_spectrum_name)
+        self.queue.put((self.on_combine_spectra_finnish, [combined_spectrum, combined_spectrum_name], {}))
 
     def on_combine_spectra_finnish(self, combined_spectrum, combined_spectrum_name):
         # Remove "[A]  " from spectrum name (legend)
@@ -3243,6 +3319,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         # Remove current continuum from plot if exists
         self.remove_continuum_spectrum()
+
+        # Establish the new continuum at 1.0
+        self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, fixed_value=1.0, model="Fixed value")
+        self.active_spectrum.continuum_data = self.__get_spectrum_from_model(self.active_spectrum.continuum_model, self.active_spectrum.data['waveobs'])
+        self.draw_continuum_spectrum()
 
         self.draw_active_spectrum()
         self.update_title()
@@ -3363,7 +3444,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
             limb_darkening_coeff = 0.0
             microturbulence_vel = 2.0
             #resolution = 47000
-            resolution = 0
+            #resolution = 0
+            resolution = 300000
             wave_step = 0.001
 
             key = "SendSpectrumDialog"
@@ -3388,7 +3470,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             wave_top = self.dialog[key].results["Wavelength max (nm)"]
             wave_step = self.dialog[key].results["Wavelength step (nm)"]
             selected_atmosphere_models = self.dialog[key].results["Model atmosphere"]
-            selected_linelist = self.dialog[key].results["Line list"]
+            selected_linelist = self.dialog[key].results["Line list"].split(".")[0]
             in_segments = self.dialog[key].results["Generate spectrum for"] == "Segments"
             in_lines = self.dialog[key].results["Generate spectrum for"] == "Line masks"
 
@@ -3488,7 +3570,6 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             self.operation_in_progress = True
             self.status_message("Synthesizing spectrum...")
-            self.update_progress(10)
             thread = threading.Thread(target=self.on_synthesize_thread, args=(waveobs, waveobs_mask, linelist, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, ))
             thread.setDaemon(True)
             thread.start()
@@ -3504,13 +3585,13 @@ SPECTRUM a Stellar Spectral Synthesis Program
         fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
 
         # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
-        synth_spectrum['flux'] = sve.generate_spectrum(synth_spectrum['waveobs'], waveobs_mask, atmosphere_layers, teff, logg, MH, linelist=linelist, abundances=abundances, fixed_abundances=fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, verbose=1, update_progress_func=self.update_progress)
+        synth_spectrum['flux'] = sve.generate_spectrum(synth_spectrum['waveobs'], waveobs_mask, atmosphere_layers, teff, logg, MH, linelist=linelist, abundances=abundances, fixed_abundances=fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, verbose=1, gui_queue=self.queue)
 
 
         synth_spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
 
         # Remove atmosphere model temporary file
-        self.after_idle(self.on_synthesize_finnish, synth_spectrum, teff, logg, MH, microturbulence_vel)
+        self.queue.put((self.on_synthesize_finnish, [synth_spectrum, teff, logg, MH, microturbulence_vel], {}))
 
     def on_synthesize_finnish(self, synth_spectrum, teff, logg, MH, microturbulence_vel):
         self.operation_in_progress = False
@@ -3611,7 +3692,6 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         self.operation_in_progress = True
         self.status_message("Determining abundances...")
-        self.update_progress(10)
 
         thread = threading.Thread(target=self.on_determine_abundances_thread, args=(atmosphere_layers, teff, logg, MH, abundances, microturbulence_vel,))
         thread.setDaemon(True)
@@ -3623,9 +3703,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
         linemasks['ew'] = 1000. * 10. * linemasks['ew'] # From nm to mA
         linemasks['VALD_wave_peak'] = 10 * linemasks['VALD_wave_peak'] # From nm to Angstrom
 
-        abundances, normal_abundances, relative_abundances = sve.determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, verbose=1, update_progress_func=self.update_progress)
+        abundances, normal_abundances, relative_abundances = sve.determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, verbose=1, gui_queue=self.queue)
 
-        self.after_idle(self.on_determine_abundances_finnish, abundances, normal_abundances, relative_abundances)
+        self.queue.put((self.on_determine_abundances_finnish, [abundances, normal_abundances, relative_abundances], {}))
 
     def on_determine_abundances_finnish(self, abundances, normal_abundances, relative_abundances):
         self.flash_status_message("Abundances determined!")
@@ -3680,7 +3760,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             limb_darkening_coeff = self.active_spectrum.dialog[key].results["Limb darkening coefficient"]
             resolution = self.active_spectrum.dialog[key].results["Resolution"]
             selected_atmosphere_models = self.active_spectrum.dialog[key].results["Model atmosphere"]
-            selected_linelist = self.active_spectrum.dialog[key].results["Line list"]
+            selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
 
             free_teff = self.active_spectrum.dialog[key].results["Free Teff"] == 1
             free_logg = self.active_spectrum.dialog[key].results["Free Log(g)"] == 1
@@ -3770,14 +3850,13 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             self.operation_in_progress = True
             self.status_message("Determining parameters...")
-            self.update_progress(10)
             thread = threading.Thread(target=self.on_determine_parameters_thread, args=(waveobs, waveobs_mask, linelist, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, ))
             thread.setDaemon(True)
             thread.start()
 
     def on_determine_parameters_thread(self, waveobs, waveobs_mask, linelist, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
         # TODO
-        self.after_idle(self.on_determine_parameters_finnish, synth_spectrum, teff, logg, MH, microturbulence_vel)
+        self.queue.put((self.on_determine_parameters_finnish, [synth_spectrum, teff, logg, MH, microturbulence_vel], {}))
 
     def on_determine_parameters_finnish(self, synth_spectrum, teff, logg, MH, microturbulence_vel):
         self.operation_in_progress = False

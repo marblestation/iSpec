@@ -193,99 +193,110 @@ def find_min_win(x, span=3):
     return np.asarray(ret)
 
 
-def find_local_max_values(x):
-    """
-    For an array of values, find the position of local maximum values considering only
-    the next and previous elements, except they have the same value.
-    In that case, the next/previous different value is checked. Therefore,
-    ::
+try:
+    import pyximport
+    import numpy as np
+    pyximport.install(setup_args={'include_dirs':[np.get_include()]})
+    from common_c import find_local_max_values
+    from common_c import find_local_min_values
+except:
+    print "*********************************************************************"
+    print "Not optimized version loaded!"
+    print "*********************************************************************"
 
-        find_local_max([1,2,3,3,2,1,4,3])
+    def find_local_max_values(x):
+        """
+        For an array of values, find the position of local maximum values considering only
+        the next and previous elements, except they have the same value.
+        In that case, the next/previous different value is checked. Therefore,
+        ::
 
-    would return:
-    ::
+            find_local_max([1,2,3,3,2,1,4,3])
 
-        [2, 3, 6]
-    """
-    ret = []
-    n = len(x)
-    m = 0;
-    for i in np.arange(n):
-        l_min = np.max([i-1, 0])
-        #l_max = i-1
-        #r_min = i+1
-        #r_max = np.min([i+1, n-1])
-        r_min = np.min([i+1, n-1])
-        is_max = True
+        would return:
+        ::
 
-        # left side
-        j = l_min
-        # If value is equal, search for the last different value
-        while j >= 0 and x[j] == x[i]:
-            j -= 1
+            [2, 3, 6]
+        """
+        ret = []
+        n = len(x)
+        m = 0;
+        for i in np.arange(n):
+            l_min = np.max([i-1, 0])
+            #l_max = i-1
+            #r_min = i+1
+            #r_max = np.min([i+1, n-1])
+            r_min = np.min([i+1, n-1])
+            is_max = True
 
-        if (j < 0 or x[j] > x[i]) and i > 0:
-            is_max = False
+            # left side
+            j = l_min
+            # If value is equal, search for the last different value
+            while j >= 0 and x[j] == x[i]:
+                j -= 1
 
-        # right side
-        if is_max:
-            j = r_min
-            # If value is equal, search for the next different value
-            while j < n and x[j] == x[i]:
-                j += 1
-            if (j >= n or x[j] > x[i]) and i < n-1:
+            if (j < 0 or x[j] > x[i]) and i > 0:
                 is_max = False
 
-        if is_max:
-            ret.append(i)
-    return np.asarray(ret)
+            # right side
+            if is_max:
+                j = r_min
+                # If value is equal, search for the next different value
+                while j < n and x[j] == x[i]:
+                    j += 1
+                if (j >= n or x[j] > x[i]) and i < n-1:
+                    is_max = False
 
-def find_local_min_values(x):
-    """
-    For an array of values, find the position of local maximum values considering only
-    the next and previous elements, except they have the same value.
-    In that case, the next/previous different value is checked. Therefore,
-    ::
+            if is_max:
+                ret.append(i)
+        return np.asarray(ret)
 
-        find_local_max([10,9,3,3,9,10,4,30])
+    def find_local_min_values(x):
+        """
+        For an array of values, find the position of local maximum values considering only
+        the next and previous elements, except they have the same value.
+        In that case, the next/previous different value is checked. Therefore,
+        ::
 
-    would return:
-    ::
+            find_local_max([10,9,3,3,9,10,4,30])
 
-        [2, 3, 6]
-    """
-    ret = []
-    n = len(x)
-    m = 0;
-    for i in np.arange(n):
-        l_min = np.max([i-1, 0])
-        #l_max = i-1
-        #r_min = i+1
-        #r_max = np.min([i+1, n-1])
-        r_min = np.min([i+1, n-1])
-        is_min = True
-        # left side
-        j = l_min
-        # If value is equal, search for the last different value
-        while j >= 0 and x[j] == x[i]:
-            j -= 1
+        would return:
+        ::
 
-        if j < 0 or x[j] < x[i]:
-            is_min = False
+            [2, 3, 6]
+        """
+        ret = []
+        n = len(x)
+        m = 0;
+        for i in np.arange(n):
+            l_min = np.max([i-1, 0])
+            #l_max = i-1
+            #r_min = i+1
+            #r_max = np.min([i+1, n-1])
+            r_min = np.min([i+1, n-1])
+            is_min = True
+            # left side
+            j = l_min
+            # If value is equal, search for the last different value
+            while j >= 0 and x[j] == x[i]:
+                j -= 1
 
-        # right side
-        if is_min:
-            j = r_min
-            # If value is equal, search for the next different value
-            while j < n and x[j] == x[i]:
-                j += 1
-
-            if j >= n or x[j] < x[i]:
+            if j < 0 or x[j] < x[i]:
                 is_min = False
 
-        if is_min:
-            ret.append(i)
-    return np.asarray(ret)
+            # right side
+            if is_min:
+                j = r_min
+                # If value is equal, search for the next different value
+                while j < n and x[j] == x[i]:
+                    j += 1
+
+                if j >= n or x[j] < x[i]:
+                    is_min = False
+
+            if is_min:
+                ret.append(i)
+        return np.asarray(ret)
 
 ############## [start] Barycentric vel
 def __precession_matrix(equinox1, equinox2, fk4=False):

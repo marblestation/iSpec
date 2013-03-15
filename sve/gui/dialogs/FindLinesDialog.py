@@ -60,6 +60,12 @@ class FindLinesDialog(CustomDialog):
         component["default"] = False
         self.__components.append(component)
         component = {}
+        component["type"] = "OptionMenu"
+        component["text"] = "Line list"
+        component["options"] = ["VALD.300_1100nm"]
+        component["default"] = component["options"][0]
+        self.__components.append(component)
+        component = {}
         component["type"] = "Radiobutton"
         component["text"] = "Look for line masks in"
         component["options"] = ["The whole spectra", "Only inside segments"]

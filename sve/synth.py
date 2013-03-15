@@ -57,7 +57,7 @@ def write_SPECTRUM_linelist(linelist, linelist_filename=None):
     return out.name
 
 
-def generate_fundamental_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel, verbose=0, update_progress_func=None, timeout=600, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None):
+def generate_fundamental_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=900, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None):
     """
     Generates a synthetic spectrum for the wavelength specified in waveobs only
     if waveobs_mask contains the value 1.0 at the same position.
@@ -72,10 +72,10 @@ def generate_fundamental_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff
 
     Fixed abundances can be empty.
     """
-    return generate_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence = 0.0, vsini = 0.0, limb_darkening_coeff = 0.0, R=0, verbose=verbose, update_progress_func=update_progress_func, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file)
+    return generate_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence = 0.0, vsini = 0.0, limb_darkening_coeff = 0.0, R=0, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file)
 
 
-def generate_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, update_progress_func=None, timeout=600, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None):
+def generate_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, gui_queue=None, timeout=900, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None):
     """
     Generates a synthetic spectrum for the wavelength specified in waveobs only
     if waveobs_mask contains the value 1.0 at the same position.
@@ -113,25 +113,28 @@ def generate_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, 
     # be reinitialized to work properly
     # * The best solution would be to improve the C code but since it is too complex
     #   this hack has been implemented
-    result_queue = Queue()
+    process_communication_queue = Queue()
 
-    # TODO: Allow communications between process in order to update the GUI progress bar
-    update_progress_func = None
-
-    p = Process(target=__generate_spectrum, args=(result_queue, waveobs, waveobs_mask, atmosphere_layers_file, linelist_file, abundances_file, fixed_abundances_file), kwargs={'microturbulence_vel': microturbulence_vel, 'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'nlayers': nlayers, 'verbose': verbose, 'update_progress_func':update_progress_func})
+    p = Process(target=__generate_spectrum, args=(process_communication_queue, waveobs, waveobs_mask, atmosphere_layers_file, linelist_file, abundances_file, fixed_abundances_file), kwargs={'microturbulence_vel': microturbulence_vel, 'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'nlayers': nlayers, 'verbose': verbose})
     p.start()
     fluxes = np.zeros(len(waveobs))
     num_seconds = 0
     # Constantly check that the process has not died without returning any result and blocking the queue call
     while p.is_alive() and num_seconds < timeout:
         try:
-            fluxes = result_queue.get(timeout=1)
+            data = process_communication_queue.get(timeout=1)
+            if type(data) == np.ndarray:
+                # Results received!
+                fluxes = data
+                break
+            elif gui_queue != None:
+                # GUI update
+                # It allows communications between process in order to update the GUI progress bar
+                gui_queue.put(data)
         except Empty:
             # No results, continue waiting
-            num_seconds += 1
-        else:
-            # Results received!
-            break
+            pass
+        num_seconds += 1
     if num_seconds >= timeout:
         logging.error("A timeout has occurred in the synthetic spectrum generation.")
         p.terminate()
@@ -151,18 +154,33 @@ def generate_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, 
         os.remove(linelist_file)
     return fluxes
 
-def __generate_spectrum(result_queue, waveobs, waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, nlayers=56, verbose=0, update_progress_func=None):
+
+def __generate_spectrum(process_communication_queue, waveobs, waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, nlayers=56, verbose=0):
     """
     Generate synthetic spectrum and apply macroturbulence, rotation (visini), limb darkening coeff and resolution except
     if all those parameters are set to zero, in that case the fundamental synthetic spectrum is returned.
     """
     import synthesizer
-    fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, R, nlayers, verbose, update_progress_func)
-    result_queue.put(fluxes)
+
+    update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
+    fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, 0, nlayers, verbose, update_progress_func)
+    # Avoid zero fluxes, set a minimum value so that when it is convolved it
+    # changes. This way we reduce the impact of the following problem:
+    # SPECTRUM + MARCS makes some strong lines to have zero fluxes (i.e. 854.21nm)
+    zeros = np.where(fluxes <= 1.0e-10)[0]
+    fluxes[zeros] = 1.0e-10
+    if R > 0:
+        # Use SVE convolution routine instead of SPECTRUM one, since SVE is more reliable
+        spectrum = np.recarray((len(waveobs), ), dtype=[('waveobs', float),('flux', float),('err', float)])
+        spectrum['waveobs'] = waveobs
+        spectrum['flux'] = fluxes
+        spectrum['err'] = 0.0
+        fluxes = convolve_spectrum(spectrum, R, from_resolution=None, frame=None)['flux']
+    process_communication_queue.put(fluxes)
 
 
 
-def apply_post_fundamental_effects(waveobs, fluxes, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, update_progress_func=None, timeout=600):
+def apply_post_fundamental_effects(waveobs, fluxes, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, gui_queue=None, timeout=900):
     """
     Apply macroturbulence, rotation (vsini), limb darkening coefficient and/or resolution
     """
@@ -173,24 +191,27 @@ def apply_post_fundamental_effects(waveobs, fluxes, macroturbulence = 3.0, vsini
     # be reinitialized to work properly
     # * The best solution would be to improve the C code but since it is too complex
     #   this hack has been implemented
-    result_queue = Queue()
+    process_communication_queue = Queue()
 
-    # TODO: Allow communications between process in order to update the GUI progress bar
-    update_progress_func = None
-
-    p = Process(target=__apply_post_fundamental_effects, args=(result_queue, waveobs, fluxes), kwargs={'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'verbose': verbose, 'update_progress_func':update_progress_func})
+    p = Process(target=__apply_post_fundamental_effects, args=(process_communication_queue, waveobs, fluxes), kwargs={'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'verbose': verbose})
     p.start()
     num_seconds = 0
     # Constantly check that the process has not died without returning any result and blocking the queue call
     while p.is_alive() and num_seconds < timeout:
         try:
-            fluxes = result_queue.get(timeout=1)
+            data = process_communication_queue.get(timeout=1)
+            if type(data) == np.ndarray:
+                # Results received!
+                fluxes = data
+                break
+            elif gui_queue != None:
+                # GUI update
+                # It allows communications between process in order to update the GUI progress bar
+                gui_queue.put(data)
         except Empty:
             # No results, continue waiting
-            num_seconds += 1
-        else:
-            # Results received!
-            break
+            pass
+        num_seconds += 1
     if num_seconds >= timeout:
         logging.error("A timeout has occurred in the application of post fundamental effects.")
         p.terminate()
@@ -203,13 +224,26 @@ def apply_post_fundamental_effects(waveobs, fluxes, macroturbulence = 3.0, vsini
     return fluxes
 
 
-def __apply_post_fundamental_effects(result_queue, waveobs, fluxes, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, update_progress_func=None):
+def __apply_post_fundamental_effects(process_communication_queue, waveobs, fluxes, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0):
     """
     Apply macroturbulence, rotation (visini), limb darkening coeff and resolution to already generated fundamental synthetic spectrum.
     """
     import synthesizer
-    fluxes = synthesizer.apply_post_fundamental_effects(waveobs*10., fluxes, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, R, verbose, update_progress_func)
-    result_queue.put(fluxes)
+    update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
+    fluxes = synthesizer.apply_post_fundamental_effects(waveobs*10., fluxes, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, 0, verbose, update_progress_func)
+    # Avoid zero fluxes, set a minimum value so that when it is convolved it
+    # changes. This way we reduce the impact of the following problem:
+    # SPECTRUM + MARCS makes some strong lines to have zero fluxes (i.e. 854.21nm)
+    zeros = np.where(fluxes <= 1.0e-10)[0]
+    fluxes[zeros] = 1.0e-10
+    if R > 0:
+        # Use SVE convolution routine instead of SPECTRUM one, since SVE is more reliable
+        spectrum = np.recarray((len(waveobs), ), dtype=[('waveobs', float),('flux', float),('err', float)])
+        spectrum['waveobs'] = waveobs
+        spectrum['flux'] = fluxes
+        spectrum['err'] = 0.0
+        fluxes = convolve_spectrum(spectrum, R, from_resolution=None, frame=None)['flux']
+    process_communication_queue.put(fluxes)
 
 
 class SynthModel(MPFitModel):
@@ -262,18 +296,11 @@ class SynthModel(MPFitModel):
             # Optimization to avoid too small changes in parameters or repetition
             self.cache[key] = self.last_fluxes.copy()
 
-        self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=0, verbose=0)
-        if self.R()>0:
-            synth_spectrum = np.recarray((len(self.waveobs), ), dtype=[('waveobs', float),('flux', float),('err', float)])
-            synth_spectrum['waveobs'] = self.waveobs
-            synth_spectrum['flux'] = self.last_final_fluxes
-            synth_spectrum['err'] = 0.0
-            convolved_synth_spectrum = convolve_spectrum(synth_spectrum, self.R())
-            self.last_final_fluxes = convolved_synth_spectrum['flux']
+        self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), verbose=0)
         return self.last_final_fluxes[self.comparing_mask]
 
     def fitData(self, waveobs, waveobs_mask, comparing_mask, fluxes, weights=None, parinfo=None, quiet=True):
-        if len(self._parinfo) != 8:
+        if len(parinfo) != 8:
             raise Exception("Wrong number of parameters!")
 
         if sys.platform == "win32":

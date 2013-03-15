@@ -15,7 +15,7 @@ class SolverDialog(CustomDialog):
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Line list"
-        component["options"] = ["VALD", "Kurucz", "SPECTRUM"]
+        component["options"] = ["VALD.300_1100nm", "Kurucz.300_1100nm", "NIST.300_1100nm", "SPECTRUM.300_1000nm"]
         component["default"] = component["options"][0]
         self.__components.append(component)
         component = {}

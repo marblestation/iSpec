@@ -144,10 +144,10 @@ bv = np.round(models[0].mu(), 2) # km/s
 logging.info("Resolution degradation...")
 from_resolution = 80000
 to_resolution = 40000
-convolved_sun_spectrum = sve.convolve_spectrum(sun_spectrum, from_resolution, \
-                                                to_resolution=to_resolution)
-convolved_mu_cas_a_spectrum = sve.convolve_spectrum(mu_cas_a_spectrum, from_resolution, \
-                                                to_resolution=to_resolution)
+convolved_sun_spectrum = sve.convolve_spectrum(sun_spectrum, to_resolution, \
+                                                from_resolution=from_resolution)
+convolved_mu_cas_a_spectrum = sve.convolve_spectrum(mu_cas_a_spectrum, to_resolution, \
+                                                from_resolution=from_resolution)
 
 
 #--- Resampling and combining ----------------------------------------------
