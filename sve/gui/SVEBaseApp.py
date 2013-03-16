@@ -12,9 +12,9 @@ from matplotlib.figure import Figure
 from matplotlib.ticker import ScalarFormatter
 import matplotlib.pyplot as plt
 
-from Queue import Queue # Use this queue instead of multiprocessing or there
-                        # will be problems with synthetic spectrum generation
-                        # from different process
+#import Queue
+#from multiprocessing import Queue
+from Queue import Queue
 from Queue import Empty
 import asciitable
 
@@ -165,6 +165,7 @@ class SVEBaseApp(Tkinter.Tk):
                     # string command (usefull when called from other processes
                     # such as when a synthetic spectrum is generated)
                     eval(command)
+                self.queue.task_done()
             except Empty:
                 pass
         self.after(100, self.__periodic_queue_check)

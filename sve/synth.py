@@ -26,6 +26,7 @@ from atmospheres import *
 from spectrum import *
 from multiprocessing import Process
 from multiprocessing import Queue
+from multiprocessing import JoinableQueue
 from Queue import Empty
 
 import log
@@ -113,7 +114,8 @@ def generate_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, 
     # be reinitialized to work properly
     # * The best solution would be to improve the C code but since it is too complex
     #   this hack has been implemented
-    process_communication_queue = Queue()
+    #process_communication_queue = Queue()
+    process_communication_queue = JoinableQueue()
 
     p = Process(target=__generate_spectrum, args=(process_communication_queue, waveobs, waveobs_mask, atmosphere_layers_file, linelist_file, abundances_file, fixed_abundances_file), kwargs={'microturbulence_vel': microturbulence_vel, 'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'nlayers': nlayers, 'verbose': verbose})
     p.start()
@@ -131,6 +133,8 @@ def generate_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, 
                 # GUI update
                 # It allows communications between process in order to update the GUI progress bar
                 gui_queue.put(data)
+                gui_queue.join()
+            process_communication_queue.task_done()
         except Empty:
             # No results, continue waiting
             pass
@@ -154,6 +158,9 @@ def generate_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, 
         os.remove(linelist_file)
     return fluxes
 
+def __enqueue_progress(process_communication_queue, v):
+    process_communication_queue.put(("self.update_progress(%i)" % v))
+    process_communication_queue.join()
 
 def __generate_spectrum(process_communication_queue, waveobs, waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, nlayers=56, verbose=0):
     """
@@ -162,7 +169,8 @@ def __generate_spectrum(process_communication_queue, waveobs, waveobs_mask, atmo
     """
     import synthesizer
 
-    update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
+    #update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
+    update_progress_func = lambda v: __enqueue_progress(process_communication_queue, v)
     fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, 0, nlayers, verbose, update_progress_func)
     # Avoid zero fluxes, set a minimum value so that when it is convolved it
     # changes. This way we reduce the impact of the following problem:
@@ -229,7 +237,8 @@ def __apply_post_fundamental_effects(process_communication_queue, waveobs, fluxe
     Apply macroturbulence, rotation (visini), limb darkening coeff and resolution to already generated fundamental synthetic spectrum.
     """
     import synthesizer
-    update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
+    #update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
+    update_progress_func = lambda v: __enqueue_progress(process_communication_queue, v)
     fluxes = synthesizer.apply_post_fundamental_effects(waveobs*10., fluxes, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, 0, verbose, update_progress_func)
     # Avoid zero fluxes, set a minimum value so that when it is convolved it
     # changes. This way we reduce the impact of the following problem:

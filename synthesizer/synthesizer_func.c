@@ -219,18 +219,18 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
     bkap2 = cmatrix(0,3,0,NTAU);
     bkap3 = cmatrix(0,3,0,NTAU);
     bkap4 = cmatrix(0,3,0,NTAU);
-    /*if(flagN != 1) {*/
-        /*printf("\nSPECTRUM, a Stellar Spectral Synthesis Program"); */
-        /*printf("\n(C) Richard O. Gray 1992 - 2010 Version 2.76e");*/
-        /*printf("\nMay 3, 2010");*/
-        /*printf("\n* Linked to Python by Sergi Blanco Cuaresma - February 2012\n");*/
-        /*printf("\nIntegrated Disk mode (normalized Intensity)\n\n");*/
-        /*if(flagc == 1) printf("Output will be continuum only (no line absorption)\n");*/
-        /*if(flagw == 0) printf("Silent mode\n");*/
-        /*if(flagg == 1) printf("Velocity gradient mode\n");*/
-        /*if(flagI == 1) printf("Isotopes enabled\n");*/
-        /*if(flagu == 1) printf("Reading microturbulent velocity from atmosphere model\n");*/
-    /*}*/
+    if ((flagN != 1) || (flagw == 1)) {
+        printf("\nSPECTRUM, a Stellar Spectral Synthesis Program"); 
+        printf("\n(C) Richard O. Gray 1992 - 2010 Version 2.76e");
+        printf("\nMay 3, 2010");
+        printf("\n* Linked to Python by Sergi Blanco Cuaresma - February 2012\n");
+        printf("\nIntegrated Disk mode (normalized Intensity)\n\n");
+        if(flagc == 1) printf("Output will be continuum only (no line absorption)\n");
+        if(flagw == 0) printf("Silent mode\n");
+        if(flagg == 1) printf("Velocity gradient mode\n");
+        if(flagI == 1) printf("Isotopes enabled\n");
+        if(flagu == 1) printf("Reading microturbulent velocity from atmosphere model\n");
+    }
 
     // stellar atmosphere data file
     inmodel(model,atmosphere_model_file,flagw);
@@ -319,7 +319,7 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
         inc = dwave;
 
         // Only compute not masked wavelengths
-        if (waveobs_mask[pos] != 0.0) {
+        if (waveobs_mask[pos] == 1.0) {
             Depth = 1.0;
 
             tauwave(model,wave);
@@ -346,10 +346,6 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
             taukap(wave,model,atom,line,nline,strgln,V,He,POP);
             Depth = depth(model,wave,Flux);
             fluxes[pos] = 1.0 - Depth;
-            if (Depth > 1.0)
-                printf("*");
-            if (fluxes[pos] < 0.0)
-                printf("!");
         } else {
             fluxes[pos] = 1.0;
         }
@@ -397,11 +393,18 @@ long num;
   /* End Effect */
 
   n1 = nd + 1;
-  for(i=1;i<=nd;i++) ys[i] = y[i];
+  for(i=1;i<=nd;i++) {
+      if (i >= num) { // SBC: Make sure we do not do a buffer overflow
+          break;
+      }
+      ys[i] = y[i];
+  }
   n2 = num - nd -1;
-  for(i=n2;i<=num;i++) ys[i] = y[i];
+  for(i=n2;i<num;i++) ys[i] = y[i]; // SBC: Buffer overflow corrected
+  //for(i=n2;i<=num;i++) ys[i] = y[i];
   if(vsini < 0.5) {
-    for(i=1;i<=num;i++) ys[i] = y[i];
+    for(i=1;i<num;i++) ys[i] = y[i]; // SBC: Buffer overflow corrected
+    //for(i=1;i<=num;i++) ys[i] = y[i];
     return;
   }
 
@@ -409,6 +412,9 @@ long num;
 
    w = st + (n1-1)*dw;
    for(n=n1;n<=n2;n++) {
+      if (n >= num) { // SBC: Make sure we do not do a buffer overflow
+          break;
+      }
      w = w+dw;
      s = 0.0;
      t = 0.0;
@@ -421,6 +427,9 @@ long num;
        v = i*dv;
        r2 = 1.0 - v*v;
        if(r2 > 0.0) {
+          if ((n + i < 0) || (n + i >= num)) { // SBC: Make sure we do not do a buffer overflow
+              continue;
+          }
          f = c1*sqrt(r2) + c2*r2;
          t = t+f;
          s = s + f*y[n+i];
@@ -461,7 +470,7 @@ int macroturbulence_spectrum(const double waveobs[], double fluxes[], int num_me
     data = dvector(1,N);
     ans = dvector(1,2*N);
     respns = dvector(1,N);
-    //printf("%i %i\n", num_measures, N);
+    printf("%i %i\n", num_measures, N);
     intspec1 = 0.5*(fluxes[0] + fluxes[num_measures-1]);
     for(i=2;i<num_measures;i++) intspec1 += fluxes[i];
     
@@ -505,6 +514,7 @@ int rotation_spectrum(const double waveobs[], double fluxes[], int num_measures,
     int i;
     // ROTATION
     double modified_fluxes[num_measures];
+    /*printf("before convolv\n");*/
     convolv(waveobs, fluxes, modified_fluxes, num_measures, vsini, limb_darkening_coeff);
 
     // Do not modify first position to avoid edge distorsions
