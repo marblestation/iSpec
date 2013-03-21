@@ -378,8 +378,8 @@ class SVEBaseApp(Tkinter.Tk):
         self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
         parametersmenu.add_separator()
         if "determine_abundances" in dir(sve):
-            #parametersmenu.add_command(label="Find astrophysical parameters", command=self.on_determine_parameters, state=Tkinter.DISABLED)
-            #self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
+            parametersmenu.add_command(label="Determine astrophysical parameters", command=self.on_determine_parameters)
+            self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
             parametersmenu.add_command(label="Determine abundances with fitted lines", command=self.on_determine_abundances)
             self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
 
@@ -394,6 +394,8 @@ class SVEBaseApp(Tkinter.Tk):
         self.menu_active_spectrum.add_command(label="Close spectrum", command=self.on_close_spectrum)
         self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(Tkinter.END, "label")))
         self.menu_active_spectrum.add_command(label="Close all spectra", command=self.on_close_all_spectra)
+        self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(Tkinter.END, "label")))
+        self.menu_active_spectrum.add_command(label="Close all spectra except the active one", command=self.on_close_all_spectra_except_active)
         self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(Tkinter.END, "label")))
         self.menu_active_spectrum.add_separator()
 
@@ -675,31 +677,44 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
 
 
+    def on_close_all_spectra_except_active(self):
+        self.__close_all_spectra(except_active=True)
 
     def on_close_all_spectra(self):
+        self.__close_all_spectra(except_active=False)
+
+    def __close_all_spectra(self, except_active=True):
         if not self.check_active_spectrum_exists():
             return
         if self.check_operation_in_progress():
             return
+        if len(self.spectra) <= 1:
+            return
 
         some_not_saved = False
         for spec in self.spectra:
+            if except_active and self.active_spectrum == spec:
+                continue
             if spec.not_saved:
                 some_not_saved = True
                 break
 
-        if some_not_saved:
+        if except_active:
+            msg = "Are you sure you want to close ALL the spectra except the active one?"
+        else:
             msg = "Are you sure you want to close ALL the spectra?"
+        if some_not_saved:
             title = "Changes not saved"
             if not self.question(title, msg):
                 return
         else:
-            msg = "Are you sure you want to close ALL the spectra?"
             title = "Close all the spectra"
             if not self.question(title, msg):
                 return
 
         for spec in self.spectra:
+            if except_active and self.active_spectrum == spec:
+                continue
             self.axes.lines.remove(spec.plot_id)
             # Remove errors if they exists
             if spec != None and spec.errors_plot_id1 != None:
@@ -722,9 +737,13 @@ SPECTRUM a Stellar Spectral Synthesis Program
                     del region.line_plot_id[spec]
                     del region.line_model[spec]
                     del region.line_extra[spec]
-        self.spectra = []
-        self.active_spectrum = None
-        self.active_spectrum_history = []
+        if except_active:
+            self.spectra = [self.active_spectrum]
+            self.active_spectrum_history = [self.active_spectrum]
+        else:
+            self.spectra = []
+            self.active_spectrum = None
+            self.active_spectrum_history = []
 
         self.update_menu_active_spectrum()
         self.update_title()
@@ -732,7 +751,10 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.draw_continuum_spectrum()
         self.draw_fitted_lines()
         self.update_scale()
-        self.flash_status_message("All spectra closed.")
+        if except_active:
+            self.flash_status_message("All spectra closed except the active one.")
+        else:
+            self.flash_status_message("All spectra closed.")
 
     def on_open_continuum(self):
         if self.check_operation_in_progress():
@@ -1765,17 +1787,6 @@ SPECTRUM a Stellar Spectral Synthesis Program
         thread.setDaemon(True)
         thread.start()
 
-    def __get_spectrum_from_model(self, model, spectrum_wave_grid):
-        """
-        Calculate flux for a wavelength grid using a given model (i.e. continuum fitted model).
-        """
-        total_points = len(spectrum_wave_grid)
-        spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-        spectrum['waveobs'] = spectrum_wave_grid
-        spectrum['flux'] = model(spectrum['waveobs'])
-        spectrum['err'] = np.zeros(total_points)
-        return spectrum
-
     def on_fit_continuum_thread(self, nknots, in_continuum=False, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model="Polynomy"):
         try:
             if in_continuum:
@@ -1783,7 +1794,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, segments=self.regions["continuum"] , nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
             else:
                 self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
-            self.active_spectrum.continuum_data = self.__get_spectrum_from_model(self.active_spectrum.continuum_model, self.active_spectrum.data['waveobs'])
+            waveobs = self.active_spectrum.data['waveobs']
+            self.active_spectrum.continuum_data = sve.create_spectrum_structure(waveobs, self.active_spectrum.continuum_model(waveobs))
 
             self.queue.put((self.on_fit_continuum_finish, [nknots], {}))
         except Exception as e:
@@ -1817,7 +1829,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             velocity_upper_limit = self.velocity_atomic_upper_limit
             velocity_step = self.velocity_atomic_step
             templates = []
-            masks = ["HARPS_SOPHIE.G2.375_679nm", "HARPS_SOPHIE.K0.378_679nm", "Atlas.Sun.372_926nm", "Atlas.Arcturus.372_926nm", "Synthetic.Sun.300_1100nm", "VALD.Sun.300_1100nm", "Narval.Sun.370_1048"]
+            masks = ["Atlas.Sun.372_926nm", "Atlas.Arcturus.372_926nm", "HARPS_SOPHIE.G2.375_679nm", "HARPS_SOPHIE.K0.378_679nm", "Synthetic.Sun.300_1100nm", "VALD.Sun.300_1100nm", "Narval.Sun.370_1048"]
             mask_size = 2.0
             mask_depth = 0.1
         elif relative_to_telluric_data:
@@ -2462,7 +2474,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         # If no regions found, just finnish
         if total_regions == 0:
-            self.queue.put((self.on_find_lines_finish, [None, None, None], {}))
+            self.queue.put((self.on_find_lines_finish, [None], {}))
             return
 
 
@@ -3197,17 +3209,13 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             if operation_mean:
                 # Mean fluxes
-                combined_spectrum = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-                combined_spectrum['waveobs'] = xaxis
+                combined_spectrum = sve.create_spectrum_structure(xaxis, err=std)
                 combined_spectrum['flux'] = np.mean(matrix, axis=0)
-                combined_spectrum['err'] = std
                 combined_spectrum_name = "Cumulative_mean_spectrum"
             else:
                 # Median fluxes
-                combined_spectrum = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-                combined_spectrum['waveobs'] = xaxis
+                combined_spectrum = sve.create_spectrum_structure(xaxis, err=std)
                 combined_spectrum['flux'] = np.median(matrix, axis=0)
-                combined_spectrum['err'] = std
                 combined_spectrum_name = "Cumulative_median_spectrum"
         elif operation_subtract:
             flux = np.zeros(total_wavelengths)
@@ -3221,10 +3229,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 # Error propagation assuming that they are independent
                 err = np.sqrt(np.power(err,2) + np.power(spec['err'],2))
                 i += 1
-            combined_spectrum = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-            combined_spectrum['waveobs'] = xaxis
-            combined_spectrum['flux'] = flux
-            combined_spectrum['err'] = err
+            combined_spectrum = sve.create_spectrum_structure(xaxis, flux, err)
             combined_spectrum_name = "Subtracted_spectrum"
         elif operation_add:
             flux = np.zeros(total_wavelengths)
@@ -3233,10 +3238,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 flux = flux + spec['flux']
                 # Error propagation assuming that they are independent
                 err = np.sqrt(np.power(err,2) + np.power(spec['err'],2))
-            combined_spectrum = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-            combined_spectrum['waveobs'] = xaxis
-            combined_spectrum['flux'] = flux
-            combined_spectrum['err'] = err
+            combined_spectrum = sve.create_spectrum_structure(xaxis, flux, err)
             combined_spectrum_name = "Added_spectrum"
         elif operation_divide:
             flux = np.zeros(total_wavelengths)
@@ -3255,10 +3257,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                     else:
                         flux = flux * (1. / spec['flux'])
                 i += 1
-            combined_spectrum = np.recarray((total_wavelengths, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-            combined_spectrum['waveobs'] = xaxis
-            combined_spectrum['flux'] = flux
-            combined_spectrum['err'] = err
+            combined_spectrum = sve.create_spectrum_structure(xaxis, flux, err)
             combined_spectrum_name = "Divided_spectrum"
 
         # Free memory
@@ -3323,7 +3322,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         # Establish the new continuum at 1.0
         self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, fixed_value=1.0, model="Fixed value")
-        self.active_spectrum.continuum_data = self.__get_spectrum_from_model(self.active_spectrum.continuum_model, self.active_spectrum.data['waveobs'])
+        waveobs = self.active_spectrum.data['waveobs']
+        self.active_spectrum.continuum_data = sve.create_spectrum_structure(waveobs, self.active_spectrum.continuum_model(waveobs))
         self.draw_continuum_spectrum()
 
         self.draw_active_spectrum()
@@ -3524,30 +3524,14 @@ SPECTRUM a Stellar Spectral Synthesis Program
             waveobs = np.arange(wave_base, wave_top, wave_step)
 
             if not in_segments and not in_lines:
-                lfilter = np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.)
-                waveobs_mask = np.ones(len(waveobs)) # Compute fluxes for all the wavelengths
+                regions = None # Compute fluxes for all the wavelengths
             else:
                 #in_segments or in_lines
                 if len(self.region_widgets[elements_type]) == 0:
                     self.flash_status_message("No segments/line masks present for synthetic spectrum generation.")
                     return
-
-                # Build wavelength points from regions
-                wfilter = None
-                for region in self.region_widgets[elements_type]:
-                    wave_base = region.get_wave_base()
-                    wave_top = region.get_wave_top()
-
-                    if wfilter == None:
-                        lfilter = np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.)
-                        wfilter = np.logical_and(waveobs >= wave_base, waveobs <= wave_top)
-                    else:
-                        lfilter = np.logical_or(lfilter, np.logical_and(linelist['wave (A)'] >= wave_base*11., linelist['wave (A)'] <= wave_top*10.))
-                        wfilter = np.logical_or(wfilter, np.logical_and(waveobs >= wave_base, waveobs <= wave_top))
-                waveobs_mask = np.zeros(len(waveobs))
-                waveobs_mask[wfilter] = 1.0 # Compute fluxes only for selected segments
-            linelist = linelist[lfilter]
-
+                self.__update_numpy_arrays_from_widgets(elements_type)
+                regions = self.regions[elements_type]
 
             # If wavelength out of the linelist file are used, SPECTRUM starts to generate flat spectrum
             if np.min(waveobs) < 300.0 or np.max(waveobs) > 1100.0:
@@ -3571,22 +3555,19 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             self.operation_in_progress = True
             self.status_message("Synthesizing spectrum...")
-            thread = threading.Thread(target=self.on_synthesize_thread, args=(waveobs, waveobs_mask, linelist, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, ))
+            thread = threading.Thread(target=self.on_synthesize_thread, args=(waveobs, regions, linelist, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, ))
             thread.setDaemon(True)
             thread.start()
 
-    def on_synthesize_thread(self, waveobs, waveobs_mask, linelist, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
-        total_points = len(waveobs)
+    def on_synthesize_thread(self, waveobs, regions, linelist, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
 
-        synth_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-        synth_spectrum['waveobs'] = waveobs
-        synth_spectrum['err'] = 0.0
+        synth_spectrum = sve.create_spectrum_structure(waveobs)
 
         # No fixed abundances
         fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
 
         # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
-        synth_spectrum['flux'] = sve.generate_spectrum(synth_spectrum['waveobs'], waveobs_mask, atmosphere_layers, teff, logg, MH, linelist=linelist, abundances=abundances, fixed_abundances=fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, verbose=1, gui_queue=self.queue)
+        synth_spectrum['flux'] = sve.generate_spectrum(synth_spectrum['waveobs'], atmosphere_layers, teff, logg, MH, linelist=linelist, abundances=abundances, fixed_abundances=fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, regions=regions, verbose=1, gui_queue=self.queue)
 
 
         synth_spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
@@ -3645,7 +3626,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if not self.active_spectrum.dialog.has_key(key):
             teff = 5777.0
             logg = 4.44
-            MH = 0.0
+            MH = 0.02
             microturbulence_vel = 2.0
             self.active_spectrum.dialog[key] = AbundancesDialog(self, "Abundances determination", teff, logg, MH, microturbulence_vel)
             self.active_spectrum.dialog[key].show()
@@ -3728,9 +3709,14 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
 
     def on_determine_parameters(self):
+        if not self.check_active_spectrum_exists():
+            return
         if self.check_operation_in_progress():
             return
-        if "generate_spectrum" in dir(sve):
+        if not self.check_continuum_model_exists():
+            return
+
+        if "modelize_spectrum" in dir(sve):
             teff = 5777.0
             logg = 4.44
             MH = 0.02
@@ -3739,8 +3725,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
             limb_darkening_coeff = 0.0
             microturbulence_vel = 2.0
             #resolution = 47000
-            resolution = 0
-            wave_step = 0.001
+            #resolution = 300000
+            resolution = 100000
 
             key = "SolverDialog"
             if not self.active_spectrum.dialog.has_key(key):
@@ -3752,34 +3738,61 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 self.active_spectrum.dialog[key].destroy()
                 return
 
-            teff = self.active_spectrum.dialog[key].results["Effective temperature (K)"]
-            logg = self.active_spectrum.dialog[key].results["Surface gravity (log g)"]
-            MH = self.active_spectrum.dialog[key].results["Metallicity [Fe/H]"]
-            microturbulence_vel = self.active_spectrum.dialog[key].results["Microturbulence velocity (km/s)"]
-            macroturbulence = self.active_spectrum.dialog[key].results["Macroturbulence velocity (km/s)"]
-            vsini = self.active_spectrum.dialog[key].results["Rotation (v sin(i)) (km/s)"]
-            limb_darkening_coeff = self.active_spectrum.dialog[key].results["Limb darkening coefficient"]
-            resolution = self.active_spectrum.dialog[key].results["Resolution"]
+            initial_teff = self.active_spectrum.dialog[key].results["Effective temperature (K)"]
+            initial_logg = self.active_spectrum.dialog[key].results["Surface gravity (log g)"]
+            initial_MH = self.active_spectrum.dialog[key].results["Metallicity [Fe/H]"]
+            initial_vmic = self.active_spectrum.dialog[key].results["Microturbulence velocity (km/s)"]
+            initial_vmac = self.active_spectrum.dialog[key].results["Macroturbulence velocity (km/s)"]
+            initial_vsini = self.active_spectrum.dialog[key].results["Rotation (v sin(i)) (km/s)"]
+            initial_limb_darkening_coeff = self.active_spectrum.dialog[key].results["Limb darkening coefficient"]
+            initial_R = self.active_spectrum.dialog[key].results["Resolution"]
             selected_atmosphere_models = self.active_spectrum.dialog[key].results["Model atmosphere"]
             selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
+            element_abundance = int(self.active_spectrum.dialog[key].results["Individual abundance"].split()[0])
+            element_abundance_name = self.active_spectrum.dialog[key].results["Individual abundance"].split()[2]
+            max_iterations = self.active_spectrum.dialog[key].results["Maximum number of iterations"]
 
             free_teff = self.active_spectrum.dialog[key].results["Free Teff"] == 1
             free_logg = self.active_spectrum.dialog[key].results["Free Log(g)"] == 1
             free_MH = self.active_spectrum.dialog[key].results["Free [Fe/H]"] == 1
-            free_microturbulence_vel = self.active_spectrum.dialog[key].results["Free Vmic"] == 1
+            free_microturbulence = self.active_spectrum.dialog[key].results["Free Vmic"] == 1
             free_macroturbulence = self.active_spectrum.dialog[key].results["Free Vmac"] == 1
             free_vsini = self.active_spectrum.dialog[key].results["Free vsin(i)"] == 1
             free_limb_darkening_coeff = self.active_spectrum.dialog[key].results["Free limb dark. coeff."] == 1
             free_resolution = self.active_spectrum.dialog[key].results["Free resolution"] == 1
+            free_element_abundance = self.active_spectrum.dialog[key].results["Free individual abundance"] == 1
+
+            free_params = []
+            if free_teff:
+                free_params.append("teff")
+            if free_logg:
+                free_params.append("logg")
+            if free_MH:
+                free_params.append("MH")
+            if free_microturbulence:
+                free_params.append("vmic")
+            if free_macroturbulence:
+                free_params.append("vmac")
+            if free_vsini:
+                free_params.append("vsini")
+            if free_limb_darkening_coeff:
+                free_params.append("limb_darkening_coef")
+            if free_resolution:
+                free_params.append("R")
+            if free_element_abundance:
+                free_params.append(str(element_abundance))
+
+            if len(free_params) == 0:
+                msg = "At least one parameter should be let free"
+                title = 'No free parameters'
+                self.error(title, msg)
+                return
+
 
             self.active_spectrum.dialog[key].destroy()
 
             linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + "/300_1100nm.lst")
             abundances_file = resource_path("input/abundances/" + selected_atmosphere_models + "/stdatom.dat")
-
-            if teff == None or logg == None or MH == None or microturbulence_vel == None or resolution == None:
-                self.flash_status_message("Bad value.")
-                return
 
             if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
                 logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
@@ -3803,34 +3816,24 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 self.abundances_SPECTRUM[abundances_file] = sve.read_SPECTRUM_abundances(abundances_file)
             abundances = self.abundances_SPECTRUM[abundances_file]
 
-            # Prepare atmosphere model
-            self.status_message("Interpolating atmosphere model...")
-            atmosphere_layers = sve.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH)
+            if not free_element_abundance:
+                # No fixed abundances
+                free_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
+            else:
+                free_abundances = np.recarray((1, ), dtype=[('code', int),('Abund', float)])
+                free_abundances['code'] = element_abundance
+                free_abundances['Abund'] = abundances['Abund'][abundances['code'] == int(element_abundance)] # Initial abundance
 
 
             # Consider only segments
             elements_type = "segments"
             if len(self.region_widgets[elements_type]) == 0:
-                self.flash_status_message("No segments/line masks present for synthetic spectrum generation.")
+                msg = "No segments present for synthetic spectrum generation."
+                title = 'No segments'
+                self.error(title, msg)
                 return
 
-            # Build wavelength points from regions
-            wfilter = None
-            for region in self.region_widgets[elements_type]:
-                wave_base = region.get_wave_base()
-                wave_top = region.get_wave_top()
-
-                if wfilter == None:
-                    lfilter = np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.)
-                    wfilter = np.logical_and(waveobs >= wave_base, waveobs <= wave_top)
-                else:
-                    lfilter = np.logical_or(lfilter, np.logical_and(linelist['wave (A)'] >= wave_base*11., linelist['wave (A)'] <= wave_top*10.))
-                    wfilter = np.logical_or(wfilter, np.logical_and(waveobs >= wave_base, waveobs <= wave_top))
-            waveobs_mask = np.zeros(len(waveobs))
-            waveobs_mask[wfilter] = 1.0 # Compute fluxes only for selected segments
-            linelist = linelist[lfilter]
-
-
+            waveobs = self.active_spectrum.data['waveobs']
             # If wavelength out of the linelist file are used, SPECTRUM starts to generate flat spectrum
             if np.min(waveobs) < 300.0 or np.max(waveobs) > 1100.0:
                 # luke.300_1000nm.lst
@@ -3851,20 +3854,51 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             self.operation_in_progress = True
             self.status_message("Determining parameters...")
-            thread = threading.Thread(target=self.on_determine_parameters_thread, args=(waveobs, waveobs_mask, linelist, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, ))
+            self.update_progress(10)
+            thread = threading.Thread(target=self.on_determine_parameters_thread, args=(selected_atmosphere_models, linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, max_iterations))
             thread.setDaemon(True)
             thread.start()
 
-    def on_determine_parameters_thread(self, waveobs, waveobs_mask, linelist, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
-        # TODO
-        self.queue.put((self.on_determine_parameters_finnish, [synth_spectrum, teff, logg, MH, microturbulence_vel], {}))
+    def on_determine_parameters_thread(self, selected_atmosphere_models, linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, max_iterations):
+        self.__update_numpy_arrays_from_widgets("lines")
+        self.__update_numpy_arrays_from_widgets("segments")
 
-    def on_determine_parameters_finnish(self, synth_spectrum, teff, logg, MH, microturbulence_vel):
+        # Normalize
+        spectrum = sve.create_spectrum_structure(self.active_spectrum.data['waveobs'])
+        spectrum['flux'] = self.active_spectrum.data['flux'] / self.active_spectrum.continuum_model(self.active_spectrum.data['waveobs'])
+        spectrum['err'] = self.active_spectrum.data['err'] / self.active_spectrum.continuum_model(self.active_spectrum.data['waveobs'])
+
+        synth_spectrum, params, errors, status, stats_linemasks = sve.modelize_spectrum(spectrum, self.modeled_layers_pack[selected_atmosphere_models], linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations)
+        self.queue.put((self.on_determine_parameters_finnish, [synth_spectrum, params, errors, status, stats_linemasks], {}))
+
+    def on_determine_parameters_finnish(self, synth_spectrum, params, errors, status, stats_linemasks):
+        # Name: If it already exists, add a suffix
+        name = "%.1f_%.2f_%.2f_%.1f_%.1f_%.1f_%.1f_%.0f" % (params['teff'], params['logg'], params['MH'], params['vmic'], params['vmac'], params['vsini'], params['limb_darkening_coeff'], params['R'])
+        name = self.get_name(name)
+        color = self.get_color()
+
+        ### Add a new spectrum but do not make it active to avoid confusions
+        analysed_spectrum = self.active_spectrum
+        self.active_spectrum = Spectrum(synth_spectrum, name, color=color)
+        self.spectra.append(self.active_spectrum)
+        self.active_spectrum.not_saved = True
+        self.draw_active_spectrum()
+
+        # Remove "[A]  " from spectrum name (legend) if it exists
+        if self.active_spectrum != None and self.active_spectrum.plot_id != None:
+            self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
+
+        self.active_spectrum = analysed_spectrum
+        self.draw_active_spectrum()
+
+        self.update_title()
+        self.update_menu_active_spectrum()
+        self.update_scale()
+
+        self.canvas.draw()
+
         self.operation_in_progress = False
-        # TODO
-        self.error("Operation not implemented!")
         self.flash_status_message("Parameters determined!")
-
 
 
 

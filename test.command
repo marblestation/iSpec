@@ -42,7 +42,7 @@ case $i in
 4) EXEC=$SVE' "'$DIR/input/spectra/examples/narval_arcturus.s.gz'"' ;;
 5) EXEC=$SVE' "'$DIR/input/spectra/examples/espadons_mu_leo.s.gz'"' ;;
 6) EXEC=$SVE' "'$DIR/input/spectra/examples/espadons_mu_leo.s.gz'" "'$DIR/input/spectra/examples/narval_arcturus.s.gz'" "'$DIR/input/spectra/examples/harps_procyon.s.gz'" "'$DIR/input/spectra/examples/narval_mu_cas.s.gz'" "'$DIR/input/spectra/examples/narval_sun.s.gz'"' ;;
-7) EXEC=$SVE' --continuum="'$DIR/input/regions/continuum_regions.txt'" --lines="'$DIR/input/regions/line_masks.txt'" --segments="'$DIR/input/regions/segments.txt'" "'$DIR/input/spectra/examples/narval_sun.s.gz'"' ;;
+7) EXEC=$SVE' --continuum="'$DIR/input/regions/continuum_regions.txt'" --lines="'$DIR/input/regions/fe_YY_line_masks.txt'" --segments="'$DIR/input/regions/fe_YY_segments.txt'" "'$DIR/input/spectra/examples/narval_sun.s.gz'"' ;;
 8) exit
 esac
 

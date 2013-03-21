@@ -219,7 +219,7 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
     bkap2 = cmatrix(0,3,0,NTAU);
     bkap3 = cmatrix(0,3,0,NTAU);
     bkap4 = cmatrix(0,3,0,NTAU);
-    if ((flagN != 1) || (flagw == 1)) {
+    if ((flagN != 1) && (flagw == 1)) {
         printf("\nSPECTRUM, a Stellar Spectral Synthesis Program"); 
         printf("\n(C) Richard O. Gray 1992 - 2010 Version 2.76e");
         printf("\nMay 3, 2010");
@@ -470,7 +470,6 @@ int macroturbulence_spectrum(const double waveobs[], double fluxes[], int num_me
     data = dvector(1,N);
     ans = dvector(1,2*N);
     respns = dvector(1,N);
-    printf("%i %i\n", num_measures, N);
     intspec1 = 0.5*(fluxes[0] + fluxes[num_measures-1]);
     for(i=2;i<num_measures;i++) intspec1 += fluxes[i];
     

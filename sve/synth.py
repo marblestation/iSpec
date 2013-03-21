@@ -58,10 +58,11 @@ def write_SPECTRUM_linelist(linelist, linelist_filename=None):
     return out.name
 
 
-def generate_fundamental_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=900, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None):
+def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=900, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, regions=None, waveobs_mask=None):
     """
-    Generates a synthetic spectrum for the wavelength specified in waveobs only
-    if waveobs_mask contains the value 1.0 at the same position.
+    Generates a synthetic spectrum for the wavelength specified in waveobs.
+    In case regions is specified (recarray with 'wave_base' and 'wave_top'),
+    only those regions will be computed.
 
     No macroturbulence, rotation (vsini), limb darkening coefficient or resolution is considered
     in this process. That's why it is named as "fundamental" spectrum.
@@ -73,13 +74,14 @@ def generate_fundamental_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff
 
     Fixed abundances can be empty.
     """
-    return generate_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence = 0.0, vsini = 0.0, limb_darkening_coeff = 0.0, R=0, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file)
+    return generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence = 0.0, vsini = 0.0, limb_darkening_coeff = 0.0, R=0, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, regions=regions)
 
 
-def generate_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, gui_queue=None, timeout=900, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None):
+def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, gui_queue=None, timeout=900, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, regions=None, waveobs_mask=None):
     """
-    Generates a synthetic spectrum for the wavelength specified in waveobs only
-    if waveobs_mask contains the value 1.0 at the same position.
+    Generates a synthetic spectrum for the wavelength specified in waveobs.
+    In case regions is specified (recarray with 'wave_base' and 'wave_top'),
+    only those regions will be computed.
 
     The atmosphere model, linelist, abundances and fixed abundances can be specified
     as numpy recarray tables and they will be saved to disk to be used by SPECTRUM. In case the
@@ -88,6 +90,18 @@ def generate_spectrum(waveobs, waveobs_mask, atmosphere_layers, teff, logg, MH, 
 
     Fixed abundances can be empty.
     """
+    if waveobs_mask == None:
+        if regions == None:
+            waveobs_mask = np.ones(len(waveobs)) # Compute fluxes for all the wavelengths
+            # Limit linelist
+            wave_base = np.min(waveobs)
+            wave_top = np.max(waveobs)
+            lfilter = np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.)
+            linelist = linelist[lfilter]
+        else:
+            waveobs_mask = __create_waveobs_mask(waveobs, regions)
+            # Limit linelist
+            linelist = __filter_linelist(linelist, regions)
 
     # OPTIMIZATION: Use already saved files to reduce input/output time
     remove_tmp_atm_file = False
@@ -179,10 +193,7 @@ def __generate_spectrum(process_communication_queue, waveobs, waveobs_mask, atmo
     fluxes[zeros] = 1.0e-10
     if R > 0:
         # Use SVE convolution routine instead of SPECTRUM one, since SVE is more reliable
-        spectrum = np.recarray((len(waveobs), ), dtype=[('waveobs', float),('flux', float),('err', float)])
-        spectrum['waveobs'] = waveobs
-        spectrum['flux'] = fluxes
-        spectrum['err'] = 0.0
+        spectrum = create_spectrum_structure(waveobs, fluxes)
         fluxes = convolve_spectrum(spectrum, R, from_resolution=None, frame=None)['flux']
     process_communication_queue.put(fluxes)
 
@@ -247,10 +258,7 @@ def __apply_post_fundamental_effects(process_communication_queue, waveobs, fluxe
     fluxes[zeros] = 1.0e-10
     if R > 0:
         # Use SVE convolution routine instead of SPECTRUM one, since SVE is more reliable
-        spectrum = np.recarray((len(waveobs), ), dtype=[('waveobs', float),('flux', float),('err', float)])
-        spectrum['waveobs'] = waveobs
-        spectrum['flux'] = fluxes
-        spectrum['err'] = 0.0
+        spectrum = create_spectrum_structure(waveobs, fluxes)
         fluxes = convolve_spectrum(spectrum, R, from_resolution=None, frame=None)['flux']
     process_communication_queue.put(fluxes)
 
@@ -260,11 +268,111 @@ class SynthModel(MPFitModel):
     Match synthetic spectrum to observed spectrum
     * Requires the synthetic spectrum generation functionality on
     """
-    def __init__(self, modeled_layers_pack, linelist, abundances, fixed_abundances, teff=5000, logg=3.0, MH=0.0, vmic=2.0, vmac=0.0, vsini=2.0, limb_darkening_coeff=0.0, R=0):
+    def __init__(self, modeled_layers_pack, linelist, abundances, teff=5000, logg=3.0, MH=0.0, vmic=2.0, vmac=0.0, vsini=2.0, limb_darkening_coeff=0.0, R=0):
+        self.elements = {}
+        self.elements["1"] = "H"
+        self.elements["2"] = "He"
+        self.elements["3"] = "Li"
+        self.elements["4"] = "Be"
+        self.elements["5"] = "B"
+        self.elements["6"] = "C"
+        self.elements["7"] = "N"
+        self.elements["8"] = "O"
+        self.elements["9"] = "F"
+        self.elements["10"] = "Ne"
+        self.elements["11"] = "Na"
+        self.elements["12"] = "Mg"
+        self.elements["13"] = "Al"
+        self.elements["14"] = "Si"
+        self.elements["15"] = "P"
+        self.elements["16"] = "S"
+        self.elements["17"] = "Cl"
+        self.elements["18"] = "Ar"
+        self.elements["19"] = "K"
+        self.elements["20"] = "Ca"
+        self.elements["21"] = "Sc"
+        self.elements["22"] = "Ti"
+        self.elements["23"] = "V"
+        self.elements["24"] = "Cr"
+        self.elements["25"] = "Mn"
+        self.elements["26"] = "Fe"
+        self.elements["27"] = "Co"
+        self.elements["28"] = "Ni"
+        self.elements["29"] = "Cu"
+        self.elements["30"] = "Zn"
+        self.elements["31"] = "Ga"
+        self.elements["32"] = "Ge"
+        self.elements["33"] = "As"
+        self.elements["34"] = "Se"
+        self.elements["35"] = "Br"
+        self.elements["36"] = "Kr"
+        self.elements["37"] = "Rb"
+        self.elements["38"] = "Sr"
+        self.elements["39"] = "Y"
+        self.elements["40"] = "Zr"
+        self.elements["41"] = "Nb"
+        self.elements["42"] = "Mo"
+        self.elements["43"] = "Tc"
+        self.elements["44"] = "Ru"
+        self.elements["45"] = "Rh"
+        self.elements["46"] = "Pd"
+        self.elements["47"] = "Ag"
+        self.elements["48"] = "Cd"
+        self.elements["49"] = "In"
+        self.elements["50"] = "Sn"
+        self.elements["51"] = "Sb"
+        self.elements["52"] = "Te"
+        self.elements["53"] = "I"
+        self.elements["54"] = "Xe"
+        self.elements["55"] = "Cs"
+        self.elements["56"] = "Ba"
+        self.elements["57"] = "La"
+        self.elements["58"] = "Ce"
+        self.elements["59"] = "Pr"
+        self.elements["60"] = "Nd"
+        self.elements["61"] = "Pm"
+        self.elements["62"] = "Sm"
+        self.elements["63"] = "Eu"
+        self.elements["64"] = "Gd"
+        self.elements["65"] = "Tb"
+        self.elements["66"] = "Dy"
+        self.elements["67"] = "Ho"
+        self.elements["68"] = "Er"
+        self.elements["69"] = "Tm"
+        self.elements["70"] = "Yb"
+        self.elements["71"] = "Lu"
+        self.elements["72"] = "Hf"
+        self.elements["73"] = "Ta"
+        self.elements["74"] = "W"
+        self.elements["75"] = "Re"
+        self.elements["76"] = "Os"
+        self.elements["77"] = "Ir"
+        self.elements["78"] = "Pt"
+        self.elements["79"] = "Au"
+        self.elements["80"] = "Hg"
+        self.elements["81"] = "Tl"
+        self.elements["82"] = "Pb"
+        self.elements["83"] = "Bi"
+        self.elements["84"] = "Po"
+        self.elements["85"] = "At"
+        self.elements["86"] = "Rn"
+        self.elements["87"] = "Fr"
+        self.elements["88"] = "Ra"
+        self.elements["89"] = "Ac"
+        self.elements["90"] = "Th"
+        self.elements["91"] = "Pa"
+        self.elements["92"] = "U"
+        self.elements["101"] = "Md"
+        self.elements["106"] = "Sg"
+        self.elements["107"] = "Bh"
+        self.elements["108"] = "Hs"
+        self.elements["112"] = "Cn"
+        self.elements["113"] = "Uut"
+        self.elements["114"] = "Uuq"
+
         self.modeled_layers_pack = modeled_layers_pack
         self.linelist = linelist
         self.abundances = abundances
-        self.fixed_abundances = fixed_abundances
         #
         self.calculation_time = 0
         self.waveobs = None
@@ -280,36 +388,36 @@ class SynthModel(MPFitModel):
         # The model function with parameters p required by mpfit library
         if p != None:
             # Update internal structure for fitting:
-            self._parinfo[0]['value'] = p[0]
-            self._parinfo[1]['value'] = p[1]
-            self._parinfo[2]['value'] = p[2]
-            self._parinfo[3]['value'] = p[3]
-            self._parinfo[4]['value'] = p[4]
-            self._parinfo[5]['value'] = p[5]
-            self._parinfo[6]['value'] = p[6]
-            self._parinfo[7]['value'] = p[7]
+            for i in xrange(len(p)):
+                self._parinfo[i]['value'] = p[i]
 
-        complete_key = "%.2f %.2f %.2f %.2f %.2f %.2f %.2f %i" % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
-        key = "%.2f %.2f %.2f %.2f" % (self.teff(), self.logg(), self.MH(), self.vmic())
+        # Consider new abundances as fixed
+        fixed_abundances = self.free_abundances()
+
+        abundances_key = " ".join(map(str, fixed_abundances['Abund']))
+        complete_key = "%.2f %.2f %.2f %.2f %.2f %.2f %.2f %i " % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
+        complete_key += abundances_key
+        key = "%.2f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.vmic())
+        key += abundances_key
         if self.cache.has_key(key):
             print "Cache:", complete_key
             self.last_fluxes = self.cache[key].copy()
         else:
             print "Generating:", complete_key
-            # No fixed abundances
-            fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
+
+
             # Atmosphere
             atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH())
             # Fundamental synthetic fluxes
-            self.last_fluxes = generate_fundamental_spectrum(self.waveobs, self.waveobs_mask, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.linelist, self.abundances, self.fixed_abundances, microturbulence_vel=self.vmic(), abundances_file=self.abundances_file, linelist_file=self.linelist_file, verbose=0)
+            self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.linelist, self.abundances, fixed_abundances, microturbulence_vel=self.vmic(), abundances_file=self.abundances_file, linelist_file=self.linelist_file, waveobs_mask=self.waveobs_mask, verbose=0)
             # Optimization to avoid too small changes in parameters or repetition
             self.cache[key] = self.last_fluxes.copy()
 
         self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), verbose=0)
         return self.last_final_fluxes[self.comparing_mask]
 
-    def fitData(self, waveobs, waveobs_mask, comparing_mask, fluxes, weights=None, parinfo=None, quiet=True):
-        if len(parinfo) != 8:
+    def fitData(self, waveobs, waveobs_mask, comparing_mask, fluxes, weights=None, parinfo=None, max_iterations=20, quiet=True):
+        if len(parinfo) < 8:
             raise Exception("Wrong number of parameters!")
 
         if sys.platform == "win32":
@@ -328,14 +436,13 @@ class SynthModel(MPFitModel):
         gtol = 1.e-4
         damp = 1.0   # Residuals are limited between -1.0 and 1.0 (np.tanh(residuals/1.0)) minimizing the influence of bad fluxes
                      # * Spectrum must be a normalized one
-        maxiter = 20 # Maximum number of iterations
         _t0 = default_timer()
 
         # Write abundances and linelist to avoid writing the same info in each iteration
         self.abundances_file = write_SPECTRUM_abundances(self.abundances)
         self.linelist_file = write_SPECTRUM_linelist(self.linelist)
 
-        super(SynthModel, self).fitData(waveobs[self.comparing_mask], fluxes[self.comparing_mask], weights=weights[self.comparing_mask], parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=maxiter, quiet=quiet)
+        super(SynthModel, self).fitData(waveobs[self.comparing_mask], fluxes[self.comparing_mask], weights=weights[self.comparing_mask], parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet)
 
         residuals = self.last_final_fluxes[self.comparing_mask] - fluxes[self.comparing_mask]
         self.rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
@@ -365,6 +472,12 @@ class SynthModel(MPFitModel):
     def vsini(self): return self._parinfo[5]['value']
     def limb_darkening_coeff(self): return self._parinfo[6]['value']
     def R(self): return self._parinfo[7]['value']
+    def free_abundances(self):
+        fixed_abundances = np.recarray((len(self._parinfo)-8, ), dtype=[('code', int),('Abund', float)])
+        for i in xrange(len(self._parinfo)-8):
+            fixed_abundances['code'] = int(self._parinfo[8+i]['parname'])
+            fixed_abundances['Abund'] = self._parinfo[8+i]['value']
+        return fixed_abundances
 
     def eteff(self): return self.m.perror[0]
     def elogg(self): return self.m.perror[1]
@@ -374,27 +487,77 @@ class SynthModel(MPFitModel):
     def evsini(self): return self.m.perror[5]
     def elimb_darkening_coeff(self): return self.m.perror[6]
     def eR(self): return self.m.perror[7]
+    def efree_abundances(self):
+        eabundances = []
+        for i in xrange(len(self._parinfo)-8):
+            eabundances.append(self.m.perror[8+i])
+        return eabundances
 
     def print_solution(self):
         header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("teff","logg","MH","vmic","vmac","vsini","limb","R")
         solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i" % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
         errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i" % (self.eteff(), self.elogg(), self.eMH(), self.evmic(), self.evmac(), self.evsini(), self.elimb_darkening_coeff(), int(self.eR()))
-        print "         ", header
-        print "Solution:", solution
-        print "Errors:  ", errors
+
+        # Append free individual abundances
+        abundances_header = ""
+        abundances_solution = ""
+        abundances_errors = ""
+        free_abundances = self.free_abundances()
+        efree_abundances = self.efree_abundances()
+
+        sun_log_Nh_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == 1]
+        sun_log_Nfe_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == 26]
+        sun_log_Nfe_over_Nh = sun_log_Nfe_over_Ntotal + 12 - sun_log_Nh_over_Ntotal
+        for i in xrange(len(free_abundances)):
+            sun_log_Nx_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == free_abundances['code'][i]]
+            sun_log_Nx_over_Nh = sun_log_Nx_over_Ntotal + 12 - sun_log_Nh_over_Ntotal
+            log_Nx_over_Ntotal = free_abundances['Abund'][i]
+            log_Nx_over_Nh = log_Nx_over_Ntotal + 12 - sun_log_Nh_over_Ntotal
+
+            # If 'Fe' is not free
+            if 26 not in free_abundances['code']:
+                # 'Fe' abundance is scaled with metallicity
+                log_Nfe_over_Ntotal = sun_log_Nfe_over_Ntotal - self.MH()
+                log_Nfe_over_Nh = log_Nfe_over_Ntotal + 12 - sun_log_Nh_over_Ntotal
+            else:
+                # 'Fe' abundance has been determined independent of metallicity
+                efilter = free_abundances['code'] == 26
+                log_Nfe_over_Ntotal = free_abundances['Abund'][efilter]
+                log_Nfe_over_Nh = log_Nfe_over_Ntotal + 12 - sun_log_Nh_over_Ntotal
+
+            x_over_h = log_Nx_over_Nh - sun_log_Nx_over_Nh
+            x_over_fe = (log_Nx_over_Nh - sun_log_Nx_over_Nh) - (log_Nfe_over_Nh - sun_log_Nfe_over_Nh)
+            element = self.elements[str(free_abundances['code'][i])]
+            x_over_h_name = "[" + element + "/H]"
+            x_over_fe_name = "[" + element + "/Fe]"
+            abundances_header += "%8s\t%8s\t%8s" % (element, x_over_h_name, x_over_fe_name)
+            abundances_solution += "%8.2f\t%8.2f\t%8.2f" % (free_abundances['Abund'][i], x_over_h, x_over_fe)
+            abundances_errors += "%8.2f\t%8.2f\t%8.2f" % (efree_abundances[i], 0.0, 0.0)
+
+        print "           ", header
+        print "Solution:  ", solution
+        print "Errors:    ", errors
+        print ""
+        if len(free_abundances) > 0:
+            print "           ", abundances_header
+            print "Abundances:", abundances_solution
+            print "Ab. errors:", abundances_errors
+            print ""
+
         print "Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second)
         header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","chisq(tanh)","rchisq(tanh)","chisq","rchisq","rms")
         stats = "%8i\t%8i\t%8i\t%8.2f\t%8.4f\t%8.2f\t%8.4f\t%8.4f" % (self.m.dof, self.m.niter, self.m.nfev, self.chisq, self.reduced_chisq, self.basic_chisq, self.reduced_basic_chisq, self.rms)
+        print ""
         print "         ", header
         print "Stats:   ", stats
         print "Return code:", self.m.status
 
-def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, teff_range, logg_range, MH_range):
+def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, free_abundances, teff_range, logg_range, MH_range):
     """
     Creates the structure needed for the mpfitmodel
     """
     free_params = [param.lower() for param in free_params]
-    parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(8)]
+    parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(8+len(free_abundances))]
     #
     parinfo[0]['parname'] = "teff"
     parinfo[0]['value'] = initial_teff
@@ -434,14 +597,14 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[5]['parname'] = "Vsini"
     parinfo[5]['value'] = initial_vsini
     parinfo[5]['fixed'] = not parinfo[5]['parname'].lower() in free_params
-    parinfo[5]['step'] = 0.5 # For auto-derivatives
+    parinfo[5]['step'] = 0.1 # For auto-derivatives
     parinfo[5]['limited'] = [True, True]
     parinfo[5]['limits'] = [0.0, 50.0]
     #
     parinfo[6]['parname'] = "limb_darkening_coef"
     parinfo[6]['value'] = initial_limb_darkening_coeff
     parinfo[6]['fixed'] = not parinfo[6]['parname'].lower() in free_params
-    parinfo[6]['step'] = 0.10 # For auto-derivatives
+    parinfo[6]['step'] = 0.20 # For auto-derivatives
     parinfo[6]['limited'] = [True, True]
     parinfo[6]['limits'] = [0.0, 1.0]
     #
@@ -450,7 +613,15 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[7]['fixed'] = not parinfo[7]['parname'].lower() in free_params
     parinfo[7]['step'] = 100.0 # For auto-derivatives
     parinfo[7]['limited'] = [True, True]
-    parinfo[7]['limits'] = [0.0, 300000.0]
+    parinfo[7]['limits'] = [500.0, 300000.0]
+    #
+    for i in xrange(len(free_abundances)):
+        parinfo[8+i]['parname'] = str(free_abundances['code'][i])
+        parinfo[8+i]['value'] = free_abundances['Abund'][i]
+        parinfo[8+i]['fixed'] = not parinfo[8+i]['parname'].lower() in free_params
+        parinfo[8+i]['step'] = 0.05 # For auto-derivatives
+        parinfo[8+i]['limited'] = [True, True]
+        parinfo[8+i]['limits'] = [-30., 0.]
 
     return parinfo
 
@@ -552,7 +723,7 @@ def __get_stats_per_linemask(waveobs, fluxes, synthetic_fluxes, weights, free_pa
 
     return results
 
-def modelize_spectrum(spectrum, modeled_layers_pack, linelist, abundances, fixed_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=None, linemasks=None):
+def modelize_spectrum(spectrum, modeled_layers_pack, linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=None, linemasks=None, max_iterations=20):
 
     waveobs = spectrum['waveobs']
     flux = spectrum['flux']
@@ -587,11 +758,13 @@ def modelize_spectrum(spectrum, modeled_layers_pack, linelist, abundances, fixed
     logg_range = modeled_layers_pack[4]
     MH_range = modeled_layers_pack[5]
 
-    parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, teff_range, logg_range, MH_range)
+    parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, free_abundances, teff_range, logg_range, MH_range)
 
-    synth_model = SynthModel(modeled_layers_pack, linelist, abundances, fixed_abundances)
-    synth_model.fitData(waveobs, waveobs_mask, comparing_mask, flux, weights=weights, parinfo=parinfo, quiet=False)
+    synth_model = SynthModel(modeled_layers_pack, linelist, abundances)
+    synth_model.fitData(waveobs, waveobs_mask, comparing_mask, flux, weights=weights, parinfo=parinfo, max_iterations=max_iterations, quiet=False)
+    print "\n"
     stats_linemasks = __get_stats_per_linemask(waveobs, flux, synth_model.last_final_fluxes, weights, free_params, linemasks, verbose=True)
+    print "\n"
     synth_model.print_solution()
 
     # Collect information to be returned
@@ -630,10 +803,7 @@ def modelize_spectrum(spectrum, modeled_layers_pack, linelist, abundances, fixed
     status['nsynthesis'] = synth_model.m.nfev
     status['status'] = synth_model.m.status
 
-    synth_spectrum = np.recarray((len(waveobs), ), dtype=[('waveobs', float),('flux', float),('err', float)])
-    synth_spectrum['waveobs'] = waveobs
-    synth_spectrum['flux'] = synth_model.last_final_fluxes
-    synth_spectrum['err'] = 0.0
+    synth_spectrum = create_spectrum_structure(waveobs, synth_model.last_final_fluxes)
 
     return synth_spectrum, params, errors, status, stats_linemasks
 

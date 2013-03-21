@@ -28,17 +28,17 @@ def get_arguments():
         if o in ("-c", "--continuum"):
             continuum_file = a
             if not os.path.exists(continuum_file):
-                print "Continuum file", args[0], "does not exists!"
+                print "Continuum file", continuum_file, "does not exists!"
                 sys.exit(2)
         elif o in ("-l", "--lines"):
             lines_file = a
             if not os.path.exists(lines_file):
-                print "Lines file", args[0], "does not exists!"
+                print "Lines file", lines_file, "does not exists!"
                 sys.exit(2)
         elif o in ("-s", "--segments"):
             segments_file = a
             if not os.path.exists(segments_file):
-                print "Segments file", args[0], "does not exists!"
+                print "Segments file", segments_file, "does not exists!"
                 sys.exit(2)
         else:
             print "Argument", o, "not recognized!"

@@ -100,9 +100,7 @@ def __read_fits_spectrum(spectrum_filename, fluxhdu="PRIMARY", errorhdu=None):
 
 
     num_measures = len(flux)
-    spectrum = np.recarray((num_measures, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-    spectrum['waveobs'] = waveobs
-    spectrum['flux'] = flux
+    spectrum = create_spectrum_structure(waveobs, flux)
 
     if errorhdu == None:
         spectrum['err'] = np.zeros(len(flux))
@@ -625,12 +623,27 @@ def convolve_spectrum(spectrum, to_resolution, from_resolution=None, frame=None)
         raise Exception("This method cannot deal with final resolutions that are bigger than original")
 
     waveobs, flux, err = __convolve_spectrum(spectrum['waveobs'], spectrum['flux'], spectrum['err'], to_resolution, from_resolution=from_resolution, frame=frame)
-    convolved_spectrum = np.recarray((len(waveobs), ), dtype=[('waveobs', float),('flux', float),('err', float)])
-    convolved_spectrum['waveobs'] = waveobs
-    convolved_spectrum['flux'] = flux
-    convolved_spectrum['err'] = err
+    convolved_spectrum = create_spectrum_structure(waveobs, flux, err)
     return convolved_spectrum
 
+def create_spectrum_structure(waveobs, flux=None, err=None):
+    """
+    Create spectrum structure
+    """
+    spectrum = np.recarray((len(waveobs), ), dtype=[('waveobs', float),('flux', float),('err', float)])
+    spectrum['waveobs'] = waveobs
+
+    if flux != None:
+        spectrum['flux'] = flux
+    else:
+        spectrum['flux'] = 0.0
+
+    if err != None:
+        spectrum['err'] = err
+    else:
+        spectrum['err'] = 0.0
+
+    return spectrum
 
 
 def resample_spectrum(spectrum, xaxis, method="bessel", frame=None):
@@ -659,35 +672,33 @@ def resample_spectrum(spectrum, xaxis, method="bessel", frame=None):
     logging.info("%.2f%%" % current_work_progress)
     if frame != None:
         frame.update_progress(current_work_progress)
-    resampled_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-    resampled_spectrum['waveobs'] = xaxis
+
     if method.lower() == "linear":
         ## Scipy linear interpolation (same result as numpy):
         #f = interpolate.interp1d(spectrum['waveobs'], spectrum['flux'], kind='linear', bounds_error=False, fill_value=0.0)
-        #resampled_spectrum['flux'] = f(xaxis)
+        #flux = f(xaxis)
         ## Numpy linear interpolation:
-        resampled_spectrum['flux'] = np.interp(xaxis, spectrum['waveobs'], spectrum['flux'], left=0.0, right=0.0) # No extrapolation, just returns zeros
+        flux = np.interp(xaxis, spectrum['waveobs'], spectrum['flux'], left=0.0, right=0.0) # No extrapolation, just returns zeros
+        err = np.interp(xaxis, spectrum['waveobs'], spectrum['err'], left=0.0, right=0.0) # No extrapolation, just returns zeros
         current_work_progress = 90.0
         logging.info("%.2f%%" % current_work_progress)
         if frame != None:
             frame.update_progress(current_work_progress)
     elif method.lower() == "spline":
         f = interpolate.InterpolatedUnivariateSpline(spectrum['waveobs'], spectrum['flux'], k=3)
-        resampled_spectrum['flux'] = f(xaxis)
+        e = interpolate.InterpolatedUnivariateSpline(spectrum['waveobs'], spectrum['err'], k=3)
+        flux = f(xaxis)
+        err = e(xaxis)
         current_work_progress = 90.0
         logging.info("%.2f%%" % current_work_progress)
         if frame != None:
             frame.update_progress(current_work_progress)
     elif method.lower() == "bessel":
         waveobs, flux, err = __bessel_interpolation(spectrum['waveobs'], spectrum['flux'], spectrum['err'], xaxis, frame=frame)
-        resampled_spectrum = np.recarray((total_points, ), dtype=[('waveobs', float),('flux', float),('err', float)])
-        resampled_spectrum['waveobs'] = waveobs
-        resampled_spectrum['flux'] = flux
-        resampled_spectrum['err'] = err
     else:
         raise Exception("Unknown method")
 
-    resampled_spectrum['err'] = np.interp(xaxis, spectrum['waveobs'], spectrum['err'])
+    resampled_spectrum = create_spectrum_structure(xaxis, flux, err)
     return resampled_spectrum
 
 def correct_velocity(spectrum, velocity):

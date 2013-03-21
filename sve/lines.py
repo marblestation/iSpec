@@ -38,7 +38,7 @@ from mpfitmodels import GaussianModel
 from mpfitmodels import VoigtModel
 import log
 import logging
-
+import copy
 
 
 
@@ -1421,7 +1421,7 @@ def build_velocity_profile(spectrum, linelist=None, template=None, lower_velocit
         raise Exception("A linelist or template should be specified")
 
 
-def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False, depth_percent_limit=10, model='Auto'):
+def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False, depth_percent_limit=10, model='2nd order polynomial + auto fit'):
     """
     Fits a model ('Gaussian' or 'Voigt') to the deepest peaks in the velocity
     profile. If it is 'Auto', a gaussian and a voigt will be fitted and the best
@@ -1539,6 +1539,17 @@ def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False, depth
             mu = xcoord[peaks[i]]
             poly_step = xcoord[peaks[i]+1] - xcoord[peaks[i]] # Temporary just to the next iteration
         #########################################################
+        ## TODO: REMOVE Ivyes code
+        #from ccanalyzer import analyzer
+
+        ##rv = xcoord[base[i]:top[i]+1]
+        ##cc = fluxes[base[i]:top[i]+1]
+        #rv = xcoord
+        ##depth = np.abs(np.max(template['flux']) - template['flux'])
+        #cc = np.min(fluxes) - fluxes
+        #aa = analyzer(rv, cc, rv.shape[0])
+        ##print mu, aa.getResult(),aa.getError()
+        #mu = aa.getResult()
 
         #########################################################
         ####### Gaussian/Voigt fit to determine other params.
@@ -1591,7 +1602,6 @@ def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False, depth
 
         try:
             # Fit a gaussian and a voigt, but choose the one with the best fit
-            import copy
             if model in ['2nd order polynomial + auto fit', '2nd order polynomial + gaussian fit']:
                 gaussian_model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=copy.deepcopy(parinfo[:4]), weights=weights)
                 #gaussian_model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=copy.deepcopy(parinfo[:4]))

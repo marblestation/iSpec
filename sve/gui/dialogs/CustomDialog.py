@@ -1,6 +1,12 @@
+import sys
 import Tkinter
 import tkMessageBox
 from tkSimpleDialog import Dialog
+
+try:
+    import ttk
+except:
+    pass
 
 import numpy as np
 
@@ -47,14 +53,25 @@ class CustomDialog(Dialog):
                 component["variable"].set(component["default"])
                 component["object"] = Tkinter.Checkbutton(grid_frame, text=component["text"], variable=component["variable"])
                 component["object"].grid(row=row, columnspan=2, sticky=Tkinter.E)
+            #elif component["type"].lower() == "combobox":
             elif component["type"].lower() == "optionmenu":
                 if len(component["options"]) <= 0:
                     raise Exception("Options needed!")
                 Tkinter.Label(grid_frame, text=component["text"]).grid(row=row, sticky=Tkinter.W)
                 component["variable"] = Tkinter.StringVar()
-                component["variable"].set(component["default"])
-                component["object"] = apply(Tkinter.OptionMenu, (grid_frame, component["variable"]) + tuple(component["options"]))
-                component["object"].grid(row=row, column=1, sticky=Tkinter.W)
+
+                if "ttk" in sys.modules.keys():
+                    # It supports better long lists of options
+                    component["variable"].set(component["default"])
+                    component["object"] = ttk.Combobox(grid_frame, textvariable=component["variable"], state='readonly')
+                    component["object"]['values'] = tuple(component["options"])
+                    component["object"].grid(row=row, column=1, sticky=Tkinter.W)
+                else:
+                    Tkinter.Label(grid_frame, text=component["text"]).grid(row=row, sticky=Tkinter.W)
+                    component["variable"] = Tkinter.StringVar()
+                    component["variable"].set(component["default"])
+                    component["object"] = apply(Tkinter.OptionMenu, (grid_frame, component["variable"]) + tuple(component["options"]))
+                    component["object"].grid(row=row, column=1, sticky=Tkinter.W)
             elif component["type"].lower() == "radiobutton":
                 Tkinter.Label(grid_frame, text=component["text"]).grid(row=row, sticky=Tkinter.W)
                 component["variable"] = Tkinter.StringVar()

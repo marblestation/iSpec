@@ -335,7 +335,8 @@ int flagw;
     free_dmatrix(f, 1, 7, 1, 1);
     free_dmatrix(df, 1, 7, 1, 7);
     free_dvector(n, 1, 7);
-    printf("\n");
+    if (flagw == 1) // SBC: Added no silent condition
+        printf("\n");
     fflush(stdout);
     if (flagP == 1)
         printDensity(model);
