@@ -22,7 +22,7 @@ import numpy as np
 import logging
 
 #--- SVE directory --------------------------------------------------------
-#sve_dir = '/home/user/SVE_v20120919/'
+#sve_dir = '/home/marble/shared/sve/'
 sve_dir = './'
 sys.path.insert(0, os.path.abspath(sve_dir))
 import sve

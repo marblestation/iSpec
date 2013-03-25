@@ -1685,7 +1685,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if self.active_spectrum != None and self.active_spectrum.continuum_plot_id != None:
             self.axes.lines.remove(self.active_spectrum.continuum_plot_id)
             self.active_spectrum.continuum_plot_id = None
-            self.active_spectrum.continuum_model = None
+            #self.active_spectrum.continuum_model = None
             #self.active_spectrum.continuum_data = None
             self.canvas.draw()
 

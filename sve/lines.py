@@ -15,6 +15,7 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with SVE. If not, see <http://www.gnu.org/licenses/>.
 #
+
 import asciitable
 import numpy as np
 import numpy.lib.recfunctions as rfn # Extra functions

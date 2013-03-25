@@ -3,8 +3,13 @@ import sys
 import os
 import getopt
 import numpy as np
+
+#--- SVE directory --------------------------------------------------------
+#sve_dir = '/home/marble/shared/sve/'
+sve_dir = './'
+sys.path.insert(0, os.path.abspath(sve_dir))
 import sve
-from sve.gui import *
+from sve.gui import SVEBaseApp
 
 ## Print usage
 def usage():

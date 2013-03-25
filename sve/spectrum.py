@@ -616,7 +616,7 @@ def convolve_spectrum(spectrum, to_resolution, from_resolution=None, frame=None)
     If "from_resolution" is not specified or its equal to "to_resolution", then the spectrum
     is convolved with the instrumental gaussian defined by "to_resolution".
 
-    If "to_resolution" is specified, the convolution is made with the difference of
+    If "from_resolution" is specified, the convolution is made with the difference of
     both resolutions in order to degrade the spectrum.
     """
     if from_resolution != None and from_resolution <= to_resolution:
@@ -651,18 +651,19 @@ def resample_spectrum(spectrum, xaxis, method="bessel", frame=None):
     Returns a new spectrum with measures at the given xaxis wavelength
     Interpolation method can be:
 
-    * method = "bessel": A Bessel's Central-Difference Interpolation with
-    4 points. In this case interpolation is linear only when there are
-    not enough points (i.e. beginning/end of spectrum).
-    * method = "linear": Linear interpolation using 2 points
-    * method = "spline": A spline interpolation that may may be usefull
-    for obtaining a smooth oversampled spectra by following this simple
-    procedure:
+    - method = "bessel": A Bessel's Central-Difference Interpolation with
+      4 points. In this case interpolation is linear only when there are
+      not enough points (i.e. beginning/end of spectrum).
+    - method = "linear": Linear interpolation using 2 points
+    - method = "spline": A spline interpolation that may may be usefull
+      for obtaining a smooth oversampled spectra by following this simple
+      procedure:
+
         - If the original spectrum is not uniformly sampled, apply first
-        the linear interpolation with a wave step equal to the median step
-        of the spectrum.
+          the linear interpolation with a wave step equal to the median step
+          of the spectrum.
         - Once the spectrum is uniformly sampled, apply the spline interpolation
-        with a wave step smaller than the current wave step.
+          with a wave step smaller than the current wave step.
 
     """
     total_points = len(xaxis)
