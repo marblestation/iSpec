@@ -19,6 +19,7 @@ import numpy as np
 from atmospheres import *
 from multiprocessing import Process
 from multiprocessing import Queue
+from multiprocessing import JoinableQueue
 from Queue import Empty
 
 import log
@@ -40,7 +41,7 @@ def write_abundance_lines(linemasks, filename=None):
     If filename is not specified, a temporary file is created and the name is returned.
 
     """
-    if filename != None:
+    if filename is not None:
         out = open(filename, "w")
     else:
         # Temporary file
@@ -64,7 +65,7 @@ def write_SPECTRUM_fixed_abundances(fixed_abundances, filename=None):
     If filename is not specified, a temporary file is created and the name is returned.
 
     """
-    if filename != None:
+    if filename is not None:
         out = open(filename, "w")
     else:
         # Temporary file
@@ -97,7 +98,7 @@ def write_SPECTRUM_abundances(abundances, abundances_filename=None):
 
     If filename is not specified, a temporary file is created and the name is returned.
     """
-    if abundances_filename != None:
+    if abundances_filename is not None:
         out = open(abundances_filename, "w")
     else:
         # Temporary file
@@ -108,7 +109,23 @@ def write_SPECTRUM_abundances(abundances, abundances_filename=None):
     return out.name
 
 
-def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, verbose=0, update_progress_func=None, timeout=600):
+def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, verbose=0, gui_queue=None, timeout=900):
+    """
+    Determine abundances from equivalent widths (linemasks previously fitted and
+    cross-matched with an atomic linelist).
+
+    Returns:
+
+    - The abundance on the scale native to SPECTRUM
+    - The abundance in he normal scale, in which the logarithmic abundance of hydrogen is equal to 12.0.
+    - The abundance relative to the unscaled abundances (specified in "abundances").
+      If "abundances" contain solar abundances, these values represent
+      the quantity [X/H] where X is the species in question.
+    """
+    # Transfor units
+    linemasks = linemasks.copy()
+    linemasks['ew'] = 1000. * 10. * linemasks['ew'] # From nm to mA
+    linemasks['VALD_wave_peak'] = 10 * linemasks['VALD_wave_peak'] # From nm to Angstrom
 
     linemasks_file = write_abundance_lines(linemasks)
     atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH)
@@ -122,42 +139,77 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
     # be reinitialized to work properly
     # * The best solution would be to improve the C code but since it is too complex
     #   this hack has been implemented
-    result_queue = Queue()
+    #process_communication_queue = Queue()
+    process_communication_queue = JoinableQueue()
 
-    # TODO: Allow communications between process in order to update the GUI progress bar
-    update_progress_func = None
-
-    p = Process(target=__determine_abundances, args=(result_queue, atmosphere_layers_file, linemasks_file, num_measures, abundances_file,), kwargs={'microturbulence_vel': microturbulence_vel, 'nlayers': nlayers, 'verbose': verbose, 'update_progress_func':update_progress_func})
+    p = Process(target=__determine_abundances, args=(process_communication_queue, atmosphere_layers_file, linemasks_file, num_measures, abundances_file,), kwargs={'microturbulence_vel': microturbulence_vel, 'nlayers': nlayers, 'verbose': verbose})
     p.start()
-    try:
-        abundances = result_queue.get(timeout=timeout)
-    except Empty:
-        logging.error("Timeout in the abundance determination!")
-        abundances = (np.zeros(num_measures), np.zeros(num_measures), np.zeros(num_measures))
-        p.terminate()
-    else:
-        p.join()
-    p.join()
+    # Default values
+    spec_abund = np.zeros(num_measures)
+    normal_abund = np.zeros(num_measures)
+    x_over_h = np.zeros(num_measures)
+    x_over_fe = np.zeros(num_measures)
+    num_seconds = 0
+    # Constantly check that the process has not died without returning any result and blocking the queue call
+    while p.is_alive() and num_seconds < timeout:
+        try:
+            data = process_communication_queue.get(timeout=1)
+            if type(data) == tuple:
+                # Results received!
+                spec_abund, normal_abund, x_over_h = data
+                # Calculate abundance relative to Fe also: [X/Fe]
+                sun_log_Nh_over_Ntotal = abundances['Abund'][abundances['code'] == 1] # Hydrogen
+                sun_log_Nfe_over_Ntotal = abundances['Abund'][abundances['code'] == 26] # Fe
+                sun_log_Nfe_over_Nh = sun_log_Nfe_over_Ntotal + 12 - sun_log_Nh_over_Ntotal
+
+                # 'Fe' abundance should be scaled with metallicity
+                log_Nfe_over_Ntotal = sun_log_Nfe_over_Ntotal - MH
+                log_Nfe_over_Nh = np.ones(len(spec_abund)) * (log_Nfe_over_Ntotal + 12 - sun_log_Nh_over_Ntotal)
+
+                # If there are iron lines, for those the log_Nfe_over_Nh is different
+                iron_lines = np.logical_or(linemasks['element'] == 'Fe 1', linemasks['element'] == 'Fe 2')
+                log_Nfe_over_Nh[iron_lines] = normal_abund
+
+                x_over_fe = x_over_h - (log_Nfe_over_Nh - sun_log_Nfe_over_Nh) # [X/Fe]
+                break
+            elif gui_queue is not None:
+                # GUI update
+                # It allows communications between process in order to update the GUI progress bar
+                gui_queue.put(data)
+                gui_queue.join()
+            process_communication_queue.task_done()
+        except Empty:
+            # No results, continue waiting
+            pass
+        num_seconds += 1
 
     os.remove(atmosphere_layers_file)
     os.remove(linemasks_file)
     os.remove(abundances_file)
 
-    return abundances
 
-def __determine_abundances(result_queue, atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel = 2.0, nlayers=56, verbose=0, update_progress_func=None):
+    return spec_abund, normal_abund, x_over_h, x_over_fe
+
+def __enqueue_progress(process_communication_queue, v):
+    process_communication_queue.put(("self.update_progress(%i)" % v))
+    process_communication_queue.join()
+
+def __determine_abundances(process_communication_queue, atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel = 2.0, nlayers=56, verbose=0):
     """
-    Determine abundances from equivalent widths
+    Determine abundances from equivalent widths (linemasks previously fitted and
+    cross-matched with an atomic linelist).
 
     Returns:
 
     - The abundance on the scale native to SPECTRUM
     - The abundance in he normal scale, in which the logarithmic abundance of hydrogen is equal to 12.0.
-    - The abundance relative to the unscaled abundances (content of "abundances_file").
-    If "abundances_file" contain solar abundances, this values represent
-    the quantity [X/H] where X is the species in question.
+    - The abundance relative to the unscaled abundances (specified in "abundances").
+      If "abundances" contain solar abundances, these values represent
+      the quantity [X/H] where X is the species in question.
     """
     import synthesizer
+    update_progress_func = lambda v: __enqueue_progress(process_communication_queue, v)
     abundances = synthesizer.abundances(atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel, nlayers, verbose, update_progress_func)
-    result_queue.put(abundances)
+    process_communication_queue.put(abundances)
+
 

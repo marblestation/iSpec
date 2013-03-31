@@ -18,6 +18,7 @@
 import mpfit
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.integrate import quad
 
 class MPFitModel(object):
     def __init__(self, p):
@@ -49,7 +50,7 @@ class MPFitModel(object):
         # Non-negative status value means MPFIT should continue, negative means
         # stop the calculation.
         status = 0
-        if self.weights != None:
+        if self.weights is not None:
             return([status, (self.y - model)*self.weights])
         else:
             return([status, (self.y - model)])
@@ -72,7 +73,7 @@ class MPFitModel(object):
         self.weights = weights
 
         # Parameters' constraints
-        if parinfo != None:
+        if parinfo is not None:
             self._parinfo = parinfo
 
         m = mpfit.mpfit(self._model_evaluation_function, parinfo=self._parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=maxiter, quiet=quiet)
@@ -105,7 +106,7 @@ class GaussianModel(MPFitModel):
 
     def _model_function(self, x, p=None):
         # The model function with parameters p required by mpfit library
-        if p != None:
+        if p is not None:
             # Update internal structure for fitting:
             self._parinfo[0]['value'] = p[0]
             self._parinfo[1]['value'] = p[1]
@@ -134,16 +135,15 @@ class GaussianModel(MPFitModel):
         return f
 
     def integrate(self, from_x=None, to_x=None):
-        # Define range: Include 99.97% of the gaussian area
-        if from_x == None:
-            from_x = self.mu() - 3*self.sig()
-        if to_x == None:
-            to_x = self.mu() + 3*self.sig()
+        # Define range: Include 99.9999998% of the gaussian area
+        if from_x is None:
+            from_x = self.mu() - 6*self.sig()
+        if to_x is None:
+            to_x = self.mu() + 6*self.sig()
 
-        #if self.x == None:
+        #if self.x is None:
             #return 0
         #else:
-        from scipy.integrate import quad
         integral, estimated_error = quad(self._make_gauss(), from_x, to_x)
         return integral
 
@@ -169,7 +169,7 @@ class VoigtModel(MPFitModel):
 
     def _model_function(self, x, p=None):
         # The model function with parameters p required by mpfit library
-        if p != None:
+        if p is not None:
             # Update internal structure for fitting:
             self._parinfo[0]['value'] = p[0]
             self._parinfo[1]['value'] = p[1]
@@ -217,12 +217,12 @@ class VoigtModel(MPFitModel):
 
     def integrate(self, from_x=None, to_x=None):
         # Define range: Include 99.97% of the gaussian area
-        if from_x == None:
+        if from_x is None:
             from_x = self.mu() - 3*self.sig()
-        if to_x == None:
+        if to_x is None:
             to_x = self.mu() + 3*self.sig()
 
-        #if self.x == None:
+        #if self.x is None:
             #return 0
         #else:
         from scipy.integrate import quad

@@ -32,7 +32,7 @@ class SAMPManager():
 
     def is_connected(self):
         working_connection = False
-        if self.samp_client != None and self.samp_client.isConnected():
+        if self.samp_client is not None and self.samp_client.isConnected():
             try:
                 self.samp_client.ping()
                 working_connection = True
@@ -43,7 +43,7 @@ class SAMPManager():
     def __check_connection(self):
         status = "Status: "
         if not self.is_connected():
-            if self.samp_client != None and self.samp_client.isConnected():
+            if self.samp_client is not None and self.samp_client.isConnected():
                 # Destroy old client to completely reset the connection status
                 del self.samp_client
                 self.samp_client = sampy.SAMPIntegratedClient(metadata=self.metadata, addr='localhost')
@@ -150,13 +150,13 @@ class SAMPManager():
         self.shutdown()
 
     def shutdown(self):
-        if self.timer != None: self.timer.cancel()
+        if self.timer is not None: self.timer.cancel()
         if self.samp_client.isConnected():
             try:
                 self.samp_client.disconnect()
             except Exception:
                 pass
-        if self.samp_hub != None and self.samp_hub._is_running: self.samp_hub.stop()
+        if self.samp_hub is not None and self.samp_hub._is_running: self.samp_hub.stop()
         sys.exit(0)
 
     def __get_target_client(self, target_client_name):
@@ -195,7 +195,7 @@ class SAMPManager():
             if has_waveobs and has_flux:
                 break
 
-        if target_table != None:
+        if target_table is not None:
             spectrum = np.recarray((len(target_table.array),), dtype=[('waveobs', float),('flux', float),('err', float)])
             if 'waveobs' in target_table.array.dtype.fields.keys():
                 spectrum['waveobs'] = target_table.array['waveobs']
@@ -222,7 +222,7 @@ class SAMPManager():
                 spectrum['err'] = target_table.array[target_table.array.dtype.names[2]]
             else:
                 spectrum['err'] = 0.0
-        if target_table == None or spectrum == None:
+        if target_table is None or spectrum is None:
             raise Exception("Table not compatible")
 
         return spectrum
@@ -267,7 +267,7 @@ class SAMPManager():
         # Find hdu containing data
         target_hdu = None
         for hdu in hdulist:
-            if hdu.data != None and len(hdu.data) > 0 and len(hdu.data.dtype.fields.keys()) >= 2:
+            if hdu.data is not None and len(hdu.data) > 0 and len(hdu.data.dtype.fields.keys()) >= 2:
                 target_hdu = hdu
         spectrum = np.recarray((len(target_hdu.data),), dtype=[('waveobs', float),('flux', float),('err', float)])
         # the first column
@@ -279,7 +279,7 @@ class SAMPManager():
             spectrum['err'] = target_hdu.data[target_hdu.data.dtype.names[2]]
         else:
             spectrum['err'] = 0.0
-        if target_hdu == None or spectrum == None:
+        if target_hdu is None or spectrum is None:
             raise Exception("FITS not compatible")
         return spectrum
 
@@ -395,7 +395,7 @@ class SAMPManager():
             target_client_name = target_client
             target_client = self.__get_target_client(target_client_name)
         response = False
-        if target_client != None:
+        if target_client is not None:
             try:
                 response = self.samp_client.notify(target_client, metadata)
                 logging.info("Spectrum sent via SAMP")

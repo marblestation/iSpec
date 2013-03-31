@@ -33,9 +33,14 @@ def resource_path(relative):
 
 #if os.path.exists(resource_path("synthesizer.so")):
 try:
-    from atmospheres import *
-    from synth import *
-    from abundances import *
+    from abundances import determine_abundances
+    from abundances import read_SPECTRUM_abundances
+    from atmospheres import interpolate_atmosphere_layers
+    from atmospheres import load_modeled_layers_pack
+    from atmospheres import valid_atmosphere_target
+    from synth import generate_spectrum
+    from synth import modelize_spectrum
+    from synth import read_SPECTRUM_linelist
 except ImportError as e:
     pass
 from common import calculate_barycentric_velocity_correction, sigma_clipping, interquartile_range_filtering

@@ -20,6 +20,7 @@ from plotting import *
 from common import *
 from spectrum import *
 from pymodelfit import UniformCDFKnotSplineModel
+from scipy import interpolate
 import log
 import logging
 
@@ -163,8 +164,38 @@ def __determine_continuum_base_points(spectrum, discard_outliers=True, median_wa
 
     return continuum_base_points
 
+def fit_continuum(spectrum, independent_regions=None, segments=None, nknots=None, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy'):
+    #nknots = 2
+    #median_wave_range = 0.05
+    #max_wave_range = 0.2
 
-def fit_continuum(spectrum, segments=None, nknots=None, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy'):
+    if independent_regions is not None:
+        if len(independent_regions) == 0:
+            raise Exception("No segments defined!")
+
+        wave_step = 0.0001
+        xaxis = np.arange(spectrum['waveobs'][0], spectrum['waveobs'][-1]+wave_step, wave_step)
+        fluxes = np.ones(len(xaxis))
+        for i, region in enumerate(independent_regions):
+            wfilter = np.logical_and(spectrum['waveobs'] >= region['wave_base'], spectrum['waveobs'] <= region['wave_top'])
+            try:
+                if len(spectrum[wfilter]) > 10:
+                    continuum = __fit_continuum(spectrum[wfilter], segments=segments, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
+                    # Save
+                    wfilter = np.logical_and(xaxis >= region['wave_base'], xaxis <= region['wave_top'])
+                    fluxes[np.where(wfilter)[0]] = continuum(xaxis[wfilter])
+            except:
+                print "Continuum fit failed for segment #", i, "[", region['wave_base'], ",", region['wave_top'], "]"
+                pass
+
+        #continuum = interpolate.InterpolatedUnivariateSpline(xaxis, fluxes, k=3)
+        continuum = interpolate.interp1d(xaxis, fluxes, kind='linear', bounds_error=False, fill_value=0.0)
+    else:
+        continuum = __fit_continuum(spectrum, segments=segments, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
+    return continuum
+
+
+def __fit_continuum(spectrum, segments=None, nknots=None, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy'):
     """
     If fixed_value is specified, the continuum is fixed to the given value (always
     the same for any wavelength). If not, fit the continuum by following these steps:
@@ -186,12 +217,10 @@ def fit_continuum(spectrum, segments=None, nknots=None, median_wave_range=0.1, m
     if not model in ['Splines', 'Polynomy', 'Fixed value']:
         raise Exception("Wrong model name!")
 
-    if model == 'Fixed value' and fixed_value == None:
+    if model == 'Fixed value' and fixed_value is None:
         raise Exception("Fixed value needed!")
 
     class ConstantValue:
-        """ Constant class used for microturbulent velocities because they are
-            constant for all layers and atmospheres """
         def __init__(self, value):
             self.value = value
 
@@ -201,12 +230,12 @@ def fit_continuum(spectrum, segments=None, nknots=None, median_wave_range=0.1, m
     if model == 'Fixed value':
         return ConstantValue(fixed_value)
 
-    if segments != None:
+    if segments is not None:
         spectrum_regions = None
         for segment in segments:
             wave_filter = (spectrum['waveobs'] >= segment['wave_base']) & (spectrum['waveobs'] <= segment['wave_top'])
             new_spectrum_region = spectrum[wave_filter]
-            if spectrum_regions == None:
+            if spectrum_regions is None:
                 spectrum_regions = new_spectrum_region
             else:
                 spectrum_regions = np.hstack((spectrum_regions, new_spectrum_region))
@@ -214,7 +243,7 @@ def fit_continuum(spectrum, segments=None, nknots=None, median_wave_range=0.1, m
 
     continuum_base_points = __determine_continuum_base_points(spectrum, discard_outliers=True, median_wave_range=median_wave_range, max_wave_range=max_wave_range)
 
-    if nknots == None:
+    if nknots is None:
         # * 1 knot every 10 nm in average
         nknots = np.max([1, int((np.max(spectrum['waveobs']) - np.min(spectrum['waveobs'])) / 10)])
 
@@ -243,6 +272,7 @@ def fit_continuum(spectrum, segments=None, nknots=None, median_wave_range=0.1, m
         else:
             continuum_model = np.poly1d(np.polyfit(spectrum['waveobs'][continuum_base_points], spectrum['flux'][continuum_base_points], nknots))
     except Exception, e:
+        ipdb.set_trace()
         fitting_error = True
 
     # If there is no fit (because too few points)
@@ -277,10 +307,10 @@ def find_continuum(spectrum, resolution, segments=None, max_std_continuum = 0.00
 
     last_reported_progress = -1
     total_work_progress = max_wave - min_wave
-    if frame != None:
+    if frame is not None:
         frame.update_progress(0)
 
-    if segments == None:
+    if segments is None:
         # Use whole spectrum
         segments = np.array([(min_wave, max_wave)], dtype=[('wave_base', float),('wave_top', float)])
 
@@ -288,7 +318,7 @@ def find_continuum(spectrum, resolution, segments=None, max_std_continuum = 0.00
 
     for segment in segments:
         wave_base = segment['wave_base']
-        if fixed_wave_step != None:
+        if fixed_wave_step is not None:
             wave_increment = fixed_wave_step
         else:
             wave_increment = (wave_base / resolution) * 4
@@ -327,7 +357,7 @@ def find_continuum(spectrum, resolution, segments=None, max_std_continuum = 0.00
 
             # Go to next region
             wave_base = wave_top
-            if fixed_wave_step != None:
+            if fixed_wave_step is not None:
                 wave_increment = fixed_wave_step
             else:
                 wave_increment = (wave_base / resolution) * 4
@@ -340,7 +370,7 @@ def find_continuum(spectrum, resolution, segments=None, max_std_continuum = 0.00
             if report_progress(current_work_progress, last_reported_progress):
                 last_reported_progress = current_work_progress
                 logging.info("%.2f%%" % current_work_progress)
-                if frame != None:
+                if frame is not None:
                     frame.update_progress(current_work_progress)
 
             i += 1

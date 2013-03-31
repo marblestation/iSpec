@@ -16,7 +16,7 @@ class SendSpectrumDialog(CustomDialog):
 
     def show(self, updated_applications=None):
         self.results = None
-        if updated_applications != None:
+        if updated_applications is not None:
             self.__components[0]["options"] = updated_applications
             # Validate that the default value (previous user selected value) exists in the new application list
             default_ok = False

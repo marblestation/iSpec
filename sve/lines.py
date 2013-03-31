@@ -54,7 +54,7 @@ def read_VALD_linelist(vald_file, minimum_depth=0.0, data_end=None):
     - data_end can be negative in order to ignore the last nth rows (VALD usually adds references to the end of the file that should be ignored)
     """
     # Original VALD linelist
-    if data_end == None:
+    if data_end is None:
         vald = asciitable.read(vald_file, delimiter=",", quotechar="'", data_start=3, names=["element", "wave (A)", "lower state (eV)", "Vmic (km/s)", "log(gf)", "rad", "stark", "waals", "factor", "depth", "Reference"], exclude_names=["Vmic (km/s)", "factor", "Reference"], guess=False)
     else:
         vald = asciitable.read(vald_file, delimiter=",", quotechar="'", data_start=3, data_end=data_end, names=["element", "wave (A)", "lower state (eV)", "Vmic (km/s)", "log(gf)", "rad", "stark", "waals", "factor", "depth", "Reference"], exclude_names=["Vmic (km/s)", "factor", "Reference"], guess=False)
@@ -242,9 +242,9 @@ def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None):
 
     # Parameters estimators
     baseline = np.median(continuum_model(spectrum_slice['waveobs']))
-    if A == None:
+    if A is None:
         A = min_flux - baseline
-    if sig == None:
+    if sig is None:
         sig = (x[-1] - x[0])/3.0
 
 
@@ -288,11 +288,11 @@ def __fit_voigt(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=Non
 
     # Parameters estimators
     baseline = np.median(continuum_model(spectrum_slice['waveobs']))
-    if A == None:
+    if A is None:
         A = min_flux - baseline
-    if sig == None:
+    if sig is None:
         sig = (x[-1] - x[0])/3.0
-    if gamma == None:
+    if gamma is None:
         gamma = (x[-1] - x[0])/2.0
 
     parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for i in np.arange(5)]
@@ -564,7 +564,7 @@ def find_linemasks(spectrum, continuum_model, vald_linelist_file, chemical_eleme
     """
     #print "NOTICE: This method can generate overflow warnings due to the Least Square Algorithm"
     #print "        used for the fitting process, but they can be ignored."
-    if smoothed_spectrum == None:
+    if smoothed_spectrum is None:
         smoothed_spectrum = spectrum
 
     logging.info("Finding peaks and base points...")
@@ -584,9 +584,9 @@ def find_linemasks(spectrum, continuum_model, vald_linelist_file, chemical_eleme
     flux_at_peak = spectrum['flux'][peaks]
     depth = ((continuum_at_peak - flux_at_peak) / continuum_at_peak)
 
-    if minimum_depth == None:
+    if minimum_depth is None:
         minimum_depth = np.min(depth)
-    if maximum_depth == None:
+    if maximum_depth is None:
         minimum_depth = np.max(depth)
 
     # To save computation time, min and max depth can be indicated and all the lines out
@@ -595,7 +595,7 @@ def find_linemasks(spectrum, continuum_model, vald_linelist_file, chemical_eleme
     accepted_for_fitting = np.logical_and(depth >= minimum_depth, depth <= maximum_depth)
 
     last_reported_progress = -1
-    if frame != None:
+    if frame is not None:
         frame.update_progress(0)
 
     num_peaks = len(peaks)
@@ -676,22 +676,22 @@ def fit_lines(regions, spectrum, continuum_model, vel_atomic, vel_telluric, vald
         regions['peak'] = 0
         for i in np.arange(len(regions_tmp)):
             where_base = np.where(spectrum['waveobs'] >= regions_tmp['wave_base'][i])
-            if len(where_base) > 0:
+            if len(where_base[0]) > 0:
                 regions['base'][i] = where_base[0][0]
             where_top = np.where(spectrum['waveobs'] >= regions_tmp['wave_top'][i])
-            if len(where_top) > 0:
+            if len(where_top[0]) > 0:
                 regions['top'][i] = where_top[0][0]
             where_peak = np.where(spectrum['waveobs'] >= regions_tmp['wave_peak'][i])
-            if len(where_peak) > 0:
+            if len(where_peak[0]) > 0:
                 regions['peak'][i] = where_peak[0][0]
 
     i = 0
     # Model: fit gaussian
     for i in np.arange(total_regions):
         fitting_not_possible = False
-        if accepted_for_fitting == None or accepted_for_fitting[i]:
+        if accepted_for_fitting is None or accepted_for_fitting[i]:
             # Adjust edges
-            if smoothed_spectrum != None:
+            if smoothed_spectrum is not None:
                 new_base, new_top = __improve_linemask_edges(smoothed_spectrum['waveobs'], smoothed_spectrum['flux'], regions['base'][i], regions['top'][i], regions['peak'][i])
             else:
                 new_base = regions['base'][i]
@@ -737,11 +737,11 @@ def fit_lines(regions, spectrum, continuum_model, vel_atomic, vel_telluric, vald
                 regions['relative_depth_fit'][i] = ((continuum - (flux + flux_from_top_base_point_to_continuum)) / continuum)
 
                 # Equivalent Width
-                # - Include 99.97% of the gaussian area
-                from_x = regions['mu'][i] - 3*regions['sig'][i]
-                to_x = regions['mu'][i] + 3*regions['sig'][i]
+                # - Include 99.9999998% of the gaussian area
+                from_x = regions['mu'][i] - 6*regions['sig'][i]
+                to_x = regions['mu'][i] + 6*regions['sig'][i]
                 regions['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x)
-                regions['ew'][i] = regions['integrated_flux'][i] / np.mean(continuum_model(spectrum_window['waveobs']))
+                regions['ew'][i] = regions['integrated_flux'][i] / line_model.baseline()
                 # RMS
                 regions['rms'][i] = rms
             except Exception as e:
@@ -753,13 +753,13 @@ def fit_lines(regions, spectrum, continuum_model, vel_atomic, vel_telluric, vald
         if report_progress(current_work_progress, last_reported_progress):
             last_reported_progress = current_work_progress
             logging.info("%.2f%%" % current_work_progress)
-            if frame != None:
+            if frame is not None:
                 frame.update_progress(current_work_progress)
 
-    if vald_linelist_file != None:
+    if vald_linelist_file is not None:
         logging.info("Cross matching with atomic data...")
         regions = __fill_linemasks_with_VALD_info(regions, vald_linelist_file, chemical_elements_file, molecules_file, diff_limit=0.005, vel_atomic=vel_atomic)
-    if telluric_linelist_file != None:
+    if telluric_linelist_file is not None:
         logging.info("Cross matching with telluric data...")
         regions = __fill_linemasks_with_telluric_info(regions, telluric_linelist_file, vel_telluric=vel_telluric)
 
@@ -1041,7 +1041,7 @@ def __cross_correlation_function_template(spectrum, template, lower_velocity_lim
     """
 
     last_reported_progress = -1
-    if frame != None:
+    if frame is not None:
         frame.update_progress(0)
 
     # Speed of light in m/s
@@ -1065,7 +1065,7 @@ def __cross_correlation_function_template(spectrum, template, lower_velocity_lim
         if report_progress(current_work_progress, last_reported_progress):
             last_reported_progress = current_work_progress
             logging.info("%.2f%%" % current_work_progress)
-            if frame != None:
+            if frame is not None:
                 frame.update_progress(current_work_progress)
 
     max_ccf = np.max(ccf)
@@ -1075,7 +1075,7 @@ def __cross_correlation_function_template(spectrum, template, lower_velocity_lim
     return velocity, ccf, ccf_err
 
 
-def sampling_uniform_in_velocity(wave_base, wave_top, velocity_step):
+def __sampling_uniform_in_velocity(wave_base, wave_top, velocity_step):
     """
     Create a uniformly spaced grid in terms of velocity:
 
@@ -1129,7 +1129,7 @@ def __cross_correlation_function_uniform_in_velocity(spectrum, mask, lower_veloc
     """
 
     last_reported_progress = -1
-    if frame != None:
+    if frame is not None:
         frame.update_progress(0)
 
     # Speed of light in m/s
@@ -1139,7 +1139,7 @@ def __cross_correlation_function_uniform_in_velocity(spectrum, mask, lower_veloc
     shifts = np.arange(np.int32(np.floor(lower_velocity_limit)/velocity_step), np.int32(np.ceil(upper_velocity_limit)/velocity_step)+1)
     velocity = shifts * velocity_step
 
-    waveobs = sampling_uniform_in_velocity(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), velocity_step)
+    waveobs = __sampling_uniform_in_velocity(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), velocity_step)
     flux = np.interp(waveobs, spectrum['waveobs'], spectrum['flux'], left=0.0, right=0.0)
     err = np.interp(waveobs, spectrum['waveobs'], spectrum['err'], left=0.0, right=0.0)
 
@@ -1212,7 +1212,7 @@ def __cross_correlation_function_uniform_in_velocity(spectrum, mask, lower_veloc
             if report_progress(current_work_progress, last_reported_progress):
                 last_reported_progress = current_work_progress
                 logging.info("%.2f%%" % current_work_progress)
-                if frame != None:
+                if frame is not None:
                     frame.update_progress(current_work_progress)
 
     max_ccf = np.max(ccf)
@@ -1250,7 +1250,7 @@ def create_filter_for_regions_affected_by_tellurics(wavelengths, linelist_tellur
         if report_progress(current_work_progress, last_reported_progress):
             last_reported_progress = current_work_progress
             logging.info("%.2f%%" % current_work_progress)
-            if frame != None:
+            if frame is not None:
                 frame.update_progress(current_work_progress)
         last += end
     return tfilter
@@ -1382,8 +1382,8 @@ def build_velocity_profile(spectrum, linelist=None, template=None, lower_velocit
         Velocity coordenates, normalized fluxes (relative intensities) and number of used lines.
 
     """
-    if linelist != None:
-        if template != None:
+    if linelist is not None:
+        if template is not None:
             logging.warn("Building velocity profile with mask (ignoring template)")
 
         #linelist_file = sve_dir + "input/linelists/Kurucz.lst"
@@ -1412,7 +1412,7 @@ def build_velocity_profile(spectrum, linelist=None, template=None, lower_velocit
 
         velocity, ccf, ccf_err = __cross_correlation_function_uniform_in_velocity(spectrum, linelist, lower_velocity_limit, upper_velocity_limit, velocity_step, mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, frame=frame)
         return velocity, ccf, ccf_err
-    elif template != None:
+    elif template is not None:
         ## Obtain the cross-correlate function by shifting the template
         velocity, ccf, ccf_err = __cross_correlation_function_uniform_in_velocity(spectrum, template, lower_velocity_limit, upper_velocity_limit, velocity_step, template=True, fourier=False, frame=frame)
         #velocity, ccf, ccf_err = __cross_correlation_function_template(spectrum, template, lower_velocity_limit = lower_velocity_limit, upper_velocity_limit=upper_velocity_limit, velocity_step = velocity_step, frame=frame)
@@ -1640,7 +1640,7 @@ def select_good_velocity_profile_models(models, xcoord, fluxes):
     # Build the fluxes for the composite models
     line_fluxes = None
     for model in models:
-        if line_fluxes == None:
+        if line_fluxes is None:
             # first peak
             line_fluxes = model(xcoord)
             continue
@@ -1649,7 +1649,7 @@ def select_good_velocity_profile_models(models, xcoord, fluxes):
         wfilter = np.where(line_fluxes > current_line_fluxes)[0]
         line_fluxes[wfilter] = current_line_fluxes[wfilter]
     ### Substract the line models conserving the base level
-    if line_fluxes != None:
+    if line_fluxes is not None:
         values = 1 + fluxes - line_fluxes
     else:
         values = fluxes

@@ -41,7 +41,7 @@ class CleanTelluricsDialog(CustomDialog):
 
     def show(self, updated_vel=None):
         self.results = None
-        if updated_vel != None:
+        if updated_vel is not None:
             self.__components[0]["default"] = updated_vel
         CustomDialog.__init__(self, self.__parent, self.__title, self.__components)
 

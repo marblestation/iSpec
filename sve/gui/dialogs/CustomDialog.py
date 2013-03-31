@@ -46,7 +46,7 @@ class CustomDialog(Dialog):
                 component["object"].delete(0, Tkinter.END)
                 component["object"].insert(0, str(component["default"]))
                 component["object"].grid(row=row, column=1)
-                if first_entry == None:
+                if first_entry is None:
                     first_entry = component["object"]
             elif component["type"].lower() == "checkbutton":
                 component["variable"] = Tkinter.IntVar() # set to 1 if the button is selected, and 0 otherwise
@@ -81,7 +81,7 @@ class CustomDialog(Dialog):
                     objects[-1].grid(row=row, column=1, sticky=Tkinter.W)
                     row += 1
                 component["variable"].set(component["default"])
-            elif component["type"].lower() == "listbox" and component["options"] != None and len(component["options"]) > 0:
+            elif component["type"].lower() == "listbox" and component["options"] is not None and len(component["options"]) > 0:
                 stats_scrollbar = Tkinter.Scrollbar(stats_frame, orient=Tkinter.VERTICAL)
                 component["object"] = Tkinter.Listbox(stats_frame, height=5, yscrollcommand=stats_scrollbar.set, font=('courier',10,'normal'), selectmode=Tkinter.EXTENDED)
                 stats_scrollbar.pack(side=Tkinter.RIGHT, fill=Tkinter.Y)
@@ -89,7 +89,7 @@ class CustomDialog(Dialog):
                 for text in component["options"]:
                     component["object"].insert(Tkinter.END, text)
                 component["object"].pack(fill=Tkinter.BOTH, expand=1)
-            elif component["type"].lower() == "plot" and component["function"] != None:
+            elif component["type"].lower() == "plot" and component["function"] is not None:
                 # Create the mpl Figure and FigCanvas objects.
                 # 5x4 inches, 100 dots-per-inch
                 #
@@ -142,7 +142,7 @@ class CustomDialog(Dialog):
                         parent = self
                     )
                     return 0
-                if component["minvalue"] != None and value < component["minvalue"]:
+                if component["minvalue"] is not None and value < component["minvalue"]:
                     tkMessageBox.showwarning(
                         "Too small",
                         "'%s': "
@@ -151,7 +151,7 @@ class CustomDialog(Dialog):
                         parent = self
                     )
                     return 0
-                if component["maxvalue"] != None and value > component["maxvalue"]:
+                if component["maxvalue"] is not None and value > component["maxvalue"]:
                     tkMessageBox.showwarning(
                         "Too big",
                         "'%s': "

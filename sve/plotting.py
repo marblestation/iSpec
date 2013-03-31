@@ -31,16 +31,16 @@ def plot_spectra(spectra, filename=None, grid = True, title = None, ylabel = 'Fl
     if grid:
         ax1.grid(True, which="both")
 
-    if title != None:
+    if title is not None:
         ax1.set_title(title, fontsize="10")
 
-    if xlabel != None:
+    if xlabel is not None:
         ax1.set_xlabel(xlabel, fontsize="10")
 
-    if ylabel != None:
+    if ylabel is not None:
         ax1.set_ylabel(ylabel, fontsize="10")
 
-    #~ if filename != None:
+    #~ if filename is not None:
         #~ major_tick = np.round((np.max(spectra['waveobs']) - np.min(spectra['waveobs'])) / 100, decimals=2)
         #~ minor_tick = major_tick / 2
         #~ ax1.xaxis.set_major_locator(MultipleLocator(major_tick))
@@ -58,7 +58,7 @@ def plot_spectra(spectra, filename=None, grid = True, title = None, ylabel = 'Fl
         ax1.plot(spec['waveobs'], spec['flux'], lw=1, color=colors[color % 7], linestyle=linestyles[3], marker='', markersize=1, markeredgewidth=0, markerfacecolor=colors[0])
         color = (color + 1) % len(colors)
 
-    if filename == None:
+    if filename is None:
         plt.show()
     else:
         if filename[-4:] == ".png":

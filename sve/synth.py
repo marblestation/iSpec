@@ -21,6 +21,7 @@ import time
 from datetime import datetime, timedelta
 import numpy as np
 from mpfitmodels import *
+from continuum import *
 from abundances import *
 from atmospheres import *
 from spectrum import *
@@ -48,7 +49,7 @@ def write_SPECTRUM_linelist(linelist, linelist_filename=None):
     Saves a SPECTRUM linelist for spectral synthesis.
     If filename is not specified, a temporary file is created and the name is returned.
     """
-    if linelist_filename != None:
+    if linelist_filename is not None:
         out = open(linelist_filename, "w")
     else:
         # Temporary file
@@ -72,7 +73,7 @@ def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, li
     user already has the information saved onto the disk, the filenames can be
     specified to reduce input/output time (and the numpy recarray tables will be ignored)
 
-    Fixed abundances can be empty.
+    Fixed abundances can be set to 'None'.
     """
     return generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence = 0.0, vsini = 0.0, limb_darkening_coeff = 0.0, R=0, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, regions=regions)
 
@@ -88,10 +89,14 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abun
     user already has the information saved onto the disk, the filenames can be
     specified to reduce input/output time (and the numpy recarray tables will be ignored)
 
-    Fixed abundances can be empty.
+    Fixed abundances can be set to 'None'.
     """
-    if waveobs_mask == None:
-        if regions == None:
+    if fixed_abundances is None:
+        # No fixed abundances
+        fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
+
+    if waveobs_mask is None:
+        if regions is None:
             waveobs_mask = np.ones(len(waveobs)) # Compute fluxes for all the wavelengths
             # Limit linelist
             wave_base = np.min(waveobs)
@@ -108,16 +113,16 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abun
     remove_tmp_abund_file = False
     remove_tmp_fixed_abund_file = False
     remove_tmp_linelist_file = False
-    if atmosphere_layers_file == None:
+    if atmosphere_layers_file is None:
         atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH)
         remove_tmp_atm_file = True
-    if abundances_file == None:
+    if abundances_file is None:
         abundances_file = write_SPECTRUM_abundances(abundances)
         remove_tmp_abund_file = True
-    if fixed_abundances_file == None:
+    if fixed_abundances_file is None:
         fixed_abundances_file = write_SPECTRUM_fixed_abundances(fixed_abundances)
         remove_tmp_fixed_abund_file = True
-    if linelist_file == None:
+    if linelist_file is None:
         linelist_file = write_SPECTRUM_linelist(linelist)
         remove_tmp_linelist_file = True
     nlayers = len(atmosphere_layers)
@@ -143,7 +148,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abun
                 # Results received!
                 fluxes = data
                 break
-            elif gui_queue != None:
+            elif gui_queue is not None:
                 # GUI update
                 # It allows communications between process in order to update the GUI progress bar
                 gui_queue.put(data)
@@ -223,7 +228,7 @@ def apply_post_fundamental_effects(waveobs, fluxes, macroturbulence = 3.0, vsini
                 # Results received!
                 fluxes = data
                 break
-            elif gui_queue != None:
+            elif gui_queue is not None:
                 # GUI update
                 # It allows communications between process in order to update the GUI progress bar
                 gui_queue.put(data)
@@ -382,11 +387,13 @@ class SynthModel(MPFitModel):
         #
         self.abundances_file = None
         self.linelist_file = None
+        self.noise = None
+        self.last_continuum_correction = None
         super(SynthModel, self).__init__(p)
 
     def _model_function(self, x, p=None):
         # The model function with parameters p required by mpfit library
-        if p != None:
+        if p is not None:
             # Update internal structure for fitting:
             for i in xrange(len(p)):
                 self._parinfo[i]['value'] = p[i]
@@ -410,13 +417,31 @@ class SynthModel(MPFitModel):
             atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH())
             # Fundamental synthetic fluxes
             self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.linelist, self.abundances, fixed_abundances, microturbulence_vel=self.vmic(), abundances_file=self.abundances_file, linelist_file=self.linelist_file, waveobs_mask=self.waveobs_mask, verbose=0)
+
+            # Fit continuum
+            if self.fit_continuum_func is not None:
+                spectrum = create_spectrum_structure(self.waveobs)
+                spectrum['flux'] = self.last_fluxes
+                # Add noise
+                if self.noise is not None:
+                    spectrum['flux'] += self.noise
+                continuum_model = self.fit_continuum_func(spectrum)
+                self.last_continuum_correction = continuum_model(self.waveobs)
+                inormalize = np.where(self.last_continuum_correction != 0)[0]
+                self.last_fluxes[inormalize] /= self.last_continuum_correction[inormalize]
             # Optimization to avoid too small changes in parameters or repetition
             self.cache[key] = self.last_fluxes.copy()
 
         self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), verbose=0)
+
+
+        #self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_final_fluxes, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), verbose=0)
+
         return self.last_final_fluxes[self.comparing_mask]
 
-    def fitData(self, waveobs, waveobs_mask, comparing_mask, fluxes, weights=None, parinfo=None, max_iterations=20, quiet=True):
+    def fitData(self, waveobs, waveobs_mask, comparing_mask, fluxes, weights=None, parinfo=None, max_iterations=20, quiet=True, fit_continuum_func=None, noise=None):
+        self.noise = noise
+        self.fit_continuum_func = fit_continuum_func
         if len(parinfo) < 8:
             raise Exception("Wrong number of parameters!")
 
@@ -429,7 +454,7 @@ class SynthModel(MPFitModel):
         self.waveobs = waveobs
         self.waveobs_mask = waveobs_mask # Synthesis for wavelengths with mask different from 0.0
         self.comparing_mask = comparing_mask == 1.0 # Wavelengths to be compared for the least square algorithm
-        if weights == None:
+        if weights is None:
             weights = np.ones(len(waveobs))
         ftol = 1.e-4 # Terminate when the improvement in chisq between iterations is ftol > -(new_chisq/chisq)**2 +1
         xtol = 1.e-4
@@ -601,7 +626,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[5]['limited'] = [True, True]
     parinfo[5]['limits'] = [0.0, 50.0]
     #
-    parinfo[6]['parname'] = "limb_darkening_coef"
+    parinfo[6]['parname'] = "limb_darkening_coeff"
     parinfo[6]['value'] = initial_limb_darkening_coeff
     parinfo[6]['fixed'] = not parinfo[6]['parname'].lower() in free_params
     parinfo[6]['step'] = 0.20 # For auto-derivatives
@@ -633,12 +658,12 @@ def __filter_linelist(linelist, segments):
         wave_base = region['wave_base']
         wave_top = region['wave_top']
 
-        if lfilter == None:
+        if lfilter is None:
             lfilter = np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.)
         else:
             lfilter = np.logical_or(lfilter, np.logical_and(linelist['wave (A)'] >= wave_base*10., linelist['wave (A)'] <= wave_top*10.))
 
-    if lfilter != None:
+    if lfilter is not None:
         return linelist[lfilter]
     else:
         return linelist
@@ -650,7 +675,7 @@ def __create_waveobs_mask(waveobs, segments):
         wave_base = region['wave_base']
         wave_top = region['wave_top']
 
-        if wfilter == None:
+        if wfilter is None:
             wfilter = np.logical_and(waveobs >= wave_base, waveobs <= wave_top)
         else:
             wfilter = np.logical_or(wfilter, np.logical_and(waveobs >= wave_base, waveobs <= wave_top))
@@ -659,14 +684,42 @@ def __create_waveobs_mask(waveobs, segments):
 
     return waveobs_mask
 
-def __create_comparing_mask(waveobs, linemasks):
+def __filter_linemasks_not_in_segments(linemasks, segments):
+    if segments is None:
+        return linemasks
+    else:
+        lfilter = linemasks['wave_base'] == -1
+        for i, region in enumerate(linemasks):
+            wave_base = region['wave_base']
+            wave_top = region['wave_top']
+
+            # Consider only lines that are inside segments
+            in_segment1 = np.logical_and(segments['wave_base'] <= wave_base, segments['wave_top'] >= wave_base)
+            in_segment2 = np.logical_and(segments['wave_base'] <= wave_top, segments['wave_top'] >= wave_top)
+            in_segment = np.logical_and(in_segment1, in_segment2)
+            if np.all(in_segment == False):
+                lfilter[i] = False
+            else:
+                lfilter[i] = True
+
+        return linemasks[lfilter]
+
+def __create_comparing_mask(waveobs, linemasks, segments):
     # Build wavelength points from regions
     wfilter = None
     for region in linemasks:
         wave_base = region['wave_base']
         wave_top = region['wave_top']
 
-        if wfilter == None:
+        # Consider only lines that are inside segments
+        if segments is not None:
+            in_segment1 = np.logical_and(segments['wave_base'] <= wave_base, segments['wave_top'] >= wave_base)
+            in_segment2 = np.logical_and(segments['wave_base'] <= wave_top, segments['wave_top'] >= wave_top)
+            in_segment = np.logical_and(in_segment1, in_segment2)
+            if np.all(in_segment == False):
+                continue
+
+        if wfilter is None:
             wfilter = np.logical_and(waveobs >= wave_base, waveobs <= wave_top)
         else:
             wfilter = np.logical_or(wfilter, np.logical_and(waveobs >= wave_base, waveobs <= wave_top))
@@ -723,7 +776,40 @@ def __get_stats_per_linemask(waveobs, fluxes, synthetic_fluxes, weights, free_pa
 
     return results
 
-def modelize_spectrum(spectrum, modeled_layers_pack, linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=None, linemasks=None, max_iterations=20):
+def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=None, linemasks=None, max_iterations=20):
+    """
+    It matches synthetic spectrum to observed spectrum by applying a least
+    square algorithm.
+
+    - free_params is an array that can contain any combination of the following
+      strings: ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "limb_darkening_coeff"]
+    - free_abundances can be set to 'None'
+    - If segments are specified, the synthetic spectrum will be only generated for
+      those regions.
+    - If linemasks are specified, only those regions will be used for comparison.
+    """
+    # Normalize
+    spectrum_orig = spectrum
+    if segments is not None:
+        # Build wavelength points from regions
+        wfilter = None
+        for region in segments:
+            wave_base = region["wave_base"]
+            wave_top = region["wave_top"]
+
+            if wfilter is None:
+                wfilter = np.logical_and(spectrum_orig['waveobs'] >= wave_base, spectrum_orig['waveobs'] <= wave_top)
+            else:
+                wfilter = np.logical_or(wfilter, np.logical_and(spectrum_orig['waveobs'] >= wave_base, spectrum_orig['waveobs'] <= wave_top))
+        spectrum = create_spectrum_structure(spectrum_orig['waveobs'][wfilter], spectrum_orig['flux'][wfilter], spectrum_orig['err'][wfilter])
+    else:
+        spectrum = create_spectrum_structure(spectrum_orig['waveobs'], spectrum_orig['flux'], spectrum_orig['err'])
+
+    # Normalization
+    continuum = continuum_model(spectrum['waveobs'])
+    inormalize = np.where(continuum != 0)[0]
+    spectrum['flux'][inormalize] /= continuum[inormalize]
+    spectrum['err'][inormalize] /= continuum[inormalize]
 
     waveobs = spectrum['waveobs']
     flux = spectrum['flux']
@@ -733,11 +819,17 @@ def modelize_spectrum(spectrum, modeled_layers_pack, linelist, abundances, free_
         #weights = np.ones(len(waveobs))
     weights = np.ones(len(waveobs))
     #weights = 1. / (flux * 0.10)
+
+    # Estimate SNR
     #snr = 100
     #weights = 1. / (flux / snr)
     #weights = 1. / spectrum['err']
 
-    if segments == None:
+    if free_abundances is None:
+        # No fixed abundances
+        free_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
+
+    if segments is None:
         waveobs_mask = np.ones(len(waveobs)) # Compute fluxes for all the wavelengths
         # Limit linelist
         wave_base = np.min(waveobs)
@@ -749,10 +841,12 @@ def modelize_spectrum(spectrum, modeled_layers_pack, linelist, abundances, free_
         # Limit linelist
         linelist = __filter_linelist(linelist, segments)
 
-    if linemasks == None:
+    if linemasks is None:
         comparing_mask = np.ones(len(waveobs)) # Compare all fluxes
     else:
-        comparing_mask = __create_comparing_mask(waveobs, linemasks)
+        linemasks = __filter_linemasks_not_in_segments(linemasks, segments)
+        # Compare fluxes inside line masks that belong to a segment
+        comparing_mask = __create_comparing_mask(waveobs, linemasks, segments)
 
     teff_range = modeled_layers_pack[3]
     logg_range = modeled_layers_pack[4]
@@ -761,7 +855,27 @@ def modelize_spectrum(spectrum, modeled_layers_pack, linelist, abundances, free_
     parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, free_abundances, teff_range, logg_range, MH_range)
 
     synth_model = SynthModel(modeled_layers_pack, linelist, abundances)
-    synth_model.fitData(waveobs, waveobs_mask, comparing_mask, flux, weights=weights, parinfo=parinfo, max_iterations=max_iterations, quiet=False)
+
+    wave_step = 0.001
+    xaxis = np.arange(np.min(spectrum_orig["waveobs"]), np.max(spectrum_orig["waveobs"]), wave_step)
+    resampled_spectrum = resample_spectrum(spectrum_orig, xaxis)
+    snr = estimate_snr(resampled_spectrum['flux'], num_points=10)
+    #snr = 100
+    sigma = flux/snr
+    # Control sigma zero or negative due to zero or negative fluxes
+    noise = np.zeros(len(flux))
+    fnoise = np.where(sigma > 0.0)[0]
+    noise[fnoise] = np.random.normal(0, sigma[fnoise], len(flux[fnoise]))
+    nknots = 1
+    #median_wave_range = 0.05
+    median_wave_range = 0.
+    max_wave_range = 0.1
+    fixed_value = None
+    model = "Polynomy"
+    #fixed_value = 1.0
+    #model = 'Fixed value'
+    fit_continuum_func = lambda x: fit_continuum(x, independent_regions=segments, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
+    synth_model.fitData(waveobs, waveobs_mask, comparing_mask, flux, weights=weights, parinfo=parinfo, max_iterations=max_iterations, quiet=False, fit_continuum_func=fit_continuum_func, noise=noise)
     print "\n"
     stats_linemasks = __get_stats_per_linemask(waveobs, flux, synth_model.last_final_fluxes, weights, free_params, linemasks, verbose=True)
     print "\n"
@@ -804,6 +918,13 @@ def modelize_spectrum(spectrum, modeled_layers_pack, linelist, abundances, free_
     status['status'] = synth_model.m.status
 
     synth_spectrum = create_spectrum_structure(waveobs, synth_model.last_final_fluxes)
+    if synth_model.last_continuum_correction is not None:
+        # Uncorrect synthetic spectrum to recover the real theoretical spectrum
+        synth_spectrum['flux'] *= synth_model.last_continuum_correction
+        synth_spectrum['err'] *= synth_model.last_continuum_correction
+        # Correct the observed spectrum
+        spectrum['flux'] *= synth_model.last_continuum_correction
+        spectrum['err'] *= synth_model.last_continuum_correction
 
-    return synth_spectrum, params, errors, status, stats_linemasks
+    return spectrum, synth_spectrum, params, errors, status, stats_linemasks
 

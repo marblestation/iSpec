@@ -31,9 +31,9 @@ class FitLinesDialog(CustomDialog):
 
     def show(self, updated_vel_telluric=None, updated_vel_atomic=None):
         self.results = None
-        if updated_vel_atomic != None:
+        if updated_vel_atomic is not None:
             self.__components[0]["default"] = updated_vel_atomic
-        if updated_vel_telluric != None:
+        if updated_vel_telluric is not None:
             self.__components[1]["default"] = updated_vel_telluric
         CustomDialog.__init__(self, self.__parent, self.__title, self.__components)
 

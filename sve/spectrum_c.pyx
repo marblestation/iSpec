@@ -1,7 +1,7 @@
 """
     This file is part of Spectra.
     Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
-    
+
     Spectra is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -170,7 +170,9 @@ def bessel_interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.d
             # DISCARD: Linear extrapolation using index-1 and index-2
             # flux = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index-1]-fluxes[index-2])/(waveobs[index-1]-waveobs[index-2]))
             # JUST DUPLICATE:
-            resampled_flux[i] = fluxes[index-1]
+            #resampled_flux[i] = fluxes[index-1]
+            # JUST ZERO:
+            resampled_flux[i] = 0.0
         elif index == 1 or index == total_points-1:
             # Linear interpolation between index and index-1
             # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
@@ -179,7 +181,9 @@ def bessel_interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.d
             # DISCARD: Linear extrapolation using index+1 and index
             # flux = fluxes[index] + (objective_wavelength - waveobs[index]) * ((fluxes[index+1]-fluxes[index])/(waveobs[index+1]-waveobs[index]))
             # JUST DUPLICATE:
-            resampled_flux[i] = fluxes[index]
+            #resampled_flux[i] = fluxes[index]
+            # JUST ZERO:
+            resampled_flux[i] = 0.0
         elif waveobs[index] == objective_wavelength:
             resampled_flux[i] = fluxes[index]
         else:
@@ -205,7 +209,7 @@ def bessel_interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.d
 
             p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
             resampled_flux[i] = flux_x0 + p * (flux_x1 - flux_x0) + (p * (p - 1) / 4) * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
-        
+
         current_work_progress = (i*1.0 / new_total_points) * 100
         if (int(current_work_progress) % 10 == 0 and current_work_progress - last_reported_progress > 10) or last_reported_progress < 0 or current_work_progress == 100:
             last_reported_progress = current_work_progress

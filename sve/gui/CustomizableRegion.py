@@ -61,7 +61,7 @@ class CustomizableRegion:
         # If left button clicked, modify left edge
         if event.button == 1:
             # Check condition to allow modification
-            if self.mark != None:
+            if self.mark is not None:
                 # Mark should be inside the region
                 compatible_with_mark = event.xdata < self.mark.get_xdata()[0]
             else:
@@ -79,7 +79,7 @@ class CustomizableRegion:
                 self.frame.canvas.draw()
         elif event.button == 3:
             # Check condition to allow modification
-            if self.mark != None:
+            if self.mark is not None:
                 # Mark should be inside the region
                 compatible_with_mark = event.xdata > self.mark.get_xdata()[0]
             else:
@@ -100,7 +100,7 @@ class CustomizableRegion:
         xy = self.axvspan.get_xy()
 
         # If left button clicked, modify mark
-        if event.button == 1 and self.mark != None:
+        if event.button == 1 and self.mark is not None:
             x = self.mark.get_xdata()
 
             inside_region = (event.xdata > xy[0,0]) and (event.xdata < xy[2,0])
@@ -109,13 +109,13 @@ class CustomizableRegion:
                 x[1] = event.xdata
                 self.mark.set_xdata(x)
                 self.mark_position = self.mark.get_xdata()
-                if self.note != None:
+                if self.note is not None:
                     self.note.xy = (event.xdata, 1)
                 self.frame.status_message("Moving mark to %.4f" % x[0])
                 self.frame.canvas.draw()
 
     def update_mark_note(self, event):
-        if self.note != None:
+        if self.note is not None:
             note_text = self.note.get_text()
         else:
             note_text = ""
@@ -125,9 +125,9 @@ class CustomizableRegion:
         self.frame.canvas.draw()
 
     def update_mark_note_text(self, note_text):
-        if note_text != None and note_text != "":
+        if note_text is not None and note_text != "":
             # Set
-            if self.note == None:
+            if self.note is None:
                 # New
                 self.note = self.frame.axes.annotate(note_text, xy=(self.mark_position, 1),  xycoords=("data", 'axes fraction'),
                     xytext=(-10, 20), textcoords='offset points',
@@ -142,17 +142,17 @@ class CustomizableRegion:
             else:
                 # Update
                 self.note.set_text(note_text)
-        elif note_text == "" and self.note != None:
+        elif note_text == "" and self.note is not None:
             # Remove
             self.note.set_visible(False)
             self.note = None
 
     def show_mark(self):
-        if self.mark == None:
+        if self.mark is None:
             self.mark = self.frame.axes.axvline(x = self.mark_position, linewidth=1, color='orange')
 
     def hide_mark(self):
-        if self.mark != None:
+        if self.mark is not None:
             self.mark.remove()
             self.mark = None
 
@@ -161,7 +161,7 @@ class CustomizableRegion:
         # Validate that the click is on this axis/object
         if event.inaxes != self.axvspan.axes: return
         # Validate it is not in PAN or ZOOM mode
-        if event.inaxes != None and event.inaxes.get_navigate_mode() != None: return
+        if event.inaxes is not None and event.inaxes.get_navigate_mode() is not None: return
         contains, attrd = self.axvspan.contains(event)
         if not contains: return
         # This element is the kind of element that is selected to be modified?
@@ -223,43 +223,43 @@ class CustomizableRegion:
         self.axvspan.figure.canvas.mpl_disconnect(self.cid_release)
         self.axvspan.figure.canvas.mpl_disconnect(self.cid_motion)
         self.axvspan.remove()
-        if self.mark != None:
+        if self.mark is not None:
             self.mark.remove()
-        if self.note != None:
+        if self.note is not None:
             self.note.remove()
 
     def hide(self):
         self.axvspan.set_visible(False)
-        if self.mark != None:
+        if self.mark is not None:
             self.mark.set_visible(False)
-        if self.note != None:
+        if self.note is not None:
             self.note.set_visible(False)
-        if self.line_plot_id != None:
+        if self.line_plot_id is not None:
             for plot_id in self.line_plot_id.values():
-                if plot_id != None:
+                if plot_id is not None:
                     self.frame.axes.lines.remove(plot_id)
 
 
     def on_release(self, event):
         # Validate it is not in PAN or ZOOM mode
-        if event.inaxes != None and event.inaxes.get_navigate_mode() != None: return
+        if event.inaxes is not None and event.inaxes.get_navigate_mode() is not None: return
 
         # Validate it is not in PAN or ZOOM mode
-        if event.inaxes != None and event.inaxes.get_navigate_mode() != None: return
+        if event.inaxes is not None and event.inaxes.get_navigate_mode() is not None: return
 
         # This element is the kind of element that is selected to be modified?
         if self.frame.elements != self.element_type: return
         # If the action is "create", this should be managed by the frame and not individual elements
         if self.frame.action == "Create" and not (self.frame.elements == "lines" and self.frame.subelements == "marks"): return
 
-        if self.press != None:
+        if self.press is not None:
             # In modification mode, if it is the current selected widget
             self.press = None
             if self.frame.action == "Remove":
                 self.frame.lock.release() # Release now because the next commands will
                 if self.frame.elements == "lines" and self.frame.subelements == "marks":
                     # Remove note
-                    if self.note != None:
+                    if self.note is not None:
                         self.note.set_visible(False)
                         self.note.remove()
                         self.note = None
@@ -286,7 +286,7 @@ class CustomizableRegion:
                             pass
                 elif self.frame.action == "Create" and self.frame.elements == "lines" and self.frame.subelements == "marks":
                     # Create a note (left or right click)
-                    if (event.button == 1 or event.button == 3) and self.note == None:
+                    if (event.button == 1 or event.button == 3) and self.note is None:
                         self.update_mark_note(event)
                 elif self.frame.action == "Stats" and self.frame.lock.locked():
                     self.frame.update_stats(self)
@@ -303,7 +303,7 @@ class CustomizableRegion:
         if self.press is None: return
         if event.inaxes != self.axvspan.axes: return
         # Validate it is not in PAN or ZOOM mode
-        if event.inaxes.get_navigate_mode() != None: return
+        if event.inaxes.get_navigate_mode() is not None: return
         if self.frame.action == "Stats": return
 
 #        button, x, xpress = self.press
@@ -316,7 +316,7 @@ class CustomizableRegion:
 
     def get_note_text(self):
         note_text = ""
-        if self.element_type == "lines" and self.note != None:
+        if self.element_type == "lines" and self.note is not None:
             note_text = self.note.get_text()
         return note_text
 

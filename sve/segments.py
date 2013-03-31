@@ -51,9 +51,32 @@ def write_segment_regions(segment_regions, segment_regions_filename):
         491.2240        491.2260
         492.5800        492.5990
     """
-    out = open(segments_regions_filename, "w")
+    out = open(segment_regions_filename, "w")
     out.write("wave_base\twave_top\n")
-    out.write("\n".join(["\t".join(map(str, (seg['wave_base'], seg['wave_top']))) for seg in segments_regions]))
+    out.write("\n".join(["\t".join(map(str, (seg['wave_base'], seg['wave_top']))) for seg in segment_regions]))
     out.close()
 
+def create_segments_around_lines(linemasks, margin=0.5):
+    dirty_segments = np.recarray((len(linemasks),),  dtype=[('wave_base', float), ('wave_top', float)])
+    for i, line_mask in enumerate(linemasks):
+        dirty_segments['wave_base'][i] = line_mask['wave_base'] - margin
+        dirty_segments['wave_top'][i] = line_mask['wave_top'] + margin
+
+    # Given a group of segments of a spectrum, merge those that are
+    # consecutive.
+    cleaned_segments = []
+    i = 0
+    # For all regions (except the last one), check the next one is consecutive in wavelengths
+    while i < len(dirty_segments) - 2:
+        j = 0
+        # While wave_top of the current is equal to wave_base of the next...
+        while ((dirty_segments[j+i]['wave_top'] >= dirty_segments[j+i+1]['wave_base']) and (j < len(dirty_segments) - 2 - i)):
+            j += 1
+
+        wave_base = dirty_segments[i]['wave_base']
+        wave_top = dirty_segments[j+i]['wave_top']
+
+        cleaned_segments.append((wave_base, wave_top))
+        i += j + 1 # Skip the regions that have been merged
+    return np.array(cleaned_segments,  dtype=[('wave_base', float), ('wave_top', float)])
 

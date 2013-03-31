@@ -123,14 +123,6 @@ class SolverDialog(CustomDialog):
         component["default"] = False
         self.__components.append(component)
         component = {}
-        component["type"] = "Entry"
-        component["text"] = "Individual elements (comma separated)"
-        component["text-type"] = "str" # float, int or str
-        component["default"] = ""
-        component["minvalue"] = None
-        component["maxvalue"] = None
-        self.__components.append(component)
-        component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Individual abundance"
         component["options"] = []

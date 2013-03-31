@@ -22,7 +22,7 @@ import numpy as np
 import logging
 
 #--- SVE directory --------------------------------------------------------
-#sve_dir = '/home/marble/shared/sve/'
+#sve_dir = '/home/blanco/shared/sve/'
 sve_dir = './'
 sys.path.insert(0, os.path.abspath(sve_dir))
 import sve
@@ -66,7 +66,7 @@ mu_cas_a_spectrum = mu_cas_a_spectrum[wfilter]
 #--- Radial Velocity determination with linelist mask ---------------------------
 logging.info("Radial velocity determination with linelist mask...")
 # - Read atomic data
-vald_linelist_file = sve_dir + "input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
+vald_linelist_file = sve_dir + "/input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
 linelist = sve.read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
 # - Filter lines that may be affected by telluric lines
 telluric_lines_file = sve_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
@@ -93,8 +93,9 @@ rv = np.round(models[0].mu(), 2) # km/s
 #--- Radial Velocity determination with template ---------------------------
 logging.info("Radial velocity determination with template...")
 # - Read atomic data
-template = sve.read_spectrum(sve_dir + "/input/spectra/synthetic/synth_5777.0_4.44_0.02_2.0.txt.gz")
-#template = sve.read_spectrum("input/spectra/examples/narval_sun.s.gz")
+template = sve.read_spectrum(sve_dir + \
+        "/input/spectra/synthetic/Synth_Kurucz_VALD_5777.0_4.44_0.02_2.0.txt.gz")
+#template = sve.read_spectrum(sve_dir + "/input/spectra/examples/narval_sun.s.gz")
 
 # - Read telluric lines and use only the 25% of the deepest ones
 telluric_lines_file = sve_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
@@ -193,16 +194,17 @@ sun_continuum_regions = sve.find_continuum(sun_spectrum, resolution, \
                                     continuum_model = sun_continuum_model, \
                                     max_continuum_diff=max_continuum_diff, \
                                     fixed_wave_step=fixed_wave_step)
-sve.write_continuum_regions(sun_continuum_regions, "sun_continuum_regions.txt")
+sve.write_continuum_regions(sun_continuum_regions, "example_sun_continuum_regions.txt")
 
 # Or limit the search to given segments
-segments = sve.read_segment_regions(sve_dir + "input/regions/segments.txt")
+segments = sve.read_segment_regions(sve_dir + "/input/regions/fe_YY_segments.txt")
 limited_sun_continuum_regions = sve.find_continuum(sun_spectrum, resolution, \
                                         segments=segments, max_std_continuum = sigma, \
                                         continuum_model = sun_continuum_model, \
                                         max_continuum_diff=max_continuum_diff, \
                                         fixed_wave_step=fixed_wave_step)
-sve.write_continuum_regions(limited_sun_continuum_regions, "limited_sun_continuum_regions.txt")
+sve.write_continuum_regions(limited_sun_continuum_regions, \
+        "example_limited_sun_continuum_region.txt")
 
 #--- Find linemasks ---------------------------------------------------------
 logging.info("Finding line masks...")
@@ -228,7 +230,7 @@ sun_linemasks = sve.find_linemasks(sun_spectrum, sun_continuum_model, vald_linel
 rejected_by_atomic_line_not_found = (sun_linemasks['VALD_wave_peak'] == 0)
 sun_linemasks = sun_linemasks[~rejected_by_atomic_line_not_found]
 
-sve.write_line_regions(sun_linemasks, "sun_linemasks.txt")
+sve.write_line_regions(sun_linemasks, "example_sun_linemasks.txt")
 
 ##--- Barycentric velocity correction ---------------------------------------
 logging.info("Calculating barycentric velocity correction...")
@@ -268,10 +270,10 @@ efilter = (sun_spectrum['err'] > err_base) & (sun_spectrum['err'] <= err_top)
 wfilter = np.logical_and(ffilter, efilter)
 sun_spectrum = sun_spectrum[wfilter]
 
-##--- Clean regions that may be affected by tellurics ----------------------------------------------
+##--- Clean regions that may be affected by tellurics --------------------------
 logging.info("Cleaning tellurics...")
 
-telluric_lines_file = sve_dir + "input/linelists/telluric/standard_atm_air_model.lst"
+telluric_lines_file = sve_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
 linelist_telluric = sve.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
 
 # - Filter regions that may be affected by telluric lines
@@ -293,7 +295,7 @@ molecules_file = sve_dir + "/input/abundances/molecular_symbols.dat"
 telluric_linelist_file = sve_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
 vel_atomic = 0.00 # km/s
 vel_telluric = 17.79 # km/s
-line_regions = sve.read_line_regions(sve_dir + "/input/regions/line_masks.txt")
+line_regions = sve.read_line_regions(sve_dir + "/input/regions/fe_YY_line_masks.txt")
 linemasks = sve.fit_lines(line_regions, sun_spectrum, sun_continuum_model, vel_atomic, \
                             vel_telluric, vald_linelist_file, chemical_elements_file, \
                             molecules_file, telluric_linelist_file, discard_gaussian=False, \
@@ -303,9 +305,150 @@ linemasks = sve.fit_lines(line_regions, sun_spectrum, sun_continuum_model, vel_a
 rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
 linemasks = linemasks[~rejected_by_atomic_line_not_found]
 
+#--- Determining abundances by EW of the previously fitted lines ---------------
+# Parameters
+teff = 5777.0
+logg = 4.44
+MH = 0.02
+microturbulence_vel = 2.0
+
+# Selected model and linelist
+selected_atmosphere_models = "MARCS"
+
+# Load model atmospheres
+modeled_layers_pack = sve.load_modeled_layers_pack(sve_dir + '/input/atmospheres/' \
+        + selected_atmosphere_models + '/modeled_layers_pack.dump')
+# Load SPECTRUM abundances
+abundances_file = sve_dir + "/input/abundances/" + selected_atmosphere_models + "/stdatom.dat"
+abundances = sve.read_SPECTRUM_abundances(abundances_file)
+
+# Validate parameters
+if not sve.valid_atmosphere_target(modeled_layers_pack, teff, logg, MH):
+    msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
+            fall out of theatmospheric models."
+    print msg
+
+# Prepare atmosphere model
+atmosphere_layers = sve.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH)
+
+spec_abund, normal_abund, x_over_h, x_over_fe = sve.determine_abundances(atmosphere_layers, \
+        teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, verbose=1)
+
+print "[X/H]: %.2f" % np.median(x_over_h)
+print "[X/Fe]: %.2f" % np.median(x_over_fe)
+
+#--- Synthesizing spectra --------------------------------------------------------
+# Parameters
+teff = 5777.0
+logg = 4.44
+MH = 0.02
+macroturbulence = 0.0
+vsini = 2.0
+limb_darkening_coeff = 0.0
+microturbulence_vel = 2.0
+resolution = 300000
+wave_step = 0.001
+
+# Wavelengths to synthesis
+#regions = sve.read_segment_regions(sve_dir + "/input/regions/fe_YY_segments.txt")
+regions = None
+wave_base = 515.0 # Magnesium triplet region
+wave_top = 525.0
+
+# Selected model and linelist
+selected_atmosphere_models = "MARCS"
+selected_linelist = "VALD"
+
+# Load model atmospheres
+modeled_layers_pack = sve.load_modeled_layers_pack(sve_dir + 'input/atmospheres/' + \
+        selected_atmosphere_models + '/modeled_layers_pack.dump')
+# Load SPECTRUM linelist
+linelist_file = sve_dir + "/input/linelists/SPECTRUM/" + selected_linelist + "/300_1100nm.lst"
+linelist = sve.read_SPECTRUM_linelist(linelist_file)
+# Load SPECTRUM abundances
+fixed_abundances = None # No fixed abundances
+abundances_file = sve_dir + "/input/abundances/" + selected_atmosphere_models + "/stdatom.dat"
+abundances = sve.read_SPECTRUM_abundances(abundances_file)
+
+# Validate parameters
+if not sve.valid_atmosphere_target(modeled_layers_pack, teff, logg, MH):
+    msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
+            fall out of theatmospheric models."
+    print msg
+
+
+# Prepare atmosphere model
+atmosphere_layers = sve.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH)
+
+# Synthesis
+synth_spectrum = sve.create_spectrum_structure(np.arange(wave_base, wave_top, wave_step))
+synth_spectrum['flux'] = sve.generate_spectrum(synth_spectrum['waveobs'], \
+        atmosphere_layers, teff, logg, MH, linelist=linelist, abundances=abundances, \
+        fixed_abundances=fixed_abundances, microturbulence_vel = microturbulence_vel, \
+        macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, \
+        R=resolution, regions=regions, verbose=1)
+
+# Add gaussian noise
+snr = 100
+sigma = synth_spectrum['flux']/snr
+synth_spectrum['flux'] += np.random.normal(0, sigma, len(synth_spectrum))
+
+
+#--- Modelize spectra --------------------------------------------------------
+# Parameters
+initial_teff = 5777.0
+initial_logg = 4.44
+initial_MH = 0.02
+initial_vmic = 2.0
+initial_vmac = 0.0
+initial_vsini = 2.0
+initial_limb_darkening_coeff = 0.0
+initial_R = 300000
+max_iterations = 20
+
+# Selected model and linelist
+selected_atmosphere_models = "MARCS"
+selected_linelist = "VALD"
+
+# Free parameters
+#free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "limb_darkening_coeff"]
+free_params = ["R"]
+
+# Free individual element abundance
+free_abundances = None
+#free_abundances = np.recarray((1, ), dtype=[('code', int),('Abund', float)])
+#element_abundance = 12 # Mg (Magnessium)
+#free_abundances['code'] = element_abundance
+#free_abundances['Abund'] = abundances['Abund'][abundances['code'] == int(element_abundance)]
+
+# Regions
+segments = sve.read_segment_regions(sve_dir + "/input/regions/fe_YY_segments.txt")
+line_regions = sve.read_line_regions(sve_dir + "/input/regions/fe_YY_line_masks.txt")
+
+# Load model atmospheres
+modeled_layers_pack = sve.load_modeled_layers_pack(sve_dir + 'input/atmospheres/' + \
+        selected_atmosphere_models + '/modeled_layers_pack.dump')
+# Load SPECTRUM linelist
+linelist_file = sve_dir + "/input/linelists/SPECTRUM/" + selected_linelist + "/300_1100nm.lst"
+linelist = sve.read_SPECTRUM_linelist(linelist_file)
+# Load SPECTRUM abundances
+fixed_abundances = None # No fixed abundances
+abundances_file = sve_dir + "/input/abundances/" + selected_atmosphere_models + "/stdatom.dat"
+abundances = sve.read_SPECTRUM_abundances(abundances_file)
+
+modeled_synth_spectrum, params, errors, status, stats_linemasks = \
+        sve.modelize_spectrum(sun_spectrum, sun_continuum_model, \
+        modeled_layers_pack, linelist, abundances, free_abundances, initial_teff, \
+        initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
+        initial_limb_darkening_coeff, initial_R, free_params, segments=segments, \
+        linemasks=line_regions, max_iterations=max_iterations)
+
 
 ##--- Save spectrum ---------------------------------------------------------
 logging.info("Saving spectrum...")
-sve.write_spectrum(sun_spectrum, "sun.s")
-sve.write_spectrum(mu_cas_a_spectrum, "mu_cas_a.s")
+sve.write_spectrum(sun_spectrum, "example_sun.s")
+sve.write_spectrum(mu_cas_a_spectrum, "example_mu_cas_a.s")
+sve.write_spectrum(synth_spectrum, "example_synth.s")
+sve.write_spectrum(modeled_synth_spectrum, "example_modeled_synth.s")
+
 

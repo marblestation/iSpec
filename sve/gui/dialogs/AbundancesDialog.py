@@ -9,7 +9,7 @@ class AbundancesDialog(CustomDialog):
         for element in elements:
             flines = self.__linemasks['element'] == element
             element_linemasks = self.__linemasks[flines]
-            element_abundances = self.__abundances[flines]
+            element_abundances = self.__x_over_h[flines]
             #axes.plot(element_linemasks['VALD_wave_peak'], element_abundances, linestyle='', marker='o', markersize=5, zorder=1, label=element)
             axes.plot(element_linemasks['lower state (eV)'], element_abundances, linestyle='', marker='o', markersize=5, zorder=1, label=element)
 
@@ -22,8 +22,9 @@ class AbundancesDialog(CustomDialog):
         axes.set_xlabel("wavelength (nm)", fontsize="10")
         axes.set_ylabel("abundance (dex)", fontsize="10")
 
-    def register(self, linemasks, abundances):
-        self.__abundances = abundances
+    def register(self, linemasks, x_over_h, x_over_fe):
+        self.__x_over_h = x_over_h
+        self.__x_over_fe = x_over_fe
         self.__linemasks = linemasks
 
         # We have data, we can assign the plotting function
@@ -41,18 +42,21 @@ class AbundancesDialog(CustomDialog):
         self.__stats.append("%-50s: %10.2f" % ("Surface gravity (log g)", np.round(logg, 2)))
         self.__stats.append("%-50s: %10.2f" % ("Metallicity [Fe/H]", np.round(feh, 2)))
         self.__stats.append("%-50s: %10.2f" % ("Microturbulence velocity (km/s)", np.round(vmic, 2)))
-        self.__stats.append("%-50s: %10.2f" % ("Total number of lines", np.round(len(abundances), 2)))
+        self.__stats.append("%-50s: %10.2f" % ("Total number of lines", np.round(len(x_over_h), 2)))
 
         elements = np.unique(linemasks['element'])
         for element in elements:
             flines = linemasks['element'] == element
             element_linemasks = linemasks[flines]
-            element_abundances = abundances[flines]
-            self.__stats.append("%-50s: %10.2f" % ( element + " abundance (%)", np.round(100.*np.power(10, np.median(element_abundances)), 5)))
-            self.__stats.append("%-50s: %10.2f" % ( element + " median abundance in log(N/Ntot) (dex)", np.round(np.median(element_abundances), 2)))
-            self.__stats.append("%-50s: %10.2f" % ( element + " mean abundance in log(N/Ntot) (dex)", np.round(np.mean(element_abundances), 2)))
-            self.__stats.append("%-50s: %10.2f" % ( element + " standard deviation in log(N/Ntot) (dex)", np.round(np.std(element_abundances), 2)))
-            self.__stats.append("%-50s: %10.2f" % ( element + " lines number", np.round(len(element_abundances), 0)))
+            element_abundances_over_h = x_over_h[flines]
+            element_abundances_over_fe = x_over_fe[flines]
+            self.__stats.append("%-50s: %10.2f" % ( element + " median abundance in [X/H] (dex)", np.round(np.median(element_abundances_over_h), 2)))
+            self.__stats.append("%-50s: %10.2f" % ( element + " mean abundance in [X/H] (dex)", np.round(np.mean(element_abundances_over_h), 2)))
+            self.__stats.append("%-50s: %10.2f" % ( element + " standard deviation in [X/H] (dex)", np.round(np.std(element_abundances_over_h), 2)))
+            self.__stats.append("%-50s: %10.2f" % ( element + " median abundance in [X/Fe] (dex)", np.round(np.median(element_abundances_over_fe), 2)))
+            self.__stats.append("%-50s: %10.2f" % ( element + " mean abundance in [X/Fe] (dex)", np.round(np.mean(element_abundances_over_fe), 2)))
+            self.__stats.append("%-50s: %10.2f" % ( element + " standard deviation in [X/Fe] (dex)", np.round(np.std(element_abundances_over_fe), 2)))
+            self.__stats.append("%-50s: %10.2f" % ( element + " lines number", np.round(len(element_abundances_over_h), 0)))
 
 
     def __init__(self, parent, title, teff, logg, feh, vmic):

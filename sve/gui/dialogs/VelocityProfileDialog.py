@@ -38,7 +38,7 @@ class VelocityProfileDialog(CustomDialog):
         ## Stats
         for i in xrange(len(self.__stats)):
             self.__stats.pop()
-        if self.__template != None:
+        if self.__template is not None:
             self.__stats.append("%-50s: %s" % ("Template", str(self.__template)))
         for i, model in enumerate(models):
             self.__stats.append("%-50s: %10.2f" % ("Mean (km/s)", np.round(model.mu(), 2)))
@@ -149,7 +149,7 @@ class VelocityProfileDialog(CustomDialog):
 
     def show(self, updated_templates=None):
         self.results = None
-        if updated_templates != None:
+        if updated_templates is not None:
             self.__components[5]["options"] = updated_templates
             # Validate that the default value (previous user selected value) exists in the new template list
             default_ok = False

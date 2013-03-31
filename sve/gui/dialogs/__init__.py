@@ -37,6 +37,7 @@ from EstimateSNRDialog import *
 from ExampleDialog import *
 from FindContinuumDialog import *
 from FindLinesDialog import *
+from FindSegmentsDialog import *
 from FitContinuumDialog import *
 from FitLinesDialog import *
 from OperateSpectrumDialog import *

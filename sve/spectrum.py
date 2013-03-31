@@ -61,12 +61,12 @@ def __read_fits_spectrum(spectrum_filename, fluxhdu="PRIMARY", errorhdu=None):
     flux = data.flatten()
     waveobs = None
     # NOTE: One can use hdr.get('ORIGIN') for special treatments
-    if hdr.get(str('CD%s_%s' % (specaxis,specaxis))) != None:
+    if hdr.get(str('CD%s_%s' % (specaxis,specaxis))) is not None:
         wave_step = hdr['CD%s_%s' % (specaxis,specaxis)]
         wave_base = hdr['CRVAL%s' % (specaxis)]
         reference_pixel = hdr['CRPIX%s' % (specaxis)]
         logging.info("Using the FITS CD matrix.  PIX=%f VAL=%f DELT=%f UNIT=%s" % (reference_pixel,wave_base,wave_step,unit))
-    elif hdr.get(str('CDELT%s' % (specaxis))) != None:
+    elif hdr.get(str('CDELT%s' % (specaxis))) is not None:
         wave_step = hdr['CDELT%s' % (specaxis)]
         wave_base = hdr['CRVAL%s' % (specaxis)]
         reference_pixel = hdr['CRPIX%s' % (specaxis)]
@@ -74,7 +74,7 @@ def __read_fits_spectrum(spectrum_filename, fluxhdu="PRIMARY", errorhdu=None):
     elif len(data.shape) > 1:
         logging.info("No CDELT or CD in header.  Assuming 2D input with 1st line representing the spectral axis.")
         # try assuming first axis is X axis
-        if hdr.get('CUNIT%s' % (specaxis)) != None:
+        if hdr.get('CUNIT%s' % (specaxis)) is not None:
             waveobs = data[0,:]
             flux = data[1,:]
             if data.shape[0] > 2:
@@ -102,7 +102,7 @@ def __read_fits_spectrum(spectrum_filename, fluxhdu="PRIMARY", errorhdu=None):
     num_measures = len(flux)
     spectrum = create_spectrum_structure(waveobs, flux)
 
-    if errorhdu == None:
+    if errorhdu is None:
         spectrum['err'] = np.zeros(len(flux))
         # Try to find the errors in the extensions (HDU different than the PRIMARY):
         for i in xrange(len(hdulist)):
@@ -197,7 +197,7 @@ def read_spectrum(spectrum_filename, fits_options={"fluxhdu": "PRIMARY", "errorh
     # Filter all duplicates except the first one
     last_wave = None
     for i in np.arange(len(dups)):
-        if last_wave == None:
+        if last_wave is None:
             last_wave = dups[i]['waveobs']
             continue
         if last_wave == dups[i]['waveobs']:
@@ -325,7 +325,7 @@ def estimate_snr(flux, num_points=10, frame=None):
             if report_progress(current_work_progress, last_reported_progress):
                 last_reported_progress = current_work_progress
                 logging.info("%.2f%%" % current_work_progress)
-                if frame != None:
+                if frame is not None:
                     frame.update_progress(current_work_progress)
         snr = np.asarray(snr)
     #snr, s = sigma_clipping(snr, sig=3, meanfunc=np.median)
@@ -393,7 +393,9 @@ except:
                 # DISCARD: Linear extrapolation using index-1 and index-2
                 # flux = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index-1]-fluxes[index-2])/(waveobs[index-1]-waveobs[index-2]))
                 # JUST DUPLICATE:
-                resampled_flux[i] = fluxes[index-1]
+                #resampled_flux[i] = fluxes[index-1]
+                # JUST ZERO:
+                resampled_flux[i] = 0.0
             elif index == 1 or index == total_points-1:
                 # Linear interpolation between index and index-1
                 # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
@@ -402,7 +404,9 @@ except:
                 # DISCARD: Linear extrapolation using index+1 and index
                 # flux = fluxes[index] + (objective_wavelength - waveobs[index]) * ((fluxes[index+1]-fluxes[index])/(waveobs[index+1]-waveobs[index]))
                 # JUST DUPLICATE:
-                resampled_flux[i] = fluxes[index]
+                #resampled_flux[i] = fluxes[index]
+                # JUST ZERO:
+                resampled_flux[i] = 0.0
             elif waveobs[index] == objective_wavelength:
                 resampled_flux[i] = fluxes[index]
             else:
@@ -436,7 +440,7 @@ except:
             if report_progress(current_work_progress, last_reported_progress):
                 last_reported_progress = current_work_progress
                 logging.info("%.2f%%" % current_work_progress)
-                if frame != None:
+                if frame is not None:
                     frame.update_progress(current_work_progress)
 
         return resampled_waveobs, resampled_flux, resampled_err
@@ -450,11 +454,11 @@ except:
         convolved_err = np.zeros(total_points)
 
         last_reported_progress = -1
-        if frame != None:
+        if frame is not None:
             frame.update_progress(0)
 
         # FWHM of the gaussian for the given resolution
-        if from_resolution == None:
+        if from_resolution is None:
             # Convolve using instrumental resolution (smooth but not degrade)
             fwhm = waveobs / to_resolution
         else:
@@ -494,7 +498,7 @@ except:
             if report_progress(current_work_progress, last_reported_progress):
                 last_reported_progress = current_work_progress
                 logging.info("%.2f%%" % current_work_progress)
-                if frame != None:
+                if frame is not None:
                     frame.update_progress(current_work_progress)
 
         return waveobs, convolved_flux, convolved_err
@@ -514,7 +518,7 @@ except:
         If "to_resolution" is specified, the convolution is made with the difference of
         both resolutions in order to degrade the spectrum.
         """
-        if from_resolution != None and from_resolution <= to_resolution:
+        if from_resolution is not None and from_resolution <= to_resolution:
             raise Exception("This method cannot deal with final resolutions that are bigger than original")
 
         total_points = len(waveobs)
@@ -522,7 +526,7 @@ except:
         convolved_err = np.zeros(total_points)
 
         last_reported_progress = -1
-        if frame != None:
+        if frame is not None:
             frame.update_progress(0)
 
         # Consider the wavelength of the measurements as the center of the bins
@@ -540,7 +544,7 @@ except:
         bin_width = edges[1:] - edges[:-1]          # width per pixel
 
         # FWHM of the gaussian for the given resolution
-        if from_resolution == None:
+        if from_resolution is None:
             # Convolve using instrumental resolution (smooth but not degrade)
             fwhm = waveobs / to_resolution
         else:
@@ -603,7 +607,7 @@ except:
             if report_progress(current_work_progress, last_reported_progress):
                 last_reported_progress = current_work_progress
                 #logging.info("%.2f%%" % current_work_progress)
-                if frame != None:
+                if frame is not None:
                     frame.update_progress(current_work_progress)
         logging.info("Spectra convolved!")
 
@@ -619,7 +623,7 @@ def convolve_spectrum(spectrum, to_resolution, from_resolution=None, frame=None)
     If "from_resolution" is specified, the convolution is made with the difference of
     both resolutions in order to degrade the spectrum.
     """
-    if from_resolution != None and from_resolution <= to_resolution:
+    if from_resolution is not None and from_resolution <= to_resolution:
         raise Exception("This method cannot deal with final resolutions that are bigger than original")
 
     waveobs, flux, err = __convolve_spectrum(spectrum['waveobs'], spectrum['flux'], spectrum['err'], to_resolution, from_resolution=from_resolution, frame=frame)
@@ -633,12 +637,12 @@ def create_spectrum_structure(waveobs, flux=None, err=None):
     spectrum = np.recarray((len(waveobs), ), dtype=[('waveobs', float),('flux', float),('err', float)])
     spectrum['waveobs'] = waveobs
 
-    if flux != None:
+    if flux is not None:
         spectrum['flux'] = flux
     else:
         spectrum['flux'] = 0.0
 
-    if err != None:
+    if err is not None:
         spectrum['err'] = err
     else:
         spectrum['err'] = 0.0
@@ -671,7 +675,7 @@ def resample_spectrum(spectrum, xaxis, method="bessel", frame=None):
 
     current_work_progress = 10.0
     logging.info("%.2f%%" % current_work_progress)
-    if frame != None:
+    if frame is not None:
         frame.update_progress(current_work_progress)
 
     if method.lower() == "linear":
@@ -683,7 +687,7 @@ def resample_spectrum(spectrum, xaxis, method="bessel", frame=None):
         err = np.interp(xaxis, spectrum['waveobs'], spectrum['err'], left=0.0, right=0.0) # No extrapolation, just returns zeros
         current_work_progress = 90.0
         logging.info("%.2f%%" % current_work_progress)
-        if frame != None:
+        if frame is not None:
             frame.update_progress(current_work_progress)
     elif method.lower() == "spline":
         f = interpolate.InterpolatedUnivariateSpline(spectrum['waveobs'], spectrum['flux'], k=3)
@@ -692,7 +696,7 @@ def resample_spectrum(spectrum, xaxis, method="bessel", frame=None):
         err = e(xaxis)
         current_work_progress = 90.0
         logging.info("%.2f%%" % current_work_progress)
-        if frame != None:
+        if frame is not None:
             frame.update_progress(current_work_progress)
     elif method.lower() == "bessel":
         waveobs, flux, err = __bessel_interpolation(spectrum['waveobs'], spectrum['flux'], spectrum['err'], xaxis, frame=frame)

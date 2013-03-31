@@ -29,9 +29,9 @@ class DegradeResolutionDialog(CustomDialog):
 
     def show(self, updated_from_resolution=None, updated_to_resolution=None):
         self.results = None
-        if updated_from_resolution != None:
+        if updated_from_resolution is not None:
             self.__components[1]["default"] = updated_from_resolution
-        if updated_to_resolution != None:
+        if updated_to_resolution is not None:
             self.__components[2]["default"] = updated_to_resolution
         CustomDialog.__init__(self, self.__parent, self.__title, self.__components)
 

@@ -743,7 +743,7 @@ def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None
     :returns:
         Name of the temporary file
     """
-    if atmosphere_filename != None:
+    if atmosphere_filename is not None:
         atm_file = open(atmosphere_filename, "w")
     else:
         # Temporary file
@@ -774,7 +774,9 @@ def dump_modeled_layers_pack(modeled_layers, used_values_for_layers, proximity, 
 
 def load_modeled_layers_pack(filename):
     """
-    Restore modeled layers and stats saved previously with save_modeled_layers_pack
+    Restore modeled atmospheric layers and statistics, previously processed by
+    SVE (i.e. save_modeled_layers_pack). By default, SVE is distributed with
+    several pre-processed atmospheric models that can be loaded with this function.
 
     :param filename:
         Name of the input file (i.e. models.dump)

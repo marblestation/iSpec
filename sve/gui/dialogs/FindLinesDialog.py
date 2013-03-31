@@ -74,9 +74,9 @@ class FindLinesDialog(CustomDialog):
 
     def show(self, updated_vel_atomic=None, updated_vel_telluric=None):
         self.results = None
-        if updated_vel_atomic != None:
+        if updated_vel_atomic is not None:
             self.__components[4]["default"] = updated_vel_atomic
-        if updated_vel_telluric != None:
+        if updated_vel_telluric is not None:
             self.__components[5]["default"] = updated_vel_telluric
         CustomDialog.__init__(self, self.__parent, self.__title, self.__components)
 
