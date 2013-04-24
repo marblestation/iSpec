@@ -43,7 +43,7 @@ class FindLinesDialog(CustomDialog):
         component["text"] = "Velocity respect to atomic lines (km/s)"
         component["text-type"] = "float" # float, int or str
         component["default"] = vel_atomic
-        component["minvalue"] = 0.0
+        component["minvalue"] = -np.inf
         component["maxvalue"] = np.inf
         self.__components.append(component)
         component = {}

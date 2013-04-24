@@ -76,8 +76,14 @@ class AbundancesDialog(CustomDialog):
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Model atmosphere"
-        component["options"] = ["MARCS", "Kurucz", "Castelli"]
-        component["default"] = component["options"][0]
+        component["options"] = ["Meszaros", "MARCS", "Meszaros", "Castelli", "Kurucz", "Kirby"]
+        component["default"] = component["options"][2]
+        self.__components.append(component)
+        component = {}
+        component["type"] = "OptionMenu"
+        component["text"] = "Solar abundances"
+        component["options"] = ["Asplund.2009", "Asplund.2005", "Grevesse.2007", "Grevesse.1998", "Anders.1989"]
+        component["default"] = component["options"][1]
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"

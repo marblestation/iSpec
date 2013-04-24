@@ -157,20 +157,7 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
             if type(data) == tuple:
                 # Results received!
                 spec_abund, normal_abund, x_over_h = data
-                # Calculate abundance relative to Fe also: [X/Fe]
-                sun_log_Nh_over_Ntotal = abundances['Abund'][abundances['code'] == 1] # Hydrogen
-                sun_log_Nfe_over_Ntotal = abundances['Abund'][abundances['code'] == 26] # Fe
-                sun_log_Nfe_over_Nh = sun_log_Nfe_over_Ntotal + 12 - sun_log_Nh_over_Ntotal
-
-                # 'Fe' abundance should be scaled with metallicity
-                log_Nfe_over_Ntotal = sun_log_Nfe_over_Ntotal - MH
-                log_Nfe_over_Nh = np.ones(len(spec_abund)) * (log_Nfe_over_Ntotal + 12 - sun_log_Nh_over_Ntotal)
-
-                # If there are iron lines, for those the log_Nfe_over_Nh is different
-                iron_lines = np.logical_or(linemasks['element'] == 'Fe 1', linemasks['element'] == 'Fe 2')
-                log_Nfe_over_Nh[iron_lines] = normal_abund
-
-                x_over_fe = x_over_h - (log_Nfe_over_Nh - sun_log_Nfe_over_Nh) # [X/Fe]
+                x_over_fe = x_over_h - MH
                 break
             elif gui_queue is not None:
                 # GUI update
@@ -211,5 +198,4 @@ def __determine_abundances(process_communication_queue, atmosphere_model_file, l
     update_progress_func = lambda v: __enqueue_progress(process_communication_queue, v)
     abundances = synthesizer.abundances(atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel, nlayers, verbose, update_progress_func)
     process_communication_queue.put(abundances)
-
 

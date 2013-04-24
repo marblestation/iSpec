@@ -396,10 +396,12 @@ except:
                 #resampled_flux[i] = fluxes[index-1]
                 # JUST ZERO:
                 resampled_flux[i] = 0.0
+                resampled_err[i] = 0.0
             elif index == 1 or index == total_points-1:
                 # Linear interpolation between index and index-1
                 # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
                 resampled_flux[i] = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index]-fluxes[index-1])/(waveobs[index]-waveobs[index-1]))
+                resampled_err[i] = err[index-1] + (objective_wavelength - waveobs[index-1]) * ((err[index]-err[index-1])/(waveobs[index]-waveobs[index-1]))
             elif index == 0 and waveobs[index] != objective_wavelength:
                 # DISCARD: Linear extrapolation using index+1 and index
                 # flux = fluxes[index] + (objective_wavelength - waveobs[index]) * ((fluxes[index+1]-fluxes[index])/(waveobs[index+1]-waveobs[index]))
@@ -407,8 +409,10 @@ except:
                 #resampled_flux[i] = fluxes[index]
                 # JUST ZERO:
                 resampled_flux[i] = 0.0
+                resampled_err[i] = 0.0
             elif waveobs[index] == objective_wavelength:
                 resampled_flux[i] = fluxes[index]
+                resampled_err[i] = err[index]
             else:
                 # Bessel's Central-Difference Interpolation with 4 points
                 #   p = [(x - x0) / (x1 - x0)]
@@ -430,8 +434,14 @@ except:
                 flux_x1 = fluxes[index]
                 flux_x2 = fluxes[index + 1]
 
+                err_x_1 = err[index - 2]
+                err_x0 = err[index - 1]
+                err_x1 = err[index]
+                err_x2 = err[index + 1]
+
                 p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
                 resampled_flux[i] = flux_x0 + p * (flux_x1 - flux_x0) + (p * (p - 1) / 4) * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
+                resampled_err[i] = err_x0 + p * (err_x1 - err_x0) + (p * (p - 1) / 4) * (err_x2 - err_x1 - err_x0 + err_x_1)
 
             if index > 4:
                 from_index = index - 4
@@ -736,5 +746,40 @@ def correct_velocity_regions(regions, velocity, with_peak=False):
     if with_peak:
         regions['wave_peak'] = regions['wave_peak'] / ((velocity / c) + 1)
     return regions
+
+def add_noise(spectrum, snr, distribution="poisson"):
+    noisy_spectrum = create_spectrum_structure(spectrum['waveobs'], spectrum['flux'], spectrum['err'])
+    if distribution == "gaussian":
+        sigma = spectrum['flux']/snr
+        noisy_spectrum['flux'] += np.random.normal(0, sigma, len(spectrum))
+        noisy_spectrum['err'] += sigma
+    else:
+        # poison
+        sigma = 1./snr
+        lamb = spectrum['flux'] / (sigma * sigma)
+        noisy_spectrum['flux'] = np.random.poisson(lamb)
+        noisy_spectrum['flux'] *= sigma*sigma
+        noisy_spectrum['err'] += noisy_spectrum['flux'] / np.sqrt(lamb)
+    return noisy_spectrum
+
+def create_wavelength_filter(spectrum, wave_base=None, wave_top=None, regions=None):
+    wfilter = None
+    if regions is None:
+        if wave_base is None:
+            wave_base = np.min(spectrum['waveobs'])
+        if wave_top is None:
+            wave_top = np.max(spectrum['waveobs'])
+        wfilter = (spectrum['waveobs'] >= wave_base) & (spectrum['waveobs'] <= wave_top)
+    else:
+        # Build wavelength points from regions
+        for region in regions:
+            wave_base = region['wave_base']
+            wave_top = region['wave_top']
+
+            if wfilter is None:
+                wfilter = np.logical_and(spectrum['waveobs'] >= wave_base, spectrum['waveobs'] <= wave_top)
+            else:
+                wfilter = np.logical_or(wfilter, np.logical_and(spectrum['waveobs'] >= wave_base, spectrum['waveobs'] <= wave_top))
+    return wfilter
 
 

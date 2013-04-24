@@ -643,6 +643,14 @@ def find_linemasks(spectrum, continuum_model, vald_linelist_file, chemical_eleme
 
     linemasks = linemasks[~discarded]
 
+    # Correct potential overlapping between line masks
+    linemasks.sort(order=['wave_peak'])
+    for i, line in enumerate(linemasks[:-1]):
+        if line['wave_top'] > linemasks['wave_base'][i+1]:
+            mean = (line['wave_top'] + linemasks['wave_base'][i+1]) / 2.0
+            line['wave_top'] = mean
+            linemasks['wave_base'][i+1] = mean
+
     return linemasks
 
 def fit_lines(regions, spectrum, continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian = False, discard_voigt = False, smoothed_spectrum=None, accepted_for_fitting=None, frame=None):
@@ -696,6 +704,7 @@ def fit_lines(regions, spectrum, continuum_model, vel_atomic, vel_telluric, vald
             else:
                 new_base = regions['base'][i]
                 new_top = regions['top'][i]
+            # Actually, modify line mask:
             regions['base_fit'][i] = new_base
             regions['top_fit'][i] = new_top
             regions['wave_base_fit'][i] = spectrum['waveobs'][new_base]
@@ -1023,6 +1032,37 @@ def __improve_linemask_edges(xcoord, yvalues, base, top, peak):
         #plt.show()
 
     return new_base, new_top
+
+def adjust_linemasks(spectrum, linemasks, margin=0.5):
+    for line in linemasks:
+        wave_peak = line['wave_peak']
+        wfilter = np.logical_and(spectrum['waveobs'] >= wave_peak - margin, spectrum['waveobs'] <= wave_peak + margin)
+        spectrum_window = spectrum[wfilter]
+        if len(spectrum_window) < 3:
+            continue
+        peaks, base_points = __find_peaks_and_base_points(spectrum_window['waveobs'], spectrum_window['flux'])
+        ipeak = spectrum_window['waveobs'].searchsorted(wave_peak)
+        if len(base_points) > 0:
+            # wave_peak could not be exactly in a peak, so consider the nearest peak
+            # to have only in consideration the maximum values that are after/before it
+            nearest_peak = peaks[np.argmin(np.abs(peaks - ipeak))]
+            left_base_points = base_points[base_points < nearest_peak]
+            if len(left_base_points) > 0:
+                line['wave_base'] = spectrum_window[left_base_points[-1]] # nearest to the peak
+            right_base_points = base_points[base_points > nearest_peak]
+            if len(right_base_points) > 0:
+                line['wave_top'] = spectrum_window[right_base_points[0]] # nearest to the peak
+
+    # Correct potential overlapping between line masks
+    linemasks.sort(order=['wave_peak'])
+    for i, line in enumerate(linemasks[:-1]):
+        if line['wave_top'] > linemasks['wave_base'][i+1]:
+            mean = (line['wave_top'] + linemasks['wave_base'][i+1]) / 2.0
+            line['wave_top'] = mean
+            linemasks['wave_base'][i+1] = mean
+
+    return linemasks
+
 
 ############## [start] Radial velocity
 

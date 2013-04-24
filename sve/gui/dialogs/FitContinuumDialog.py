@@ -35,10 +35,14 @@ class FitContinuumDialog(CustomDialog):
         component["maxvalue"] = np.inf
         self.__components.append(component)
         component = {}
-        component["type"] = "Radiobutton"
-        component["text"] = "Fit using"
-        component["options"] = ["The whole spectra", "Only continuum regions"]
-        component["default"] = component["options"][0]
+        component["type"] = "Checkbutton"
+        component["text"] = "Consider only continuum regions"
+        component["default"] = False
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Treat each segment independently"
+        component["default"] = False
         self.__components.append(component)
         component = {}
         component["type"] = "OptionMenu"

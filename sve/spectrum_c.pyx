@@ -173,10 +173,12 @@ def bessel_interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.d
             #resampled_flux[i] = fluxes[index-1]
             # JUST ZERO:
             resampled_flux[i] = 0.0
+            resampled_err[i] = 0.0
         elif index == 1 or index == total_points-1:
             # Linear interpolation between index and index-1
             # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
             resampled_flux[i] = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index]-fluxes[index-1])/(waveobs[index]-waveobs[index-1]))
+            resampled_err[i] = err[index-1] + (objective_wavelength - waveobs[index-1]) * ((err[index]-err[index-1])/(waveobs[index]-waveobs[index-1]))
         elif index == 0 and waveobs[index] != objective_wavelength:
             # DISCARD: Linear extrapolation using index+1 and index
             # flux = fluxes[index] + (objective_wavelength - waveobs[index]) * ((fluxes[index+1]-fluxes[index])/(waveobs[index+1]-waveobs[index]))
@@ -184,8 +186,10 @@ def bessel_interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.d
             #resampled_flux[i] = fluxes[index]
             # JUST ZERO:
             resampled_flux[i] = 0.0
+            resampled_err[i] = 0.0
         elif waveobs[index] == objective_wavelength:
             resampled_flux[i] = fluxes[index]
+            resampled_err[i] = err[index]
         else:
             # Bessel's Central-Difference Interpolation with 4 points
             #   p = [(x - x0) / (x1 - x0)]
@@ -207,8 +211,14 @@ def bessel_interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.d
             flux_x1 = fluxes[index]
             flux_x2 = fluxes[index + 1]
 
+            err_x_1 = err[index - 2]
+            err_x0 = err[index - 1]
+            err_x1 = err[index]
+            err_x2 = err[index + 1]
+
             p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
             resampled_flux[i] = flux_x0 + p * (flux_x1 - flux_x0) + (p * (p - 1) / 4) * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
+            resampled_err[i] = err_x0 + p * (err_x1 - err_x0) + (p * (p - 1) / 4) * (err_x2 - err_x1 - err_x0 + err_x_1)
 
         current_work_progress = (i*1.0 / new_total_points) * 100
         if (int(current_work_progress) % 10 == 0 and current_work_progress - last_reported_progress > 10) or last_reported_progress < 0 or current_work_progress == 100:

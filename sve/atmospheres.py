@@ -484,7 +484,8 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
                     #        - Use the interpolated result from (a) or (b)
                     #     d. Decision point:
                     #        - If there are no remaining missing values, finnish
-                    #        - If there are missing values, continue with second stage
+                    #        - If there are missing values, try to interpolate again considering real and interpolated values
+                    #        - If there are missing values and no further interpolation is possible, continue with second stage
                     # * Second stage (using real and interpolated values + extrapolated values in following iterations)
                     #   - Linearly extrapolate:
                     #     1. Extrapolate using the two nearest real values in the logg axis
@@ -526,6 +527,17 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
                         iteration = 1.
                         real_atmospheres[interpolated_filter] = iteration # Gap that has been derived by interpolation
                     #
+
+                    # For the missing values, try to continue interpolating. This way
+                    # it will use also previous interpolated values
+                    while missing > 0 and fixed > 0:
+                        processed_values, fixed, missing = __interpolate(processed_values, logg_range, teff_range, logg_index, teff_index, value_num, min_value, max_value)
+                        # For posterior proximity calculations
+                        if value_num == 0 and layer_num == 0:
+                            averaged_extrapolated_filter = np.logical_and(real_atmospheres == 0.0, processed_values.mask)
+                            #iteration += 1. # Still interpolating
+                            real_atmospheres[averaged_extrapolated_filter] = iteration # Gap that has been derived by averaged extrapolation
+                        #
 
                     if missing > 0:
                         ############################################################

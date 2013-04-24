@@ -164,7 +164,7 @@ def __determine_continuum_base_points(spectrum, discard_outliers=True, median_wa
 
     return continuum_base_points
 
-def fit_continuum(spectrum, independent_regions=None, segments=None, nknots=None, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy'):
+def fit_continuum(spectrum, independent_regions=None, continuum_regions=None, nknots=None, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy'):
     #nknots = 2
     #median_wave_range = 0.05
     #max_wave_range = 0.2
@@ -175,27 +175,32 @@ def fit_continuum(spectrum, independent_regions=None, segments=None, nknots=None
 
         wave_step = 0.0001
         xaxis = np.arange(spectrum['waveobs'][0], spectrum['waveobs'][-1]+wave_step, wave_step)
-        fluxes = np.ones(len(xaxis))
+        #fluxes = np.ones(len(xaxis))
+        fluxes = np.zeros(len(xaxis))
+        num_success = 0
         for i, region in enumerate(independent_regions):
             wfilter = np.logical_and(spectrum['waveobs'] >= region['wave_base'], spectrum['waveobs'] <= region['wave_top'])
             try:
                 if len(spectrum[wfilter]) > 10:
-                    continuum = __fit_continuum(spectrum[wfilter], segments=segments, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
+                    continuum = __fit_continuum(spectrum[wfilter], continuum_regions=continuum_regions, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
                     # Save
                     wfilter = np.logical_and(xaxis >= region['wave_base'], xaxis <= region['wave_top'])
                     fluxes[np.where(wfilter)[0]] = continuum(xaxis[wfilter])
+                    num_success += 1
             except:
                 print "Continuum fit failed for segment #", i, "[", region['wave_base'], ",", region['wave_top'], "]"
                 pass
+        if num_success == 0:
+            raise Exception("Impossible to fit continuum to any of the segments")
 
         #continuum = interpolate.InterpolatedUnivariateSpline(xaxis, fluxes, k=3)
         continuum = interpolate.interp1d(xaxis, fluxes, kind='linear', bounds_error=False, fill_value=0.0)
     else:
-        continuum = __fit_continuum(spectrum, segments=segments, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
+        continuum = __fit_continuum(spectrum, continuum_regions=continuum_regions, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
     return continuum
 
 
-def __fit_continuum(spectrum, segments=None, nknots=None, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy'):
+def __fit_continuum(spectrum, continuum_regions=None, nknots=None, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy'):
     """
     If fixed_value is specified, the continuum is fixed to the given value (always
     the same for any wavelength). If not, fit the continuum by following these steps:
@@ -230,10 +235,10 @@ def __fit_continuum(spectrum, segments=None, nknots=None, median_wave_range=0.1,
     if model == 'Fixed value':
         return ConstantValue(fixed_value)
 
-    if segments is not None:
+    if continuum_regions is not None:
         spectrum_regions = None
-        for segment in segments:
-            wave_filter = (spectrum['waveobs'] >= segment['wave_base']) & (spectrum['waveobs'] <= segment['wave_top'])
+        for region in continuum_regions:
+            wave_filter = (spectrum['waveobs'] >= region['wave_base']) & (spectrum['waveobs'] <= region['wave_top'])
             new_spectrum_region = spectrum[wave_filter]
             if spectrum_regions is None:
                 spectrum_regions = new_spectrum_region

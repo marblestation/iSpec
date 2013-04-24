@@ -24,6 +24,8 @@ if sys.hexversion < 0x02050000:
     raise RuntimeError("SVE requires at least Python 2.5")
 
 from AbundancesDialog import *
+from AddNoiseDialog import *
+from AdjustLinesDialog import *
 from CleanSpectrumDialog import *
 from CleanTelluricsDialog import *
 from CombineSpectraDialog import *

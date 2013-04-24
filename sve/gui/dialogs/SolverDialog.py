@@ -9,13 +9,19 @@ class SolverDialog(CustomDialog):
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Model atmosphere"
-        component["options"] = ["MARCS", "Kurucz", "Castelli"]
-        component["default"] = component["options"][0]
+        component["options"] = ["Meszaros", "MARCS", "Castelli", "Kurucz", "Kirby"]
+        component["default"] = component["options"][1]
+        self.__components.append(component)
+        component = {}
+        component["type"] = "OptionMenu"
+        component["text"] = "Solar abundances"
+        component["options"] = ["Asplund.2009", "Asplund.2005", "Grevesse.2007", "Grevesse.1998", "Anders.1989"]
+        component["default"] = component["options"][2]
         self.__components.append(component)
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Line list"
-        component["options"] = ["VALD.300_1100nm", "Kurucz.300_1100nm", "NIST.300_1100nm", "SPECTRUM.300_1000nm"]
+        component["options"] = ["VALD.300_1100nm", "Kurucz.300_1100nm", "NIST.300_1100nm", "SPECTRUM.300_1000nm"] #, "GES.300_1000nm"]
         component["default"] = component["options"][0]
         self.__components.append(component)
         component = {}
@@ -126,8 +132,8 @@ class SolverDialog(CustomDialog):
         component["type"] = "OptionMenu"
         component["text"] = "Individual abundance"
         component["options"] = []
-        component["options"].append("1 - H (Hydrogen)")
-        component["options"].append("2 - He (Helium)")
+        #component["options"].append("1 - H (Hydrogen)") # SPECTRUM has calculations hard coded for H and He
+        #component["options"].append("2 - He (Helium)")  # they should not be changed
         component["options"].append("3 - Li (Lithium)")
         component["options"].append("4 - Be (Beryllium)")
         component["options"].append("5 - B (Boron)")
@@ -151,7 +157,7 @@ class SolverDialog(CustomDialog):
         component["options"].append("23 - V (Vanadium)")
         component["options"].append("24 - Cr (Chromium)")
         component["options"].append("25 - Mn (Manganese)")
-        component["options"].append("26 - Fe (Iron)")
+        component["options"].append("26 - Fe (Iron)") # Determined by MH
         component["options"].append("27 - Co (Cobalt)")
         component["options"].append("28 - Ni (Nickel)")
         component["options"].append("29 - Cu (Copper)")

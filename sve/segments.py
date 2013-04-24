@@ -67,10 +67,10 @@ def create_segments_around_lines(linemasks, margin=0.5):
     cleaned_segments = []
     i = 0
     # For all regions (except the last one), check the next one is consecutive in wavelengths
-    while i < len(dirty_segments) - 2:
+    while i < len(dirty_segments):
         j = 0
         # While wave_top of the current is equal to wave_base of the next...
-        while ((dirty_segments[j+i]['wave_top'] >= dirty_segments[j+i+1]['wave_base']) and (j < len(dirty_segments) - 2 - i)):
+        while ((j < len(dirty_segments) - 1 - i) and (dirty_segments[j+i]['wave_top'] >= dirty_segments[j+i+1]['wave_base'])):
             j += 1
 
         wave_base = dirty_segments[i]['wave_base']

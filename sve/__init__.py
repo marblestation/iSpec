@@ -38,6 +38,9 @@ try:
     from atmospheres import interpolate_atmosphere_layers
     from atmospheres import load_modeled_layers_pack
     from atmospheres import valid_atmosphere_target
+    from atmospheres import read_kurucz_atmospheres
+    from atmospheres import build_modeled_interpolated_layer_values
+    from atmospheres import dump_modeled_layers_pack
     from synth import generate_spectrum
     from synth import modelize_spectrum
     from synth import read_SPECTRUM_linelist

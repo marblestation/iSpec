@@ -108,7 +108,7 @@ class CustomizableRegion:
                 x[0] = event.xdata
                 x[1] = event.xdata
                 self.mark.set_xdata(x)
-                self.mark_position = self.mark.get_xdata()
+                self.mark_position = self.mark.get_xdata()[0]
                 if self.note is not None:
                     self.note.xy = (event.xdata, 1)
                 self.frame.status_message("Moving mark to %.4f" % x[0])

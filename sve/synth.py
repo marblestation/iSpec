@@ -20,16 +20,17 @@ import sys
 import time
 from datetime import datetime, timedelta
 import numpy as np
-from mpfitmodels import *
-from continuum import *
-from abundances import *
-from atmospheres import *
-from spectrum import *
+from mpfitmodels import MPFitModel
+#from continuum import fit_continuum
+from abundances import write_SPECTRUM_abundances, write_SPECTRUM_fixed_abundances
+from atmospheres import write_atmosphere, interpolate_atmosphere_layers
+from spectrum import create_spectrum_structure, convolve_spectrum
 from multiprocessing import Process
 from multiprocessing import Queue
 from multiprocessing import JoinableQueue
 from Queue import Empty
 
+import tempfile
 import log
 import logging
 
@@ -273,10 +274,10 @@ class SynthModel(MPFitModel):
     Match synthetic spectrum to observed spectrum
     * Requires the synthetic spectrum generation functionality on
     """
-    def __init__(self, modeled_layers_pack, linelist, abundances, teff=5000, logg=3.0, MH=0.0, vmic=2.0, vmac=0.0, vsini=2.0, limb_darkening_coeff=0.0, R=0):
+    def __init__(self, modeled_layers_pack, linelist, abundances, teff=5000, logg=3.0, MH=0.0, vmic=2.0, vmac=0.0, vsini=2.0, limb_darkening_coeff=0.0, R=0, continuum_correction=1.0):
         self.elements = {}
-        self.elements["1"] = "H"
-        self.elements["2"] = "He"
+        #self.elements["1"] = "H"
+        #self.elements["2"] = "He"
         self.elements["3"] = "Li"
         self.elements["4"] = "Be"
         self.elements["5"] = "B"
@@ -383,7 +384,7 @@ class SynthModel(MPFitModel):
         self.waveobs = None
         self.waveobs_mask = None
         self.cache = {}
-        p = [teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, R]
+        p = [teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, R, continuum_correction]
         #
         self.abundances_file = None
         self.linelist_file = None
@@ -402,7 +403,7 @@ class SynthModel(MPFitModel):
         fixed_abundances = self.free_abundances()
 
         abundances_key = " ".join(map(str, fixed_abundances['Abund']))
-        complete_key = "%.2f %.2f %.2f %.2f %.2f %.2f %.2f %i " % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
+        complete_key = "%.2f %.2f %.2f %.2f %.2f %.2f %.2f %i %.2f" % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()), self.continuum_correction())
         complete_key += abundances_key
         key = "%.2f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.vmic())
         key += abundances_key
@@ -419,20 +420,21 @@ class SynthModel(MPFitModel):
             self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.linelist, self.abundances, fixed_abundances, microturbulence_vel=self.vmic(), abundances_file=self.abundances_file, linelist_file=self.linelist_file, waveobs_mask=self.waveobs_mask, verbose=0)
 
             # Fit continuum
-            if self.fit_continuum_func is not None:
-                spectrum = create_spectrum_structure(self.waveobs)
-                spectrum['flux'] = self.last_fluxes
-                # Add noise
-                if self.noise is not None:
-                    spectrum['flux'] += self.noise
-                continuum_model = self.fit_continuum_func(spectrum)
-                self.last_continuum_correction = continuum_model(self.waveobs)
-                inormalize = np.where(self.last_continuum_correction != 0)[0]
-                self.last_fluxes[inormalize] /= self.last_continuum_correction[inormalize]
+            #if self.fit_continuum_func is not None:
+                #spectrum = create_spectrum_structure(self.waveobs)
+                #spectrum['flux'] = self.last_fluxes
+                ## Add noise
+                #if self.noise is not None:
+                    #spectrum['flux'] += self.noise
+                #continuum_model = self.fit_continuum_func(spectrum)
+                #self.last_continuum_correction = continuum_model(self.waveobs)
+                #inormalize = np.where(self.last_continuum_correction != 0)[0]
+                #self.last_fluxes[inormalize] /= self.last_continuum_correction[inormalize]
             # Optimization to avoid too small changes in parameters or repetition
             self.cache[key] = self.last_fluxes.copy()
 
         self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), verbose=0)
+        self.last_final_fluxes *= self.continuum_correction()
 
 
         #self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_final_fluxes, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), verbose=0)
@@ -442,7 +444,8 @@ class SynthModel(MPFitModel):
     def fitData(self, waveobs, waveobs_mask, comparing_mask, fluxes, weights=None, parinfo=None, max_iterations=20, quiet=True, fit_continuum_func=None, noise=None):
         self.noise = noise
         self.fit_continuum_func = fit_continuum_func
-        if len(parinfo) < 8:
+        base = 9
+        if len(parinfo) < base:
             raise Exception("Wrong number of parameters!")
 
         if sys.platform == "win32":
@@ -497,11 +500,13 @@ class SynthModel(MPFitModel):
     def vsini(self): return self._parinfo[5]['value']
     def limb_darkening_coeff(self): return self._parinfo[6]['value']
     def R(self): return self._parinfo[7]['value']
+    def continuum_correction(self): return self._parinfo[8]['value']
     def free_abundances(self):
-        fixed_abundances = np.recarray((len(self._parinfo)-8, ), dtype=[('code', int),('Abund', float)])
-        for i in xrange(len(self._parinfo)-8):
-            fixed_abundances['code'] = int(self._parinfo[8+i]['parname'])
-            fixed_abundances['Abund'] = self._parinfo[8+i]['value']
+        base = 9
+        fixed_abundances = np.recarray((len(self._parinfo)-base, ), dtype=[('code', int),('Abund', float)])
+        for i in xrange(len(self._parinfo)-base):
+            fixed_abundances['code'] = int(self._parinfo[base+i]['parname'])
+            fixed_abundances['Abund'] = self._parinfo[base+i]['value']
         return fixed_abundances
 
     def eteff(self): return self.m.perror[0]
@@ -512,58 +517,74 @@ class SynthModel(MPFitModel):
     def evsini(self): return self.m.perror[5]
     def elimb_darkening_coeff(self): return self.m.perror[6]
     def eR(self): return self.m.perror[7]
+    def econtinuum_correction(self): return self.m.perror[8]
     def efree_abundances(self):
+        base = 9
         eabundances = []
-        for i in xrange(len(self._parinfo)-8):
-            eabundances.append(self.m.perror[8+i])
+        for i in xrange(len(self._parinfo)-base):
+            eabundances.append(self.m.perror[base+i])
         return eabundances
 
+    def transformed_free_abundances(self):
+        free_abundances = self.free_abundances()
+        efree_abundances = self.efree_abundances()
+
+        transformed_abund = np.recarray((len(free_abundances), ), dtype=[('code', int),('Abund', float), ('element', '|S5'), ('[X/H]', float), ('A(X)', float), ('[X/Fe]', float), ('eAbund', float), ('e[X/H]', float), ('e[X/Fe]', float), ('eA(X)', float)])
+
+        sun_log_Nh_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == 1]
+        for i in xrange(len(free_abundances)):
+            sun_log_Nx_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == free_abundances['code'][i]]
+            x_over_h = free_abundances['Abund'][i] - sun_log_Nx_over_Ntotal # x_over_fe - self.MH()
+            x_over_fe = x_over_h - self.MH() # free_abundances['Abund'][i] - sun_log_Nx_over_Ntotal + self.MH()
+            x_absolute = free_abundances['Abund'][i] + 12. - sun_log_Nh_over_Ntotal # absolute, A(X)
+
+            element = self.elements[str(free_abundances['code'][i])]
+
+            transformed_abund['code'][i] = free_abundances['code'][i]
+            transformed_abund['Abund'][i] = free_abundances['Abund'][i]
+            transformed_abund['element'][i] = element
+            transformed_abund['[X/H]'][i] = x_over_h
+            transformed_abund['[X/Fe]'][i] = x_over_fe
+            transformed_abund['A(X)'][i] = x_absolute
+            transformed_abund['eAbund'][i] = efree_abundances[i]
+            transformed_abund['e[X/H]'][i] = efree_abundances[i]
+            transformed_abund['e[X/Fe]'][i] = efree_abundances[i]
+            transformed_abund['eA(X)'][i] = efree_abundances[i]
+        return transformed_abund
+
     def print_solution(self):
-        header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("teff","logg","MH","vmic","vmac","vsini","limb","R")
-        solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i" % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
-        errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i" % (self.eteff(), self.elogg(), self.eMH(), self.evmic(), self.evmac(), self.evsini(), self.elimb_darkening_coeff(), int(self.eR()))
+        header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("teff","logg","MH","vmic","vmac","vsini","limb","R","Cont")
+        solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i\t%8.2f" % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()), self.continuum_correction())
+        errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i\t%8.2f" % (self.eteff(), self.elogg(), self.eMH(), self.evmic(), self.evmac(), self.evsini(), self.elimb_darkening_coeff(), int(self.eR()), self.econtinuum_correction())
 
         # Append free individual abundances
         abundances_header = ""
         abundances_solution = ""
         abundances_errors = ""
-        free_abundances = self.free_abundances()
-        efree_abundances = self.efree_abundances()
 
-        sun_log_Nh_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == 1]
-        sun_log_Nfe_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == 26]
-        sun_log_Nfe_over_Nh = sun_log_Nfe_over_Ntotal + 12 - sun_log_Nh_over_Ntotal
-        for i in xrange(len(free_abundances)):
-            sun_log_Nx_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == free_abundances['code'][i]]
-            sun_log_Nx_over_Nh = sun_log_Nx_over_Ntotal + 12 - sun_log_Nh_over_Ntotal
-            log_Nx_over_Ntotal = free_abundances['Abund'][i]
-            log_Nx_over_Nh = log_Nx_over_Ntotal + 12 - sun_log_Nh_over_Ntotal
-
-            # If 'Fe' is not free
-            if 26 not in free_abundances['code']:
-                # 'Fe' abundance is scaled with metallicity
-                log_Nfe_over_Ntotal = sun_log_Nfe_over_Ntotal - self.MH()
-                log_Nfe_over_Nh = log_Nfe_over_Ntotal + 12 - sun_log_Nh_over_Ntotal
-            else:
-                # 'Fe' abundance has been determined independent of metallicity
-                efilter = free_abundances['code'] == 26
-                log_Nfe_over_Ntotal = free_abundances['Abund'][efilter]
-                log_Nfe_over_Nh = log_Nfe_over_Ntotal + 12 - sun_log_Nh_over_Ntotal
-
-            x_over_h = log_Nx_over_Nh - sun_log_Nx_over_Nh
-            x_over_fe = (log_Nx_over_Nh - sun_log_Nx_over_Nh) - (log_Nfe_over_Nh - sun_log_Nfe_over_Nh)
-            element = self.elements[str(free_abundances['code'][i])]
+        transformed_abund = self.transformed_free_abundances()
+        for i in xrange(len(transformed_abund)):
+            element = transformed_abund['element'][i]
+            x_absolute_name = "A(" + element + ")"
             x_over_h_name = "[" + element + "/H]"
             x_over_fe_name = "[" + element + "/Fe]"
-            abundances_header += "%8s\t%8s\t%8s" % (element, x_over_h_name, x_over_fe_name)
-            abundances_solution += "%8.2f\t%8.2f\t%8.2f" % (free_abundances['Abund'][i], x_over_h, x_over_fe)
-            abundances_errors += "%8.2f\t%8.2f\t%8.2f" % (efree_abundances[i], 0.0, 0.0)
+            x = transformed_abund['Abund'][i]
+            x_absolute = transformed_abund['A(X)'][i]
+            x_over_h = transformed_abund['[X/H]'][i]
+            x_over_fe = transformed_abund['[X/Fe]'][i]
+            ex = transformed_abund['eAbund'][i]
+            ex_absolute = transformed_abund['eA(X)'][i]
+            ex_over_h = transformed_abund['e[X/H]'][i]
+            ex_over_fe = transformed_abund['e[X/Fe]'][i]
+            abundances_header += "%8s\t%8s\t%8s\t%8s" % (element, x_absolute_name, x_over_h_name, x_over_fe_name)
+            abundances_solution += "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (x, x_absolute, x_over_h, x_over_fe)
+            abundances_errors += "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (ex, ex_absolute, ex_over_h, ex_over_fe)
 
         print "           ", header
         print "Solution:  ", solution
         print "Errors:    ", errors
         print ""
-        if len(free_abundances) > 0:
+        if len(transformed_abund) > 0:
             print "           ", abundances_header
             print "Abundances:", abundances_solution
             print "Ab. errors:", abundances_errors
@@ -577,12 +598,13 @@ class SynthModel(MPFitModel):
         print "Stats:   ", stats
         print "Return code:", self.m.status
 
-def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, free_abundances, teff_range, logg_range, MH_range):
+def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_continuum_correction, free_params, free_abundances, teff_range, logg_range, MH_range):
     """
     Creates the structure needed for the mpfitmodel
     """
+    base = 9
     free_params = [param.lower() for param in free_params]
-    parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(8+len(free_abundances))]
+    parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base+len(free_abundances))]
     #
     parinfo[0]['parname'] = "teff"
     parinfo[0]['value'] = initial_teff
@@ -594,7 +616,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[1]['parname'] = "logg"
     parinfo[1]['value'] = initial_logg
     parinfo[1]['fixed'] = not parinfo[1]['parname'].lower() in free_params
-    parinfo[1]['step'] = 0.50 # For auto-derivatives
+    parinfo[1]['step'] = 0.10 # For auto-derivatives
     parinfo[1]['limited'] = [True, True]
     parinfo[1]['limits'] = [np.min(logg_range), np.max(logg_range)]
     #
@@ -640,13 +662,21 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[7]['limited'] = [True, True]
     parinfo[7]['limits'] = [500.0, 300000.0]
     #
+    parinfo[8]['parname'] = "continuum_correction"
+    parinfo[8]['value'] = initial_continuum_correction
+    parinfo[8]['fixed'] = not parinfo[8]['parname'].lower() in free_params
+    parinfo[8]['step'] = 0.01 # For auto-derivatives
+    parinfo[8]['limited'] = [True, True]
+    parinfo[8]['limits'] = [0.80, 1.2]
+    #
+    base = 9
     for i in xrange(len(free_abundances)):
-        parinfo[8+i]['parname'] = str(free_abundances['code'][i])
-        parinfo[8+i]['value'] = free_abundances['Abund'][i]
-        parinfo[8+i]['fixed'] = not parinfo[8+i]['parname'].lower() in free_params
-        parinfo[8+i]['step'] = 0.05 # For auto-derivatives
-        parinfo[8+i]['limited'] = [True, True]
-        parinfo[8+i]['limits'] = [-30., 0.]
+        parinfo[base+i]['parname'] = str(free_abundances['code'][i])
+        parinfo[base+i]['value'] = free_abundances['Abund'][i]
+        parinfo[base+i]['fixed'] = not parinfo[base+i]['parname'].lower() in free_params
+        parinfo[base+i]['step'] = 0.05 # For auto-derivatives
+        parinfo[base+i]['limited'] = [True, True]
+        parinfo[base+i]['limits'] = [-30., 0.]
 
     return parinfo
 
@@ -852,29 +882,32 @@ def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, 
     logg_range = modeled_layers_pack[4]
     MH_range = modeled_layers_pack[5]
 
-    parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, free_abundances, teff_range, logg_range, MH_range)
+    initial_continuum_correction = 1.0 # TODO: Remove everywhere the continuum_correction parameters because it is not useful
+    parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_continuum_correction, free_params, free_abundances, teff_range, logg_range, MH_range)
 
     synth_model = SynthModel(modeled_layers_pack, linelist, abundances)
 
-    wave_step = 0.001
-    xaxis = np.arange(np.min(spectrum_orig["waveobs"]), np.max(spectrum_orig["waveobs"]), wave_step)
-    resampled_spectrum = resample_spectrum(spectrum_orig, xaxis)
-    snr = estimate_snr(resampled_spectrum['flux'], num_points=10)
-    #snr = 100
-    sigma = flux/snr
-    # Control sigma zero or negative due to zero or negative fluxes
-    noise = np.zeros(len(flux))
-    fnoise = np.where(sigma > 0.0)[0]
-    noise[fnoise] = np.random.normal(0, sigma[fnoise], len(flux[fnoise]))
-    nknots = 1
-    #median_wave_range = 0.05
-    median_wave_range = 0.
-    max_wave_range = 0.1
-    fixed_value = None
-    model = "Polynomy"
-    #fixed_value = 1.0
-    #model = 'Fixed value'
-    fit_continuum_func = lambda x: fit_continuum(x, independent_regions=segments, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
+    #wave_step = 0.001
+    #xaxis = np.arange(np.min(spectrum_orig["waveobs"]), np.max(spectrum_orig["waveobs"]), wave_step)
+    #resampled_spectrum = resample_spectrum(spectrum_orig, xaxis)
+    #snr = estimate_snr(resampled_spectrum['flux'], num_points=10)
+    ##snr = 100
+    #sigma = flux/snr
+    ## Control sigma zero or negative due to zero or negative fluxes
+    #noise = np.zeros(len(flux))
+    #fnoise = np.where(sigma > 0.0)[0]
+    #noise[fnoise] = np.random.normal(0, sigma[fnoise], len(flux[fnoise]))
+    noise = None
+    #nknots = 1
+    ##median_wave_range = 0.05
+    #median_wave_range = 0.
+    #max_wave_range = 0.1
+    #fixed_value = None
+    #model = "Polynomy"
+    ##fixed_value = 1.0
+    ##model = 'Fixed value'
+    #fit_continuum_func = lambda x: fit_continuum(x, independent_regions=segments, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
+    fit_continuum_func = None
     synth_model.fitData(waveobs, waveobs_mask, comparing_mask, flux, weights=weights, parinfo=parinfo, max_iterations=max_iterations, quiet=False, fit_continuum_func=fit_continuum_func, noise=noise)
     print "\n"
     stats_linemasks = __get_stats_per_linemask(waveobs, flux, synth_model.last_final_fluxes, weights, free_params, linemasks, verbose=True)
@@ -902,6 +935,9 @@ def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, 
     errors['limb_darkening_coeff'] = synth_model.elimb_darkening_coeff()
     errors['R'] = synth_model.eR()
 
+    # Free abundances (original, transformed [X/H] [X/Fe] and errors)
+    free_abundances = synth_model.transformed_free_abundances()
+
     status = {}
     status['days'] = synth_model.calculation_time.day-1
     status['hours'] = synth_model.calculation_time.hour
@@ -926,5 +962,5 @@ def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, 
         spectrum['flux'] *= synth_model.last_continuum_correction
         spectrum['err'] *= synth_model.last_continuum_correction
 
-    return spectrum, synth_spectrum, params, errors, status, stats_linemasks
+    return spectrum, synth_spectrum, params, errors, free_abundances, status, stats_linemasks
 

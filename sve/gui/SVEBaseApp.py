@@ -27,6 +27,8 @@ import logging
 
 import sve
 from dialogs import AbundancesDialog
+from dialogs import AdjustLinesDialog
+from dialogs import AddNoiseDialog
 from dialogs import CleanSpectrumDialog
 from dialogs import CleanTelluricsDialog
 from dialogs import CombineSpectraDialog
@@ -337,6 +339,8 @@ class SVEBaseApp(Tkinter.Tk):
         operationmenu.add_command(label="Find continuum regions", command=self.on_find_continuum)
         self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
         operationmenu.add_command(label="Find line masks", command=self.on_find_lines)
+        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        operationmenu.add_command(label="Adjust line masks", command=self.on_adjust_lines)
         self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
         operationmenu.add_command(label="Create segments around line masks", command=self.on_create_segments_around_lines)
         self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
@@ -902,6 +906,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                             self.not_saved[elements] = False
                             self.update_title()
                         elif elements == "lines":
+                            self.remove_fitted_lines()
                             self.regions[elements] = sve.read_line_regions(path)
                             self.draw_regions(elements)
                             self.not_saved[elements] = False
@@ -1788,13 +1793,23 @@ SPECTRUM a Stellar Spectral Synthesis Program
             nknots = self.active_spectrum.dialog[key].results["Number of polynomial degrees/splines"]
             median_wave_range = self.active_spectrum.dialog[key].results["Wavelength step for median selection"]
             max_wave_range = self.active_spectrum.dialog[key].results["Wavelength step for max selection"]
-            in_continuum = self.active_spectrum.dialog[key].results["Fit using"] == "Only continuum regions"
+            in_continuum = self.active_spectrum.dialog[key].results["Consider only continuum regions"] == 1
+            each_segment = self.active_spectrum.dialog[key].results["Treat each segment independently"] == 1
             if nknots is None or median_wave_range < 0 or max_wave_range < 0:
                 self.flash_status_message("Bad value.")
                 return
 
             if in_continuum and len(self.region_widgets["continuum"]) == 0:
+                msg = 'There are no continuum regions.'
+                title = "No continuum regions"
+                self.error(title, msg)
                 self.flash_status_message("No continuum regions found.")
+                return
+            if each_segment and len(self.region_widgets["segments"]) == 0:
+                msg = 'There are no segments.'
+                title = "No segments"
+                self.error(title, msg)
+                self.flash_status_message("No segments found.")
                 return
         else:
             fixed_value = self.active_spectrum.dialog[key].results["Fixed value"]
@@ -1802,24 +1817,28 @@ SPECTRUM a Stellar Spectral Synthesis Program
             median_wave_range = None
             max_wave_range = None
             in_continuum = False
+            each_segment = False
         self.active_spectrum.dialog[key].destroy()
 
 
         self.operation_in_progress = True
         self.status_message("Fitting continuum...")
         self.update_progress(10)
-        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'in_continuum':in_continuum, 'median_wave_range':median_wave_range, 'max_wave_range':max_wave_range, 'fixed_value':fixed_value, 'model':model})
+        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'in_continuum':in_continuum, 'each_segment': each_segment, 'median_wave_range':median_wave_range, 'max_wave_range':max_wave_range, 'fixed_value':fixed_value, 'model':model})
         thread.setDaemon(True)
         thread.start()
 
-    def on_fit_continuum_thread(self, nknots, in_continuum=False, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model="Polynomy"):
+    def on_fit_continuum_thread(self, nknots, in_continuum=False, each_segment=False, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model="Polynomy"):
         try:
-            self.__update_numpy_arrays_from_widgets("segments")
-            independent_regions = self.regions["segments"]
-            independent_regions = None
+            if each_segment:
+                self.__update_numpy_arrays_from_widgets("segments")
+                independent_regions = self.regions["segments"]
+            else:
+                independent_regions = None
+
             if in_continuum:
                 self.__update_numpy_arrays_from_widgets("continuum")
-                self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, independent_regions=independent_regions, segments=self.regions["continuum"] , nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
+                self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, independent_regions=independent_regions, continuum_regions=self.regions["continuum"] , nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
             else:
                 self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, independent_regions=independent_regions, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
             waveobs = self.active_spectrum.data['waveobs']
@@ -1983,7 +2002,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             if template == "[Internal template]":
                 # Internal template (solar type)
                 if self.active_spectrum.velocity_profile_internal_template is None:
-                    self.active_spectrum.velocity_profile_internal_template = sve.read_spectrum(resource_path("input/spectra/synthetic/Synth_Kurucz_VALD_5777.0_4.44_0.02_2.0.txt.gz"))
+                    self.active_spectrum.velocity_profile_internal_template = sve.read_spectrum(resource_path("input/spectra/synthetic/Synth_Meszaros_VALD_5777.0_4.44_0.0_1.0.txt.gz"))
                 template_spectrum = self.active_spectrum.velocity_profile_internal_template
             else:
                 # Search template to be used by its name
@@ -2124,8 +2143,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
     def on_fit_lines_finnish(self, linemasks, conserve_previous_regions=True):
         elements = "lines"
 
-        diff_num_regions = len(self.region_widgets["lines"]) - len(linemasks)
-        if conserve_previous_regions and diff_num_regions > 0:
+        if linemasks is not None and conserve_previous_regions and len(self.region_widgets["lines"]) - len(linemasks) > 0:
+            diff_num_regions = len(self.region_widgets["lines"]) - len(linemasks)
             # Find regions that has been discarded due to a bad fit or other reason
             # in order to recover them
             recovered_regions = np.recarray((diff_num_regions, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100')])
@@ -2142,6 +2161,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
                     recovered_regions[i]['wave_peak'] = region.get_wave_peak()
                     recovered_regions[i]['note'] = region.get_note_text()
                     i += 1
+        else:
+            diff_num_regions = 0
 
         self.remove_fitted_lines() # If they exist
         self.remove_regions(elements, check_not_saved=False)
@@ -2346,6 +2367,63 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.operation_in_progress = False
         self.flash_status_message("Automatic finding of continuum regions ended.")
 
+    def on_adjust_lines(self):
+        if not self.check_active_spectrum_exists():
+            return
+        #if not self.check_continuum_model_exists():
+            #return
+        if self.check_operation_in_progress():
+            return
+
+        if self.not_saved["lines"]:
+            msg = "Are you sure you want to modify the line masks without saving the current ones?"
+            title = "Changes not saved"
+            if not self.question(title, msg):
+                return
+
+        self.update_numpy_arrays_from_widgets("lines")
+        if self.regions["lines"] is None or len(self.regions["lines"]) <= 0:
+            msg = 'There are no line masks'
+            title = "Missing line masks"
+            self.error(title, msg)
+            self.flash_status_message("No line masks.")
+
+        if self.active_spectrum.resolution_telluric == 0.0:
+            R = self.active_spectrum.resolution_atomic
+        else:
+            R = self.active_spectrum.resolution_telluric
+
+        key = "AdjustLinesDialog"
+        if not self.active_spectrum.dialog.has_key(key):
+            self.active_spectrum.dialog[key] = AdjustLinesDialog(self, "Adjusting line masks", margin=0.5, resolution=R)
+        self.active_spectrum.dialog[key].show()
+
+        if self.active_spectrum.dialog[key].results is None:
+            self.active_spectrum.dialog[key].destroy()
+            return
+
+        margin = self.active_spectrum.dialog[key].results["Margin around lines"]
+        resolution = self.active_spectrum.dialog[key].results["Resolution"]
+        self.active_spectrum.dialog[key].destroy()
+
+        elements = "lines"
+        linemasks = self.regions["lines"]
+
+        logging.info("Smoothing spectrum...")
+        #self.queue.put((self.status_message, ["Smoothing spectrum..."], {}))
+        smoothed_spectrum = sve.convolve_spectrum(self.active_spectrum.data, 2*resolution, frame=self)
+        logging.info("Adjusting line masks...")
+        linemasks = sve.adjust_linemasks(smoothed_spectrum, linemasks, margin=margin)
+
+        self.remove_regions(elements)
+        self.regions[elements] = linemasks
+
+        self.draw_regions(elements)
+        self.not_saved[elements] = False
+        self.update_title()
+        self.flash_status_message("Line mask adjusted")
+        self.canvas.draw()
+
     def on_find_lines(self):
         if not self.check_active_spectrum_exists():
             return
@@ -2413,9 +2491,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
             # Select spectrum from regions
             self.update_numpy_arrays_from_widgets("segments")
             spectrum = None
-            for region in self.region_widgets["segments"]:
-                wave_base = region.get_wave_base()
-                wave_top = region.get_wave_top()
+            for region in self.regions["segments"]:
+                wave_base = region["wave_base"]
+                wave_top = region["wave_top"]
 
                 wfilter = np.logical_and(self.active_spectrum.data['waveobs'] >= wave_base, self.active_spectrum.data['waveobs'] <= wave_top)
                 if spectrum is None:
@@ -2467,15 +2545,19 @@ SPECTRUM a Stellar Spectral Synthesis Program
         discarded = np.logical_or(discarded, rejected_by_atomic_line_not_found)
 
         if in_segments:
-            # Identify linemasks with too big wavelength range (probably star in between segments)
-            wave_diff = (linemasks['wave_top'] - linemasks['wave_base']) / (linemasks['top'] - linemasks['base'])
-            #wave_diff_selected, wave_diff_selected_filter = sve.sigma_clipping(wave_diff[~discarded], sig=3, meanfunc=np.median) # Discard outliers
-            wave_diff_selected, wave_diff_selected_filter = sve.interquartile_range_filtering(wave_diff[~discarded], k=1.5) # Discard outliers
-            accepted_index = np.arange(len(wave_diff))[~discarded][wave_diff_selected_filter]
-            rejected_by_wave_gaps = wave_diff < 0 # Create an array of booleans
-            rejected_by_wave_gaps[:] = True # Initialize
-            rejected_by_wave_gaps[accepted_index] = False
-            discarded = np.logical_or(discarded, rejected_by_wave_gaps)
+            # Check that there are no linemasks that exceed segment limits (because
+            # the spectrum has been cutted, the algorithm can create this overdimensioned linemasks)
+            # If so, change the linemask limit to the segment limit.
+            for region in self.regions["segments"]:
+                wave_base = region["wave_base"]
+                wave_top = region["wave_top"]
+                wfilter = np.logical_and(linemasks['wave_peak'] >= wave_base, linemasks['wave_peak'] <= wave_top)
+                filter_base_exceeded = np.where(np.logical_and(wfilter, linemasks['wave_base'] < wave_base))[0]
+                filter_top_exceeded = np.where(np.logical_and(wfilter, linemasks['wave_top'] > wave_top))[0]
+                if len(filter_base_exceeded) > 0:
+                    linemasks['wave_base'][filter_base_exceeded] = wave_base
+                if len(filter_top_exceeded) > 0:
+                    linemasks['wave_top'][filter_top_exceeded] = wave_top
 
         linemasks = linemasks[~discarded]
         total_regions = len(linemasks)
@@ -2504,8 +2586,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.error(title, msg)
             self.flash_status_message("No line masks.")
 
-        if self.region_widgets["segments"] is not None and \
-                len(self.region_widgets["segments"]) > 0 and \
+        self.update_numpy_arrays_from_widgets("segments")
+        if self.regions["segments"] is not None and \
+                len(self.regions["segments"]) > 0 and \
                 self.not_saved["segments"] == True:
             msg = "Are you sure you want to continue without saving the current segments?"
             title = "Segments not saved"
@@ -2763,7 +2846,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         key = "AddNoiseDialog"
         if not self.active_spectrum.dialog.has_key(key):
             snr = 10.0
-            self.active_spectrum.dialog[key] = EstimateErrorsDialog(self, "Add noise to spectrum", snr)
+            self.active_spectrum.dialog[key] = AddNoiseDialog(self, "Add noise to spectrum", snr)
         self.active_spectrum.dialog[key].show()
 
         if self.active_spectrum.dialog[key].results is None:
@@ -2771,6 +2854,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         snr = self.active_spectrum.dialog[key].results["SNR (Signal-to-Noise Ratio)"]
+        distribution = self.active_spectrum.dialog[key].results["Distribution"]
         self.active_spectrum.dialog[key].destroy()
 
         if snr is None or snr <= 0:
@@ -2779,9 +2863,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.error(title, msg)
             return
 
-        sigma = self.active_spectrum.data['flux']/snr
-        self.active_spectrum.data['flux'] += np.random.normal(0, sigma, len(self.active_spectrum.data))
-
+        self.active_spectrum.data = sve.add_noise(self.active_spectrum.data, snr, distribution)
         self.active_spectrum.not_saved = True
 
         self.draw_active_spectrum()
@@ -3029,18 +3111,10 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         if not in_segments:
-            wfilter = (self.active_spectrum.data['waveobs'] >= wave_base) & (self.active_spectrum.data['waveobs'] <= wave_top)
+            wfilter = sve.create_wavelength_filter(self.active_spectrum.data, wave_base=wave_base, wave_top=wave_top)
         else:
-            # Build wavelength points from regions
-            wfilter = None
-            for region in self.region_widgets["segments"]:
-                wave_base = region.get_wave_base()
-                wave_top = region.get_wave_top()
-
-                if wfilter is None:
-                    wfilter = np.logical_and(self.active_spectrum.data['waveobs'] >= wave_base, self.active_spectrum.data['waveobs'] <= wave_top)
-                else:
-                    wfilter = np.logical_or(wfilter, np.logical_and(self.active_spectrum.data['waveobs'] >= wave_base, self.active_spectrum.data['waveobs'] <= wave_top))
+            self.__update_numpy_arrays_from_widgets("segments")
+            wfilter = sve.create_wavelength_filter(self.active_spectrum.data, regions=self.regions["segments"])
 
         if len(self.active_spectrum.data[wfilter]) == 0:
             msg = "This action cannot be done since it would produce a spectrum without measurements."
@@ -3382,7 +3456,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.draw_active_spectrum()
         self.update_title()
         self.update_scale()
-        pass
+        self.flash_status_message("Spectrum normalized!")
 
 
     def on_operate_spectrum(self):
@@ -3492,11 +3566,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 #wave_top = 517.0
             teff = 5777.0
             logg = 4.44
-            MH = 0.02
+            MH = 0.00
             macroturbulence = 0.0
             vsini = 2.0
             limb_darkening_coeff = 0.0
-            microturbulence_vel = 2.0
+            microturbulence_vel = 1.0
             #resolution = 47000
             #resolution = 0
             resolution = 300000
@@ -3524,6 +3598,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             wave_top = self.dialog[key].results["Wavelength max (nm)"]
             wave_step = self.dialog[key].results["Wavelength step (nm)"]
             selected_atmosphere_models = self.dialog[key].results["Model atmosphere"]
+            selected_abundances = self.dialog[key].results["Solar abundances"]
             selected_linelist = self.dialog[key].results["Line list"].split(".")[0]
             in_segments = self.dialog[key].results["Generate spectrum for"] == "Segments"
             in_lines = self.dialog[key].results["Generate spectrum for"] == "Line masks"
@@ -3531,7 +3606,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.dialog[key].destroy()
 
             linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + "/300_1100nm.lst")
-            abundances_file = resource_path("input/abundances/" + selected_atmosphere_models + "/stdatom.dat")
+            abundances_file = resource_path("input/abundances/" + selected_abundances + "/stdatom.dat")
 
             if in_segments:
                 elements_type = "segments"
@@ -3679,8 +3754,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if not self.active_spectrum.dialog.has_key(key):
             teff = 5777.0
             logg = 4.44
-            MH = 0.02
-            microturbulence_vel = 2.0
+            MH = 0.00
+            microturbulence_vel = 1.0
             self.active_spectrum.dialog[key] = AbundancesDialog(self, "Abundances determination", teff, logg, MH, microturbulence_vel)
             self.active_spectrum.dialog[key].show()
         elif show_previous_results:
@@ -3696,7 +3771,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
         MH = self.active_spectrum.dialog[key].results["Metallicity [Fe/H]"]
         microturbulence_vel = self.active_spectrum.dialog[key].results["Microturbulence velocity (km/s)"]
         selected_atmosphere_models = self.active_spectrum.dialog[key].results["Model atmosphere"]
-        abundances_file = resource_path("input/abundances/" + selected_atmosphere_models + "/stdatom.dat")
+        selected_abundances = self.active_spectrum.dialog[key].results["Solar abundances"]
+        abundances_file = resource_path("input/abundances/" + selected_abundances + "/stdatom.dat")
         self.active_spectrum.dialog[key].destroy()
 
         if teff is None or logg is None or MH is None or microturbulence_vel is None:
@@ -3735,7 +3811,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
     def on_determine_abundances_thread(self, atmosphere_layers, teff, logg, MH, abundances, microturbulence_vel):
         linemasks = self.active_spectrum.linemasks
-        spec_abund, normal_abund, x_over_h, x_over_fe = sve.determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, verbose=1, gui_queue=self.queue)
+        spec_abund, normal_abund, x_over_h, x_over_fe = sve.determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 1.0, verbose=1, gui_queue=self.queue)
 
         self.queue.put((self.on_determine_abundances_finnish, [spec_abund, normal_abund, x_over_h, x_over_fe], {}))
 
@@ -3770,11 +3846,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if "modelize_spectrum" in dir(sve):
             teff = 5777.0
             logg = 4.44
-            MH = 0.02
+            MH = 0.00
             macroturbulence = 0.0
             vsini = 2.0
             limb_darkening_coeff = 0.0
-            microturbulence_vel = 2.0
+            microturbulence_vel = 1.0
             #resolution = 47000
             #resolution = 300000
             resolution = 100000
@@ -3798,6 +3874,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             initial_limb_darkening_coeff = self.active_spectrum.dialog[key].results["Limb darkening coefficient"]
             initial_R = self.active_spectrum.dialog[key].results["Resolution"]
             selected_atmosphere_models = self.active_spectrum.dialog[key].results["Model atmosphere"]
+            selected_abundances = self.active_spectrum.dialog[key].results["Solar abundances"]
             selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
             element_abundance = int(self.active_spectrum.dialog[key].results["Individual abundance"].split()[0])
             #element_abundance_name = self.active_spectrum.dialog[key].results["Individual abundance"].split()[2]
@@ -3843,7 +3920,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.active_spectrum.dialog[key].destroy()
 
             linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + "/300_1100nm.lst")
-            abundances_file = resource_path("input/abundances/" + selected_atmosphere_models + "/stdatom.dat")
+            abundances_file = resource_path("input/abundances/" + selected_abundances + "/stdatom.dat")
 
             if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
                 logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
@@ -3914,7 +3991,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.__update_numpy_arrays_from_widgets("lines")
         self.__update_numpy_arrays_from_widgets("segments")
 
-        obs_spectrum, synth_spectrum, params, errors, status, stats_linemasks = sve.modelize_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations)
+        obs_spectrum, synth_spectrum, params, errors, free_abundances, status, stats_linemasks = sve.modelize_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations)
         self.queue.put((self.on_determine_parameters_finnish, [obs_spectrum, synth_spectrum, params, errors, status, stats_linemasks], {}))
 
     def on_determine_parameters_finnish(self, obs_spectrum, synth_spectrum, params, errors, status, stats_linemasks):
