@@ -9,8 +9,8 @@ class SyntheticSpectrumDialog(CustomDialog):
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Model atmosphere"
-        component["options"] = ["Meszaros", "MARCS", "Castelli", "Kurucz", "Kirby"]
-        component["default"] = component["options"][1]
+        component["options"] = ["MARCS", "MARCS.GES", "MARCS.APOGEE", "ATLAS9.APOGEE", "ATLAS9.Castelli", "ATLAS9.Kurucz", "ATLAS9.Kirby"]
+        component["default"] = component["options"][2]
         self.__components.append(component)
         component = {}
         component["type"] = "OptionMenu"
@@ -21,8 +21,8 @@ class SyntheticSpectrumDialog(CustomDialog):
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Line list"
-        component["options"] = ["VALD.300_1100nm", "Kurucz.300_1100nm", "NIST.300_1100nm", "SPECTRUM.300_1000nm"]
-        component["default"] = component["options"][0]
+        component["options"] = ["VALD.300_1100nm", "VALD_with_molecules.300_1100nm", "GES.475_685nm",  "Kurucz.300_1100nm", "NIST.300_1100nm", "SPECTRUM.300_1000nm"]
+        component["default"] = component["options"][2]
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"

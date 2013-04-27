@@ -365,8 +365,12 @@ MH = 0.00
 microturbulence_vel = 1.0
 
 # Selected model amtosphere, linelist and solar abundances
-model = "MARCS" # "Meszaros", "Kirby", "Kurucz", "Castelli"
-linelist = "VALD" # "SPECTRUM"
+model = "MARCS" # MARCS", "MARCS.GES", "MARCS.APOGEE", "ATLAS9.APOGEE",
+                # "ATLAS9.Castelli", "ATLAS9.Kurucz", "ATLAS9.Kirby"
+linelist_name = "VALD.300_1100nm"   # "VALD.300_1100nm",
+                                    # "VALD_with_molecules.300_1100nm",
+                                    # "GES.475_685nm",  "Kurucz.300_1100nm",
+                                    # "NIST.300_1100nm", "SPECTRUM.300_1000nm"]
 solar_abundances = "Grevesse.2007"  # "Asplund.2005", "Asplund.2009",
                                     # "Grevesse.1998", "Anders.1989"
 
@@ -412,8 +416,12 @@ wave_base = 515.0 # Magnesium triplet region
 wave_top = 525.0
 
 # Selected model amtosphere, linelist and solar abundances
-model = "MARCS" # "Meszaros", "Kirby", "Kurucz", "Castelli"
-linelist = "VALD" # "SPECTRUM"
+model = "MARCS" # MARCS", "MARCS.GES", "MARCS.APOGEE", "ATLAS9.APOGEE",
+                # "ATLAS9.Castelli", "ATLAS9.Kurucz", "ATLAS9.Kirby"
+linelist_name = "VALD.300_1100nm"   # "VALD.300_1100nm",
+                                    # "VALD_with_molecules.300_1100nm",
+                                    # "GES.475_685nm",  "Kurucz.300_1100nm",
+                                    # "NIST.300_1100nm", "SPECTRUM.300_1000nm"]
 solar_abundances = "Grevesse.2007"  # "Asplund.2005", "Asplund.2009",
                                     # "Grevesse.1998", "Anders.1989"
 
@@ -421,7 +429,8 @@ solar_abundances = "Grevesse.2007"  # "Asplund.2005", "Asplund.2009",
 modeled_layers_pack = sve.load_modeled_layers_pack(sve_dir + 'input/atmospheres/' + \
         model + '/modeled_layers_pack.dump')
 # Load SPECTRUM linelist
-linelist_file = sve_dir + "/input/linelists/SPECTRUM/" + linelist + "/300_1100nm.lst"
+linelist_file = sve_dir + "/input/linelists/SPECTRUM/" + linelist_name.split(".")[0] +\
+                    "/" + linelist_name.split(".")[1] + ".lst"
 linelist = sve.read_SPECTRUM_linelist(linelist_file)
 # Load SPECTRUM abundances
 fixed_abundances = None # No fixed abundances
@@ -466,8 +475,12 @@ initial_R = 300000
 max_iterations = 20
 
 # Selected model amtosphere, linelist and solar abundances
-model = "MARCS" # "Meszaros", "Kirby", "Kurucz", "Castelli"
-linelist = "VALD" # "SPECTRUM"
+model = "MARCS" # MARCS", "MARCS.GES", "MARCS.APOGEE", "ATLAS9.APOGEE",
+                # "ATLAS9.Castelli", "ATLAS9.Kurucz", "ATLAS9.Kirby"
+linelist_name = "VALD.300_1100nm"   # "VALD.300_1100nm",
+                                    # "VALD_with_molecules.300_1100nm",
+                                    # "GES.475_685nm",  "Kurucz.300_1100nm",
+                                    # "NIST.300_1100nm", "SPECTRUM.300_1000nm"]
 solar_abundances = "Grevesse.2007"  # "Asplund.2005", "Asplund.2009",
                                     # "Grevesse.1998", "Anders.1989"
 
@@ -491,7 +504,8 @@ line_regions = sve.read_line_regions(sve_dir + "/input/regions/fe_YY_line_masks.
 modeled_layers_pack = sve.load_modeled_layers_pack(sve_dir + 'input/atmospheres/' + \
         model + '/modeled_layers_pack.dump')
 # Load SPECTRUM linelist
-linelist_file = sve_dir + "/input/linelists/SPECTRUM/" + linelist + "/300_1100nm.lst"
+linelist_file = sve_dir + "/input/linelists/SPECTRUM/" + linelist_name.split(".")[0] +\
+                    "/" + linelist_name.split(".")[1] + ".lst"
 linelist = sve.read_SPECTRUM_linelist(linelist_file)
 # Load SPECTRUM abundances
 fixed_abundances = None # No fixed abundances

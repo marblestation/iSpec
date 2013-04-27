@@ -3600,12 +3600,14 @@ SPECTRUM a Stellar Spectral Synthesis Program
             selected_atmosphere_models = self.dialog[key].results["Model atmosphere"]
             selected_abundances = self.dialog[key].results["Solar abundances"]
             selected_linelist = self.dialog[key].results["Line list"].split(".")[0]
+            selected_linelist += "/" + self.dialog[key].results["Line list"].split(".")[1]
             in_segments = self.dialog[key].results["Generate spectrum for"] == "Segments"
             in_lines = self.dialog[key].results["Generate spectrum for"] == "Line masks"
 
             self.dialog[key].destroy()
 
-            linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + "/300_1100nm.lst")
+            #linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + "/300_1100nm.lst")
+            linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
             abundances_file = resource_path("input/abundances/" + selected_abundances + "/stdatom.dat")
 
             if in_segments:
@@ -3876,6 +3878,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             selected_atmosphere_models = self.active_spectrum.dialog[key].results["Model atmosphere"]
             selected_abundances = self.active_spectrum.dialog[key].results["Solar abundances"]
             selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
+            selected_linelist += "/" + self.dialog[key].results["Line list"].split(".")[1]
             element_abundance = int(self.active_spectrum.dialog[key].results["Individual abundance"].split()[0])
             #element_abundance_name = self.active_spectrum.dialog[key].results["Individual abundance"].split()[2]
             max_iterations = self.active_spectrum.dialog[key].results["Maximum number of iterations"]
@@ -3919,7 +3922,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             self.active_spectrum.dialog[key].destroy()
 
-            linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + "/300_1100nm.lst")
+            #linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + "/300_1100nm.lst")
+            linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
             abundances_file = resource_path("input/abundances/" + selected_abundances + "/stdatom.dat")
 
             if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
