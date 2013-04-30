@@ -230,7 +230,11 @@ def __fit_continuum(spectrum, continuum_regions=None, nknots=None, median_wave_r
             self.value = value
 
         def __call__(self, x):
-            return np.asarray([self.value] * len(x))
+            try:
+                return np.asarray([self.value] * len(x))
+            except TypeError:
+                # It's not an array, return a single value
+                return self.value
 
     if model == 'Fixed value':
         return ConstantValue(fixed_value)

@@ -873,12 +873,26 @@ def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elem
 
     ## Load original VALD linelist
     # Discard very small lines (lesser than 1% of the continuum)
-    vald_linelist = read_VALD_linelist(vald_linelist_file, minimum_depth=0.01)
+    #vald_linelist = read_VALD_linelist(vald_linelist_file, minimum_depth=0.01)
+    # Do not discard by depth:
+    vald_linelist = read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
 
+    ### Replaced by line strength calculated from log(gf) so that we can sort also
+    ### lines without reported depths (i.e. molecules)
     # Sort by wave_peak and descending depth (for that we create a temporary field)
-    vald_linelist = rfn.append_fields(vald_linelist, "reverse_depth", dtypes=float, data=1-vald_linelist['depth'])
-    vald_linelist.sort(order=['wave_peak', 'reverse_depth'])
-    vald_linelist = rfn.drop_fields(vald_linelist, ['reverse_depth'])
+    #vald_linelist = rfn.append_fields(vald_linelist, "reverse_depth", dtypes=float, data=1-vald_linelist['depth'])
+    #vald_linelist.sort(order=['wave_peak', 'reverse_depth'])
+    #vald_linelist = rfn.drop_fields(vald_linelist, ['reverse_depth'])
+
+    # Line strength is calculated by using a theoretical proxy: log(gf) - 5040/Teff
+    # - Mucciarelli et al. 2013 - GALA: An automatic tool for the abundance analysis of stellar spectra
+    # - Temperature of reference used by Gaia ESO Survey: 3000
+    teff_ref = 3000 # K
+    line_strength = vald_linelist['log(gf)'] - (5040./teff_ref)
+    # Sort by wave_peak and descending strength (for that we create a temporary field)
+    vald_linelist = rfn.append_fields(vald_linelist, "line_strength", dtypes=float, data=line_strength)
+    vald_linelist.sort(order=['wave_peak', 'line_strength']) # Ascending
+    vald_linelist = rfn.drop_fields(vald_linelist, ['line_strength'])
 
     clean_linemasks = linemasks[linemasks['wave_peak'] != 0]
     max_wave_peak = np.max(clean_linemasks['wave_peak'])
@@ -899,6 +913,25 @@ def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elem
             #diff = vald_linelist['wave_peak'] - linemasks['wave_peak'][j]
             abs_diff = np.abs(diff)
             i = np.argmin(abs_diff)
+
+            # If there are several minimums (several lines with same wavelength)...
+            min_diff = np.min(abs_diff)
+            imin_diff = np.where(abs_diff == min_diff)[0]
+            if len(imin_diff) > 1:
+                # Select the first non-molecule if it exists
+                # ... and since vald_linelist is sorted by wavelength and strength
+                #     the most strong among the atomic lines will be selected
+                for imin in imin_diff:
+                    species = __get_specie(chemical_elements, molecules, vald_linelist["element"][imin])
+                    try:
+                        species = float(species) # species can contain "Discard" if the element is unknown
+                        if species <= 100.0: # Atom
+                            i = imin
+                            break
+                    except ValueError:
+                        # Unkown element, just continue
+                        continue
+
             # Save the information
             if abs_diff[i] <= diff_limit:
                 linemasks["VALD_wave_peak"][j] = vald_linelist["wave_peak"][i]
@@ -912,8 +945,7 @@ def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elem
                     linemasks["waals"][j] = vald_linelist["waals"][i]
                 else:
                     linemasks["waals"][j] = 0
-                linemasks['species'][j] = __get_specie(chemical_elements, molecules, linemasks["element"][j])
-                #linemasks['note'][j] = "_".join(linemasks["element"][j].split())
+                linemasks['species'][j] = __get_specie(chemical_elements, molecules, vald_linelist["element"][i])
 
     if vel_atomic != 0:
         linemasks['wave_peak'] = original_wave_peak
@@ -1048,18 +1080,42 @@ def adjust_linemasks(spectrum, linemasks, margin=0.5):
             nearest_peak = peaks[np.argmin(np.abs(peaks - ipeak))]
             left_base_points = base_points[base_points < nearest_peak]
             if len(left_base_points) > 0:
-                line['wave_base'] = spectrum_window[left_base_points[-1]] # nearest to the peak
+                wave_base = spectrum_window['waveobs'][left_base_points[-1]] # nearest to the peak
+                # Make sure that the wave_base is smaller than the wave_peak
+                i = -2
+                while wave_base > wave_peak and -1*i <= len(left_base_points):
+                    wave_base = spectrum_window['waveobs'][left_base_points[i]] # nearest to the peak
+                    i -= 1
+                if wave_base < wave_peak:
+                    line['wave_base'] =  wave_base
+
             right_base_points = base_points[base_points > nearest_peak]
             if len(right_base_points) > 0:
-                line['wave_top'] = spectrum_window[right_base_points[0]] # nearest to the peak
+                wave_top = spectrum_window['waveobs'][right_base_points[0]] # nearest to the peak
+                # Make sure that the wave_top is bigger than the wave_peak
+                i = 1
+                while wave_top < wave_peak and i < len(right_base_points):
+                    wave_top = spectrum_window['waveobs'][right_base_points[i]] # nearest to the peak
+                    i += 1
+                if wave_top > wave_peak:
+                    line['wave_top'] =  wave_top
 
     # Correct potential overlapping between line masks
     linemasks.sort(order=['wave_peak'])
     for i, line in enumerate(linemasks[:-1]):
         if line['wave_top'] > linemasks['wave_base'][i+1]:
             mean = (line['wave_top'] + linemasks['wave_base'][i+1]) / 2.0
-            line['wave_top'] = mean
-            linemasks['wave_base'][i+1] = mean
+            # Make sure that the new limit (wave_top/wave_base) is bigger/smaller
+            # than the wave_peaks of the two lines
+            if mean > line['wave_peak'] and mean < linemasks['wave_peak'][i+1]:
+                line['wave_top'] = mean
+                linemasks['wave_base'][i+1] = mean
+            elif line['wave_top'] < linemasks['wave_peak'][i+1]:
+                linemasks['wave_base'][i+1] = line['wave_top']
+            elif linemasks['wave_base'][i+1] > line['wave_peak']:
+                line['wave_top'] = linemasks['wave_base'][i+1]
+            else:
+                logging.warn("Lines [%.3f %s] and [%.3f %s] are too weak/near and their masks overlap" % (line['wave_peak'], line['note'], linemasks['wave_peak'][i+1], linemasks['note'][i+1]))
 
     return linemasks
 

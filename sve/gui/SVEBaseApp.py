@@ -1085,9 +1085,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
                                 note = region.note.get_text()
                             else:
                                 note = ""
-                            output.write("%.4f" % region.get_wave_peak() + "\t" + "%.4f" % region.get_wave_base() + "\t" + "%.4f" % region.get_wave_top() + "\t" + note + "\n")
+                            output.write("%.5f" % region.get_wave_peak() + "\t" + "%.5f" % region.get_wave_base() + "\t" + "%.5f" % region.get_wave_top() + "\t" + note + "\n")
                         else:
-                            output.write("%.4f" % region.get_wave_base() + "\t" + "%.4f" % region.get_wave_top() + "\n")
+                            output.write("%.5f" % region.get_wave_base() + "\t" + "%.5f" % region.get_wave_top() + "\n")
 
                 output.close()
                 self.regions_saved(elements)
@@ -2107,6 +2107,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         vel_atomic = self.active_spectrum.dialog[key].results["Velocity respect to atomic lines (km/s)"]
         vel_telluric = self.active_spectrum.dialog[key].results["Velocity respect to telluric lines (km/s)"]
+        selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
+        selected_linelist += "/" + self.active_spectrum.dialog[key].results["Line list"].split(".")[1]
+        linelist_file = resource_path("input/linelists/" + selected_linelist + ".lst")
         self.active_spectrum.dialog[key].destroy()
 
         if vel_atomic is None or vel_telluric is None:
@@ -2122,13 +2125,12 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         self.operation_in_progress = True
         self.status_message("Fitting lines...")
-        thread = threading.Thread(target=self.on_fit_lines_thread, args=(vel_atomic, vel_telluric))
+        thread = threading.Thread(target=self.on_fit_lines_thread, args=(vel_atomic, vel_telluric, linelist_file))
         thread.setDaemon(True)
         thread.start()
 
-    def on_fit_lines_thread(self, vel_atomic, vel_telluric):
+    def on_fit_lines_thread(self, vel_atomic, vel_telluric, vald_linelist_file):
         self.__update_numpy_arrays_from_widgets("lines")
-        vald_linelist_file = resource_path("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst")
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
         molecules_file = resource_path("input/abundances/molecular_symbols.dat")
         telluric_linelist_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
@@ -2464,6 +2466,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
         vel_telluric = self.active_spectrum.dialog[key].results["Velocity respect to telluric lines (km/s)"]
         discard_tellurics = self.active_spectrum.dialog[key].results["Discard affected by tellurics"] == 1
         in_segments = self.active_spectrum.dialog[key].results["Look for line masks in"] == "Only inside segments"
+        selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
+        selected_linelist += "/" + self.active_spectrum.dialog[key].results["Line list"].split(".")[1]
+        linelist_file = resource_path("input/linelists/" + selected_linelist + ".lst")
         self.active_spectrum.dialog[key].destroy()
 
         if max_depth is None or min_depth is None or resolution is None or vel_atomic is None or vel_telluric is None or max_depth <= min_depth or max_depth <= 0 or min_depth < 0 or resolution <= 0:
@@ -2482,11 +2487,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         self.operation_in_progress = True
-        thread = threading.Thread(target=self.on_find_lines_thread, args=(max_depth, min_depth, elements, resolution, vel_atomic, vel_telluric, discard_tellurics), kwargs={'in_segments':in_segments})
+        thread = threading.Thread(target=self.on_find_lines_thread, args=(max_depth, min_depth, elements, resolution, vel_atomic, vel_telluric, discard_tellurics, linelist_file), kwargs={'in_segments':in_segments})
         thread.setDaemon(True)
         thread.start()
 
-    def on_find_lines_thread(self, max_depth, min_depth, elements, resolution, vel_atomic, vel_telluric, discard_tellurics, in_segments=False):
+    def on_find_lines_thread(self, max_depth, min_depth, elements, resolution, vel_atomic, vel_telluric, discard_tellurics, vald_linelist_file, in_segments=False):
         if in_segments:
             # Select spectrum from regions
             self.update_numpy_arrays_from_widgets("segments")
@@ -2510,7 +2515,6 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         self.queue.put((self.status_message, ["Generating line masks, fitting gaussians and matching VALD lines..."], {}))
         logging.info("Generating line masks, fitting gaussians and matching VALD lines...")
-        vald_linelist_file = resource_path("input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst")
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
         molecules_file = resource_path("input/abundances/molecular_symbols.dat")
         telluric_linelist_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
@@ -3878,7 +3882,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             selected_atmosphere_models = self.active_spectrum.dialog[key].results["Model atmosphere"]
             selected_abundances = self.active_spectrum.dialog[key].results["Solar abundances"]
             selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
-            selected_linelist += "/" + self.dialog[key].results["Line list"].split(".")[1]
+            selected_linelist += "/" + self.active_spectrum.dialog[key].results["Line list"].split(".")[1]
             element_abundance = int(self.active_spectrum.dialog[key].results["Individual abundance"].split()[0])
             #element_abundance_name = self.active_spectrum.dialog[key].results["Individual abundance"].split()[2]
             max_iterations = self.active_spectrum.dialog[key].results["Maximum number of iterations"]

@@ -30,10 +30,10 @@ class AbundancesDialog(CustomDialog):
         # We have data, we can assign the plotting function
         self.__components[0]["function"] = self.plot
 
-        teff = float(self.__components[3]["default"])
-        logg = float(self.__components[4]["default"])
-        feh = float(self.__components[5]["default"])
-        vmic = float(self.__components[6]["default"])
+        teff = float(self.__components[4]["default"])
+        logg = float(self.__components[5]["default"])
+        feh = float(self.__components[6]["default"])
+        vmic = float(self.__components[7]["default"])
 
         ## Stats
         for i in xrange(len(self.__stats)):
@@ -76,8 +76,8 @@ class AbundancesDialog(CustomDialog):
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Model atmosphere"
-        component["options"] = ["Meszaros", "MARCS", "Meszaros", "Castelli", "Kurucz", "Kirby"]
-        component["default"] = component["options"][2]
+        component["options"] = ["MARCS", "MARCS.GES", "MARCS.APOGEE", "ATLAS9.APOGEE", "ATLAS9.Castelli", "ATLAS9.Kurucz", "ATLAS9.Kirby"]
+        component["default"] = component["options"][1]
         self.__components.append(component)
         component = {}
         component["type"] = "OptionMenu"

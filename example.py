@@ -57,7 +57,7 @@ wfilter = sve.create_wavelength_filter(sun_spectrum, wave_base=480.0, wave_top=6
 cutted_sun_spectrum = sun_spectrum[wfilter]
 
 # - Keep only points inside a list of segments
-segments = sve.read_segment_regions(sve_dir + "/input/regions/fe_YY_segments.txt")
+segments = sve.read_segment_regions(sve_dir + "/input/regions/fe_lines_segments.txt")
 wfilter = sve.create_wavelength_filter(sun_spectrum, regions=segments)
 cutted_sun_spectrum = sun_spectrum[wfilter]
 
@@ -66,7 +66,7 @@ cutted_sun_spectrum = sun_spectrum[wfilter]
 #--- Radial Velocity determination with linelist mask --------------------------
 logging.info("Radial velocity determination with linelist mask...")
 # - Read atomic data
-vald_linelist_file = sve_dir + "/input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
+vald_linelist_file = sve_dir + "/input/linelists/VALD/300_1100nm.lst"
 linelist = sve.read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
 
 ###### OPTIONAL:
@@ -182,14 +182,14 @@ model = "Polynomy" # "Splines"
 sun_continuum_model = sve.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
 
 # - Consider only continuum regions for finding continuum points to fit
-continuum_regions = sve.read_continuum_regions(sve_dir + "/input/regions/continuum_regions.txt")
+continuum_regions = sve.read_continuum_regions(sve_dir + "/input/regions/fe_lines_continuum.txt")
 sun_continuum_model = sve.fit_continuum(sun_spectrum, \
                         continuum_regions=continuum_regions, nknots=nknots,\
                         median_wave_range=0.1, max_wave_range=1.0,
                         model=model)
 
 # - Fit continuum in each segment independently
-segments = sve.read_segment_regions(sve_dir + "/input/regions/fe_YY_segments.txt")
+segments = sve.read_segment_regions(sve_dir + "/input/regions/fe_lines_segments.txt")
 sun_continuum_model = sve.fit_continuum(sun_spectrum, \
                         independent_regions=segments, nknots=1,\
                         median_wave_range=0.1, max_wave_range=1.0,
@@ -221,10 +221,10 @@ sun_continuum_regions = sve.find_continuum(sun_spectrum, resolution, \
                                     continuum_model = sun_continuum_model, \
                                     max_continuum_diff=max_continuum_diff, \
                                     fixed_wave_step=fixed_wave_step)
-sve.write_continuum_regions(sun_continuum_regions, "example_sun_continuum_regions.txt")
+sve.write_continuum_regions(sun_continuum_regions, "example_sun_fe_lines_continuum.txt")
 
 # Or limit the search to given segments
-segments = sve.read_segment_regions(sve_dir + "/input/regions/fe_YY_segments.txt")
+segments = sve.read_segment_regions(sve_dir + "/input/regions/fe_lines_segments.txt")
 limited_sun_continuum_regions = sve.find_continuum(sun_spectrum, resolution, \
                                         segments=segments, max_std_continuum = sigma, \
                                         continuum_model = sun_continuum_model, \
@@ -236,7 +236,7 @@ sve.write_continuum_regions(limited_sun_continuum_regions, \
 #--- Find linemasks ------------------------------------------------------------
 logging.info("Finding line masks...")
 sun_continuum_model = sve.fit_continuum(sun_spectrum)
-vald_linelist_file = sve_dir + "/input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
+vald_linelist_file = sve_dir + "/input/linelists/VALD/300_1100nm.lst"
 chemical_elements_file = sve_dir + "/input/abundances/chemical_elements_symbols.dat"
 molecules_file = sve_dir + "/input/abundances/molecular_symbols.dat"
 telluric_linelist_file = sve_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
@@ -325,25 +325,25 @@ clean_sun_spectrum = sun_spectrum[tfilter]
 #--- Adjust line masks ---------------------------------------------------------
 resolution = 80000
 smoothed_sun_spectrum = sve.convolve_spectrum(sun_spectrum, resolution)
-line_regions = sve.read_line_regions(sve_dir + "/input/regions/fe_YY_line_masks.txt")
+line_regions = sve.read_line_regions(sve_dir + "/input/regions/fe_lines.txt")
 linemasks = sve.adjust_linemasks(smoothed_sun_spectrum, line_regions, margin=0.5)
 segments = sve.create_segments_around_lines(linemasks, margin=0.25)
 
 
 #---Create segments around linemasks -------------------------------------------
-line_regions = sve.read_line_regions(sve_dir + "/input/regions/fe_YY_line_masks.txt")
+line_regions = sve.read_line_regions(sve_dir + "/input/regions/fe_lines.txt")
 segments = sve.create_segments_around_lines(line_regions, margin=0.25)
 
 
 #--- Fit lines -----------------------------------------------------------------
 logging.info("Fitting lines...")
-vald_linelist_file = sve_dir + "/input/linelists/VALD/VALD.300_1100nm_teff_5770.0_logg_4.40.lst"
+vald_linelist_file = sve_dir + "/input/linelists/VALD/300_1100nm.lst"
 chemical_elements_file = sve_dir + "/input/abundances/chemical_elements_symbols.dat"
 molecules_file = sve_dir + "/input/abundances/molecular_symbols.dat"
 telluric_linelist_file = sve_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
 vel_atomic = 0.00 # km/s
 vel_telluric = 17.79 # km/s
-line_regions = sve.read_line_regions(sve_dir + "/input/regions/fe_YY_line_masks.txt")
+line_regions = sve.read_line_regions(sve_dir + "/input/regions/fe_lines.txt")
 linemasks = sve.fit_lines(line_regions, sun_spectrum, sun_continuum_model, vel_atomic, \
                             vel_telluric, vald_linelist_file, chemical_elements_file, \
                             molecules_file, telluric_linelist_file, discard_gaussian=False, \
@@ -410,7 +410,7 @@ resolution = 300000
 wave_step = 0.001
 
 # Wavelengths to synthesis
-#regions = sve.read_segment_regions(sve_dir + "/input/regions/fe_YY_segments.txt")
+#regions = sve.read_segment_regions(sve_dir + "/input/regions/fe_lines_segments.txt")
 regions = None
 wave_base = 515.0 # Magnesium triplet region
 wave_top = 525.0
@@ -497,8 +497,8 @@ free_abundances = None
 #free_abundances['Abund'] = abundances['Abund'][abundances['code'] == int(element_abundance)]
 
 # Regions
-segments = sve.read_segment_regions(sve_dir + "/input/regions/fe_YY_segments.txt")
-line_regions = sve.read_line_regions(sve_dir + "/input/regions/fe_YY_line_masks.txt")
+segments = sve.read_segment_regions(sve_dir + "/input/regions/fe_lines_segments.txt")
+line_regions = sve.read_line_regions(sve_dir + "/input/regions/fe_lines.txt")
 
 # Load model atmospheres
 modeled_layers_pack = sve.load_modeled_layers_pack(sve_dir + 'input/atmospheres/' + \

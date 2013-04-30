@@ -10,7 +10,7 @@ class SolverDialog(CustomDialog):
         component["type"] = "OptionMenu"
         component["text"] = "Model atmosphere"
         component["options"] = ["MARCS", "MARCS.GES", "MARCS.APOGEE", "ATLAS9.APOGEE", "ATLAS9.Castelli", "ATLAS9.Kurucz", "ATLAS9.Kirby"]
-        component["default"] = component["options"][2]
+        component["default"] = component["options"][1]
         self.__components.append(component)
         component = {}
         component["type"] = "OptionMenu"
@@ -21,8 +21,8 @@ class SolverDialog(CustomDialog):
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Line list"
-        component["options"] = ["VALD.300_1100nm", "VALD_with_molecules.300_1100nm", "GES.475_685nm",  "Kurucz.300_1100nm", "NIST.300_1100nm", "SPECTRUM.300_1000nm"]
-        component["default"] = component["options"][2]
+        component["options"] = ["VALD.300_1100nm", "VALD_with_molecules.300_1100nm", "GES.475_685nm", "GES_atom.475_685nm",  "Kurucz.300_1100nm", "NIST.300_1100nm", "SPECTRUM.300_1000nm"]
+        component["default"] = component["options"][3]
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"

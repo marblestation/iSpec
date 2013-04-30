@@ -531,12 +531,22 @@ class SynthModel(MPFitModel):
 
         transformed_abund = np.recarray((len(free_abundances), ), dtype=[('code', int),('Abund', float), ('element', '|S5'), ('[X/H]', float), ('A(X)', float), ('[X/Fe]', float), ('eAbund', float), ('e[X/H]', float), ('e[X/Fe]', float), ('eA(X)', float)])
 
+        #function abundances, sme, solar_relative
+        #abund = sme.abund
+        #solar_abund, solar, labels
+
+        #solar_relative = abund-solar
+
+        #abund[2:*] += sme.feh ; rescale by metallicity
+        #abund[1:*] = 10^abund[1:*] ; transform to linear
+        #return, alog10(abund / abund[0]) + 12
+        #end
         sun_log_Nh_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == 1]
         for i in xrange(len(free_abundances)):
             sun_log_Nx_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == free_abundances['code'][i]]
-            x_over_h = free_abundances['Abund'][i] - sun_log_Nx_over_Ntotal # x_over_fe - self.MH()
-            x_over_fe = x_over_h - self.MH() # free_abundances['Abund'][i] - sun_log_Nx_over_Ntotal + self.MH()
             x_absolute = free_abundances['Abund'][i] + 12. - sun_log_Nh_over_Ntotal # absolute, A(X)
+            x_over_fe = free_abundances['Abund'][i] - sun_log_Nx_over_Ntotal
+            x_over_h = x_over_fe + self.MH()
 
             element = self.elements[str(free_abundances['code'][i])]
 

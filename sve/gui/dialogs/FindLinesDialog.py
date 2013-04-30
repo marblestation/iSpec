@@ -62,7 +62,7 @@ class FindLinesDialog(CustomDialog):
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Line list"
-        component["options"] = ["VALD.300_1100nm"]
+        component["options"] = ["VALD.300_1100nm", "GES.475_685nm"]
         component["default"] = component["options"][0]
         self.__components.append(component)
         component = {}
