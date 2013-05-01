@@ -85,8 +85,8 @@ xcoord, fluxes, errors = sve.build_velocity_profile(mu_cas_a_spectrum, \
                                             upper_velocity_limit=200.0, velocity_step=1.0)
 
 models = sve.modelize_velocity_profile(xcoord, fluxes, errors)
-good = sve.select_good_velocity_profile_models(models, xcoord, fluxes)
-models = models[good]
+best = sve.select_good_velocity_profile_models(models, xcoord, fluxes)
+models = models[best]
 
 # Number of models represent the number of components
 spectroscopic_nary = str(len(models) >= 2)
@@ -120,8 +120,8 @@ xcoord, fluxes, errors = sve.build_velocity_profile(mu_cas_a_spectrum, \
                                             upper_velocity_limit=200.0, velocity_step=1.0)
 
 models = sve.modelize_velocity_profile(xcoord, fluxes, errors)
-good = sve.select_good_velocity_profile_models(models, xcoord, fluxes)
-models = models[good]
+best = sve.select_good_velocity_profile_models(models, xcoord, fluxes)
+models = models[best]
 
 # Number of models represent the number of components
 spectroscopic_nary = str(len(models) >= 2)

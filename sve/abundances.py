@@ -46,7 +46,21 @@ def write_abundance_lines(linemasks, filename=None):
     else:
         # Temporary file
         out = tempfile.NamedTemporaryFile(delete=False)
-    out.write("\n".join([" ".join(map(str, (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['ew'], line['element']))) for line in linemasks]))
+    #out.write("\n".join([" ".join(map(str, (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['ew'], line['element']))) for line in linemasks]))
+    for line in linemasks:
+        # The format is different depending on the broadening parameters
+        if line['transition type'] == "AO":
+            # O'Mara
+            text = "%.5f %s %i %i %f %.1f %s %.4f %.2f %s" % (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['ew'], line['element'])
+        elif line['transition type'] == "GA":
+            # Rad, Stark and Waals
+            text = "%.5f %s %i %i %f %.1f %s %.4f %.4f %.4f %.2f %s" % (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['ew'], line['element'])
+        else:
+            # For i.e. line['transition type'] == "99"
+            # Let SPECTRUM calculate them
+            text = "%.5f %s %i %i %f %.1f %s %.2f %s" % (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['ew'], line['element'])
+        out.write(text + "\n")
+
     out.close()
     return out.name
 

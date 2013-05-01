@@ -403,7 +403,7 @@ class SynthModel(MPFitModel):
         fixed_abundances = self.free_abundances()
 
         abundances_key = " ".join(map(str, fixed_abundances['Abund']))
-        complete_key = "%.2f %.2f %.2f %.2f %.2f %.2f %.2f %i %.2f" % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()), self.continuum_correction())
+        complete_key = "%.2f %.2f %.2f %.2f %.2f %.2f %.2f %i %.2f " % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()), self.continuum_correction())
         complete_key += abundances_key
         key = "%.2f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.vmic())
         key += abundances_key
@@ -474,7 +474,7 @@ class SynthModel(MPFitModel):
 
         residuals = self.last_final_fluxes[self.comparing_mask] - fluxes[self.comparing_mask]
         self.rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
-        # Chisq without using tanh
+        # Chisq using tanh
         self.chisq = np.sum(np.tanh(weights[self.comparing_mask] * residuals)**2)
         self.reduced_chisq = self.chisq / self.m.dof
         # Chisq without using tanh for minimizing outliers

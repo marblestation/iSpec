@@ -540,7 +540,7 @@ def __create_linemasks_structure(num_peaks):
     return linemasks
 
 
-def find_linemasks(spectrum, continuum_model, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, minimum_depth=None, maximum_depth=None, smoothed_spectrum=None, discard_gaussian = False, discard_voigt = False, vel_atomic=0.0, vel_telluric=0.0, frame=None):
+def find_linemasks(spectrum, continuum_model, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, minimum_depth=None, maximum_depth=None, smoothed_spectrum=None, discard_gaussian = False, discard_voigt = False, vel_atomic=0.0, vel_telluric=0.0, consider_omara=False, frame=None):
     """
     Generate a line masks for a spectrum by finding peaks and base points.
 
@@ -561,6 +561,9 @@ def find_linemasks(spectrum, continuum_model, vald_linelist_file, chemical_eleme
 
     Returns a complete structure with all the necessary information to
     determine if it is a line of interest.
+
+    * If 'consider_omara' is True, then it will consider that the vald linelist contains
+    O'Mara parameters for some lines and it will interpret it that way.
     """
     #print "NOTICE: This method can generate overflow warnings due to the Least Square Algorithm"
     #print "        used for the fitting process, but they can be ignored."
@@ -620,7 +623,7 @@ def find_linemasks(spectrum, continuum_model, vald_linelist_file, chemical_eleme
     rejected_by_noise = __detect_false_and_noisy_features(spectrum, linemasks)
     accepted_for_fitting = np.logical_and(accepted_for_fitting, np.logical_not(rejected_by_noise))
 
-    linemasks = fit_lines(linemasks, spectrum, continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian=discard_gaussian, discard_voigt=discard_voigt, smoothed_spectrum=smoothed_spectrum, accepted_for_fitting=accepted_for_fitting, frame=frame)
+    linemasks = fit_lines(linemasks, spectrum, continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian=discard_gaussian, discard_voigt=discard_voigt, smoothed_spectrum=smoothed_spectrum, accepted_for_fitting=accepted_for_fitting, consider_omara=consider_omara, frame=frame)
 
     # Identify peaks higher than continuum
     # - Depth is negative if the peak is higher than the continuum
@@ -653,13 +656,16 @@ def find_linemasks(spectrum, continuum_model, vald_linelist_file, chemical_eleme
 
     return linemasks
 
-def fit_lines(regions, spectrum, continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian = False, discard_voigt = False, smoothed_spectrum=None, accepted_for_fitting=None, frame=None):
+def fit_lines(regions, spectrum, continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian = False, discard_voigt = False, smoothed_spectrum=None, accepted_for_fitting=None, consider_omara=False, frame=None):
     """
     Fits gaussians models in the specified line regions.
     * 'regions' should be an array with 'wave_base', 'wave_peak' and 'wave_top' columns.
     * If 'smoothed_spectrum' is present, the wave_base and wave_top can be adjusted before fitting
     * If 'accepted_for_fitting' array is present, only those regions that are set to true
     will be fitted
+
+    If 'consider_omara' is True, then it will consider that the vald linelist contains
+    O'Mara parameters for some lines and it will interpret it that way.
 
     :returns:
         Array with additional columns such as 'mu', 'sig', 'A', 'baseline'...
@@ -767,7 +773,7 @@ def fit_lines(regions, spectrum, continuum_model, vel_atomic, vel_telluric, vald
 
     if vald_linelist_file is not None:
         logging.info("Cross matching with atomic data...")
-        regions = __fill_linemasks_with_VALD_info(regions, vald_linelist_file, chemical_elements_file, molecules_file, diff_limit=0.005, vel_atomic=vel_atomic)
+        regions = __fill_linemasks_with_VALD_info(regions, vald_linelist_file, chemical_elements_file, molecules_file, diff_limit=0.005, vel_atomic=vel_atomic, consider_omara=consider_omara)
     if telluric_linelist_file is not None:
         logging.info("Cross matching with telluric data...")
         regions = __fill_linemasks_with_telluric_info(regions, telluric_linelist_file, vel_telluric=vel_telluric)
@@ -840,10 +846,12 @@ def __fill_linemasks_with_telluric_info(linemasks, telluric_linelist_file, vel_t
     return linemasks
 
 
-def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elements_file, molecules_file, diff_limit=0.005, vel_atomic=0.0):
+def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elements_file, molecules_file, diff_limit=0.005, vel_atomic=0.0, consider_omara=False):
     """
     Cross-match linemasks with a VALD linelist in order to find
     the nearest lines and copy the information into the linemasks structure.
+    If 'consider_omara' is True, then it will consider that the vald linelist contains
+    O'Mara parameters for some lines and it will interpret it that way.
     """
     # Periodic table
     chemical_elements = asciitable.read(chemical_elements_file, delimiter="\t")
@@ -934,18 +942,39 @@ def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elem
 
             # Save the information
             if abs_diff[i] <= diff_limit:
+                linemasks['species'][j] = __get_specie(chemical_elements, molecules, vald_linelist["element"][i])
                 linemasks["VALD_wave_peak"][j] = vald_linelist["wave_peak"][i]
                 linemasks["element"][j] = vald_linelist["element"][i]
                 linemasks["lower state (eV)"][j] = vald_linelist["lower state (eV)"][i]
                 linemasks["log(gf)"][j] = vald_linelist["log(gf)"][i]
                 linemasks["solar_depth"][j] = vald_linelist["depth"][i]
-                linemasks["rad"][j] = vald_linelist["rad"][i]
-                linemasks["stark"][j] = vald_linelist["stark"][i]
-                if vald_linelist["waals"][i] <= 0:
-                    linemasks["waals"][j] = vald_linelist["waals"][i]
-                else:
-                    linemasks["waals"][j] = 0
-                linemasks['species'][j] = __get_specie(chemical_elements, molecules, vald_linelist["element"][i])
+
+                # GA case by default
+                linemasks['transition type'][j] = "GA"
+                linemasks['rad'][j] = vald_linelist['rad'][i]
+                linemasks['stark'][j] = vald_linelist['stark'][i]
+                linemasks['waals'][j] = vald_linelist['waals'][i]
+
+                if consider_omara and vald_linelist['waals'] > 0:
+                    # OA Case
+                    # Anstee, Barklem & O'Mara theory for collisional broadening by hydrogen, so called ABO theory
+                    # * sigma.alpha parameter
+                    linemasks['transition type'][j] = "AO"
+                    linemasks['rad'][j] = vald_linelist['waals'][i] # For this subset in reality this is the sigma.alpha parameter, no the rad
+                    linemasks['stark'][j] = 0
+                    linemasks['waals'][j] = 0
+                elif (vald_linelist['rad'][j] <= 0 or vald_linelist['stark'][j] >= 0 or \
+                        vald_linelist['waals'][j] >= 0 or float(linemasks['species'][j]) >= 101.0):
+                    # If it is a molecule or any of this criterias is not met:
+                    # - Radiative damping should be positive
+                    # - Stark should be zero or negative
+                    # - Van der Waals should be zero or negative
+                    linemasks['transition type'][j] = "99"
+                    linemasks['rad'][j] = 0
+                    linemasks['stark'][j] = 0
+                    linemasks['waals'][j] = 0
+
+
 
     if vel_atomic != 0:
         linemasks['wave_peak'] = original_wave_peak
@@ -953,7 +982,10 @@ def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elem
 
     linemasks['upper state (cm^-1)'] = (__eV_to_inverse_cm(__get_upper_state(linemasks['lower state (eV)'], linemasks[ "VALD_wave_peak"]))).astype(int)
     linemasks['lower state (cm^-1)'] = (__eV_to_inverse_cm(linemasks['lower state (eV)'])).astype(int)
-    linemasks['transition type'] = "GA"
+
+    # Molecule cases
+    molecules = np.asarray(map(float, linemasks['species'])) >= 101.0
+    linemasks['upper state (cm^-1)'][molecules] = 0.0 # Since we do not have molecular band information, we should leave it to zero
 
     return linemasks
 

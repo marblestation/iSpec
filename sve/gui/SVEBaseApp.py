@@ -2134,7 +2134,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
         molecules_file = resource_path("input/abundances/molecular_symbols.dat")
         telluric_linelist_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
-        linemasks = sve.fit_lines(self.regions["lines"], self.active_spectrum.data, self.active_spectrum.continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian=False, discard_voigt=True, smoothed_spectrum=self.active_spectrum.data, frame=self)
+        consider_omara = "GES" in vald_linelist_file # O'Mara only for GES linelist
+        linemasks = sve.fit_lines(self.regions["lines"], self.active_spectrum.data, self.active_spectrum.continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian=False, discard_voigt=True, smoothed_spectrum=self.active_spectrum.data, consider_omara=consider_omara, frame=self)
         # Exclude lines that have not been successfully cross matched with the atomic data
         # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
         rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
@@ -2518,7 +2519,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
         molecules_file = resource_path("input/abundances/molecular_symbols.dat")
         telluric_linelist_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
-        linemasks = sve.find_linemasks(spectrum, self.active_spectrum.continuum_model, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, minimum_depth=min_depth, maximum_depth=max_depth, smoothed_spectrum=smoothed_spectrum, discard_gaussian = False, discard_voigt = True, vel_atomic=vel_atomic, vel_telluric=vel_telluric, frame=self)
+
+        consider_omara = "GES" in vald_linelist_file # O'Mara only for GES linelist
+        linemasks = sve.find_linemasks(spectrum, self.active_spectrum.continuum_model, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, minimum_depth=min_depth, maximum_depth=max_depth, smoothed_spectrum=smoothed_spectrum, discard_gaussian = False, discard_voigt = True, vel_atomic=vel_atomic, vel_telluric=vel_telluric, consider_omara=consider_omara, frame=self)
 
         # If no peaks found, just finnish
         if linemasks is None or len(linemasks) == 0:
