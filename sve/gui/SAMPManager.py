@@ -1,3 +1,20 @@
+#
+#    This file is part of the Integrated Spectroscopic Framework (iSpec).
+#    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
+#
+#    iSpec is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    iSpec is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
+#
+#    You should have received a copy of the GNU Affero General Public License
+#    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
+#
 import os
 import sampy
 import tempfile
@@ -21,9 +38,9 @@ class SAMPManager():
         self.samp_hub = None
         self.samp_client = None
         self.metadata = {
-                        'samp.name' : 'SVE',
-                        'samp.description.text' : 'SVE',
-                        'samp.icon.url' : 'file://'+self.dirname+'/images/SVE.png',
+                        'samp.name' : 'iSpec',
+                        'samp.description.text' : 'iSpec',
+                        'samp.icon.url' : 'file://'+self.dirname+'/images/iSpec.png',
                         }
         self.samp_client = sampy.SAMPIntegratedClient(metadata=self.metadata, addr='localhost')
         self.check_connection_period = check_connection_period # seconds
@@ -410,7 +427,7 @@ class SAMPManager():
 #print names
 
 #if len(names) > 0:
-    #spectrum = sve.read_spectrum("input/spectra/examples/narval_sun.s.gz")
+    #spectrum = ispec.read_spectrum("input/spectra/examples/narval_sun.s.gz")
     #print "*"
     #i = 0
     #s.broadcast_spectrum(spectrum, "test1", ids[i], as_table=as_tables[i])

@@ -1,19 +1,19 @@
 #
-#    This file is part of Spectra Visual Editor (SVE).
+#    This file is part of the Integrated Spectroscopic Framework (iSpec).
 #    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
 #
-#    SVE is free software: you can redistribute it and/or modify
+#    iSpec is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU Affero General Public License as published by
 #    the Free Software Foundation, either version 3 of the License, or
 #    (at your option) any later version.
 #
-#    SVE is distributed in the hope that it will be useful,
+#    iSpec is distributed in the hope that it will be useful,
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU Affero General Public License for more details.
 #
 #    You should have received a copy of the GNU Affero General Public License
-#    along with SVE. If not, see <http://www.gnu.org/licenses/>.
+#    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 import numpy as np
 import numpy.lib.recfunctions as rfn # Extra functions
@@ -258,8 +258,8 @@ def write_spectrum(spectrum, spectrum_filename):
             header.update('NAXIS2', 2) # waveobs and flux
         header.update('CUNIT1', "NM")
         header.update('CTYPE1', "WAVELENGTH")
-        header.update('ORIGIN', "SVE")
-        #header.update('VERSION', "SVE")
+        header.update('ORIGIN', "iSpec")
+        #header.update('VERSION', "iSpec")
         header.update('UTCSAVED', time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
         primary_hdu = pyfits.PrimaryHDU(data=data, header=header)
 
@@ -781,5 +781,47 @@ def create_wavelength_filter(spectrum, wave_base=None, wave_top=None, regions=No
             else:
                 wfilter = np.logical_or(wfilter, np.logical_and(spectrum['waveobs'] >= wave_base, spectrum['waveobs'] <= wave_top))
     return wfilter
+
+
+def air_to_vacuum(spectrum):
+    """
+    It converts spectrum's wavelengths (nm) from air to vacuum
+    """
+    converted_spectrum = create_spectrum_structure(spectrum['waveobs'], spectrum['flux'], spectrum['err'])
+    sigma2 = np.power(1.e3/spectrum['waveobs'], 2) # nm
+    # Compute conversion factor
+    fact = 1. + 6.4328e-5 + 2.94981e-2/(146.-sigma2) + 2.5540e-4/(41.-sigma2)
+    fact = fact*(spectrum['waveobs'] >= 200.) + 1.*(spectrum['waveobs'] < 200.)
+    converted_spectrum['waveobs'] = spectrum['waveobs']*fact
+    return converted_spectrum
+
+
+def vacuum_to_air(spectrum):
+    """
+    It converts spectrum's wavelengths from vacuum to air
+    """
+    converted_spectrum = create_spectrum_structure(spectrum['waveobs'], spectrum['flux'], spectrum['err'])
+    wave2 = np.power(spectrum['waveobs'], 2)
+    # Compute conversion factor
+    fact = 1. + 2.735182e-4 + 131.4182/wave2 + 2.76249e8/(wave2**2.)
+    fact = fact * ( spectrum['waveobs'] >= 200. ) + 1.*( spectrum['waveobs'] < 200. )
+    converted_spectrum['waveobs'] = spectrum['waveobs'] / fact
+    return converted_spectrum
+
+
+def filter_cosmic_rays(spectrum, min_flux=0.90, max_flux=1.10, margin=3):
+    """
+    It consider the mean and standard deviation (sigma) of the fluxes between a
+    minimum and a maximum in order to filter out everything that is
+    above the mean + 3 * sigma.
+    
+    Ideally the spectrum should be already normalized.
+    """
+    wfilter = np.logical_and(spectrum['flux'] > min_flux, spectrum['flux'] < max_flux)
+    mu = np.mean(spectrum['flux'][wfilter])
+    sigma = np.std(spectrum['flux'][wfilter])
+    ffilter = spectrum['flux'] < mu + margin*sigma
+    return spectrum[ffilter]
+
 
 

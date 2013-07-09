@@ -1,19 +1,19 @@
 #
-#    This file is part of Spectra Visual Editor (SVE).
+#    This file is part of the Integrated Spectroscopic Framework (iSpec).
 #    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
 #
-#    SVE is free software: you can redistribute it and/or modify
+#    iSpec is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU Affero General Public License as published by
 #    the Free Software Foundation, either version 3 of the License, or
 #    (at your option) any later version.
 #
-#    SVE is distributed in the hope that it will be useful,
+#    iSpec is distributed in the hope that it will be useful,
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU Affero General Public License for more details.
 #
 #    You should have received a copy of the GNU Affero General Public License
-#    along with SVE. If not, see <http://www.gnu.org/licenses/>.
+#    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 import numpy as np
 from atmospheres import *
@@ -41,6 +41,11 @@ def write_abundance_lines(linemasks, filename=None):
     If filename is not specified, a temporary file is created and the name is returned.
 
     """
+    # Transfor units
+    linemasks = linemasks.copy()
+    linemasks['ew'] = 1000. * 10. * linemasks['ew'] # From nm to mA
+    linemasks['VALD_wave_peak'] = 10 * linemasks['VALD_wave_peak'] # From nm to Angstrom
+
     if filename is not None:
         out = open(filename, "w")
     else:
@@ -51,14 +56,14 @@ def write_abundance_lines(linemasks, filename=None):
         # The format is different depending on the broadening parameters
         if line['transition type'] == "AO":
             # O'Mara
-            text = "%.5f %s %i %i %f %.1f %s %.4f %.2f %s" % (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['ew'], line['element'])
+            text = "%.5f %s %i %i %f %.1f %s %.4f %f %s" % (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['ew'], line['element'])
         elif line['transition type'] == "GA":
             # Rad, Stark and Waals
-            text = "%.5f %s %i %i %f %.1f %s %.4f %.4f %.4f %.2f %s" % (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['ew'], line['element'])
+            text = "%.5f %s %i %i %f %.1f %s %.4f %.4f %.4f %f %s" % (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['ew'], line['element'])
         else:
             # For i.e. line['transition type'] == "99"
             # Let SPECTRUM calculate them
-            text = "%.5f %s %i %i %f %.1f %s %.2f %s" % (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['ew'], line['element'])
+            text = "%.5f %s %i %i %f %.1f %s %f %s" % (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['ew'], line['element'])
         out.write(text + "\n")
 
     out.close()
@@ -136,10 +141,6 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
       If "abundances" contain solar abundances, these values represent
       the quantity [X/H] where X is the species in question.
     """
-    # Transfor units
-    linemasks = linemasks.copy()
-    linemasks['ew'] = 1000. * 10. * linemasks['ew'] # From nm to mA
-    linemasks['VALD_wave_peak'] = 10 * linemasks['VALD_wave_peak'] # From nm to Angstrom
 
     linemasks_file = write_abundance_lines(linemasks)
     atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH)

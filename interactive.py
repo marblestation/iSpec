@@ -1,15 +1,32 @@
 #!/usr/bin/env python
+#
+#    This file is part of the Integrated Spectroscopic Framework (iSpec).
+#    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
+#
+#    iSpec is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    iSpec is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
+#
+#    You should have received a copy of the GNU Affero General Public License
+#    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
+#
 import sys
 import os
 import getopt
 import numpy as np
 
-#--- SVE directory --------------------------------------------------------
-#sve_dir = '/home/marble/shared/sve/'
-sve_dir = './'
-sys.path.insert(0, os.path.abspath(sve_dir))
-import sve
-from sve.gui import SVEBaseApp
+#--- iSpec directory --------------------------------------------------------
+#ispec_dir = '/home/marble/shared/ispec/'
+ispec_dir = './'
+sys.path.insert(0, os.path.abspath(ispec_dir))
+import ispec
+from ispec.gui import iSpecBaseApp
 
 ## Print usage
 def usage():
@@ -78,7 +95,7 @@ if __name__ == '__main__':
     spectra = []
     for path in filenames['spectra']:
         try:
-            spectrum = sve.read_spectrum(path)
+            spectrum = ispec.read_spectrum(path)
             #wfilter = (spectrum['waveobs'] >= 516.0) & (spectrum['waveobs'] <= 519.0)
             #spectrum = spectrum[wfilter]
         except Exception as e:
@@ -88,7 +105,7 @@ if __name__ == '__main__':
 
     if filenames['continuum'] != None:
         try:
-            continuum = sve.read_continuum_regions(filenames['continuum'])
+            continuum = ispec.read_continuum_regions(filenames['continuum'])
         except Exception as e:
             print "Continuum file", filenames['continuum'], "has an incompatible format!"
             sys.exit(2)
@@ -101,7 +118,7 @@ if __name__ == '__main__':
 
     if filenames['lines'] != None:
         try:
-            lines = sve.read_line_regions(filenames['lines'])
+            lines = ispec.read_line_regions(filenames['lines'])
         except Exception as e:
             print "Lines file", filenames['lines'], "has an incompatible format!"
             sys.exit(2)
@@ -121,7 +138,7 @@ if __name__ == '__main__':
 
     if filenames['segments'] != None:
         try:
-            segments = sve.read_segment_regions(filenames['segments'])
+            segments = ispec.read_segment_regions(filenames['segments'])
         except Exception as e:
             print "Segments file", filenames['segments'], "has an incompatible format!"
             sys.exit(2)
@@ -152,5 +169,5 @@ if __name__ == '__main__':
     #app.MainLoop()
 
 
-    app = SVEBaseApp(spectra, regions, filenames)
+    app = iSpecBaseApp(spectra, regions, filenames)
     app.mainloop()

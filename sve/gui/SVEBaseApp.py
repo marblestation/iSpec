@@ -1,4 +1,21 @@
 #!/usr/bin/env python
+#
+#    This file is part of the Integrated Spectroscopic Framework (iSpec).
+#    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
+#
+#    iSpec is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    iSpec is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
+#
+#    You should have received a copy of the GNU Affero General Public License
+#    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
+#
 import Tkinter
 import tkMessageBox
 import tkFileDialog
@@ -25,7 +42,7 @@ import threading
 import logging
 
 
-import sve
+import ispec
 from dialogs import AbundancesDialog
 from dialogs import AdjustLinesDialog
 from dialogs import AddNoiseDialog
@@ -65,13 +82,13 @@ def resource_path(relative):
         basedir = sys._MEIPASS
     else:
         basedir = os.path.dirname(__file__)
-        # Since we are inside "sve/gui/", we go up two levels to find "input/"
+        # Since we are inside "ispec/gui/", we go up two levels to find "input/"
         basedir = os.path.dirname(basedir[:-1])
         basedir = os.path.dirname(basedir[:-1])
     return os.path.join(basedir, relative)
 
 
-class SVEBaseApp(Tkinter.Tk):
+class iSpecBaseApp(Tkinter.Tk):
 
     def __init_attributes__(self):
         self.velocity_telluric_lower_limit = -100 # km/s
@@ -196,9 +213,9 @@ class SVEBaseApp(Tkinter.Tk):
         self.protocol('WM_DELETE_WINDOW', self.on_close)
 
         # Window icon
-        img = Tkinter.PhotoImage(file=resource_path("images/SVE.gif"))
+        img = Tkinter.PhotoImage(file=resource_path("images/iSpec.gif"))
         self.tk.call('wm', 'iconphoto', self._w, img)
-        #self.iconbitmap(bitmap="@"+resource_path("images/SVE.xbm")) # Black and white
+        #self.iconbitmap(bitmap="@"+resource_path("images/iSpec.xbm")) # Black and white
 
         self.queue = Queue()
         # Start the periodic call in the GUI to check if the queue contains
@@ -296,7 +313,7 @@ class SVEBaseApp(Tkinter.Tk):
     def create_window(self ):
         self.frame = Tkinter.Frame(self)
         self.frame.pack(fill=Tkinter.BOTH, expand=1)
-        self.wm_title("SVE")
+        self.wm_title("iSpec")
 
     def create_menu(self):
         # create a menu
@@ -402,7 +419,7 @@ class SVEBaseApp(Tkinter.Tk):
         parametersmenu.add_command(label="Estimate SNR", command=self.on_estimate_snr)
         self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
         parametersmenu.add_separator()
-        if "determine_abundances" in dir(sve):
+        if "determine_abundances" in dir(ispec):
             parametersmenu.add_command(label="Determine astrophysical parameters", command=self.on_determine_parameters)
             self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
             parametersmenu.add_command(label="Determine abundances with fitted lines", command=self.on_determine_abundances)
@@ -424,7 +441,7 @@ class SVEBaseApp(Tkinter.Tk):
         self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(Tkinter.END, "label")))
         self.menu_active_spectrum.add_separator()
 
-        if "generate_spectrum" in dir(sve):
+        if "generate_spectrum" in dir(ispec):
                 self.menu_active_spectrum.add_command(label="Synthesize spectrum", command=self.on_synthesize)
 
         if self.samp_manager is not None:
@@ -618,26 +635,26 @@ class SVEBaseApp(Tkinter.Tk):
 
 
     def on_license(self):
-        license = """Spectra Visual Editor is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+        license = """The Integrated Spectroscopic Framework is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
-Spectra Visual Editor is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
+the Integrated Spectroscopic Framework is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
 
-You should have received a copy of the GNU Affero General Public License along with Spectra Visual Editor.  If not, see:
+You should have received a copy of the GNU Affero General Public License along with the Integrated Spectroscopic Framework.  If not, see:
 
 www.gnu.org/licenses/"""
-        self.info("SVE License", license)
+        self.info("iSpec License", license)
 
     def on_about(self):
-        description = """Spectra Visual Editor is a tool for the treatment of spectrum files in order to identify lines, continuum regions and determine radial velocities among other options.
+        description = """the Integrated Spectroscopic Framework is a tool for the treatment of spectrum files in order to identify lines, continuum regions and determine radial velocities among other options.
 """
-        if "generate_spectrum" in dir(sve):
+        if "generate_spectrum" in dir(ispec):
             description += """
 The generation of synthetic spectrum is done thanks to:
 
 SPECTRUM a Stellar Spectral Synthesis Program
 (C) Richard O. Gray 1992 - 2010 Version 2.76e
 """
-        self.info("About SVE", description)
+        self.info("About iSpec", description)
 
 
 
@@ -879,7 +896,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                             # Remove "[A]  " from spectrum name (legend) if it exists
                             if self.active_spectrum is not None and self.active_spectrum.plot_id is not None:
                                 self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
-                            new_spectrum_data = sve.read_spectrum(path)
+                            new_spectrum_data = ispec.read_spectrum(path)
                             name = self.get_name(path.split('/')[-1]) # If it already exists, add a suffix
                             color = self.get_color()
                             self.active_spectrum = Spectrum(new_spectrum_data, name, path = path, color=color)
@@ -901,19 +918,19 @@ SPECTRUM a Stellar Spectral Synthesis Program
                             self.error(title, msg)
                             continue # Give the oportunity to select another file name
                         if elements == "continuum":
-                            self.regions[elements] = sve.read_continuum_regions(path)
+                            self.regions[elements] = ispec.read_continuum_regions(path)
                             self.draw_regions(elements)
                             self.not_saved[elements] = False
                             self.update_title()
                         elif elements == "lines":
                             self.remove_fitted_lines()
-                            self.regions[elements] = sve.read_line_regions(path)
+                            self.regions[elements] = ispec.read_line_regions(path)
                             self.draw_regions(elements)
                             self.not_saved[elements] = False
                             self.update_title()
                         else:
                             # 'segments'
-                            self.regions[elements] = sve.read_segment_regions(path)
+                            self.regions[elements] = ispec.read_segment_regions(path)
                             self.draw_regions(elements)
                             self.not_saved[elements] = False
                             self.update_title()
@@ -946,7 +963,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 filename = self.active_spectrum.name.split(self.dupiclated_name_separator)[0] + ".png"
                 dirname = os.getcwd()
         else:
-            filename = "SVE_plot_image.png"
+            filename = "iSpec_plot_image.png"
             dirname = os.getcwd()
 
         action_ended = False
@@ -1000,7 +1017,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 path = answer
                 self.status_message("Saving %s..." % path)
                 # Save, compress if the filename ends with ".gz"
-                sve.write_spectrum(self.active_spectrum.data, path)
+                ispec.write_spectrum(self.active_spectrum.data, path)
                 self.active_spectrum.not_saved = False
                 self.update_title()
 
@@ -1396,7 +1413,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         if not self.samp_manager.is_connected():
-            msg = "No compatible external application can be detected because SVE is not connected to any SAMP hub.\n\n* A SAMP hub can be created by using TOPCAT application."
+            msg = "No compatible external application can be detected because iSpec is not connected to any SAMP hub.\n\n* A SAMP hub can be created by using TOPCAT application."
             title = 'Connection not available'
             self.error(title, msg)
             self.flash_status_message("Not connected to any SAMP hub.")
@@ -1561,7 +1578,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.progress_bar.set((1.*value)/100)
 
     def update_title(self):
-        title = "SVE"
+        title = "iSpec"
 
         spectra_not_saved = False
         for spec in self.spectra:
@@ -1838,11 +1855,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             if in_continuum:
                 self.__update_numpy_arrays_from_widgets("continuum")
-                self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, independent_regions=independent_regions, continuum_regions=self.regions["continuum"] , nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
+                self.active_spectrum.continuum_model = ispec.fit_continuum(self.active_spectrum.data, independent_regions=independent_regions, continuum_regions=self.regions["continuum"] , nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
             else:
-                self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, independent_regions=independent_regions, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
+                self.active_spectrum.continuum_model = ispec.fit_continuum(self.active_spectrum.data, independent_regions=independent_regions, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
             waveobs = self.active_spectrum.data['waveobs']
-            self.active_spectrum.continuum_data = sve.create_spectrum_structure(waveobs, self.active_spectrum.continuum_model(waveobs))
+            self.active_spectrum.continuum_data = ispec.create_spectrum_structure(waveobs, self.active_spectrum.continuum_model(waveobs))
 
             self.queue.put((self.on_fit_continuum_finish, [nknots], {}))
         except Exception:
@@ -1980,7 +1997,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         linelist = linelist[rfilter]
         # Discard outliers FWHM in km/s (which is not wavelength dependent)
         telluric_fwhm = (c / (linelist['wave_peak'] / linelist['fwhm'])) / 1000.0 # km/s
-        fwhm_selected, fwhm_selected_filter = sve.sigma_clipping(telluric_fwhm, meanfunc=np.median)
+        fwhm_selected, fwhm_selected_filter = ispec.sigma_clipping(telluric_fwhm, meanfunc=np.median)
         linelist = linelist[fwhm_selected_filter]
         return linelist
 
@@ -2002,7 +2019,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             if template == "[Internal template]":
                 # Internal template (solar type)
                 if self.active_spectrum.velocity_profile_internal_template is None:
-                    self.active_spectrum.velocity_profile_internal_template = sve.read_spectrum(resource_path("input/spectra/synthetic/Synth_Meszaros_VALD_5777.0_4.44_0.0_1.0.txt.gz"))
+                    self.active_spectrum.velocity_profile_internal_template = ispec.read_spectrum(resource_path("input/spectra/synthetic/Synth_Meszaros_VALD_5777.0_4.44_0.0_1.0.txt.gz"))
                 template_spectrum = self.active_spectrum.velocity_profile_internal_template
             else:
                 # Search template to be used by its name
@@ -2012,24 +2029,24 @@ SPECTRUM a Stellar Spectral Synthesis Program
                     if self.spectra[i].name == template:
                         template_spectrum = self.spectra[i].data
                         break
-            xcoord, fluxes, errors = sve.build_velocity_profile(self.active_spectrum.data, template=template_spectrum, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, fourier=fourier, frame=self)
+            xcoord, fluxes, errors = ispec.build_velocity_profile(self.active_spectrum.data, template=template_spectrum, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, fourier=fourier, frame=self)
         else:
-            xcoord, fluxes, errors = sve.build_velocity_profile(self.active_spectrum.data, linelist=mask_linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, frame=self)
+            xcoord, fluxes, errors = ispec.build_velocity_profile(self.active_spectrum.data, linelist=mask_linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, frame=self)
 
         self.queue.put((self.on_determine_velocity_finish, [xcoord, fluxes, errors, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, mask_linelist, model], {}))
 
     def on_determine_velocity_finish(self, xcoord, fluxes, errors, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, mask_linelist, model):
         # Modelize
         if relative_to_atomic_data or relative_to_template:
-            models = sve.modelize_velocity_profile(xcoord, fluxes, errors, model=model)
+            models = ispec.modelize_velocity_profile(xcoord, fluxes, errors, model=model)
             if len(models) > 1:
-                accept = sve.select_good_velocity_profile_models(models, xcoord, fluxes)
+                accept = ispec.select_good_velocity_profile_models(models, xcoord, fluxes)
                 if len(models[accept]) == 0:
                     models = models[:1]
                 else:
                     models = models[accept]
         else:
-            models = sve.modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=True, model=model)
+            models = ispec.modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=True, model=model)
 
         if len(models) == 0:
             fwhm = 0.0
@@ -2135,7 +2152,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         molecules_file = resource_path("input/abundances/molecular_symbols.dat")
         telluric_linelist_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
         consider_omara = "GES" in vald_linelist_file # O'Mara only for GES linelist
-        linemasks = sve.fit_lines(self.regions["lines"], self.active_spectrum.data, self.active_spectrum.continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian=False, discard_voigt=True, smoothed_spectrum=self.active_spectrum.data, consider_omara=consider_omara, frame=self)
+        linemasks = ispec.fit_lines(self.regions["lines"], self.active_spectrum.data, self.active_spectrum.continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian=False, discard_voigt=True, smoothed_spectrum=self.active_spectrum.data, consider_omara=consider_omara, frame=self)
         # Exclude lines that have not been successfully cross matched with the atomic data
         # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
         rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
@@ -2194,7 +2211,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 line_extra = line_extra + str(line['ew']) + ";" + line['element'] + ";"
                 line_extra = line_extra + str(line['telluric_wave_peak']) + ";" + str(line['telluric_depth'])
                 line_extras.append(line_extra)
-                line_model = sve.GaussianModel(baseline=line['baseline'], A=line['A'], sig=line['sig'], mu=line['mu'])
+                line_model = ispec.GaussianModel(baseline=line['baseline'], A=line['A'], sig=line['sig'], mu=line['mu'])
                 line_model.rms = line['rms']
                 line_models.append(line_model)
                 if line["telluric_wave_peak"] != 0:
@@ -2354,9 +2371,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.queue.put((self.status_message, ["Finding continuum regions..."], {}))
         if in_segments:
             self.update_numpy_arrays_from_widgets("segments")
-            continuum_regions = sve.find_continuum(self.active_spectrum.data, resolution, segments=self.regions["segments"], max_std_continuum = sigma, continuum_model = self.active_spectrum.continuum_model, max_continuum_diff=max_continuum_diff, fixed_wave_step=fixed_wave_step, frame=self)
+            continuum_regions = ispec.find_continuum(self.active_spectrum.data, resolution, segments=self.regions["segments"], max_std_continuum = sigma, continuum_model = self.active_spectrum.continuum_model, max_continuum_diff=max_continuum_diff, fixed_wave_step=fixed_wave_step, frame=self)
         else:
-            continuum_regions = sve.find_continuum(self.active_spectrum.data, resolution, max_std_continuum = sigma, continuum_model = self.active_spectrum.continuum_model, max_continuum_diff=max_continuum_diff, fixed_wave_step=fixed_wave_step, frame=self)
+            continuum_regions = ispec.find_continuum(self.active_spectrum.data, resolution, max_std_continuum = sigma, continuum_model = self.active_spectrum.continuum_model, max_continuum_diff=max_continuum_diff, fixed_wave_step=fixed_wave_step, frame=self)
 
         self.queue.put((self.on_find_continuum_finish, [continuum_regions], {}))
 
@@ -2414,9 +2431,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         logging.info("Smoothing spectrum...")
         #self.queue.put((self.status_message, ["Smoothing spectrum..."], {}))
-        smoothed_spectrum = sve.convolve_spectrum(self.active_spectrum.data, 2*resolution, frame=self)
+        smoothed_spectrum = ispec.convolve_spectrum(self.active_spectrum.data, 2*resolution, frame=self)
         logging.info("Adjusting line masks...")
-        linemasks = sve.adjust_linemasks(smoothed_spectrum, linemasks, margin=margin)
+        linemasks = ispec.adjust_linemasks(smoothed_spectrum, linemasks, margin=margin)
 
         self.remove_regions(elements)
         self.regions[elements] = linemasks
@@ -2511,7 +2528,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         logging.info("Smoothing spectrum...")
         self.queue.put((self.status_message, ["Smoothing spectrum..."], {}))
-        smoothed_spectrum = sve.convolve_spectrum(spectrum, 2*resolution, frame=self)
+        smoothed_spectrum = ispec.convolve_spectrum(spectrum, 2*resolution, frame=self)
 
 
         self.queue.put((self.status_message, ["Generating line masks, fitting gaussians and matching VALD lines..."], {}))
@@ -2521,7 +2538,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         telluric_linelist_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
 
         consider_omara = "GES" in vald_linelist_file # O'Mara only for GES linelist
-        linemasks = sve.find_linemasks(spectrum, self.active_spectrum.continuum_model, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, minimum_depth=min_depth, maximum_depth=max_depth, smoothed_spectrum=smoothed_spectrum, discard_gaussian = False, discard_voigt = True, vel_atomic=vel_atomic, vel_telluric=vel_telluric, consider_omara=consider_omara, frame=self)
+        linemasks = ispec.find_linemasks(spectrum, self.active_spectrum.continuum_model, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, minimum_depth=min_depth, maximum_depth=max_depth, smoothed_spectrum=smoothed_spectrum, discard_gaussian = False, discard_voigt = True, vel_atomic=vel_atomic, vel_telluric=vel_telluric, consider_omara=consider_omara, frame=self)
 
         # If no peaks found, just finnish
         if linemasks is None or len(linemasks) == 0:
@@ -2619,7 +2636,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.remove_regions(elements)
 
         linemasks = self.regions["lines"]
-        self.regions[elements] = sve.create_segments_around_lines(linemasks, margin=margin)
+        self.regions[elements] = ispec.create_segments_around_lines(linemasks, margin=margin)
 
         self.draw_regions(elements)
         self.not_saved[elements] = False
@@ -2682,9 +2699,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 self.update_numpy_arrays_from_widgets(elements)
                 if len(self.regions[elements]) > 0:
                     if elements == "lines":
-                        self.regions[elements] = sve.correct_velocity_regions(self.regions[elements], velocity, with_peak=True)
+                        self.regions[elements] = ispec.correct_velocity_regions(self.regions[elements], velocity, with_peak=True)
                     else:
-                        self.regions[elements] = sve.correct_velocity_regions(self.regions[elements], velocity)
+                        self.regions[elements] = ispec.correct_velocity_regions(self.regions[elements], velocity)
                     self.draw_regions(elements)
                     self.not_saved[elements] = False
         else:
@@ -2693,7 +2710,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.active_spectrum.velocity_telluric -= velocity
             self.active_spectrum.velocity_template -= velocity
             # Correct
-            self.active_spectrum.data = sve.correct_velocity(self.active_spectrum.data, velocity)
+            self.active_spectrum.data = ispec.correct_velocity(self.active_spectrum.data, velocity)
             self.active_spectrum.not_saved = True
             self.draw_active_spectrum()
         self.update_title()
@@ -2735,7 +2752,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         # Project velocity toward star
-        self.barycentric_vel = sve.calculate_barycentric_velocity_correction((year, month, day, hours, minutes, seconds), (ra_hours, ra_minutes, ra_seconds, dec_degrees, dec_minutes, dec_seconds))
+        self.barycentric_vel = ispec.calculate_barycentric_velocity_correction((year, month, day, hours, minutes, seconds), (ra_hours, ra_minutes, ra_seconds, dec_degrees, dec_minutes, dec_seconds))
 
         msg = "Barycentric velocity determined: " + str(self.barycentric_vel) + " km/s"
         title = "Barycentric velocity"
@@ -2791,10 +2808,10 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.queue.put((self.status_message, ["Resampling spectrum..."], {}))
         self.queue.put((self.update_progress, [10], {}))
         xaxis = np.arange(np.min(self.active_spectrum.data["waveobs"]), np.max(self.active_spectrum.data["waveobs"]), wave_step)
-        resampled_spectrum_data = sve.resample_spectrum(self.active_spectrum.data, xaxis, frame=self)
+        resampled_spectrum_data = ispec.resample_spectrum(self.active_spectrum.data, xaxis, frame=self)
 
         self.queue.put((self.status_message, ["Estimating SNR for the whole spectrum..."], {}))
-        estimated_snr = sve.estimate_snr(resampled_spectrum_data['flux'], num_points=num_points, frame=self)
+        estimated_snr = ispec.estimate_snr(resampled_spectrum_data['flux'], num_points=num_points, frame=self)
         self.queue.put((self.on_estimate_snr_finnish, [estimated_snr], {}))
 
     def on_estimate_snr_finnish(self, estimated_snr):
@@ -2870,7 +2887,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.error(title, msg)
             return
 
-        self.active_spectrum.data = sve.add_noise(self.active_spectrum.data, snr, distribution)
+        self.active_spectrum.data = ispec.add_noise(self.active_spectrum.data, snr, distribution)
         self.active_spectrum.not_saved = True
 
         self.draw_active_spectrum()
@@ -2923,9 +2940,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.queue.put((self.status_message, ["Degrading spectrum resolution..."], {}))
         if from_resolution == 0:
             # Smooth
-            convolved_spectrum = sve.convolve_spectrum(self.active_spectrum.data, to_resolution, frame=self)
+            convolved_spectrum = ispec.convolve_spectrum(self.active_spectrum.data, to_resolution, frame=self)
         else:
-            convolved_spectrum = sve.convolve_spectrum(self.active_spectrum.data, to_resolution, from_resolution=from_resolution, frame=self)
+            convolved_spectrum = ispec.convolve_spectrum(self.active_spectrum.data, to_resolution, from_resolution=from_resolution, frame=self)
         self.queue.put((self.on_degrade_resolution_finnish, [convolved_spectrum, from_resolution, to_resolution], {}))
 
     def on_degrade_resolution_finnish(self, convolved_spectrum, from_resolution, to_resolution):
@@ -3063,12 +3080,12 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         if self.linelist_telluric is None:
             telluric_lines_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
-            self.linelist_telluric = sve.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
+            self.linelist_telluric = ispec.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
 
         # - Filter regions that may be affected by telluric lines
         #dfilter = self.linelist_telluric['depth'] > np.percentile(self.linelist_telluric['depth'], 75) # (only the 25% of the deepest ones)
         dfilter = self.linelist_telluric['depth'] > min_depth
-        tfilter = sve.create_filter_for_regions_affected_by_tellurics(self.active_spectrum.data['waveobs'], \
+        tfilter = ispec.create_filter_for_regions_affected_by_tellurics(self.active_spectrum.data['waveobs'], \
                                     self.linelist_telluric[dfilter], min_velocity=-rv+min_vel, max_velocity=-rv+max_vel)
 
         if len(self.active_spectrum.data[tfilter]) == 0:
@@ -3118,10 +3135,10 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         if not in_segments:
-            wfilter = sve.create_wavelength_filter(self.active_spectrum.data, wave_base=wave_base, wave_top=wave_top)
+            wfilter = ispec.create_wavelength_filter(self.active_spectrum.data, wave_base=wave_base, wave_top=wave_top)
         else:
             self.__update_numpy_arrays_from_widgets("segments")
-            wfilter = sve.create_wavelength_filter(self.active_spectrum.data, regions=self.regions["segments"])
+            wfilter = ispec.create_wavelength_filter(self.active_spectrum.data, regions=self.regions["segments"])
 
         if len(self.active_spectrum.data[wfilter]) == 0:
             msg = "This action cannot be done since it would produce a spectrum without measurements."
@@ -3218,7 +3235,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.queue.put((self.status_message, ["Resampling spectrum..."], {}))
         self.queue.put((self.update_progress, [10], {}))
         xaxis = np.arange(wave_base, wave_top, wave_step)
-        resampled_spectrum_data = sve.resample_spectrum(self.active_spectrum.data, xaxis, method=method, frame=self)
+        resampled_spectrum_data = ispec.resample_spectrum(self.active_spectrum.data, xaxis, method=method, frame=self)
         self.active_spectrum.data = resampled_spectrum_data
         self.queue.put((self.on_resample_spectrum_finnish, [], {}))
 
@@ -3319,7 +3336,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.queue.put((self.status_message, ["Resampling spectrum %i of %i (%s)..." % (i+1, total, spec.name)], {}))
             if spec == self.active_spectrum:
                 active = i
-            resampled_spectrum_data = sve.resample_spectrum(spec.data, xaxis, frame=self)
+            resampled_spectrum_data = ispec.resample_spectrum(spec.data, xaxis, frame=self)
             resampled_spectra.append(resampled_spectrum_data)
             i += 1
 
@@ -3343,12 +3360,12 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             if operation_mean:
                 # Mean fluxes
-                combined_spectrum = sve.create_spectrum_structure(xaxis, err=std)
+                combined_spectrum = ispec.create_spectrum_structure(xaxis, err=std)
                 combined_spectrum['flux'] = np.mean(matrix, axis=0)
                 combined_spectrum_name = "Cumulative_mean_spectrum"
             else:
                 # Median fluxes
-                combined_spectrum = sve.create_spectrum_structure(xaxis, err=std)
+                combined_spectrum = ispec.create_spectrum_structure(xaxis, err=std)
                 combined_spectrum['flux'] = np.median(matrix, axis=0)
                 combined_spectrum_name = "Cumulative_median_spectrum"
         elif operation_subtract:
@@ -3363,7 +3380,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 # Error propagation assuming that they are independent
                 err = np.sqrt(np.power(err,2) + np.power(spec['err'],2))
                 i += 1
-            combined_spectrum = sve.create_spectrum_structure(xaxis, flux, err)
+            combined_spectrum = ispec.create_spectrum_structure(xaxis, flux, err)
             combined_spectrum_name = "Subtracted_spectrum"
         elif operation_add:
             flux = np.zeros(total_wavelengths)
@@ -3372,7 +3389,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 flux = flux + spec['flux']
                 # Error propagation assuming that they are independent
                 err = np.sqrt(np.power(err,2) + np.power(spec['err'],2))
-            combined_spectrum = sve.create_spectrum_structure(xaxis, flux, err)
+            combined_spectrum = ispec.create_spectrum_structure(xaxis, flux, err)
             combined_spectrum_name = "Added_spectrum"
         elif operation_divide:
             flux = np.zeros(total_wavelengths)
@@ -3391,7 +3408,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                     else:
                         flux = flux * (1. / spec['flux'])
                 i += 1
-            combined_spectrum = sve.create_spectrum_structure(xaxis, flux, err)
+            combined_spectrum = ispec.create_spectrum_structure(xaxis, flux, err)
             combined_spectrum_name = "Divided_spectrum"
 
         # Free memory
@@ -3455,9 +3472,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.remove_continuum_spectrum()
 
         # Establish the new continuum at 1.0
-        self.active_spectrum.continuum_model = sve.fit_continuum(self.active_spectrum.data, fixed_value=1.0, model="Fixed value")
+        self.active_spectrum.continuum_model = ispec.fit_continuum(self.active_spectrum.data, fixed_value=1.0, model="Fixed value")
         waveobs = self.active_spectrum.data['waveobs']
-        self.active_spectrum.continuum_data = sve.create_spectrum_structure(waveobs, self.active_spectrum.continuum_model(waveobs))
+        self.active_spectrum.continuum_data = ispec.create_spectrum_structure(waveobs, self.active_spectrum.continuum_model(waveobs))
         self.draw_continuum_spectrum()
 
         self.draw_active_spectrum()
@@ -3563,7 +3580,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
     def on_synthesize(self):
         if self.check_operation_in_progress():
             return
-        if "generate_spectrum" in dir(sve):
+        if "generate_spectrum" in dir(ispec):
             if self.active_spectrum is not None:
                 wave_base = np.round(np.min(self.active_spectrum.data['waveobs']), 2)
                 wave_top = np.round(np.max(self.active_spectrum.data['waveobs']), 2)
@@ -3629,9 +3646,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
             if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
                 logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
                 self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
-                self.modeled_layers_pack[selected_atmosphere_models] = sve.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/modeled_layers_pack.dump'))
+                self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/modeled_layers_pack.dump'))
 
-            if not sve.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
+            if not ispec.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
                 msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of theatmospheric models."
                 title = 'Out of the atmospheric models'
                 self.error(title, msg)
@@ -3640,17 +3657,17 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             # Load SPECTRUM linelist
             if not linelist_file in self.linelist_SPECTRUM.keys():
-                self.linelist_SPECTRUM[linelist_file] = sve.read_SPECTRUM_linelist(linelist_file)
+                self.linelist_SPECTRUM[linelist_file] = ispec.read_SPECTRUM_linelist(linelist_file)
             linelist = self.linelist_SPECTRUM[linelist_file]
 
             # Load SPECTRUM abundances
             if not abundances_file in self.abundances_SPECTRUM.keys():
-                self.abundances_SPECTRUM[abundances_file] = sve.read_SPECTRUM_abundances(abundances_file)
+                self.abundances_SPECTRUM[abundances_file] = ispec.read_SPECTRUM_abundances(abundances_file)
             abundances = self.abundances_SPECTRUM[abundances_file]
 
             # Prepare atmosphere model
             self.status_message("Interpolating atmosphere model...")
-            atmosphere_layers = sve.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH)
+            atmosphere_layers = ispec.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH)
 
             if wave_base >= wave_top:
                 msg = "Bad wavelength range definition, maximum value cannot be lower than minimum value."
@@ -3698,13 +3715,13 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
     def on_synthesize_thread(self, waveobs, regions, linelist, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
 
-        synth_spectrum = sve.create_spectrum_structure(waveobs)
+        synth_spectrum = ispec.create_spectrum_structure(waveobs)
 
         # No fixed abundances
         fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
 
         # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
-        synth_spectrum['flux'] = sve.generate_spectrum(synth_spectrum['waveobs'], atmosphere_layers, teff, logg, MH, linelist=linelist, abundances=abundances, fixed_abundances=fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, regions=regions, verbose=1, gui_queue=self.queue)
+        synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], atmosphere_layers, teff, logg, MH, linelist=linelist, abundances=abundances, fixed_abundances=fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, regions=regions, verbose=1, gui_queue=self.queue)
 
 
         synth_spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
@@ -3792,9 +3809,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
             logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
             self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
-            self.modeled_layers_pack[selected_atmosphere_models] = sve.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/modeled_layers_pack.dump'))
+            self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/modeled_layers_pack.dump'))
 
-        if not sve.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
+        if not ispec.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
             msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of theatmospheric models."
             title = 'Out of the atmospheric models'
             self.error(title, msg)
@@ -3803,12 +3820,12 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         # Load SPECTRUM abundances
         if not abundances_file in self.abundances_SPECTRUM.keys():
-            self.abundances_SPECTRUM[abundances_file] = sve.read_SPECTRUM_abundances(abundances_file)
+            self.abundances_SPECTRUM[abundances_file] = ispec.read_SPECTRUM_abundances(abundances_file)
         abundances = self.abundances_SPECTRUM[abundances_file]
 
         # Prepare atmosphere model
         self.status_message("Interpolating atmosphere model...")
-        atmosphere_layers = sve.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH)
+        atmosphere_layers = ispec.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH)
 
         self.operation_in_progress = True
         self.status_message("Determining abundances...")
@@ -3820,7 +3837,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
     def on_determine_abundances_thread(self, atmosphere_layers, teff, logg, MH, abundances, microturbulence_vel):
         linemasks = self.active_spectrum.linemasks
-        spec_abund, normal_abund, x_over_h, x_over_fe = sve.determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 1.0, verbose=1, gui_queue=self.queue)
+        spec_abund, normal_abund, x_over_h, x_over_fe = ispec.determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 1.0, verbose=1, gui_queue=self.queue)
 
         self.queue.put((self.on_determine_abundances_finnish, [spec_abund, normal_abund, x_over_h, x_over_fe], {}))
 
@@ -3852,7 +3869,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if not self.check_continuum_model_exists():
             return
 
-        if "modelize_spectrum" in dir(sve):
+        if "modelize_spectrum" in dir(ispec):
             teff = 5777.0
             logg = 4.44
             MH = 0.00
@@ -3936,9 +3953,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
             if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
                 logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
                 self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
-                self.modeled_layers_pack[selected_atmosphere_models] = sve.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/modeled_layers_pack.dump'))
+                self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/modeled_layers_pack.dump'))
 
-            if not sve.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
+            if not ispec.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
                 msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of theatmospheric models."
                 title = 'Out of the atmospheric models'
                 self.error(title, msg)
@@ -3947,12 +3964,12 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             # Load SPECTRUM linelist
             if not linelist_file in self.linelist_SPECTRUM.keys():
-                self.linelist_SPECTRUM[linelist_file] = sve.read_SPECTRUM_linelist(linelist_file)
+                self.linelist_SPECTRUM[linelist_file] = ispec.read_SPECTRUM_linelist(linelist_file)
             linelist = self.linelist_SPECTRUM[linelist_file]
 
             # Load SPECTRUM abundances
             if not abundances_file in self.abundances_SPECTRUM.keys():
-                self.abundances_SPECTRUM[abundances_file] = sve.read_SPECTRUM_abundances(abundances_file)
+                self.abundances_SPECTRUM[abundances_file] = ispec.read_SPECTRUM_abundances(abundances_file)
             abundances = self.abundances_SPECTRUM[abundances_file]
 
             if not free_element_abundance:
@@ -4002,7 +4019,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.__update_numpy_arrays_from_widgets("lines")
         self.__update_numpy_arrays_from_widgets("segments")
 
-        obs_spectrum, synth_spectrum, params, errors, free_abundances, status, stats_linemasks = sve.modelize_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations)
+        obs_spectrum, synth_spectrum, params, errors, free_abundances, status, stats_linemasks = ispec.modelize_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations)
         self.queue.put((self.on_determine_parameters_finnish, [obs_spectrum, synth_spectrum, params, errors, status, stats_linemasks], {}))
 
     def on_determine_parameters_finnish(self, obs_spectrum, synth_spectrum, params, errors, status, stats_linemasks):

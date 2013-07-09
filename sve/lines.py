@@ -1,19 +1,19 @@
 #
-#    This file is part of Spectra Visual Editor (SVE).
+#    This file is part of the Integrated Spectroscopic Framework (iSpec).
 #    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
 #
-#    SVE is free software: you can redistribute it and/or modify
+#    iSpec is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU Affero General Public License as published by
 #    the Free Software Foundation, either version 3 of the License, or
 #    (at your option) any later version.
 #
-#    SVE is distributed in the hope that it will be useful,
+#    iSpec is distributed in the hope that it will be useful,
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU Affero General Public License for more details.
 #
 #    You should have received a copy of the GNU Affero General Public License
-#    along with SVE. If not, see <http://www.gnu.org/licenses/>.
+#    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 
 import asciitable
@@ -206,7 +206,7 @@ def read_line_regions(line_regions_filename):
         logging.error("Line regions where wave_base is equal or bigger than wave_top")
         raise Exception("Incompatible format")
 
-    if np.any(line_regions['wave_top'] - line_regions['wave_peak'] <= 0) or np.any(line_regions['wave_peak'] - line_regions['wave_base'] <= 0):
+    if np.any(line_regions['wave_top'] - line_regions['wave_peak'] < 0) or np.any(line_regions['wave_peak'] - line_regions['wave_base'] < 0):
         logging.error("Line regions where wave_peak is outside wave_base and wave_top")
         raise Exception("Incompatible format")
 
@@ -243,10 +243,9 @@ def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None):
     # Parameters estimators
     baseline = np.median(continuum_model(spectrum_slice['waveobs']))
     if A is None:
-        A = min_flux - baseline
+        A = np.min(min_flux - baseline, -1e-10)
     if sig is None:
-        sig = (x[-1] - x[0])/3.0
-
+        sig = np.max((x[-1] - x[0])/3.0, 1e-10)
 
     parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for i in np.arange(4)]
     parinfo[0]['value'] = baseline # Continuum
@@ -259,9 +258,10 @@ def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None):
     parinfo[2]['limits'] = [0., x[-1] - x[0]]
     parinfo[3]['value'] = mu # Peak only within the spectrum slice
     parinfo[3]['fixed'] = True
+    #parinfo[3]['fixed'] = False
     #parinfo[3]['limited'] = [True, True]
-    ##parinfo[3]['limits'] = [x[0], x[-1]]
-    #parinfo[3]['limits'] = [mu - 0.005, mu + 0.005]
+    #parinfo[3]['limits'] = [x[0], x[-1]]
+    ##parinfo[3]['limits'] = [mu - 0.005, mu + 0.005]
 
     # If there are only 3 data point, fix 'mu'
     # - if not, the fit will fail with an exception because there are not
@@ -955,7 +955,7 @@ def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elem
                 linemasks['stark'][j] = vald_linelist['stark'][i]
                 linemasks['waals'][j] = vald_linelist['waals'][i]
 
-                if consider_omara and vald_linelist['waals'] > 0:
+                if consider_omara and vald_linelist['waals'][i] > 0:
                     # OA Case
                     # Anstee, Barklem & O'Mara theory for collisional broadening by hydrogen, so called ABO theory
                     # * sigma.alpha parameter
@@ -964,7 +964,8 @@ def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elem
                     linemasks['stark'][j] = 0
                     linemasks['waals'][j] = 0
                 elif (vald_linelist['rad'][j] <= 0 or vald_linelist['stark'][j] >= 0 or \
-                        vald_linelist['waals'][j] >= 0 or float(linemasks['species'][j]) >= 101.0):
+                        vald_linelist['waals'][j] >= 0 or \
+                        (linemasks['species'][j] not in ["", "Discard"] and float(linemasks['species'][j]) >= 101.0)):
                     # If it is a molecule or any of this criterias is not met:
                     # - Radiative damping should be positive
                     # - Stark should be zero or negative
@@ -984,7 +985,10 @@ def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elem
     linemasks['lower state (cm^-1)'] = (__eV_to_inverse_cm(linemasks['lower state (eV)'])).astype(int)
 
     # Molecule cases
-    molecules = np.asarray(map(float, linemasks['species'])) >= 101.0
+    species = linemasks['species'].copy()
+    nofloat = np.where(np.logical_or(species == "Discard", species == ""))[0]
+    species[nofloat] = "0.0" # If not, float conversion is going to fail
+    molecules = np.asarray(map(float, species)) >= 101.0
     linemasks['upper state (cm^-1)'][molecules] = 0.0 # Since we do not have molecular band information, we should leave it to zero
 
     return linemasks
@@ -1514,7 +1518,7 @@ def build_velocity_profile(spectrum, linelist=None, template=None, lower_velocit
         if template is not None:
             logging.warn("Building velocity profile with mask (ignoring template)")
 
-        #linelist_file = sve_dir + "input/linelists/Kurucz.lst"
+        #linelist_file = ispec_dir + "input/linelists/Kurucz.lst"
         import asciitable
         #linelist = asciitable.read(linelist_file, names=["wave_peak", "element", "depth"])
         if len(linelist) > 500: # Not tellurics
@@ -1522,7 +1526,7 @@ def build_velocity_profile(spectrum, linelist=None, template=None, lower_velocit
             #linelist = asciitable.read("input/sun.lst", names=["wave_peak", "depth"])
             #linelist = asciitable.read("input/masks/narval.sun.370_1048.txt", delimiter="\t")
             #linelist = asciitable.read("input/arcturus.lst", names=["wave_peak", "depth"])
-            #linelist = asciitable.read("/home/sblancoc/apps/sve/input/Gerard.lst", names=["wave_peak", "depth"])
+            #linelist = asciitable.read("/home/sblancoc/apps/ispec/input/Gerard.lst", names=["wave_peak", "depth"])
             pass
 
         #xaxis = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), 0.000005)
