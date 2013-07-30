@@ -217,8 +217,9 @@ normalized_sun_spectrum['err'] = sun_spectrum['err'] \
 
 #--- Filtering cosmic rays -----------------------------------------------------
 # Spectrum should be already normalized
-clean_sun_spectrum = ispec.filter_cosmic_rays(normalized_sun_spectrum, \
+ffilter = ispec.create_filter_cosmic_rays(normalized_sun_spectrum, \
                                 min_flux=0.90, max_flux=1.10, margin=3)
+clean_sun_spectrum = sun_spectrum[ffilter]
 
 
 #--- Find continuum regions ----------------------------------------------------

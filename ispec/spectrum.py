@@ -191,21 +191,22 @@ def read_spectrum(spectrum_filename, fits_options={"fluxhdu": "PRIMARY", "errorh
     # Filtering...
     valid = ~np.isnan(spectrum['flux'])
 
-    # Find duplicate wavelengths
-    dups, dups_index = find_duplicates(spectrum, 'waveobs')
+    if len(spectrum[valid]) > 2:
+        # Find duplicate wavelengths
+        dups, dups_index = find_duplicates(spectrum, 'waveobs')
 
-    # Filter all duplicates except the first one
-    last_wave = None
-    for i in np.arange(len(dups)):
-        if last_wave is None:
-            last_wave = dups[i]['waveobs']
-            continue
-        if last_wave == dups[i]['waveobs']:
-            pos = dups_index[i]
-            valid[pos] = False
-        else:
-            # Do not filter the first duplicated value
-            last_wave = dups[i]['waveobs']
+        # Filter all duplicates except the first one
+        last_wave = None
+        for i in np.arange(len(dups)):
+            if last_wave is None:
+                last_wave = dups[i]['waveobs']
+                continue
+            if last_wave == dups[i]['waveobs']:
+                pos = dups_index[i]
+                valid[pos] = False
+            else:
+                # Do not filter the first duplicated value
+                last_wave = dups[i]['waveobs']
 
     # Filter invalid and duplicated values
     spectrum = spectrum[valid]
@@ -372,6 +373,9 @@ except:
 
         - 4 points in general
         - 2 when there are not more (i.e. at the beginning of the array or outside)
+
+        * It does not interpolate if any of the fluxes used for interpolation is zero or negative
+        this way it can respect gaps in the spectrum
         """
         last_reported_progress = -1
         current_work_progress = 10.0
@@ -398,10 +402,15 @@ except:
                 resampled_flux[i] = 0.0
                 resampled_err[i] = 0.0
             elif index == 1 or index == total_points-1:
-                # Linear interpolation between index and index-1
-                # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
-                resampled_flux[i] = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index]-fluxes[index-1])/(waveobs[index]-waveobs[index-1]))
-                resampled_err[i] = err[index-1] + (objective_wavelength - waveobs[index-1]) * ((err[index]-err[index-1])/(waveobs[index]-waveobs[index-1]))
+                # Do not interpolate if any of the fluxes is zero or negative
+                if fluxes[index-1] <= 1e-10 or fluxes[index] <= 1e-10:
+                    resampled_flux[i] = 0.0
+                    resampled_err[i] = 0.0
+                else:
+                    # Linear interpolation between index and index-1
+                    # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
+                    resampled_flux[i] = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index]-fluxes[index-1])/(waveobs[index]-waveobs[index-1]))
+                    resampled_err[i] = err[index-1] + (objective_wavelength - waveobs[index-1]) * ((err[index]-err[index-1])/(waveobs[index]-waveobs[index-1]))
             elif index == 0 and waveobs[index] != objective_wavelength:
                 # DISCARD: Linear extrapolation using index+1 and index
                 # flux = fluxes[index] + (objective_wavelength - waveobs[index]) * ((fluxes[index+1]-fluxes[index])/(waveobs[index+1]-waveobs[index]))
@@ -439,9 +448,14 @@ except:
                 err_x1 = err[index]
                 err_x2 = err[index + 1]
 
-                p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
-                resampled_flux[i] = flux_x0 + p * (flux_x1 - flux_x0) + (p * (p - 1) / 4) * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
-                resampled_err[i] = err_x0 + p * (err_x1 - err_x0) + (p * (p - 1) / 4) * (err_x2 - err_x1 - err_x0 + err_x_1)
+                # Do not interpolate if any of the fluxes is zero or negative
+                if flux_x_1 <= 1e-10 or flux_x0 <= 1e-10 or flux_x1 <= 1e-10 or flux_x2 <= 1e-10:
+                    resampled_flux[i] = 0.0
+                    resampled_err[i] = 0.0
+                else:
+                    p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
+                    resampled_flux[i] = flux_x0 + p * (flux_x1 - flux_x0) + (p * (p - 1) / 4) * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
+                    resampled_err[i] = err_x0 + p * (err_x1 - err_x0) + (p * (p - 1) / 4) * (err_x2 - err_x1 - err_x0 + err_x_1)
 
             if index > 4:
                 from_index = index - 4
@@ -477,7 +491,7 @@ except:
         sigma = __fwhm_to_sigma(fwhm)
 
         for i in np.arange(total_points):
-            if flux[i] <= 0:
+            if flux[i] <= 1e-10:
                 continue
 
             lambda_peak = waveobs[i] # Current lambda (wavelength) to be modified
@@ -748,21 +762,31 @@ def correct_velocity_regions(regions, velocity, with_peak=False):
     return regions
 
 def add_noise(spectrum, snr, distribution="poisson"):
+    """
+    Add noise to the spectrum fluxes to simulate a given SNR (Signal to noise Ratio).
+    The distribution can be "poisson" or "gaussian"
+    """
     noisy_spectrum = create_spectrum_structure(spectrum['waveobs'], spectrum['flux'], spectrum['err'])
-    if distribution == "gaussian":
+    if distribution.lower() == "gaussian":
         sigma = spectrum['flux']/snr
+        sigma[sigma <= 0.0] = 1.0e-10
         noisy_spectrum['flux'] += np.random.normal(0, sigma, len(spectrum))
         noisy_spectrum['err'] += sigma
     else:
         # poison
         sigma = 1./snr
         lamb = spectrum['flux'] / (sigma * sigma)
+        lamb[lamb < 0.0] = 0.0
         noisy_spectrum['flux'] = np.random.poisson(lamb)
         noisy_spectrum['flux'] *= sigma*sigma
         noisy_spectrum['err'] += noisy_spectrum['flux'] / np.sqrt(lamb)
     return noisy_spectrum
 
 def create_wavelength_filter(spectrum, wave_base=None, wave_top=None, regions=None):
+    """
+    Filter out the measurement of a spectrum between two given wavelengths limits
+    or outside the regions if it is not "None".
+    """
     wfilter = None
     if regions is None:
         if wave_base is None:
@@ -809,19 +833,19 @@ def vacuum_to_air(spectrum):
     return converted_spectrum
 
 
-def filter_cosmic_rays(spectrum, min_flux=0.90, max_flux=1.10, margin=3):
+def create_filter_cosmic_rays(spectrum, min_flux=0.90, max_flux=1.10, margin=3):
     """
     It consider the mean and standard deviation (sigma) of the fluxes between a
     minimum and a maximum in order to filter out everything that is
     above the mean + 3 * sigma.
-    
+
     Ideally the spectrum should be already normalized.
     """
     wfilter = np.logical_and(spectrum['flux'] > min_flux, spectrum['flux'] < max_flux)
     mu = np.mean(spectrum['flux'][wfilter])
     sigma = np.std(spectrum['flux'][wfilter])
     ffilter = spectrum['flux'] < mu + margin*sigma
-    return spectrum[ffilter]
+    return ffilter
 
 
 

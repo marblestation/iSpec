@@ -63,7 +63,7 @@ def convolve_spectrum(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.doub
     cdef int y
     for i in np.arange(total_points):
     #for i from 0 <= i < total_points by 1:
-        if flux[i] <= 0:
+        if flux[i] <= 1e-10:
             continue
 
         # FWHM of the gaussian for the given resolution
@@ -110,7 +110,10 @@ def convolve_spectrum(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.doub
             total_gaussian += gaussian[x]
             if err[i] > 0:
                 convolved_err[i] += err_window[x] * gaussian[x]
+                #convolved_err[i] += (err_window[x] * gaussian[x]) * (err_window[x] * gaussian[x]) # Independent measurements
         convolved_flux[i] /= total_gaussian
+        #convolved_err[i] = sqrt(convolved_err[i]) # Independent measurements
+        convolved_err[i] /= total_gaussian
 
         current_work_progress = (i*1.0 / total_points) * 100
         if (int(current_work_progress) % 10 == 0 and current_work_progress - last_reported_progress > 10) or last_reported_progress < 0 or current_work_progress == 100:
@@ -131,6 +134,9 @@ def bessel_interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.d
 
     - 4 points in general
     - 2 when there are not more (i.e. at the beginning of the array or outside)
+
+    * It does not interpolate if any of the fluxes used for interpolation is zero or negative
+      this way it can respect gaps in the spectrum
     """
     cdef double current_work_progress
     cdef double last_reported_progress = -1
@@ -175,10 +181,15 @@ def bessel_interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.d
             resampled_flux[i] = 0.0
             resampled_err[i] = 0.0
         elif index == 1 or index == total_points-1:
-            # Linear interpolation between index and index-1
-            # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
-            resampled_flux[i] = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index]-fluxes[index-1])/(waveobs[index]-waveobs[index-1]))
-            resampled_err[i] = err[index-1] + (objective_wavelength - waveobs[index-1]) * ((err[index]-err[index-1])/(waveobs[index]-waveobs[index-1]))
+            # Do not interpolate if any of the fluxes is zero or negative
+            if fluxes[index-1] <= 1e-10 or fluxes[index] <= 1e-10:
+                resampled_flux[i] = 0.0
+                resampled_err[i] = 0.0
+            else:
+                # Linear interpolation between index and index-1
+                # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
+                resampled_flux[i] = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index]-fluxes[index-1])/(waveobs[index]-waveobs[index-1]))
+                resampled_err[i] = err[index-1] + (objective_wavelength - waveobs[index-1]) * ((err[index]-err[index-1])/(waveobs[index]-waveobs[index-1]))
         elif index == 0 and waveobs[index] != objective_wavelength:
             # DISCARD: Linear extrapolation using index+1 and index
             # flux = fluxes[index] + (objective_wavelength - waveobs[index]) * ((fluxes[index+1]-fluxes[index])/(waveobs[index+1]-waveobs[index]))
@@ -216,9 +227,14 @@ def bessel_interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.d
             err_x1 = err[index]
             err_x2 = err[index + 1]
 
-            p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
-            resampled_flux[i] = flux_x0 + p * (flux_x1 - flux_x0) + (p * (p - 1) / 4) * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
-            resampled_err[i] = err_x0 + p * (err_x1 - err_x0) + (p * (p - 1) / 4) * (err_x2 - err_x1 - err_x0 + err_x_1)
+            # Do not interpolate if any of the fluxes is zero or negative
+            if flux_x_1 <= 1e-10 or flux_x0 <= 1e-10 or flux_x1 <= 1e-10 or flux_x2 <= 1e-10:
+                resampled_flux[i] = 0.0
+                resampled_err[i] = 0.0
+            else:
+                p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
+                resampled_flux[i] = flux_x0 + p * (flux_x1 - flux_x0) + (p * (p - 1) / 4) * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
+                resampled_err[i] = err_x0 + p * (err_x1 - err_x0) + (p * (p - 1) / 4) * (err_x2 - err_x1 - err_x0 + err_x_1)
 
         current_work_progress = (i*1.0 / new_total_points) * 100
         if (int(current_work_progress) % 10 == 0 and current_work_progress - last_reported_progress > 10) or last_reported_progress < 0 or current_work_progress == 100:

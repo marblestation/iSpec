@@ -1102,6 +1102,11 @@ def __improve_linemask_edges(xcoord, yvalues, base, top, peak):
     return new_base, new_top
 
 def adjust_linemasks(spectrum, linemasks, margin=0.5):
+    """
+    Adjust the line masks borders to the shape of the line in the specified spectrum.
+    It will consider by default 0.5 nm around the wave peak. It returns a new
+    linemasks structure.
+    """
     for line in linemasks:
         wave_peak = line['wave_peak']
         wfilter = np.logical_and(spectrum['waveobs'] >= wave_peak - margin, spectrum['waveobs'] <= wave_peak + margin)
@@ -1227,6 +1232,10 @@ def __sampling_uniform_in_velocity(wave_base, wave_top, velocity_step):
     # number of elements to go from wave_base to wave_top in increments of velocity_step
     i = int(np.ceil( (c * (wave_top - wave_base)) / (wave_base*velocity_step)))
     grid = wave_base * np.power((1 + (velocity_step / c)), np.arange(i)+1)
+
+    # Ensure wavelength limits since the "number of elements i" tends to be overestimated
+    wfilter = grid <= wave_top
+    grid = grid[wfilter]
 
     ### Non optimized:
     #grid = []

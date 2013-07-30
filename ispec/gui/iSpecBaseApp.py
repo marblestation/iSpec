@@ -730,7 +730,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
         if self.check_operation_in_progress():
             return
-        if len(self.spectra) <= 1:
+        if len(self.spectra) <= 1 and except_active:
             return
 
         some_not_saved = False
@@ -1575,7 +1575,14 @@ SPECTRUM a Stellar Spectral Synthesis Program
         return response
 
     def update_progress(self, value):
-        self.progress_bar.set((1.*value)/100)
+        normalized_value = np.min([1, np.max([0, 1.*value / 100])])
+        try:
+            self.progress_bar.set(normalized_value)
+        except:
+            # Sometimes this set fails because unknown reasons, we can just ignore the exception
+            pass
+            #import ipdb
+            #ipdb.set_trace()
 
     def update_title(self):
         title = "iSpec"
@@ -2019,7 +2026,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             if template == "[Internal template]":
                 # Internal template (solar type)
                 if self.active_spectrum.velocity_profile_internal_template is None:
-                    self.active_spectrum.velocity_profile_internal_template = ispec.read_spectrum(resource_path("input/spectra/synthetic/Synth_Meszaros_VALD_5777.0_4.44_0.0_1.0.txt.gz"))
+                    self.active_spectrum.velocity_profile_internal_template = ispec.read_spectrum(resource_path("input/spectra/synthetic/Synth_ATLAS9.APOGEE_VALD_5777.0_4.44_0.0_1.0.txt.gz"))
                 template_spectrum = self.active_spectrum.velocity_profile_internal_template
             else:
                 # Search template to be used by its name
@@ -2986,9 +2993,24 @@ SPECTRUM a Stellar Spectral Synthesis Program
         filter_by_error = self.dialog[key].results["Filter by error"] == 1
         err_base = self.dialog[key].results["Base error"]
         err_top = self.dialog[key].results["Top error"]
+        filter_cosmics = self.dialog[key].results["Filter above: mean + N * stdev"] == 1
+        flux_cosmics_base = self.dialog[key].results["Base flux to consider"]
+        flux_cosmics_top = self.dialog[key].results["Top flux to consider"]
+        cosmics_n = self.dialog[key].results["N"]
+        replace_by = self.dialog[key].results["Replace by"]
         self.dialog[key].destroy()
 
-        if flux_base is None or flux_top is None or flux_top <= flux_base or err_base is None or err_top is None or err_top <= err_base:
+        if replace_by == "Continuum" and self.active_spectrum.continuum_model is None:
+            msg = "It is necessary to previously fit continuum in order to clean values and replace them by continuum"
+            title = "Continuum not fitted"
+            self.error(title, msg)
+            self.flash_status_message("Continuum not fitted.")
+            return
+
+        if flux_base is None or flux_top is None or flux_top <= flux_base \
+                or err_base is None or err_top is None or err_top <= err_base \
+                or flux_cosmics_base is None or flux_cosmics_top is None or flux_cosmics_top <= flux_cosmics_base \
+                or cosmics_n is None or cosmics_n <= 0:
             self.flash_status_message("Bad value.")
             return
 
@@ -3001,13 +3023,6 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         self.status_message("Cleaning spectrum...")
 
-        # Remove current continuum from plot if exists
-        self.remove_continuum_spectrum()
-
-        # Remove current drawn fitted lines if they exist
-        # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
-        self.remove_fitted_lines()
-
         if filter_by_flux and filter_by_error:
             ffilter = (self.active_spectrum.data['flux'] > flux_base) & (self.active_spectrum.data['flux'] <= flux_top)
             efilter = (self.active_spectrum.data['err'] > err_base) & (self.active_spectrum.data['err'] <= err_top)
@@ -3019,6 +3034,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
         else:
             wfilter = np.logical_not(np.isnan(self.active_spectrum.data['err']))
 
+        if filter_cosmics:
+            wfilter = ispec.create_filter_cosmic_rays(self.active_spectrum.data, min_flux=flux_cosmics_base, max_flux=flux_cosmics_top, margin=cosmics_n)
+
         if len(self.active_spectrum.data[wfilter]) == 0:
             msg = "This action cannot be done since it would produce a spectrum without measurements."
             title = "Wrong flux/error ranges"
@@ -3026,7 +3044,32 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.flash_status_message("Bad value.")
             return
 
-        self.active_spectrum.data = self.active_spectrum.data[wfilter]
+        if len(self.active_spectrum.data[wfilter]) == 0:
+            msg = "This action cannot be done since it would produce a spectrum without measurements."
+            title = "Wrong ranges"
+            self.error(title, msg)
+            self.flash_status_message("Bad value.")
+            return
+
+        if replace_by == "Zeros":
+            self.active_spectrum.data['flux'][~wfilter] = 0.0
+            self.active_spectrum.data['err'][~wfilter] = 0.0
+        elif replace_by == "NaN":
+            self.active_spectrum.data['flux'][~wfilter] = np.nan
+            self.active_spectrum.data['err'][~wfilter] = np.nan
+        elif replace_by == "Continuum":
+            self.active_spectrum.data['flux'][~wfilter] = self.active_spectrum.continuum_model(self.active_spectrum.data['waveobs'][~wfilter])
+            self.active_spectrum.data['err'][~wfilter] = 0.0
+        else:
+            self.active_spectrum.data = self.active_spectrum.data[wfilter]
+
+        # Remove current continuum from plot if exists
+        self.remove_continuum_spectrum()
+
+        # Remove current drawn fitted lines if they exist
+        # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
+        self.remove_fitted_lines()
+
         self.active_spectrum.not_saved = True
         self.draw_active_spectrum()
 
@@ -3041,22 +3084,30 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         key = "CleanTelluricsDialog"
-        rv = self.active_spectrum.velocity_atomic
+        vel_telluric = self.active_spectrum.velocity_telluric
         if not self.active_spectrum.dialog.has_key(key):
-            self.active_spectrum.dialog[key] = CleanTelluricsDialog(self, "Clean telluric regions", rv, -30.0, 30.0, 0.02)
-        self.active_spectrum.dialog[key].show(updated_vel=rv)
+            self.active_spectrum.dialog[key] = CleanTelluricsDialog(self, "Clean telluric regions", vel_telluric, -30.0, 30.0, 0.02)
+        self.active_spectrum.dialog[key].show(updated_vel=vel_telluric)
 
         if self.active_spectrum.dialog[key].results is None:
             self.active_spectrum.dialog[key].destroy()
             return
 
-        rv = self.active_spectrum.dialog[key].results["Radial velocity"]
+        vel_telluric = self.active_spectrum.dialog[key].results["Velocity relative to tellurics"]
         min_vel = self.active_spectrum.dialog[key].results["Minimum velocity"]
         max_vel = self.active_spectrum.dialog[key].results["Maximum velocity"]
         min_depth = self.active_spectrum.dialog[key].results["Minimum tellurics depth"]
+        replace_by = self.active_spectrum.dialog[key].results["Replace by"]
         self.active_spectrum.dialog[key].destroy()
 
-        if rv is None or min_depth is None or min_vel is None or max_vel is None or min_vel >= max_vel:
+        if replace_by == "Continuum" and self.active_spectrum.continuum_model is None:
+            msg = "It is necessary to previously fit continuum in order to clean values and replace them by continuum"
+            title = "Continuum not fitted"
+            self.error(title, msg)
+            self.flash_status_message("Continuum not fitted.")
+            return
+
+        if vel_telluric is None or min_depth is None or min_vel is None or max_vel is None or min_vel >= max_vel:
             self.flash_status_message("Bad value.")
             return
 
@@ -3069,14 +3120,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         self.status_message("Cleaning spectrum...")
 
-        self.active_spectrum.velocity_atomic = rv
-
-        # Remove current continuum from plot if exists
-        self.remove_continuum_spectrum()
-
-        # Remove current drawn fitted lines if they exist
-        # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
-        self.remove_fitted_lines()
+        self.active_spectrum.velocity_telluric = vel_telluric
 
         if self.linelist_telluric is None:
             telluric_lines_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
@@ -3086,7 +3130,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         #dfilter = self.linelist_telluric['depth'] > np.percentile(self.linelist_telluric['depth'], 75) # (only the 25% of the deepest ones)
         dfilter = self.linelist_telluric['depth'] > min_depth
         tfilter = ispec.create_filter_for_regions_affected_by_tellurics(self.active_spectrum.data['waveobs'], \
-                                    self.linelist_telluric[dfilter], min_velocity=-rv+min_vel, max_velocity=-rv+max_vel)
+                                    self.linelist_telluric[dfilter], min_velocity=-vel_telluric+min_vel, max_velocity=-vel_telluric+max_vel)
 
         if len(self.active_spectrum.data[tfilter]) == 0:
             msg = "This action cannot be done since it would produce a spectrum without measurements."
@@ -3094,9 +3138,24 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.error(title, msg)
             self.flash_status_message("Bad value.")
             return
-        #self.active_spectrum.data['flux'][tfilter] = 0.0
-        #self.active_spectrum.data['err'][tfilter] = 0.0
-        self.active_spectrum.data = self.active_spectrum.data[~tfilter]
+        if replace_by == "Zeros":
+            self.active_spectrum.data['flux'][tfilter] = 0.0
+            self.active_spectrum.data['err'][tfilter] = 0.0
+        elif replace_by == "NaN":
+            self.active_spectrum.data['flux'][tfilter] = np.nan
+            self.active_spectrum.data['err'][tfilter] = np.nan
+        elif replace_by == "Continuum":
+            self.active_spectrum.data['flux'][tfilter] = self.active_spectrum.continuum_model(self.active_spectrum.data['waveobs'][tfilter])
+            self.active_spectrum.data['err'][tfilter] = 0.0
+        else:
+            self.active_spectrum.data = self.active_spectrum.data[~tfilter]
+
+        # Remove current continuum from plot if exists
+        self.remove_continuum_spectrum()
+
+        # Remove current drawn fitted lines if they exist
+        # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
+        self.remove_fitted_lines()
 
         self.active_spectrum.not_saved = True
         self.draw_active_spectrum()
@@ -3163,7 +3222,13 @@ SPECTRUM a Stellar Spectral Synthesis Program
         # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
         self.remove_fitted_lines()
 
-        self.active_spectrum.data = self.active_spectrum.data[wfilter]
+        #self.active_spectrum.data = self.active_spectrum.data[wfilter]
+        self.active_spectrum.data['flux'][~wfilter] = 0.0
+        self.active_spectrum.data['err'][~wfilter] = 0.0
+        #if self.active_spectrum.continuum_model is not None:
+            #self.active_spectrum.data['flux'][~wfilter] = self.active_spectrum.continuum_model(self.active_spectrum.data['waveobs'][~wfilter])
+            #self.active_spectrum.data['err'][~wfilter] = 0.0
+
         self.active_spectrum.not_saved = True
         self.draw_active_spectrum()
 
@@ -3600,7 +3665,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             resolution = 300000
             wave_step = 0.001
 
-            key = "SendSpectrumDialog"
+            key = "SyntheticSpectrumDialog"
             if not self.dialog.has_key(key):
                 self.dialog[key] = SyntheticSpectrumDialog(self, "Synthetic spectrum generator", wave_base, wave_top, wave_step, resolution, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff)
             self.dialog[key].show()
