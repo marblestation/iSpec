@@ -90,7 +90,7 @@ def __find_a_value_per_wavelength_range(spectrum, base_points, wave_range=1, med
     candidate_base_points = -9999 * np.ones(num_candidate_base_points, dtype=int)
     i = 0
     while wave_base < wave_top:
-        positions = np.where((waveobs[base_points] >= wave_base) & (waveobs[base_points] <= wave_base + wave_step))[0]
+        positions = np.where((waveobs[base_points] >= wave_base) & (waveobs[base_points] < wave_base + wave_step))[0]
 
         if len(positions) == 0:
             candidate_base_points[i] = -9999

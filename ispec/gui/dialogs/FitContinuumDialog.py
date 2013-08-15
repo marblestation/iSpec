@@ -47,7 +47,7 @@ class FitContinuumDialog(CustomDialog):
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Fitting model"
-        component["options"] = ["Polynomy", "Splines", "Fixed value"]
+        component["options"] = ["Splines", "Polynomy", "Fixed value"]
         component["default"] = component["options"][0]
         self.__components.append(component)
         component = {}

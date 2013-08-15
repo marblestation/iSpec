@@ -106,11 +106,12 @@ def convolve_spectrum(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.doub
         total_gaussian = 0.0
         for x from 0 <= x < len(flux_window) by 1:
             gaussian[x] = exp(- ((waveobs_window[x] - lambda_peak)**2) / (2*sigma**2)) / sqrt(2*np.pi*sigma)
-            convolved_flux[i] += flux_window[x] * gaussian[x]
-            total_gaussian += gaussian[x]
-            if err[i] > 0:
-                convolved_err[i] += err_window[x] * gaussian[x]
-                #convolved_err[i] += (err_window[x] * gaussian[x]) * (err_window[x] * gaussian[x]) # Independent measurements
+            if flux_window[x] > 0.0: # Zero or negative values are considered as gaps in the spectrum
+                convolved_flux[i] += flux_window[x] * gaussian[x]
+                total_gaussian += gaussian[x]
+                if err[i] > 0:
+                    convolved_err[i] += err_window[x] * gaussian[x]
+                    #convolved_err[i] += (err_window[x] * gaussian[x]) * (err_window[x] * gaussian[x]) # Independent measurements
         convolved_flux[i] /= total_gaussian
         #convolved_err[i] = sqrt(convolved_err[i]) # Independent measurements
         convolved_err[i] /= total_gaussian
@@ -198,9 +199,12 @@ def bessel_interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.d
             # JUST ZERO:
             resampled_flux[i] = 0.0
             resampled_err[i] = 0.0
-        elif waveobs[index] == objective_wavelength:
-            resampled_flux[i] = fluxes[index]
-            resampled_err[i] = err[index]
+        # Do not do this optimization because it can produce a value surounded
+        # by zeros because of the condition "Do not interpolate if any of the
+        # fluxes is zero or negative" implemented in the rest of the cases
+        #elif waveobs[index] == objective_wavelength:
+            #resampled_flux[i] = fluxes[index]
+            #resampled_err[i] = err[index]
         else:
             # Bessel's Central-Difference Interpolation with 4 points
             #   p = [(x - x0) / (x1 - x0)]

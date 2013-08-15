@@ -2,7 +2,7 @@ import numpy as np
 from CustomDialog import *
 
 class FindLinesDialog(CustomDialog):
-    def __init__(self, parent, title, min_depth=0.05, max_depth=1.0, vel_atomic=0.0, vel_telluric=0.0, resolution=300000, elements="Fe 1, Fe 2"):
+    def __init__(self, parent, title, min_depth=0.05, max_depth=1.0, vel_telluric=0.0, resolution=300000, elements="Fe 1, Fe 2"):
         self.__parent = parent
         self.__title = title
         self.__components = []
@@ -40,14 +40,6 @@ class FindLinesDialog(CustomDialog):
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
-        component["text"] = "Velocity respect to atomic lines (km/s)"
-        component["text-type"] = "float" # float, int or str
-        component["default"] = vel_atomic
-        component["minvalue"] = -np.inf
-        component["maxvalue"] = np.inf
-        self.__components.append(component)
-        component = {}
-        component["type"] = "Entry"
         component["text"] = "Velocity respect to telluric lines (km/s)"
         component["text-type"] = "float" # float, int or str
         component["default"] = vel_telluric
@@ -72,12 +64,10 @@ class FindLinesDialog(CustomDialog):
         component["default"] = component["options"][0]
         self.__components.append(component)
 
-    def show(self, updated_vel_atomic=None, updated_vel_telluric=None):
+    def show(self, updated_vel_telluric=None):
         self.results = None
-        if updated_vel_atomic is not None:
-            self.__components[4]["default"] = updated_vel_atomic
         if updated_vel_telluric is not None:
-            self.__components[5]["default"] = updated_vel_telluric
+            self.__components[4]["default"] = updated_vel_telluric
         CustomDialog.__init__(self, self.__parent, self.__title, self.__components)
 
 

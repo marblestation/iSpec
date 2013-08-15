@@ -419,9 +419,12 @@ except:
                 # JUST ZERO:
                 resampled_flux[i] = 0.0
                 resampled_err[i] = 0.0
-            elif waveobs[index] == objective_wavelength:
-                resampled_flux[i] = fluxes[index]
-                resampled_err[i] = err[index]
+            # Do not do this optimization because it can produce a value surounded
+            # by zeros because of the condition "Do not interpolate if any of the
+            # fluxes is zero or negative" implemented in the rest of the cases
+            #elif waveobs[index] == objective_wavelength:
+                #resampled_flux[i] = fluxes[index]
+                #resampled_err[i] = err[index]
             else:
                 # Bessel's Central-Difference Interpolation with 4 points
                 #   p = [(x - x0) / (x1 - x0)]
@@ -599,15 +602,15 @@ except:
             err_segment = err[lower_pos:upper_pos+1]
             waveobs_segment = waveobs[lower_pos:upper_pos+1]
 
-            nsegments = len(flux_segment)
-
             # Build the gaussian corresponding to the instrumental spread function
             gaussian = np.exp(- ((waveobs_segment - current_center)**2) / (2*current_sigma**2)) / np.sqrt(2*np.pi*current_sigma**2)
             gaussian = gaussian / np.sum(gaussian)
 
             # Convolve the current position by using the segment and the gaussian
             if flux[i] > 0:
-                weighted_flux = flux_segment * gaussian
+                # Zero or negative values are considered as gaps in the spectrum
+                only_positive_fluxes = flux_segment > 0
+                weighted_flux = flux_segment[only_positive_fluxes] * gaussian[only_positive_fluxes]
                 current_convolved_flux = weighted_flux.sum()
                 convolved_flux[i] = current_convolved_flux
             else:
@@ -794,6 +797,8 @@ def create_wavelength_filter(spectrum, wave_base=None, wave_top=None, regions=No
         if wave_top is None:
             wave_top = np.max(spectrum['waveobs'])
         wfilter = (spectrum['waveobs'] >= wave_base) & (spectrum['waveobs'] <= wave_top)
+    elif len(regions) == 0:
+        wfilter = spectrum['waveobs'] == np.min(spectrum['waveobs']) - 1.0 # Make all false
     else:
         # Build wavelength points from regions
         for region in regions:
@@ -833,19 +838,28 @@ def vacuum_to_air(spectrum):
     return converted_spectrum
 
 
-def create_filter_cosmic_rays(spectrum, min_flux=0.90, max_flux=1.10, margin=3):
+def create_filter_cosmic_rays(spectrum, continuum_model, resampling_wave_step=0.001, window_size=15, variation_limit=0.01):
     """
-    It consider the mean and standard deviation (sigma) of the fluxes between a
-    minimum and a maximum in order to filter out everything that is
-    above the mean + 3 * sigma.
+    It uses a median filter to smooth out single-measurement deviations. Then it uses
+    sigma-clipping to remove large variations between the actual and smoothed image.
 
-    Ideally the spectrum should be already normalized.
+    For doing the comparison, the original spectrum should be resampled to have
+    homonenous wave step.
+
+    Only those detected cosmics above the continuum will be discarded.
     """
-    wfilter = np.logical_and(spectrum['flux'] > min_flux, spectrum['flux'] < max_flux)
-    mu = np.mean(spectrum['flux'][wfilter])
-    sigma = np.std(spectrum['flux'][wfilter])
-    ffilter = spectrum['flux'] < mu + margin*sigma
-    return ffilter
+    import scipy.signal
+    wavelengths = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), resampling_wave_step)
+    resampled_spectrum = resample_spectrum(spectrum, wavelengths)
+
+    resampled_smooth = create_spectrum_structure(resampled_spectrum['waveobs'])
+    resampled_smooth['flux'] = scipy.signal.medfilt(resampled_spectrum['flux'], 15)
+    smooth = resample_spectrum(resampled_smooth, spectrum['waveobs'])
+
+    cosmics = spectrum['flux'] - smooth['flux'] > variation_limit
+    cosmics = np.logical_and(cosmics, (spectrum['flux'] / continuum_model(spectrum['waveobs'])) > 1.0)
+    return cosmics
+
 
 
 

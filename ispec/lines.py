@@ -243,16 +243,16 @@ def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None):
     # Parameters estimators
     baseline = np.median(continuum_model(spectrum_slice['waveobs']))
     if A is None:
-        A = np.min(min_flux - baseline, -1e-10)
+        A = np.min((min_flux - baseline, -1e-10))
     if sig is None:
-        sig = np.max((x[-1] - x[0])/3.0, 1e-10)
+        sig = np.max(((x[-1] - x[0])/3.0, 1e-10))
 
     parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for i in np.arange(4)]
     parinfo[0]['value'] = baseline # Continuum
     parinfo[0]['fixed'] = True
     parinfo[1]['value'] = A # Only negative (absorption lines) and greater than the lowest point + 25%
     parinfo[1]['limited'] = [True, True]
-    parinfo[1]['limits'] = [(min_flux-baseline) * 1.25, 0.]
+    parinfo[1]['limits'] = [np.min(((min_flux-baseline) * 1.25, -1e-10)), 0.]
     parinfo[2]['value'] = sig # Only positives (absorption lines) and lower than the spectrum slice
     parinfo[2]['limited'] = [True, True]
     parinfo[2]['limits'] = [0., x[-1] - x[0]]
@@ -540,7 +540,7 @@ def __create_linemasks_structure(num_peaks):
     return linemasks
 
 
-def find_linemasks(spectrum, continuum_model, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, minimum_depth=None, maximum_depth=None, smoothed_spectrum=None, discard_gaussian = False, discard_voigt = False, vel_atomic=0.0, vel_telluric=0.0, consider_omara=False, frame=None):
+def find_linemasks(spectrum, continuum_model,  vald_linelist_file=None, chemical_elements_file=None, molecules_file=None, telluric_linelist_file=None, vel_telluric=0.0, minimum_depth=None, maximum_depth=None, discard_gaussian = False, discard_voigt = False, smoothed_spectrum=None, accepted_for_fitting=None, consider_omara=False, frame=None):
     """
     Generate a line masks for a spectrum by finding peaks and base points.
 
@@ -623,7 +623,15 @@ def find_linemasks(spectrum, continuum_model, vald_linelist_file, chemical_eleme
     rejected_by_noise = __detect_false_and_noisy_features(spectrum, linemasks)
     accepted_for_fitting = np.logical_and(accepted_for_fitting, np.logical_not(rejected_by_noise))
 
-    linemasks = fit_lines(linemasks, spectrum, continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian=discard_gaussian, discard_voigt=discard_voigt, smoothed_spectrum=smoothed_spectrum, accepted_for_fitting=accepted_for_fitting, consider_omara=consider_omara, frame=frame)
+    linemasks = fit_lines(linemasks, spectrum, continuum_model, \
+                                vald_linelist_file = vald_linelist_file, \
+                                chemical_elements_file = chemical_elements_file, \
+                                molecules_file = molecules_file, \
+                                telluric_linelist_file = telluric_linelist_file, \
+                                vel_telluric = vel_telluric, \
+                                discard_gaussian = discard_gaussian, \
+                                discard_voigt = discard_voigt, \
+                                consider_omara = consider_omara)
 
     # Identify peaks higher than continuum
     # - Depth is negative if the peak is higher than the continuum
@@ -656,13 +664,21 @@ def find_linemasks(spectrum, continuum_model, vald_linelist_file, chemical_eleme
 
     return linemasks
 
-def fit_lines(regions, spectrum, continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian = False, discard_voigt = False, smoothed_spectrum=None, accepted_for_fitting=None, consider_omara=False, frame=None):
+def fit_lines(regions, spectrum, continuum_model,  vald_linelist_file=None, chemical_elements_file=None, molecules_file=None, telluric_linelist_file=None, vel_telluric=0.0, discard_gaussian = False, discard_voigt = False, smoothed_spectrum=None, accepted_for_fitting=None, consider_omara=False, frame=None):
     """
     Fits gaussians models in the specified line regions.
     * 'regions' should be an array with 'wave_base', 'wave_peak' and 'wave_top' columns.
     * If 'smoothed_spectrum' is present, the wave_base and wave_top can be adjusted before fitting
     * If 'accepted_for_fitting' array is present, only those regions that are set to true
     will be fitted
+
+    If vald_linelist_file, chemical_elements_file, molecules_file are specified, the
+    lines will be cross-matched with the atomic information. In that case, the spectrum
+    MUST be already radial velocity corrected.
+
+    If telluric_linelist_file is specified, then it will try to identify which lines
+    could be potentially affected by tellurics. It is mandatory to specify the
+    velocity relative to the telluric lines.
 
     If 'consider_omara' is True, then it will consider that the vald linelist contains
     O'Mara parameters for some lines and it will interpret it that way.
@@ -753,9 +769,10 @@ def fit_lines(regions, spectrum, continuum_model, vel_atomic, vel_telluric, vald
 
                 # Equivalent Width
                 # - Include 99.9999998% of the gaussian area
-                from_x = regions['mu'][i] - 6*regions['sig'][i]
-                to_x = regions['mu'][i] + 6*regions['sig'][i]
-                regions['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x)
+                #from_x = regions['mu'][i] - 6*regions['sig'][i]
+                #to_x = regions['mu'][i] + 6*regions['sig'][i]
+                #regions['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x)
+                regions['integrated_flux'][i] = -1 * line_model.A()
                 regions['ew'][i] = regions['integrated_flux'][i] / line_model.baseline()
                 # RMS
                 regions['rms'][i] = rms
@@ -771,9 +788,9 @@ def fit_lines(regions, spectrum, continuum_model, vel_atomic, vel_telluric, vald
             if frame is not None:
                 frame.update_progress(current_work_progress)
 
-    if vald_linelist_file is not None:
+    if None not in [vald_linelist_file, chemical_elements_file, molecules_file]:
         logging.info("Cross matching with atomic data...")
-        regions = __fill_linemasks_with_VALD_info(regions, vald_linelist_file, chemical_elements_file, molecules_file, diff_limit=0.005, vel_atomic=vel_atomic, consider_omara=consider_omara)
+        regions = __fill_linemasks_with_VALD_info(regions, vald_linelist_file, chemical_elements_file, molecules_file, diff_limit=0.005, vel_atomic=0.0, consider_omara=consider_omara)
     if telluric_linelist_file is not None:
         logging.info("Cross matching with telluric data...")
         regions = __fill_linemasks_with_telluric_info(regions, telluric_linelist_file, vel_telluric=vel_telluric)
@@ -1101,15 +1118,19 @@ def __improve_linemask_edges(xcoord, yvalues, base, top, peak):
 
     return new_base, new_top
 
-def adjust_linemasks(spectrum, linemasks, margin=0.5):
+def adjust_linemasks(spectrum, linemasks, max_margin=0.5, min_margin=0.0):
     """
     Adjust the line masks borders to the shape of the line in the specified spectrum.
-    It will consider by default 0.5 nm around the wave peak. It returns a new
-    linemasks structure.
+    It will consider by default 0.5 nm around the wave peak.
+
+    It tries to respect the min_margin around the peak but in case of overlapping
+    regions, it might not be respected.
+
+    It returns a new linemasks structure.
     """
     for line in linemasks:
         wave_peak = line['wave_peak']
-        wfilter = np.logical_and(spectrum['waveobs'] >= wave_peak - margin, spectrum['waveobs'] <= wave_peak + margin)
+        wfilter = np.logical_and(spectrum['waveobs'] >= wave_peak - max_margin, spectrum['waveobs'] <= wave_peak + max_margin)
         spectrum_window = spectrum[wfilter]
         if len(spectrum_window) < 3:
             continue
@@ -1141,22 +1162,28 @@ def adjust_linemasks(spectrum, linemasks, margin=0.5):
                 if wave_top > wave_peak:
                     line['wave_top'] =  wave_top
 
+            if min_margin > 0:
+                line['wave_base'] = np.min((line['wave_peak']-min_margin, line['wave_base']))
+                line['wave_top'] = np.max((line['wave_peak']+min_margin, line['wave_top']))
+
     # Correct potential overlapping between line masks
     linemasks.sort(order=['wave_peak'])
     for i, line in enumerate(linemasks[:-1]):
         if line['wave_top'] > linemasks['wave_base'][i+1]:
-            mean = (line['wave_top'] + linemasks['wave_base'][i+1]) / 2.0
+            mean_from_edges = (line['wave_top'] + linemasks['wave_base'][i+1]) / 2.0
             # Make sure that the new limit (wave_top/wave_base) is bigger/smaller
             # than the wave_peaks of the two lines
-            if mean > line['wave_peak'] and mean < linemasks['wave_peak'][i+1]:
-                line['wave_top'] = mean
-                linemasks['wave_base'][i+1] = mean
+            if mean_from_edges > line['wave_peak'] and mean_from_edges < linemasks['wave_peak'][i+1]:
+                line['wave_top'] = mean_from_edges
+                linemasks['wave_base'][i+1] = mean_from_edges
             elif line['wave_top'] < linemasks['wave_peak'][i+1]:
                 linemasks['wave_base'][i+1] = line['wave_top']
             elif linemasks['wave_base'][i+1] > line['wave_peak']:
                 line['wave_top'] = linemasks['wave_base'][i+1]
             else:
-                logging.warn("Lines [%.3f %s] and [%.3f %s] are too weak/near and their masks overlap" % (line['wave_peak'], line['note'], linemasks['wave_peak'][i+1], linemasks['note'][i+1]))
+                mean_from_peaks = (line['wave_peak'] + linemasks['wave_peak'][i+1]) / 2.0
+                line['wave_top'] = mean_from_peaks
+                linemasks['wave_base'][i+1] = mean_from_peaks
 
     return linemasks
 

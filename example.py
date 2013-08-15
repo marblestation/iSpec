@@ -76,7 +76,7 @@ linelist = ispec.read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
 
 ###### OPTIONAL:
 ## - Filter lines that may be affected by telluric lines
-#telluric_lines_file = ispec_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
+#telluric_lines_file = ispec_dir + "/input/linelists/CCF/Tellurics.standard.atm_air_model.txt"
 #linelist_telluric = ispec.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
 #dfilter = linelist_telluric['depth'] > np.percentile(linelist_telluric['depth'], 75)
 #linelist_telluric = linelist_telluric[dfilter]
@@ -103,13 +103,13 @@ rv = np.round(models[0].mu(), 2) # km/s
 logging.info("Radial velocity determination with template...")
 # - Read synthetic template
 template = ispec.read_spectrum(ispec_dir + \
-        "/input/spectra/synthetic/Synth_Meszaros_VALD_5777.0_4.44_0.0_1.0.txt.gz")
+        "/input/spectra/synthetic/Synth_ATLAS9.APOGEE_VALD_5777.0_4.44_0.0_1.0.txt.gz")
 # - Read observed template
 #template = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
 
 ###### OPTIONAL:
 ## - Read telluric lines and use only the 25% of the deepest ones
-#telluric_lines_file = ispec_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
+#telluric_lines_file = ispec_dir + "/input/linelists/CCF/Tellurics.standard.atm_air_model.txt"
 #linelist_telluric = ispec.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
 #dfilter = linelist_telluric['depth'] > np.percentile(linelist_telluric['depth'], 75)
 #linelist_telluric = linelist_telluric[dfilter]
@@ -142,7 +142,7 @@ mu_cas_a_spectrum = ispec.correct_velocity(mu_cas_a_spectrum, rv)
 #--- Barycentric Velocity determination ----------------------------------------
 logging.info("Barycentric velocity determination...")
 # - Telluric
-telluric_linelist_file = ispec_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
+telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Tellurics.standard.atm_air_model.txt"
 linelist_telluric = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
 
 xcoord, fluxes, errors = ispec.build_velocity_profile(sun_spectrum, \
@@ -252,19 +252,21 @@ sun_continuum_model = ispec.fit_continuum(sun_spectrum)
 vald_linelist_file = ispec_dir + "/input/linelists/VALD/300_1100nm.lst"
 chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
 molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
-telluric_linelist_file = ispec_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
+telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Tellurics.standard.atm_air_model.txt"
 resolution = 80000
 smoothed_sun_spectrum = ispec.convolve_spectrum(sun_spectrum, resolution)
 min_depth = 0.05
 max_depth = 1.00
-vel_atomic = 0.00  # km/s
 vel_telluric = 17.79  # km/s
-sun_linemasks = ispec.find_linemasks(sun_spectrum, sun_continuum_model, vald_linelist_file, \
-                        chemical_elements_file, molecules_file, telluric_linelist_file, \
+sun_linemasks = ispec.find_linemasks(sun_spectrum, sun_continuum_model, \
+                        vald_linelist_file=vald_linelist_file, \
+                        chemical_elements_file=chemical_elements_file, \
+                        molecules_file=molecules_file, \
+                        telluric_linelist_file=telluric_linelist_file, \
+                        vel_telluric=vel_telluric, \
                         minimum_depth=min_depth, maximum_depth=max_depth, \
                         smoothed_spectrum=smoothed_sun_spectrum, \
-                        discard_gaussian=False, discard_voigt=True, \
-                        vel_atomic=vel_atomic, vel_telluric=vel_telluric)
+                        discard_gaussian=False, discard_voigt=True )
 # Exclude lines that have not been successfully cross matched with the atomic data
 # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
 rejected_by_atomic_line_not_found = (sun_linemasks['VALD_wave_peak'] == 0)
@@ -320,7 +322,7 @@ sun_spectrum = sun_spectrum[wfilter]
 #--- Clean regions that may be affected by tellurics ---------------------------
 logging.info("Cleaning tellurics...")
 
-telluric_lines_file = ispec_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
+telluric_lines_file = ispec_dir + "/input/linelists/CCF/Tellurics.standard.atm_air_model.txt"
 linelist_telluric = ispec.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
 
 # - Filter regions that may be affected by telluric lines
@@ -339,7 +341,7 @@ clean_sun_spectrum = sun_spectrum[tfilter]
 resolution = 80000
 smoothed_sun_spectrum = ispec.convolve_spectrum(sun_spectrum, resolution)
 line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines.txt")
-linemasks = ispec.adjust_linemasks(smoothed_sun_spectrum, line_regions, margin=0.5)
+linemasks = ispec.adjust_linemasks(smoothed_sun_spectrum, line_regions, max_margin=0.5)
 segments = ispec.create_segments_around_lines(linemasks, margin=0.25)
 
 
@@ -353,13 +355,16 @@ logging.info("Fitting lines...")
 vald_linelist_file = ispec_dir + "/input/linelists/VALD/300_1100nm.lst"
 chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
 molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
-telluric_linelist_file = ispec_dir + "/input/linelists/telluric/standard_atm_air_model.lst"
-vel_atomic = 0.00 # km/s
+telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Tellurics.standard.atm_air_model.txt"
 vel_telluric = 17.79 # km/s
 line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines.txt")
-linemasks = ispec.fit_lines(line_regions, sun_spectrum, sun_continuum_model, vel_atomic, \
-                            vel_telluric, vald_linelist_file, chemical_elements_file, \
-                            molecules_file, telluric_linelist_file, discard_gaussian=False, \
+# Spectrum should be already radial velocity corrected
+linemasks = ispec.fit_lines(line_regions, sun_spectrum, sun_continuum_model, \
+                            vald_linelist_file = vald_linelist_file, \
+                            chemical_elements_file = chemical_elements_file, \
+                            molecules_file = molecules_file, \
+                            telluric_linelist_file = telluric_linelist_file, \
+                            vel_telluric = vel_telluric, discard_gaussian=False, \
                             discard_voigt=True)
 # Exclude lines that have not been successfully cross matched with the atomic data
 # because we cannot calculate the chemical abundance (it will crash the corresponding routines)

@@ -108,7 +108,7 @@ class VelocityProfileDialog(CustomDialog):
         component["type"] = "OptionMenu"
         component["text"] = "Fitting model"
         component["options"] = ['2nd order polynomial + auto fit', '2nd order polynomial + gaussian fit', '2nd order polynomial + voigt fit']
-        component["default"] = '2nd order polynomial + auto fit'
+        component["default"] = component["options"][1]
         self.__components.append(component)
         component = {}
         component["type"] = "Checkbutton"

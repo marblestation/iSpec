@@ -1678,9 +1678,10 @@ SPECTRUM a Stellar Spectral Synthesis Program
             #from_x = region.get_wave_peak() - 3*regions['sig'][i]
             #to_x = region.get_wave_peak() + 3*regions['sig'][i]
                 #regions['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x)
-            wave_base = region.get_wave_base()
-            wave_top = region.get_wave_top()
-            integrated_flux = -1 * region.line_model[self.active_spectrum].integrate(wave_base, wave_top)
+            #wave_base = region.get_wave_base()
+            #wave_top = region.get_wave_top()
+            #integrated_flux = -1 * region.line_model[self.active_spectrum].integrate(wave_base, wave_top)
+            integrated_flux = -1 * region.line_model[self.active_spectrum].A()
             ew = integrated_flux / region.line_model[self.active_spectrum].baseline()
             self.add_stats("Gaussian fit Equivalent Width (EW)", "%.4f" % ew)
 
@@ -2073,7 +2074,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 # so that we get the real resolution of the instrument (based on the difference in FWHM)
                 c = 299792458.0 # m/s
                 telluric_fwhm = np.mean((c / (mask_linelist['wave_peak'] / mask_linelist['fwhm'])) / 1000.0) # km/s
-                R = np.int(c/(1000.0*np.round(fwhm - telluric_fwhm, 2)))
+                diff = np.round(fwhm - telluric_fwhm, 2)
+                if diff > 0:
+                    R = np.int(c/(1000.0*diff))
+                else:
+                    R = 0
             # Velocity
             velocity = np.round(models[0].mu(), 2) # km/s
             if relative_to_atomic_data:
@@ -2120,27 +2125,24 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         key = "FitLinesDialog"
         vel_telluric = self.active_spectrum.velocity_telluric
-        vel_atomic = self.active_spectrum.velocity_atomic
         if not self.active_spectrum.dialog.has_key(key):
-            self.active_spectrum.dialog[key] = FitLinesDialog(self, "Fit lines", vel_telluric, vel_atomic)
-        self.active_spectrum.dialog[key].show(updated_vel_telluric=vel_telluric, updated_vel_atomic=vel_atomic)
+            self.active_spectrum.dialog[key] = FitLinesDialog(self, "Fit lines", vel_telluric)
+        self.active_spectrum.dialog[key].show(updated_vel_telluric=vel_telluric)
 
         if self.active_spectrum.dialog[key].results is None:
             self.active_spectrum.dialog[key].destroy()
             return
 
-        vel_atomic = self.active_spectrum.dialog[key].results["Velocity respect to atomic lines (km/s)"]
         vel_telluric = self.active_spectrum.dialog[key].results["Velocity respect to telluric lines (km/s)"]
         selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
         selected_linelist += "/" + self.active_spectrum.dialog[key].results["Line list"].split(".")[1]
         linelist_file = resource_path("input/linelists/" + selected_linelist + ".lst")
         self.active_spectrum.dialog[key].destroy()
 
-        if vel_atomic is None or vel_telluric is None:
+        if vel_telluric is None:
             self.flash_status_message("Bad value.")
             return
 
-        self.active_spectrum.velocity_atomic = vel_atomic
         self.active_spectrum.velocity_telluric = vel_telluric
 
         # Remove drawd lines if they exist
@@ -2149,17 +2151,17 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         self.operation_in_progress = True
         self.status_message("Fitting lines...")
-        thread = threading.Thread(target=self.on_fit_lines_thread, args=(vel_atomic, vel_telluric, linelist_file))
+        thread = threading.Thread(target=self.on_fit_lines_thread, args=(vel_telluric, linelist_file))
         thread.setDaemon(True)
         thread.start()
 
-    def on_fit_lines_thread(self, vel_atomic, vel_telluric, vald_linelist_file):
+    def on_fit_lines_thread(self, vel_telluric, vald_linelist_file):
         self.__update_numpy_arrays_from_widgets("lines")
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
         molecules_file = resource_path("input/abundances/molecular_symbols.dat")
-        telluric_linelist_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
+        telluric_linelist_file = resource_path("input/linelists/CCF/Tellurics.standard.atm_air_model.txt")
         consider_omara = "GES" in vald_linelist_file # O'Mara only for GES linelist
-        linemasks = ispec.fit_lines(self.regions["lines"], self.active_spectrum.data, self.active_spectrum.continuum_model, vel_atomic, vel_telluric, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, discard_gaussian=False, discard_voigt=True, smoothed_spectrum=self.active_spectrum.data, consider_omara=consider_omara, frame=self)
+        linemasks = ispec.fit_lines(self.regions["lines"], self.active_spectrum.data, self.active_spectrum.continuum_model, vald_linelist_file, chemical_elements_file=chemical_elements_file, molecules_file=molecules_file, telluric_linelist_file=telluric_linelist_file, vel_telluric=vel_telluric, discard_gaussian=False, discard_voigt=True, smoothed_spectrum=self.active_spectrum.data, consider_omara=consider_omara, frame=self)
         # Exclude lines that have not been successfully cross matched with the atomic data
         # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
         rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
@@ -2440,7 +2442,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         #self.queue.put((self.status_message, ["Smoothing spectrum..."], {}))
         smoothed_spectrum = ispec.convolve_spectrum(self.active_spectrum.data, 2*resolution, frame=self)
         logging.info("Adjusting line masks...")
-        linemasks = ispec.adjust_linemasks(smoothed_spectrum, linemasks, margin=margin)
+        linemasks = ispec.adjust_linemasks(smoothed_spectrum, linemasks, max_margin=margin)
 
         self.remove_regions(elements)
         self.regions[elements] = linemasks
@@ -2470,14 +2472,13 @@ SPECTRUM a Stellar Spectral Synthesis Program
         else:
             R = self.active_spectrum.resolution_telluric
 
-        vel_atomic = self.active_spectrum.velocity_atomic
         vel_telluric = self.active_spectrum.velocity_telluric
 
 
         key = "FindLinesDialog"
         if not self.active_spectrum.dialog.has_key(key):
-            self.active_spectrum.dialog[key] = FindLinesDialog(self, "Properties for finding line masks", self.find_lines_min_depth, self.find_lines_max_depth, vel_atomic=vel_atomic, vel_telluric=vel_telluric, resolution=R, elements="Fe 1, Fe 2")
-        self.active_spectrum.dialog[key].show(updated_vel_atomic=vel_atomic, updated_vel_telluric=vel_telluric)
+            self.active_spectrum.dialog[key] = FindLinesDialog(self, "Properties for finding line masks", self.find_lines_min_depth, self.find_lines_max_depth, vel_telluric=vel_telluric, resolution=R, elements="Fe 1, Fe 2")
+        self.active_spectrum.dialog[key].show(updated_vel_telluric=vel_telluric)
 
         if self.active_spectrum.dialog[key].results is None:
             self.active_spectrum.dialog[key].destroy()
@@ -2487,7 +2488,6 @@ SPECTRUM a Stellar Spectral Synthesis Program
         max_depth = self.active_spectrum.dialog[key].results["Maximum depth (% of the continuum)"]
         elements = self.active_spectrum.dialog[key].results["Select elements (comma separated)"]
         resolution = self.active_spectrum.dialog[key].results["Resolution"]
-        vel_atomic = self.active_spectrum.dialog[key].results["Velocity respect to atomic lines (km/s)"]
         vel_telluric = self.active_spectrum.dialog[key].results["Velocity respect to telluric lines (km/s)"]
         discard_tellurics = self.active_spectrum.dialog[key].results["Discard affected by tellurics"] == 1
         in_segments = self.active_spectrum.dialog[key].results["Look for line masks in"] == "Only inside segments"
@@ -2496,13 +2496,12 @@ SPECTRUM a Stellar Spectral Synthesis Program
         linelist_file = resource_path("input/linelists/" + selected_linelist + ".lst")
         self.active_spectrum.dialog[key].destroy()
 
-        if max_depth is None or min_depth is None or resolution is None or vel_atomic is None or vel_telluric is None or max_depth <= min_depth or max_depth <= 0 or min_depth < 0 or resolution <= 0:
+        if max_depth is None or min_depth is None or resolution is None or vel_telluric is None or max_depth <= min_depth or max_depth <= 0 or min_depth < 0 or resolution <= 0:
             self.queue.put((self.flash_status_message, ["Bad value."], {}))
             return
         ## Save values
         self.find_lines_max_depth = max_depth
         self.find_lines_min_depth = min_depth
-        self.active_spectrum.velocity_atomic = vel_atomic
         self.active_spectrum.velocity_telluric = vel_telluric
         self.active_spectrum.resolution_telluric = resolution
         self.active_spectrum.resolution_atomic = resolution
@@ -2512,11 +2511,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         self.operation_in_progress = True
-        thread = threading.Thread(target=self.on_find_lines_thread, args=(max_depth, min_depth, elements, resolution, vel_atomic, vel_telluric, discard_tellurics, linelist_file), kwargs={'in_segments':in_segments})
+        thread = threading.Thread(target=self.on_find_lines_thread, args=(max_depth, min_depth, elements, resolution, vel_telluric, discard_tellurics, linelist_file), kwargs={'in_segments':in_segments})
         thread.setDaemon(True)
         thread.start()
 
-    def on_find_lines_thread(self, max_depth, min_depth, elements, resolution, vel_atomic, vel_telluric, discard_tellurics, vald_linelist_file, in_segments=False):
+    def on_find_lines_thread(self, max_depth, min_depth, elements, resolution, vel_telluric, discard_tellurics, vald_linelist_file, in_segments=False):
         if in_segments:
             # Select spectrum from regions
             self.update_numpy_arrays_from_widgets("segments")
@@ -2542,10 +2541,19 @@ SPECTRUM a Stellar Spectral Synthesis Program
         logging.info("Generating line masks, fitting gaussians and matching VALD lines...")
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
         molecules_file = resource_path("input/abundances/molecular_symbols.dat")
-        telluric_linelist_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
+        telluric_linelist_file = resource_path("input/linelists/CCF/Tellurics.standard.atm_air_model.txt")
 
         consider_omara = "GES" in vald_linelist_file # O'Mara only for GES linelist
-        linemasks = ispec.find_linemasks(spectrum, self.active_spectrum.continuum_model, vald_linelist_file, chemical_elements_file, molecules_file, telluric_linelist_file, minimum_depth=min_depth, maximum_depth=max_depth, smoothed_spectrum=smoothed_spectrum, discard_gaussian = False, discard_voigt = True, vel_atomic=vel_atomic, vel_telluric=vel_telluric, consider_omara=consider_omara, frame=self)
+        linemasks = ispec.find_linemasks(spectrum, self.active_spectrum.continuum_model, \
+                                vald_linelist_file=vald_linelist_file, \
+                                chemical_elements_file=chemical_elements_file, \
+                                molecules_file=molecules_file, \
+                                telluric_linelist_file=telluric_linelist_file, \
+                                vel_telluric=vel_telluric, \
+                                minimum_depth=min_depth, maximum_depth=max_depth, \
+                                smoothed_spectrum=smoothed_spectrum, \
+                                discard_gaussian=False, discard_voigt=True, \
+                                consider_omara=consider_omara )
 
         # If no peaks found, just finnish
         if linemasks is None or len(linemasks) == 0:
@@ -2993,10 +3001,6 @@ SPECTRUM a Stellar Spectral Synthesis Program
         filter_by_error = self.dialog[key].results["Filter by error"] == 1
         err_base = self.dialog[key].results["Base error"]
         err_top = self.dialog[key].results["Top error"]
-        filter_cosmics = self.dialog[key].results["Filter above: mean + N * stdev"] == 1
-        flux_cosmics_base = self.dialog[key].results["Base flux to consider"]
-        flux_cosmics_top = self.dialog[key].results["Top flux to consider"]
-        cosmics_n = self.dialog[key].results["N"]
         replace_by = self.dialog[key].results["Replace by"]
         self.dialog[key].destroy()
 
@@ -3008,9 +3012,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         if flux_base is None or flux_top is None or flux_top <= flux_base \
-                or err_base is None or err_top is None or err_top <= err_base \
-                or flux_cosmics_base is None or flux_cosmics_top is None or flux_cosmics_top <= flux_cosmics_base \
-                or cosmics_n is None or cosmics_n <= 0:
+                or err_base is None or err_top is None or err_top <= err_base:
             self.flash_status_message("Bad value.")
             return
 
@@ -3033,9 +3035,6 @@ SPECTRUM a Stellar Spectral Synthesis Program
             wfilter = (self.active_spectrum.data['err'] > err_base) & (self.active_spectrum.data['err'] <= err_top)
         else:
             wfilter = np.logical_not(np.isnan(self.active_spectrum.data['err']))
-
-        if filter_cosmics:
-            wfilter = ispec.create_filter_cosmic_rays(self.active_spectrum.data, min_flux=flux_cosmics_base, max_flux=flux_cosmics_top, margin=cosmics_n)
 
         if len(self.active_spectrum.data[wfilter]) == 0:
             msg = "This action cannot be done since it would produce a spectrum without measurements."
@@ -3123,7 +3122,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.active_spectrum.velocity_telluric = vel_telluric
 
         if self.linelist_telluric is None:
-            telluric_lines_file = resource_path("input/linelists/telluric/standard_atm_air_model.lst")
+            telluric_lines_file = resource_path("input/linelists/CCF/Tellurics.standard.atm_air_model.txt")
             self.linelist_telluric = ispec.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
 
         # - Filter regions that may be affected by telluric lines
