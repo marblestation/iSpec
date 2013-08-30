@@ -24,7 +24,7 @@ from mpfitmodels import MPFitModel
 #from continuum import fit_continuum
 from abundances import write_SPECTRUM_abundances, write_SPECTRUM_fixed_abundances
 from atmospheres import write_atmosphere, interpolate_atmosphere_layers
-from spectrum import create_spectrum_structure, convolve_spectrum
+from spectrum import create_spectrum_structure, convolve_spectrum, correct_velocity, resample_spectrum
 from multiprocessing import Process
 from multiprocessing import Queue
 from multiprocessing import JoinableQueue
@@ -95,6 +95,15 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abun
     if fixed_abundances is None:
         # No fixed abundances
         fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
+
+    # All synthetic spectra contain a -0.28 shift (unknown reason) so we correct it
+    # by moving the waveobs in the other sense:
+    # ** The shift has been validated comparing with radial velocities from HARPS
+    #    for a wide range of samples in the parameter space (benchmark stars)
+    rv_shift = 0.28
+    spectrum = create_spectrum_structure(waveobs)
+    spectrum = correct_velocity(spectrum, rv_shift)
+    waveobs = spectrum['waveobs']
 
     if waveobs_mask is None:
         if regions is None:
@@ -176,6 +185,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abun
         os.remove(fixed_abundances_file)
     if remove_tmp_linelist_file:
         os.remove(linelist_file)
+
     return fluxes
 
 def __enqueue_progress(process_communication_queue, v):
@@ -564,8 +574,8 @@ class SynthModel(MPFitModel):
 
     def print_solution(self):
         header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("teff","logg","MH","vmic","vmac","vsini","limb","R","Cont")
-        solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i\t%8.2f" % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()), self.continuum_correction())
-        errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i\t%8.2f" % (self.eteff(), self.elogg(), self.eMH(), self.evmic(), self.evmac(), self.evsini(), self.elimb_darkening_coeff(), int(self.eR()), self.econtinuum_correction())
+        solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i\t%8.3f" % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()), self.continuum_correction())
+        errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i\t%8.3f" % (self.eteff(), self.elogg(), self.eMH(), self.evmic(), self.evmac(), self.evsini(), self.elimb_darkening_coeff(), int(self.eR()), self.econtinuum_correction())
 
         # Append free individual abundances
         abundances_header = ""
@@ -627,6 +637,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[1]['value'] = initial_logg
     parinfo[1]['fixed'] = not parinfo[1]['parname'].lower() in free_params
     parinfo[1]['step'] = 0.10 # For auto-derivatives
+    #parinfo[1]['mpmaxstep'] = 0.50 # Maximum change to be made in the parameter
     parinfo[1]['limited'] = [True, True]
     parinfo[1]['limits'] = [np.min(logg_range), np.max(logg_range)]
     #
@@ -675,9 +686,9 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[8]['parname'] = "continuum_correction"
     parinfo[8]['value'] = initial_continuum_correction
     parinfo[8]['fixed'] = not parinfo[8]['parname'].lower() in free_params
-    parinfo[8]['step'] = 0.01 # For auto-derivatives
+    parinfo[8]['step'] = 0.001 # For auto-derivatives
     parinfo[8]['limited'] = [True, True]
-    parinfo[8]['limits'] = [0.80, 1.2]
+    parinfo[8]['limits'] = [0.98, 1.02]
     #
     base = 9
     for i in xrange(len(free_abundances)):
@@ -782,6 +793,8 @@ def __get_stats_per_linemask(waveobs, fluxes, synthetic_fluxes, weights, free_pa
         wave_top = region['wave_top']
 
         wfilter = np.logical_and(waveobs >= wave_base, waveobs <= wave_top)
+        # Do not compare negative or zero fluxes
+        wfilter = np.logical_and(wfilter, fluxes > 0.0)
 
         # Degrees of freedom
         dof = len(waveobs[wfilter]) - len(free_params)
@@ -827,6 +840,7 @@ def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, 
     - If segments are specified, the synthetic spectrum will be only generated for
       those regions.
     - If linemasks are specified, only those regions will be used for comparison.
+    - It does not compare negative or zero fluxes
     """
     # Normalize
     spectrum_orig = spectrum
@@ -853,17 +867,8 @@ def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, 
 
     waveobs = spectrum['waveobs']
     flux = spectrum['flux']
-    #if np.all(np.logical_and(spectrum['err'] > 0.0, spectrum['err'] <= 1.0)):
-        #weights = 1./spectrum['err']
-    #else:
-        #weights = np.ones(len(waveobs))
-    weights = np.ones(len(waveobs))
-    #weights = 1. / (flux * 0.10)
+    err = spectrum['err']
 
-    # Estimate SNR
-    #snr = 100
-    #weights = 1. / (flux / snr)
-    #weights = 1. / spectrum['err']
 
     if free_abundances is None:
         # No fixed abundances
@@ -887,6 +892,41 @@ def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, 
         linemasks = __filter_linemasks_not_in_segments(linemasks, segments)
         # Compare fluxes inside line masks that belong to a segment
         comparing_mask = __create_comparing_mask(waveobs, linemasks, segments)
+    # Do not compare negative or zero fluxes
+    negative_zero = flux <= 0.0
+    comparing_mask[negative_zero] = 0.0
+
+    weights = np.ones(len(waveobs))
+
+    ### Use errors:
+    ## Do not compare negative or zero errors
+    #negative_zero = err <= 0.0
+    #comparing_mask[negative_zero] = 0.0
+    #weights[comparing_mask == 1.0] = 1. / spectrum['err'][comparing_mask == 1.0]
+
+    ### Estimate from SNR
+    #snr = 100
+    #weights[comparing_mask == 1.0] = 1. / (flux[comparing_mask == 1.0] / snr)
+
+    ### Prioritize peaks
+    # In the following situation, we want to prioritize synthetic spectra that better reproduce the lines' peaks
+    # than the upper part (more uncertainties due to continuum normalization or blending). So we would like to
+    # have a lower chisq in the case 35 than in case 34:
+    #
+    #In [32]: flux = np.asarray([1., 0.8, 0.5, 0.8, 1.0])]
+    #
+    #In [33]: np.sum(np.tanh((1. / (flux * 0.10)) * (flux - np.asarray([0.9, 0.7, 0.5, 0.7, 0.9])))**2)
+    #Out[33]: 2.5992215844110831
+    #
+    #In [34]: np.sum(np.tanh((1. / (flux * 0.10)) * (flux - np.asarray([0.9, 0.7, 0.51, 0.7, 0.9])))**2)
+    #Out[34]: 2.6381786014449662
+    #
+    #In [35]: np.sum(np.tanh((1. / (flux * 0.10)) * (flux - np.asarray([0.91, 0.7, 0.5, 0.7, 0.9])))**2)
+    #Out[35]: 2.5322785648767674
+    #weights[comparing_mask == 1.0] = 1. / (flux[comparing_mask == 1.0] * 0.10)
+    #weights[comparing_mask == 1.0] = 1. / (flux[comparing_mask == 1.0] * 0.01)
+    #weights[comparing_mask == 1.0] = 1. / (flux[comparing_mask == 1.0] * 0.0025)
+
 
     teff_range = modeled_layers_pack[3]
     logg_range = modeled_layers_pack[4]
@@ -934,6 +974,7 @@ def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, 
     params['vsini'] = synth_model.vsini()
     params['limb_darkening_coeff'] = synth_model.limb_darkening_coeff()
     params['R'] = synth_model.R()
+    params['continuum_correction'] = synth_model.continuum_correction()
 
     errors = {}
     errors['teff'] = synth_model.eteff()
@@ -944,6 +985,7 @@ def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, 
     errors['vsini'] = synth_model.evsini()
     errors['limb_darkening_coeff'] = synth_model.elimb_darkening_coeff()
     errors['R'] = synth_model.eR()
+    errors['continuum_correction'] = synth_model.econtinuum_correction()
 
     # Free abundances (original, transformed [X/H] [X/Fe] and errors)
     free_abundances = synth_model.transformed_free_abundances()

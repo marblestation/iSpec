@@ -94,10 +94,10 @@ def __read_fits_spectrum(spectrum_filename, fluxhdu="PRIMARY", errorhdu=None):
         if hdr.get('WFITTYPE') == 'LOG-LINEAR':
             xconv = lambda v: 10**((v-reference_pixel+1)*wave_step+wave_base)
             waveobs = xconv(np.arange(len(flux)))
+            print "Log scale"
         else:
             xconv = lambda v: ((v-reference_pixel+1)*wave_step+wave_base)
             waveobs = xconv(np.arange(len(flux)))
-
 
     num_measures = len(flux)
     spectrum = create_spectrum_structure(waveobs, flux)
@@ -411,7 +411,8 @@ except:
                     # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
                     resampled_flux[i] = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index]-fluxes[index-1])/(waveobs[index]-waveobs[index-1]))
                     resampled_err[i] = err[index-1] + (objective_wavelength - waveobs[index-1]) * ((err[index]-err[index-1])/(waveobs[index]-waveobs[index-1]))
-            elif index == 0 and waveobs[index] != objective_wavelength:
+            #elif index == 0 and waveobs[index] != objective_wavelength:
+            elif index == 0:
                 # DISCARD: Linear extrapolation using index+1 and index
                 # flux = fluxes[index] + (objective_wavelength - waveobs[index]) * ((fluxes[index+1]-fluxes[index])/(waveobs[index+1]-waveobs[index]))
                 # JUST DUPLICATE:

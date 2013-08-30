@@ -972,6 +972,7 @@ def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elem
                 linemasks['stark'][j] = vald_linelist['stark'][i]
                 linemasks['waals'][j] = vald_linelist['waals'][i]
 
+
                 if consider_omara and vald_linelist['waals'][i] > 0:
                     # OA Case
                     # Anstee, Barklem & O'Mara theory for collisional broadening by hydrogen, so called ABO theory
@@ -980,8 +981,8 @@ def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elem
                     linemasks['rad'][j] = vald_linelist['waals'][i] # For this subset in reality this is the sigma.alpha parameter, no the rad
                     linemasks['stark'][j] = 0
                     linemasks['waals'][j] = 0
-                elif (vald_linelist['rad'][j] <= 0 or vald_linelist['stark'][j] >= 0 or \
-                        vald_linelist['waals'][j] >= 0 or \
+                elif (vald_linelist['rad'][i] <= 0 or vald_linelist['stark'][i] >= 0 or \
+                        vald_linelist['waals'][i] >= 0 or \
                         (linemasks['species'][j] not in ["", "Discard"] and float(linemasks['species'][j]) >= 101.0)):
                     # If it is a molecule or any of this criterias is not met:
                     # - Radiative damping should be positive

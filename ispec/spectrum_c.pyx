@@ -191,7 +191,8 @@ def bessel_interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.d
                 # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
                 resampled_flux[i] = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index]-fluxes[index-1])/(waveobs[index]-waveobs[index-1]))
                 resampled_err[i] = err[index-1] + (objective_wavelength - waveobs[index-1]) * ((err[index]-err[index-1])/(waveobs[index]-waveobs[index-1]))
-        elif index == 0 and waveobs[index] != objective_wavelength:
+        #elif index == 0 and waveobs[index] != objective_wavelength:
+        elif index == 0:
             # DISCARD: Linear extrapolation using index+1 and index
             # flux = fluxes[index] + (objective_wavelength - waveobs[index]) * ((fluxes[index+1]-fluxes[index])/(waveobs[index+1]-waveobs[index]))
             # JUST DUPLICATE:
