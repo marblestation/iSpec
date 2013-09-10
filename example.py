@@ -217,9 +217,9 @@ normalized_sun_spectrum['err'] = sun_spectrum['err'] \
 
 #--- Filtering cosmic rays -----------------------------------------------------
 # Spectrum should be already normalized
-ffilter = ispec.create_filter_cosmic_rays(normalized_sun_spectrum, \
-                                min_flux=0.90, max_flux=1.10, margin=3)
-clean_sun_spectrum = sun_spectrum[ffilter]
+cosmics = ispec.create_filter_cosmic_rays(normalized_sun_spectrum, sun_continuum_model, resampling_wave_step=0.001, window_size=15, variation_limit=0.01)
+
+clean_sun_spectrum = sun_spectrum[~cosmics]
 
 
 #--- Find continuum regions ----------------------------------------------------
@@ -407,7 +407,6 @@ if not ispec.valid_atmosphere_target(modeled_layers_pack, teff, logg, MH):
 
 # Prepare atmosphere model
 atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH)
-
 spec_abund, normal_abund, x_over_h, x_over_fe = ispec.determine_abundances(atmosphere_layers, \
         teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, verbose=1)
 

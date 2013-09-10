@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 import numpy as np
 from mpfitmodels import MPFitModel
 #from continuum import fit_continuum
-from abundances import write_SPECTRUM_abundances, write_SPECTRUM_fixed_abundances
+from abundances import write_SPECTRUM_abundances, write_SPECTRUM_fixed_abundances, determine_abundances
 from atmospheres import write_atmosphere, interpolate_atmosphere_layers
 from spectrum import create_spectrum_structure, convolve_spectrum, correct_velocity, resample_spectrum
 from multiprocessing import Process
@@ -701,6 +701,38 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
 
     return parinfo
 
+def __create_EW_param_structure(initial_teff, initial_logg, initial_vmic, teff_range, logg_range):
+    """
+    Creates the structure needed for the mpfitmodel
+    """
+    base = 3
+    free_params = ["teff", "logg", "vmic"]
+    parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base)]
+    #
+    parinfo[0]['parname'] = "teff"
+    parinfo[0]['value'] = initial_teff
+    parinfo[0]['fixed'] = not parinfo[0]['parname'].lower() in free_params
+    parinfo[0]['step'] = 100.0 # For auto-derivatives
+    parinfo[0]['limited'] = [True, True]
+    parinfo[0]['limits'] = [np.min(teff_range), np.max(teff_range)]
+    #
+    parinfo[1]['parname'] = "logg"
+    parinfo[1]['value'] = initial_logg
+    parinfo[1]['fixed'] = not parinfo[1]['parname'].lower() in free_params
+    parinfo[1]['step'] = 0.10 # For auto-derivatives
+    #parinfo[1]['mpmaxstep'] = 0.50 # Maximum change to be made in the parameter
+    parinfo[1]['limited'] = [True, True]
+    parinfo[1]['limits'] = [np.min(logg_range), np.max(logg_range)]
+    #
+    parinfo[2]['parname'] = "Vmic"
+    parinfo[2]['value'] = initial_vmic
+    parinfo[2]['fixed'] = not parinfo[2]['parname'].lower() in free_params
+    parinfo[2]['step'] = 0.5 # For auto-derivatives
+    parinfo[2]['limited'] = [True, True]
+    parinfo[2]['limits'] = [0.0, 50.0]
+
+    return parinfo
+
 
 def __filter_linelist(linelist, segments):
     # Build wavelength points from regions
@@ -1015,4 +1047,352 @@ def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, 
         spectrum['err'] *= synth_model.last_continuum_correction
 
     return spectrum, synth_spectrum, params, errors, free_abundances, status, stats_linemasks
+
+
+
+class EWSynthModel(MPFitModel):
+    """
+    Match synthetic spectrum to observed spectrum
+    * Requires the synthetic spectrum generation functionality on
+    """
+    def __init__(self, modeled_layers_pack, linelist, abundances, teff=5000, logg=3.0, MH=0.0, vmic=2.0):
+        self.elements = {}
+        #self.elements["1"] = "H"
+        #self.elements["2"] = "He"
+        self.elements["3"] = "Li"
+        self.elements["4"] = "Be"
+        self.elements["5"] = "B"
+        self.elements["6"] = "C"
+        self.elements["7"] = "N"
+        self.elements["8"] = "O"
+        self.elements["9"] = "F"
+        self.elements["10"] = "Ne"
+        self.elements["11"] = "Na"
+        self.elements["12"] = "Mg"
+        self.elements["13"] = "Al"
+        self.elements["14"] = "Si"
+        self.elements["15"] = "P"
+        self.elements["16"] = "S"
+        self.elements["17"] = "Cl"
+        self.elements["18"] = "Ar"
+        self.elements["19"] = "K"
+        self.elements["20"] = "Ca"
+        self.elements["21"] = "Sc"
+        self.elements["22"] = "Ti"
+        self.elements["23"] = "V"
+        self.elements["24"] = "Cr"
+        self.elements["25"] = "Mn"
+        self.elements["26"] = "Fe"
+        self.elements["27"] = "Co"
+        self.elements["28"] = "Ni"
+        self.elements["29"] = "Cu"
+        self.elements["30"] = "Zn"
+        self.elements["31"] = "Ga"
+        self.elements["32"] = "Ge"
+        self.elements["33"] = "As"
+        self.elements["34"] = "Se"
+        self.elements["35"] = "Br"
+        self.elements["36"] = "Kr"
+        self.elements["37"] = "Rb"
+        self.elements["38"] = "Sr"
+        self.elements["39"] = "Y"
+        self.elements["40"] = "Zr"
+        self.elements["41"] = "Nb"
+        self.elements["42"] = "Mo"
+        self.elements["43"] = "Tc"
+        self.elements["44"] = "Ru"
+        self.elements["45"] = "Rh"
+        self.elements["46"] = "Pd"
+        self.elements["47"] = "Ag"
+        self.elements["48"] = "Cd"
+        self.elements["49"] = "In"
+        self.elements["50"] = "Sn"
+        self.elements["51"] = "Sb"
+        self.elements["52"] = "Te"
+        self.elements["53"] = "I"
+        self.elements["54"] = "Xe"
+        self.elements["55"] = "Cs"
+        self.elements["56"] = "Ba"
+        self.elements["57"] = "La"
+        self.elements["58"] = "Ce"
+        self.elements["59"] = "Pr"
+        self.elements["60"] = "Nd"
+        self.elements["61"] = "Pm"
+        self.elements["62"] = "Sm"
+        self.elements["63"] = "Eu"
+        self.elements["64"] = "Gd"
+        self.elements["65"] = "Tb"
+        self.elements["66"] = "Dy"
+        self.elements["67"] = "Ho"
+        self.elements["68"] = "Er"
+        self.elements["69"] = "Tm"
+        self.elements["70"] = "Yb"
+        self.elements["71"] = "Lu"
+        self.elements["72"] = "Hf"
+        self.elements["73"] = "Ta"
+        self.elements["74"] = "W"
+        self.elements["75"] = "Re"
+        self.elements["76"] = "Os"
+        self.elements["77"] = "Ir"
+        self.elements["78"] = "Pt"
+        self.elements["79"] = "Au"
+        self.elements["80"] = "Hg"
+        self.elements["81"] = "Tl"
+        self.elements["82"] = "Pb"
+        self.elements["83"] = "Bi"
+        self.elements["84"] = "Po"
+        self.elements["85"] = "At"
+        self.elements["86"] = "Rn"
+        self.elements["87"] = "Fr"
+        self.elements["88"] = "Ra"
+        self.elements["89"] = "Ac"
+        self.elements["90"] = "Th"
+        self.elements["91"] = "Pa"
+        self.elements["92"] = "U"
+        self.elements["101"] = "Md"
+        self.elements["106"] = "Sg"
+        self.elements["107"] = "Bh"
+        self.elements["108"] = "Hs"
+        self.elements["112"] = "Cn"
+        self.elements["113"] = "Uut"
+        self.elements["114"] = "Uuq"
+
+        self.modeled_layers_pack = modeled_layers_pack
+        self.linelist = linelist
+        self.abundances = abundances
+        #
+        self.calculation_time = 0
+        self.cache = {}
+        p = [teff, logg, vmic]
+        self._MH = MH
+        self._eMH = 0.0
+
+        self.min_MH = np.min(modeled_layers_pack[5])
+        self.max_MH = np.max(modeled_layers_pack[5])
+        #
+        super(EWSynthModel, self).__init__(p)
+
+    def _model_function(self, x, p=None):
+        # The model function with parameters p required by mpfit library
+        if p is not None:
+            # Update internal structure for fitting:
+            for i in xrange(len(p)):
+                self._parinfo[i]['value'] = p[i]
+
+        key = "%.2f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.vmic())
+        if self.cache.has_key(key):
+            print "Cache:", key
+            self.last_final_values = self.cache[key].copy()
+        else:
+            print "Generating:", key
+            # Optimization to avoid too small changes in parameters or repetition
+            atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH())
+            spec_abund, normal_abund, x_over_h, x_over_fe = determine_abundances(atmosphere_layers, \
+                    self.teff(), self.logg(), self.MH(), self.linemasks, self.abundances, microturbulence_vel = self.vmic(), verbose=1)
+
+
+            fe1 = self.linemasks['element'] == 'Fe 1'
+            fe2 = self.linemasks['element'] == 'Fe 2'
+            self.fe1 = fe1
+            self.fe2 = fe2
+            # Metalicity
+            #import ipdb
+            #ipdb.set_trace()
+            print "[Fe/H]", np.median(x_over_h[np.logical_or(fe1, fe2)]), np.median(x_over_h[fe1]), np.median(x_over_h[fe2])
+            #self._MH = np.median(x_over_h[np.logical_or(fe1, fe2)])
+            #self._MH = np.min((self._MH, self.max_MH))
+            #self._MH = np.max((self._MH, self.min_MH))
+            #self._eMH = np.std(x_over_h[np.logical_or(fe1, fe2)])
+
+            ## Temperature
+            # y = mx + c
+            x = self.linemasks['lower state (eV)'][fe1]
+            y = x_over_h[fe1]
+            A = np.vstack([x, np.ones(len(x))]).T
+            m1, c1 = np.linalg.lstsq(A, y)[0]
+            #import matplotlib.pyplot as plt
+            #plt.scatter(x, y)
+            #plt.plot(x, m1*x + c1)
+            #plt.show()
+
+            ## Vmic
+            # y = mx + c
+            x = np.log10(self.linemasks['ew'][fe2]/self.linemasks['wave_peak'][fe2])
+            y = x_over_h[fe2]
+            A = np.vstack([x, np.ones(len(x))]).T
+            m2, c2 = np.linalg.lstsq(A, y)[0]
+            #import matplotlib.pyplot as plt
+            #plt.scatter(x, y)
+            #plt.plot(x, m1*x + c1)
+            #plt.show()
+
+            ## Gravity
+            fe_diff = np.median(x_over_h[fe1]) - np.median(x_over_h[fe2])
+            #fe_diff = c1 - c2
+
+            self.last_final_values = np.asarray([m1, m2, fe_diff])
+            self.cache[key] = self.last_final_values.copy()
+
+            self.last_x_over_h = x_over_h.copy()
+
+
+
+        return self.last_final_values
+
+    # Default procedure to be called every iteration.  It simply prints
+    # the parameter values.
+    import scipy
+    blas_enorm32, = scipy.lib.blas.get_blas_funcs(['nrm2'],np.array([0],dtype=np.float32))
+    blas_enorm64, = scipy.lib.blas.get_blas_funcs(['nrm2'],np.array([0],dtype=np.float64))
+    def defiter(self, fcn, x, iter, fnorm=None, functkw=None,
+                       quiet=0, iterstop=None, parinfo=None,
+                       format=None, pformat='%.10g', dof=1):
+
+        if quiet:
+            return
+        if fnorm is None:
+            [status, fvec] = fcn(x, fjac=None, **functkw)
+            # If the returned fvec has more than four bits I assume that we have
+            # double precision
+            # It is important that the machar is determined by the precision of
+            # the returned value, not by the precision of the input array
+            if np.array([fvec]).dtype.itemsize>4:
+                self.blas_enorm = mpfit.blas_enorm64
+            else:
+                self.blas_enorm = mpfit.blas_enorm32
+            fnorm = self.enorm(fvec)**2
+
+        # Determine which parameters to print
+        nprint = len(x)
+        print "*Iter ", ('%6i' % iter),"   CHI-SQUARE = ",('%.10g' % fnorm)," DOF = ", ('%i' % dof)
+        for i in range(nprint):
+            if (parinfo is not None) and (parinfo[i].has_key('parname')):
+                p = '   ' + parinfo[i]['parname'] + ' = '
+            else:
+                p = '   P' + str(i) + ' = '
+            if (parinfo is not None) and (parinfo[i].has_key('mpprint')):
+                iprint = parinfo[i]['mpprint']
+            else:
+                iprint = 1
+            if iprint:
+                print p + (pformat % x[i]) + '  '
+        self._MH = np.median(self.last_x_over_h[np.logical_or(self.fe1, self.fe2)])
+        self._MH = np.min((self._MH, self.max_MH))
+        self._MH = np.max((self._MH, self.min_MH))
+        self._eMH = np.std(self.last_x_over_h[np.logical_or(self.fe1, self.fe2)])
+        return 0
+
+    def fitData(self, linemasks, parinfo=None, max_iterations=20, quiet=True):
+        base = 3
+        if len(parinfo) < base:
+            raise Exception("Wrong number of parameters!")
+
+        if sys.platform == "win32":
+            # On Windows, the best timer is time.clock()
+            default_timer = time.clock
+        else:
+            # On most other platforms the best timer is time.time()
+            default_timer = time.time
+        self.linemasks = linemasks
+        ftol = 1.e-4 # Terminate when the improvement in chisq between iterations is ftol > -(new_chisq/chisq)**2 +1
+        xtol = 1.e-4
+        gtol = 1.e-4
+        damp = 1.0   # Residuals are limited between -1.0 and 1.0 (np.tanh(residuals/1.0)) minimizing the influence of bad fluxes
+                     # * Spectrum must be a normalized one
+        _t0 = default_timer()
+
+        index = np.asarray([0, 1, 2])
+        target_values = np.zeros(len(index)) # zero slopes and zero difference between fe1 and fe2
+        weights = np.ones(len(index))
+        #super(EWSynthModel, self).fitData(index, target_values, weights=weights, parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet, iterfunct=self.defiter)
+        super(EWSynthModel, self).fitData(index, target_values, weights=weights, parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet, iterfunct='default')
+
+        residuals = self.last_final_values - target_values
+        self.rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
+        # Chisq using tanh
+        self.chisq = np.sum(np.tanh(weights * residuals)**2)
+        self.reduced_chisq = self.chisq / self.m.dof
+        # Chisq without using tanh for minimizing outliers
+        self.basic_chisq = np.sum((weights * residuals)**2)
+        self.reduced_basic_chisq = self.basic_chisq / self.m.dof
+
+        self.cache = {}
+
+        _t1 = default_timer()
+        sec = timedelta(seconds=int(_t1 - _t0))
+        self.calculation_time = datetime(1,1,1) + sec
+
+    def teff(self): return self._parinfo[0]['value']
+    def logg(self): return self._parinfo[1]['value']
+    def vmic(self): return self._parinfo[2]['value']
+
+    def eteff(self): return self.m.perror[0]
+    def elogg(self): return self.m.perror[1]
+    def evmic(self): return self.m.perror[2]
+
+    def MH(self): return self._MH
+    def eMH(self): return self._eMH
+
+    def print_solution(self):
+        header = "%8s\t%8s\t%8s\t%8s" % ("teff","logg","MH","vmic")
+        solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.teff(), self.logg(), self.MH(), self.vmic())
+        errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.eteff(), self.elogg(), self.eMH(), self.evmic())
+
+        print "           ", header
+        print "Solution:  ", solution
+        print "Errors:    ", errors
+        print ""
+
+        print "Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second)
+        header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","chisq(tanh)","rchisq(tanh)","chisq","rchisq","rms")
+        stats = "%8i\t%8i\t%8i\t%8.2f\t%8.4f\t%8.2f\t%8.4f\t%8.4f" % (self.m.dof, self.m.niter, self.m.nfev, self.chisq, self.reduced_chisq, self.basic_chisq, self.reduced_basic_chisq, self.rms)
+        print ""
+        print "         ", header
+        print "Stats:   ", stats
+        print "Return code:", self.m.status
+
+
+def derive_AP_from_EW(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, max_iterations=20):
+    """
+    """
+    teff_range = modeled_layers_pack[3]
+    logg_range = modeled_layers_pack[4]
+
+    parinfo = __create_EW_param_structure(initial_teff, initial_logg, initial_vmic, teff_range, logg_range)
+
+    synth_model = EWSynthModel(modeled_layers_pack, linelist, abundances, MH=initial_MH)
+
+    synth_model.fitData(linemasks, parinfo=parinfo, max_iterations=max_iterations, quiet=False)
+    print "\n"
+    synth_model.print_solution()
+
+    # Collect information to be returned
+    params = {}
+    params['teff'] = synth_model.teff()
+    params['logg'] = synth_model.logg()
+    params['MH'] = synth_model.MH()
+    params['vmic'] = synth_model.vmic()
+
+    errors = {}
+    errors['teff'] = synth_model.eteff()
+    errors['logg'] = synth_model.elogg()
+    errors['MH'] = synth_model.eMH()
+    errors['vmic'] = synth_model.evmic()
+
+    status = {}
+    status['days'] = synth_model.calculation_time.day-1
+    status['hours'] = synth_model.calculation_time.hour
+    status['minutes'] = synth_model.calculation_time.minute
+    status['seconds'] = synth_model.calculation_time.second
+    status['dof'] = synth_model.m.dof
+    status['error'] = synth_model.m.errmsg
+    status['chisq(tanh)'] = synth_model.chisq
+    status['rchisq(tanh)'] = synth_model.reduced_chisq
+    status['chisq'] = synth_model.basic_chisq
+    status['rchisq'] = synth_model.reduced_basic_chisq
+    status['niter'] = synth_model.m.niter
+    status['nsynthesis'] = synth_model.m.nfev
+    status['status'] = synth_model.m.status
+
+    return params, errors, status
 

@@ -57,6 +57,7 @@ def write_segment_regions(segment_regions, segment_regions_filename):
     out.close()
 
 def create_segments_around_lines(linemasks, margin=0.5):
+    linemasks.sort(order='wave_peak')
     dirty_segments = np.recarray((len(linemasks),),  dtype=[('wave_base', float), ('wave_top', float)])
     for i, line_mask in enumerate(linemasks):
         dirty_segments['wave_base'][i] = line_mask['wave_base'] - margin

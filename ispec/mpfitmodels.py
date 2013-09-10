@@ -55,7 +55,7 @@ class MPFitModel(object):
         else:
             return([status, (self.y - model)])
 
-    def fitData(self, x, y, weights=None, parinfo=None, ftol=1.e-10, xtol=1.e-10, gtol=1.e-10, damp=0, maxiter=200, quiet=True):
+    def fitData(self, x, y, weights=None, parinfo=None, ftol=1.e-10, xtol=1.e-10, gtol=1.e-10, damp=0, maxiter=200, iterfunct='default', quiet=True):
         """
         - ftol: Termination occurs when both the actual
                 and predicted relative reductions in the sum of squares are at most
@@ -76,7 +76,7 @@ class MPFitModel(object):
         if parinfo is not None:
             self._parinfo = parinfo
 
-        m = mpfit.mpfit(self._model_evaluation_function, parinfo=self._parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=maxiter, quiet=quiet)
+        m = mpfit.mpfit(self._model_evaluation_function, parinfo=self._parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=maxiter, iterfunct=iterfunct, quiet=quiet)
 
         if (m.status <= 0):
            raise Exception(m.errmsg)

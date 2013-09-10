@@ -1901,7 +1901,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             velocity_upper_limit = self.velocity_atomic_upper_limit
             velocity_step = self.velocity_atomic_step
             templates = []
-            masks = ["Atlas.Sun.372_926nm", "Atlas.Arcturus.372_926nm", "HARPS_SOPHIE.G2.375_679nm", "HARPS_SOPHIE.K0.378_679nm", "Synthetic.Sun.300_1100nm", "VALD.Sun.300_1100nm", "Narval.Sun.370_1048"]
+            masks = ["Narval.Sun.370_1048", "Atlas.Sun.372_926nm", "Atlas.Arcturus.372_926nm", "HARPS_SOPHIE.G2.375_679nm", "HARPS_SOPHIE.K0.378_679nm", "Synthetic.Sun.300_1100nm", "VALD.Sun.300_1100nm"]
             mask_size = 2.0
             mask_depth = 0.1
         elif relative_to_telluric_data:
@@ -3001,11 +3001,16 @@ SPECTRUM a Stellar Spectral Synthesis Program
         filter_by_error = self.dialog[key].results["Filter by error"] == 1
         err_base = self.dialog[key].results["Base error"]
         err_top = self.dialog[key].results["Top error"]
+        filter_cosmics = self.dialog[key].results["Filter cosmics"] == 1
+        resampling_step = self.dialog[key].results["Resampling step"]
+        window_size = self.dialog[key].results["Window size"]
+        variation_limit = self.dialog[key].results["Variation limit"]
+
         replace_by = self.dialog[key].results["Replace by"]
         self.dialog[key].destroy()
 
-        if replace_by == "Continuum" and self.active_spectrum.continuum_model is None:
-            msg = "It is necessary to previously fit continuum in order to clean values and replace them by continuum"
+        if (filter_cosmics or replace_by == "Continuum") and self.active_spectrum.continuum_model is None:
+            msg = "It is necessary to previously fit continuum in order to clean values with the selected options"
             title = "Continuum not fitted"
             self.error(title, msg)
             self.flash_status_message("Continuum not fitted.")
@@ -3025,6 +3030,13 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         self.status_message("Cleaning spectrum...")
 
+        if filter_by_flux and filter_by_error and filter_cosmics:
+            cosmics = ispec.create_filter_cosmic_rays(self.active_spectrum.data, self.active_spectrum.continuum_model, resampling_wave_step=resampling_step, window_size=window_size, variation_limit=variation_limit)
+            cfilter = np.logical_not(cosmics)
+            ffilter = (self.active_spectrum.data['flux'] > flux_base) & (self.active_spectrum.data['flux'] <= flux_top)
+            efilter = (self.active_spectrum.data['err'] > err_base) & (self.active_spectrum.data['err'] <= err_top)
+            wfilter = np.logical_and(ffilter, efilter)
+            wfilter = np.logical_and(wfilter, cfilter)
         if filter_by_flux and filter_by_error:
             ffilter = (self.active_spectrum.data['flux'] > flux_base) & (self.active_spectrum.data['flux'] <= flux_top)
             efilter = (self.active_spectrum.data['err'] > err_base) & (self.active_spectrum.data['err'] <= err_top)
@@ -3033,6 +3045,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
             wfilter = (self.active_spectrum.data['flux'] > flux_base) & (self.active_spectrum.data['flux'] <= flux_top)
         elif filter_by_error:
             wfilter = (self.active_spectrum.data['err'] > err_base) & (self.active_spectrum.data['err'] <= err_top)
+        elif filter_cosmics:
+            cosmics = ispec.create_filter_cosmic_rays(self.active_spectrum.data, self.active_spectrum.continuum_model, resampling_wave_step=resampling_step, window_size=window_size, variation_limit=variation_limit)
+            wfilter = np.logical_not(cosmics)
         else:
             wfilter = np.logical_not(np.isnan(self.active_spectrum.data['err']))
 
@@ -3182,6 +3197,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         wave_base = self.dialog[key].results["Base wavelength"]
         wave_top = self.dialog[key].results["Top wavelength"]
         in_segments = self.dialog[key].results["Consider"] == "Segments"
+        replace_by = self.dialog[key].results["Replace by"]
         self.dialog[key].destroy()
 
         if not in_segments and (wave_base is None or wave_top is None or wave_top <= wave_base):
@@ -3221,12 +3237,19 @@ SPECTRUM a Stellar Spectral Synthesis Program
         # IMPORTANT: Before active_spectrum is modified, if not this routine will not work properly
         self.remove_fitted_lines()
 
-        #self.active_spectrum.data = self.active_spectrum.data[wfilter]
         self.active_spectrum.data['flux'][~wfilter] = 0.0
         self.active_spectrum.data['err'][~wfilter] = 0.0
-        #if self.active_spectrum.continuum_model is not None:
-            #self.active_spectrum.data['flux'][~wfilter] = self.active_spectrum.continuum_model(self.active_spectrum.data['waveobs'][~wfilter])
-            #self.active_spectrum.data['err'][~wfilter] = 0.0
+        if replace_by == "Zeros":
+            self.active_spectrum.data['flux'][~wfilter] = 0.0
+            self.active_spectrum.data['err'][~wfilter] = 0.0
+        elif replace_by == "NaN":
+            self.active_spectrum.data['flux'][~wfilter] = np.nan
+            self.active_spectrum.data['err'][~wfilter] = np.nan
+        elif replace_by == "Continuum":
+            self.active_spectrum.data['flux'][~wfilter] = self.active_spectrum.continuum_model(self.active_spectrum.data['waveobs'][~wfilter])
+            self.active_spectrum.data['err'][~wfilter] = 0.0
+        else:
+            self.active_spectrum.data = self.active_spectrum.data[wfilter]
 
         self.active_spectrum.not_saved = True
         self.draw_active_spectrum()

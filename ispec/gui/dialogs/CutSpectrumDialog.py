@@ -28,6 +28,13 @@ class CutSpectrumDialog(CustomDialog):
         component["options"] = ["Custom range (defined above)", "Segments"]
         component["default"] = component["options"][0]
         self.__components.append(component)
+        component = {}
+        component["type"] = "OptionMenu"
+        component["text"] = "Replace by"
+        #component["options"] = ["Zeros", "NaN", "Continuum", "Completely remove"]
+        component["options"] = ["Zeros", "Completely remove"]
+        component["default"] = component["options"][1]
+        self.__components.append(component)
 
     def show(self):
         self.results = None
