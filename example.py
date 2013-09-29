@@ -358,6 +358,7 @@ molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
 telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Tellurics.standard.atm_air_model.txt"
 vel_telluric = 17.79 # km/s
 line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines.txt")
+line_regions = ispec.adjust_linemasks(sun_spectrum, line_regions, max_margin=0.5)
 # Spectrum should be already radial velocity corrected
 linemasks = ispec.fit_lines(line_regions, sun_spectrum, sun_continuum_model, \
                             vald_linelist_file = vald_linelist_file, \
@@ -389,15 +390,15 @@ linelist_name = "VALD.300_1100nm"   # "VALD.300_1100nm",
                                     # "VALD_with_molecules.300_1100nm",
                                     # "GES.475_685nm",  "Kurucz.300_1100nm",
                                     # "NIST.300_1100nm", "SPECTRUM.300_1000nm"]
-solar_abundances = "Grevesse.2007"  # "Asplund.2005", "Asplund.2009",
-                                    # "Grevesse.1998", "Anders.1989"
+solar_abundances_name = "Grevesse.2007"  # "Asplund.2005", "Asplund.2009",
+                                         # "Grevesse.1998", "Anders.1989"
 
 # Load model atmospheres
 modeled_layers_pack = ispec.load_modeled_layers_pack(ispec_dir + '/input/atmospheres/' \
         + model + '/modeled_layers_pack.dump')
 # Load SPECTRUM abundances
-abundances_file = ispec_dir + "/input/abundances/" + solar_abundances + "/stdatom.dat"
-abundances = ispec.read_SPECTRUM_abundances(abundances_file)
+solar_abundances_file = ispec_dir + "/input/abundances/" + solar_abundances_name + "/stdatom.dat"
+solar_abundances = ispec.read_SPECTRUM_abundances(solar_abundances_file)
 
 # Validate parameters
 if not ispec.valid_atmosphere_target(modeled_layers_pack, teff, logg, MH):
@@ -408,7 +409,7 @@ if not ispec.valid_atmosphere_target(modeled_layers_pack, teff, logg, MH):
 # Prepare atmosphere model
 atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH)
 spec_abund, normal_abund, x_over_h, x_over_fe = ispec.determine_abundances(atmosphere_layers, \
-        teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, verbose=1)
+        teff, logg, MH, linemasks, solar_abundances, microturbulence_vel = 2.0, verbose=1)
 
 print "[X/H]: %.2f" % np.median(x_over_h)
 print "[X/Fe]: %.2f" % np.median(x_over_fe)
@@ -439,8 +440,8 @@ linelist_name = "VALD.300_1100nm"   # "VALD.300_1100nm",
                                     # "VALD_with_molecules.300_1100nm",
                                     # "GES.475_685nm",  "Kurucz.300_1100nm",
                                     # "NIST.300_1100nm", "SPECTRUM.300_1000nm"]
-solar_abundances = "Grevesse.2007"  # "Asplund.2005", "Asplund.2009",
-                                    # "Grevesse.1998", "Anders.1989"
+solar_abundances_name = "Grevesse.2007"  # "Asplund.2005", "Asplund.2009",
+                                         # "Grevesse.1998", "Anders.1989"
 
 # Load model atmospheres
 modeled_layers_pack = ispec.load_modeled_layers_pack(ispec_dir + 'input/atmospheres/' + \
@@ -451,8 +452,8 @@ linelist_file = ispec_dir + "/input/linelists/SPECTRUM/" + linelist_name.split("
 linelist = ispec.read_SPECTRUM_linelist(linelist_file)
 # Load SPECTRUM abundances
 fixed_abundances = None # No fixed abundances
-abundances_file = ispec_dir + "/input/abundances/" + solar_abundances + "/stdatom.dat"
-abundances = ispec.read_SPECTRUM_abundances(abundances_file)
+solar_abundances_file = ispec_dir + "/input/abundances/" + solar_abundances_name + "/stdatom.dat"
+solar_abundances = ispec.read_SPECTRUM_abundances(solar_abundances_file)
 
 # Validate parameters
 if not ispec.valid_atmosphere_target(modeled_layers_pack, teff, logg, MH):
@@ -467,7 +468,7 @@ atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, tef
 # Synthesis
 synth_spectrum = ispec.create_spectrum_structure(np.arange(wave_base, wave_top, wave_step))
 synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], \
-        atmosphere_layers, teff, logg, MH, linelist=linelist, abundances=abundances, \
+        atmosphere_layers, teff, logg, MH, linelist=linelist, abundances=solar_abundances, \
         fixed_abundances=fixed_abundances, microturbulence_vel = microturbulence_vel, \
         macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, \
         R=resolution, regions=regions, verbose=1)
@@ -498,8 +499,8 @@ linelist_name = "VALD.300_1100nm"   # "VALD.300_1100nm",
                                     # "VALD_with_molecules.300_1100nm",
                                     # "GES.475_685nm",  "Kurucz.300_1100nm",
                                     # "NIST.300_1100nm", "SPECTRUM.300_1000nm"]
-solar_abundances = "Grevesse.2007"  # "Asplund.2005", "Asplund.2009",
-                                    # "Grevesse.1998", "Anders.1989"
+solar_abundances_name = "Grevesse.2007"  # "Asplund.2005", "Asplund.2009",
+                                         # "Grevesse.1998", "Anders.1989"
 
 # Free parameters
 #free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "limb_darkening_coeff"]
@@ -526,15 +527,39 @@ linelist_file = ispec_dir + "/input/linelists/SPECTRUM/" + linelist_name.split("
 linelist = ispec.read_SPECTRUM_linelist(linelist_file)
 # Load SPECTRUM abundances
 fixed_abundances = None # No fixed abundances
-abundances_file = ispec_dir + "/input/abundances/" + solar_abundances + "/stdatom.dat"
-abundances = ispec.read_SPECTRUM_abundances(abundances_file)
+solar_abundances_file = ispec_dir + "/input/abundances/" + solar_abundances_name + "/stdatom.dat"
+solar_abundances = ispec.read_SPECTRUM_abundances(solar_abundances_file)
 
 obs_spec, modeled_synth_spectrum, params, errors, free_abundances, status, stats_linemasks = \
         ispec.modelize_spectrum(sun_spectrum, sun_continuum_model, \
-        modeled_layers_pack, linelist, abundances, free_abundances, initial_teff, \
+        modeled_layers_pack, linelist, solar_abundances, free_abundances, initial_teff, \
         initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
         initial_limb_darkening_coeff, initial_R, free_params, segments=segments, \
         linemasks=line_regions, max_iterations=max_iterations)
+
+#--- Modelize spectra from EW --------------------------------------------------
+# Parameters
+initial_teff = 5750.0
+initial_logg = 4.5
+initial_MH = 0.00
+initial_vmic = 0.8
+
+# Validate parameters
+if not ispec.valid_atmosphere_target(modeled_layers_pack, initial_teff, initial_logg, initial_MH):
+    msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
+            fall out of theatmospheric models."
+    print msg
+
+# Reduced equivalent width
+ewr = np.log10(linemasks['ew']/linemasks['wave_peak'])
+# Filter too weak/strong lines
+# Filter criteria exposed in paper of GALA
+efilter = np.logical_and(ewr >= -5.8, ewr <= -4.65)
+
+results = ispec.modelize_spectrum_from_EW(linemasks[efilter], modeled_layers_pack, linelist,\
+                    solar_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, \
+                    teff_elements=["Fe 1"], vmic_elements=["Fe 2"], max_iterations=20)
+params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params = results
 
 
 ##--- Save spectrum ------------------------------------------------------------

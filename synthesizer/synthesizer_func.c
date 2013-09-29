@@ -673,8 +673,10 @@ int abundances_determination(char *atmosphere_model_file, char *linelist_file, i
   if((line = (linedata *) calloc(1,sizeof(linedata))) == NULL)
     nrerror("Allocation of memory for line failed");
 
-  printf("\nABUNDANCE v2.75 (C) Richard O. Gray 2008");
-  printf("\n* Linked to Python by Sergi Blanco Cuaresma - September 2012\n\n");
+  if (flagw == 1) {
+    printf("\nABUNDANCE v2.75 (C) Richard O. Gray 2008");
+    printf("\n* Linked to Python by Sergi Blanco Cuaresma - September 2012\n\n");
+  }
 
 
   inmodel(model,atmosphere_model_file,flagw);
@@ -692,15 +694,15 @@ int abundances_determination(char *atmosphere_model_file, char *linelist_file, i
   inatom(abundances_file, atom,model->MH,&ah,&ahe);
 
   pfinit(V,atom,model,flagw);
-  printf("\nCalculating Number Densities\n");
+  if(flagw == 1) printf("\nCalculating Number Densities\n");
   Density(model,atom,ah,ahe,flagw);
-  printf("Poping\n");
+  if(flagw == 1) printf("Poping\n");
   popinit(POP,atom,model,V,flagw);
 
   waveref = 5000.0;
-  printf("Calculating Reference Opacities\n");
+  if(flagw == 1) printf("Calculating Reference Opacities\n");
   tauref(model,waveref);
-  printf("Entering Main Loop\n");
+  if(flagw == 1) printf("Entering Main Loop\n");
 
   int pos = 0;
   while(bwline(&wave,line,atom,&ew,qf) == 1) {

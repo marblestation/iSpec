@@ -490,7 +490,7 @@ def __assert_structure(xcoord, yvalues, peaks, base_points):
     return peaks, base_points
 
 def __create_linemasks_structure(num_peaks):
-    linemasks = np.recarray((num_peaks, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100'), ('peak', int), ('base', int), ('top', int), ('depth', float), ('relative_depth', float), ('wave_base_fit', float), ('wave_top_fit', float), ('base_fit', int), ('top_fit', int), ('mu', float), ('sig', float), ('A', float), ('baseline', float), ('gamma', float), ('fwhm', float), ('fwhm_kms', float), ('R', float), ('depth_fit', float), ('relative_depth_fit', float), ('integrated_flux', float), ('ew', float), ('rms', float), ('VALD_wave_peak', float), ('element', '|S4'), ('lower state (eV)', float), ('log(gf)', float), ('telluric_wave_peak', float), ('telluric_fwhm', float), ('telluric_R', float), ('telluric_depth', float), ('solar_depth', float), ('discarded', bool), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('fudge factor', float), ('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8')])
+    linemasks = np.recarray((num_peaks, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100'), ('peak', int), ('base', int), ('top', int), ('depth', float), ('relative_depth', float), ('wave_base_fit', float), ('wave_top_fit', float), ('base_fit', int), ('top_fit', int), ('mu', float), ('sig', float), ('A', float), ('baseline', float), ('gamma', float), ('fwhm', float), ('fwhm_kms', float), ('R', float), ('depth_fit', float), ('relative_depth_fit', float), ('integrated_flux', float), ('ew', float), ('ew_err', float), ('rms', float), ('VALD_wave_peak', float), ('element', '|S4'), ('lower state (eV)', float), ('log(gf)', float), ('telluric_wave_peak', float), ('telluric_fwhm', float), ('telluric_R', float), ('telluric_depth', float), ('solar_depth', float), ('discarded', bool), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('fudge factor', float), ('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8')])
     # Initialization
     linemasks['discarded'] = False
     # Line mask
@@ -531,6 +531,7 @@ def __create_linemasks_structure(num_peaks):
     linemasks['relative_depth_fit'] = 0.0
     linemasks['integrated_flux'] = 0.0
     linemasks['ew'] = 0.0
+    linemasks['ew_err'] = 0.0
     linemasks['rms'] = 9999.0
     linemasks["species"] = ""
     linemasks["lower state (cm^-1)"] = 0
@@ -683,11 +684,21 @@ def fit_lines(regions, spectrum, continuum_model,  vald_linelist_file=None, chem
     If 'consider_omara' is True, then it will consider that the vald linelist contains
     O'Mara parameters for some lines and it will interpret it that way.
 
+    If the spectrum has reported errors, the EW error will be calculated (it needs
+    the SNR that will be estimated snr = fluxes/errors)
+
+    NOTE: It is recommended to use an already normalized spectrum
+
     :returns:
         Array with additional columns such as 'mu', 'sig', 'A', 'baseline'...
     """
     last_reported_progress = -1
     total_regions = len(regions)
+    #normalized_spectrum = ispec.create_spectrum_structure(spectrum['waveobs'], spectrum['flux'], spectrum['err'])
+    #normalized_spectrum['flux'] /= continuum_model(spectrum['waveobs'])
+    #normalized_spectrum['err'] /= continuum_model(spectrum['waveobs'])
+    #spectrum = normalized_spectrum
+    #continuum_model = ispec.fit_continuum(self.active_spectrum.data, fixed_value=1.0, model="Fixed value")
 
     logging.info("Fitting line models...")
     if not regions.dtype.fields.has_key('wave_base_fit'):
@@ -716,6 +727,11 @@ def fit_lines(regions, spectrum, continuum_model,  vald_linelist_file=None, chem
                 regions['peak'][i] = where_peak[0][0]
 
     i = 0
+    wfilter = spectrum['err'] > 0.
+    if len(np.where(wfilter)[0]) > 0:
+        snr = np.median(spectrum['flux'][wfilter] / spectrum['err'][wfilter])
+    else:
+        snr = None
     # Model: fit gaussian
     for i in np.arange(total_regions):
         fitting_not_possible = False
@@ -774,6 +790,14 @@ def fit_lines(regions, spectrum, continuum_model,  vald_linelist_file=None, chem
                 #regions['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x)
                 regions['integrated_flux'][i] = -1 * line_model.A()
                 regions['ew'][i] = regions['integrated_flux'][i] / line_model.baseline()
+                # EW error from
+                # Vollmann & Eversberg, 2006: http://adsabs.harvard.edu/abs/2006AN....327..862V
+                if snr is not None:
+                    mean_flux = np.mean(spectrum['flux'][regions['base_fit'][i]:regions['top_fit'][i]+1])
+                    mean_flux_continuum = np.mean(continuum_model(spectrum['waveobs'][regions['base_fit'][i]:regions['top_fit'][i]+1]))
+                    diff_wavelength = spectrum['waveobs'][regions['top_fit'][i]] - spectrum['waveobs'][regions['base_fit'][i]]
+                    regions['ew_err'][i] = np.sqrt(1 + mean_flux_continuum / mean_flux) * ((diff_wavelength - regions['ew'][i])/snr)
+                    #print "%.2f\t%.2f\t%.2f" % (regions['ew'][i]*10000, regions['ew_err'][i]*10000, regions['ew_err'][i] / regions['ew'][i])
                 # RMS
                 regions['rms'][i] = rms
             except Exception as e:
