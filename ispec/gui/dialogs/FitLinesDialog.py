@@ -2,10 +2,18 @@ import numpy as np
 from CustomDialog import *
 
 class FitLinesDialog(CustomDialog):
-    def __init__(self, parent, title, vel_telluric):
+    def __init__(self, parent, title, resolution, vel_telluric):
         self.__parent = parent
         self.__title = title
         self.__components = []
+        component = {}
+        component["type"] = "Entry"
+        component["text"] = "Resolution"
+        component["text-type"] = "int" # float, int or str
+        component["default"] = resolution
+        component["minvalue"] = 0.0
+        component["maxvalue"] = np.inf
+        self.__components.append(component)
         component = {}
         component["type"] = "Entry"
         component["text"] = "Velocity respect to telluric lines (km/s)"
@@ -20,11 +28,21 @@ class FitLinesDialog(CustomDialog):
         component["options"] = ["VALD.300_1100nm", "GES.475_685nm"]
         component["default"] = component["options"][0]
         self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Allow peak position adjustment"
+        component["default"] = True
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Check derivatives before fitting"
+        component["default"] = False
+        self.__components.append(component)
 
     def show(self, updated_vel_telluric=None):
         self.results = None
         if updated_vel_telluric is not None:
-            self.__components[0]["default"] = updated_vel_telluric
+            self.__components[1]["default"] = updated_vel_telluric
         CustomDialog.__init__(self, self.__parent, self.__title, self.__components)
 
 

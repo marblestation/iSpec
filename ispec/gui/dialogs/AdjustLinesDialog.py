@@ -17,9 +17,9 @@ class AdjustLinesDialog(CustomDialog):
         component = {}
         component["type"] = "Entry"
         component["text"] = "Resolution"
-        component["text-type"] = "float" # float, int or str
+        component["text-type"] = "int" # float, int or str
         component["default"] = resolution
-        component["minvalue"] = 1.0
+        component["minvalue"] = 0.0
         component["maxvalue"] = np.inf
         self.__components.append(component)
 

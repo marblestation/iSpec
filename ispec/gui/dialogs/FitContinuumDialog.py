@@ -2,7 +2,7 @@ import numpy as np
 from CustomDialog import *
 
 class FitContinuumDialog(CustomDialog):
-    def __init__(self, parent, title, nknots, median_wave_range, max_wave_range):
+    def __init__(self, parent, title, R, nknots, degrees, median_wave_range, max_wave_range):
         self.__parent = parent
         self.__title = title
         self.__components = []
@@ -12,11 +12,33 @@ class FitContinuumDialog(CustomDialog):
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
-        component["text"] = "Number of polynomial degrees/splines"
+        component["text"] = "Number of splines"
         component["text-type"] = "int" # float, int or str
         component["default"] = nknots
         component["minvalue"] = 1.0
         component["maxvalue"] = np.inf
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Entry"
+        component["text"] = "Degree"
+        component["text-type"] = "int" # float, int or str
+        component["default"] = degrees
+        component["minvalue"] = 1.0
+        component["maxvalue"] = np.inf
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Entry"
+        component["text"] = "Resolution"
+        component["text-type"] = "int" # float, int or str
+        component["default"] = R
+        component["minvalue"] = 0.0
+        component["maxvalue"] = np.inf
+        self.__components.append(component)
+        component = {}
+        component["type"] = "OptionMenu"
+        component["text"] = "Filtering order"
+        component["options"] = ["median+max", "max+median"]
+        component["default"] = component["options"][0]
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
@@ -36,7 +58,17 @@ class FitContinuumDialog(CustomDialog):
         self.__components.append(component)
         component = {}
         component["type"] = "Checkbutton"
+        component["text"] = "Automatically find and ignore strong lines"
+        component["default"] = True
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
         component["text"] = "Consider only continuum regions"
+        component["default"] = False
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Ignore line regions"
         component["default"] = False
         self.__components.append(component)
         component = {}

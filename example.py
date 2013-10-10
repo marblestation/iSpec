@@ -20,11 +20,18 @@ import os
 import sys
 import numpy as np
 import logging
+from astropy.io import ascii
 
 ################################################################################
 #--- iSpec directory -------------------------------------------------------------
-#ispec_dir = '/home/blanco/shared/ispec/'
-ispec_dir = './'
+if os.path.exists('/home/sblancoc/shared/iSpec/'):
+    # avakas
+    ispec_dir = '/home/sblancoc/shared/iSpec/'
+elif os.path.exists('/home/blanco/shared/iSpec/'):
+    # vanoise
+    ispec_dir = '/home/blanco/shared/iSpec/'
+else:
+    ispec_dir = '/home/marble/shared/iSpec/'
 sys.path.insert(0, os.path.abspath(ispec_dir))
 import ispec
 
@@ -71,22 +78,11 @@ cutted_sun_spectrum = sun_spectrum[wfilter]
 #--- Radial Velocity determination with linelist mask --------------------------
 logging.info("Radial velocity determination with linelist mask...")
 # - Read atomic data
-vald_linelist_file = ispec_dir + "/input/linelists/VALD/300_1100nm.lst"
-linelist = ispec.read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
-
-###### OPTIONAL:
-## - Filter lines that may be affected by telluric lines
-#telluric_lines_file = ispec_dir + "/input/linelists/CCF/Tellurics.standard.atm_air_model.txt"
-#linelist_telluric = ispec.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
-#dfilter = linelist_telluric['depth'] > np.percentile(linelist_telluric['depth'], 75)
-#linelist_telluric = linelist_telluric[dfilter]
-
-#tfilter = ispec.create_filter_for_regions_affected_by_tellurics(linelist['wave_peak'], \
-                            #linelist_telluric, min_velocity=-30.0, max_velocity=30.0)
-#linelist[tfilter]['depth'] = 0.0
+mask_file = ispec_dir + "input/linelists/CCF/Narval.Sun.370_1048nm.txt"
+ccf_mask = ascii.read(mask_file)._data
 
 xcoord, fluxes, errors = ispec.build_velocity_profile(mu_cas_a_spectrum, \
-                                            linelist=linelist, lower_velocity_limit=-200.0, \
+                                            linelist=ccf_mask, lower_velocity_limit=-200.0, \
                                             upper_velocity_limit=200.0, velocity_step=1.0)
 
 models = ispec.modelize_velocity_profile(xcoord, fluxes, errors)
@@ -94,7 +90,7 @@ best = ispec.select_good_velocity_profile_models(models, xcoord, fluxes)
 models = models[best]
 
 # Number of models represent the number of components
-spectroscopic_nary = str(len(models) >= 2)
+components = len(models)
 # First component:
 rv = np.round(models[0].mu(), 2) # km/s
 
@@ -107,19 +103,6 @@ template = ispec.read_spectrum(ispec_dir + \
 # - Read observed template
 #template = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
 
-###### OPTIONAL:
-## - Read telluric lines and use only the 25% of the deepest ones
-#telluric_lines_file = ispec_dir + "/input/linelists/CCF/Tellurics.standard.atm_air_model.txt"
-#linelist_telluric = ispec.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
-#dfilter = linelist_telluric['depth'] > np.percentile(linelist_telluric['depth'], 75)
-#linelist_telluric = linelist_telluric[dfilter]
-
-## - Filter regions that may be affected by telluric lines
-#tfilter = ispec.create_filter_for_regions_affected_by_tellurics(template['waveobs'], \
-                            #linelist_telluric, min_velocity=-30.0, max_velocity=30.0)
-#template['flux'][tfilter] = 0.0
-
-
 xcoord, fluxes, errors = ispec.build_velocity_profile(mu_cas_a_spectrum, \
                                             template=template, lower_velocity_limit=-200.0, \
                                             upper_velocity_limit=200.0, velocity_step=1.0)
@@ -129,7 +112,7 @@ best = ispec.select_good_velocity_profile_models(models, xcoord, fluxes)
 models = models[best]
 
 # Number of models represent the number of components
-spectroscopic_nary = str(len(models) >= 2)
+components = len(models)
 # First component:
 rv = np.round(models[0].mu(), 2) # km/s
 
@@ -139,7 +122,7 @@ logging.info("Radial velocity correction...")
 mu_cas_a_spectrum = ispec.correct_velocity(mu_cas_a_spectrum, rv)
 
 
-#--- Barycentric Velocity determination ----------------------------------------
+#--- Barycentric Velocity determination from spectrum --------------------------
 logging.info("Barycentric velocity determination...")
 # - Telluric
 telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Tellurics.standard.atm_air_model.txt"
@@ -180,30 +163,94 @@ coadded_spectrum['err'] = np.sqrt(np.power(resampled_sun_spectrum['err'],2) + \
 #--- Fit continuum -------------------------------------------------------------
 logging.info("Fit continuum...")
 
-nknots = None # Number of knots will be automatically estimated
-model = "Polynomy" # "Splines"
-
-# - Use a fixed value (useful when the spectrum is already normalized)
+# EXAMPLE 1: Use a fixed value (useful when the spectrum is already normalized)
+# =========
 sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
 
-# - Consider only continuum regions for finding continuum points to fit
+
+# EXAMPLE 2: Consider only continuum regions for the fit, strategy 'median+max'
+# =========
+
+# One spline per each 5 nm
+model = "Splines" # "Polynomy"
+degree = 3
+nknots = None # Automatic: 1 spline every 5 nm
+from_resolution = 80000
+
+# Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
+order='median+max'
+median_wave_range=0.1
+max_wave_range=1.0
+
 continuum_regions = ispec.read_continuum_regions(ispec_dir + "/input/regions/fe_lines_continuum.txt")
-sun_continuum_model = ispec.fit_continuum(sun_spectrum, \
-                        continuum_regions=continuum_regions, nknots=nknots,\
-                        median_wave_range=0.1, max_wave_range=1.0,
-                        model=model)
+sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+                        continuum_regions=continuum_regions, nknots=nknots, degree=degree, \
+                        median_wave_range=median_wave_range, \
+                        max_wave_range=max_wave_range, \
+                        model=model, order=order, \
+                        automatic_strong_line_detection=True)
 
-# - Fit continuum in each segment independently
+# EXAMPLE 3: Fit continuum in each segment independently, strategy 'median+max'
+#==========
+# One spline per each 5 nm
+model = "Splines" # "Polynomy"
+degree = 3
+nknots = None # Automatic: 1 spline every 5 nm
+from_resolution = 80000
+
+# Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
+order='median+max'
+median_wave_range=0.1
+max_wave_range=1.0
+
 segments = ispec.read_segment_regions(ispec_dir + "/input/regions/fe_lines_segments.txt")
-sun_continuum_model = ispec.fit_continuum(sun_spectrum, \
-                        independent_regions=segments, nknots=1,\
-                        median_wave_range=0.1, max_wave_range=1.0,
-                        model=model)
+sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+                        independent_regions=segments, nknots=1, degree=degree,\
+                        median_wave_range=median_wave_range, \
+                        max_wave_range=max_wave_range, \
+                        model=model, order=order, \
+                        automatic_strong_line_detection=True)
 
-# - Use the whole spectrum and a polynomial/spline model
-sun_continuum_model = ispec.fit_continuum(sun_spectrum, nknots=nknots, \
-                            median_wave_range=0.1, max_wave_range=1.0, \
-                            model=model)
+
+# EXAMPLE 4: Use the whole spectrum, strategy 'median+max'
+#==========
+# One spline per each 5 nm
+model = "Splines" # "Polynomy"
+degree = 3
+nknots = None # Automatic: 1 spline every 5 nm
+from_resolution = 80000
+
+# Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
+order='median+max'
+median_wave_range=0.1
+max_wave_range=1.0
+
+sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+                            nknots=nknots, degree=degree, \
+                            median_wave_range=median_wave_range, \
+                            max_wave_range=max_wave_range, \
+                            model=model, order=order, \
+                            automatic_strong_line_detection=True)
+
+# EXAMPLE 5: Use the whole spectrum, strategy 'max+median'
+#==========
+# One spline per each 5 nm
+model = "Splines" # "Polynomy"
+degree = 3
+nknots = None # Automatic: 1 spline every 5 nm
+from_resolution = 80000
+
+# Strategy: Filter first MAXIMUM values and secondly medians in order to find the continuum
+order='max+median'
+median_wave_range=3.0
+max_wave_range=1.0
+
+sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+                            nknots=nknots, degree=degree, \
+                            median_wave_range=median_wave_range, \
+                            max_wave_range=max_wave_range, \
+                            model=model, order=order, \
+                            automatic_strong_line_detection=True)
 
 
 #--- Continuum normalization ---------------------------------------------------
@@ -217,8 +264,9 @@ normalized_sun_spectrum['err'] = sun_spectrum['err'] \
 
 #--- Filtering cosmic rays -----------------------------------------------------
 # Spectrum should be already normalized
-cosmics = ispec.create_filter_cosmic_rays(normalized_sun_spectrum, sun_continuum_model, resampling_wave_step=0.001, window_size=15, variation_limit=0.01)
-
+cosmics = ispec.create_filter_cosmic_rays(sun_spectrum, sun_continuum_model, \
+                                        resampling_wave_step=0.001, window_size=15, \
+                                        variation_limit=0.01)
 clean_sun_spectrum = sun_spectrum[~cosmics]
 
 
@@ -266,6 +314,7 @@ sun_linemasks = ispec.find_linemasks(sun_spectrum, sun_continuum_model, \
                         vel_telluric=vel_telluric, \
                         minimum_depth=min_depth, maximum_depth=max_depth, \
                         smoothed_spectrum=smoothed_sun_spectrum, \
+                        check_derivatives=False, \
                         discard_gaussian=False, discard_voigt=True )
 # Exclude lines that have not been successfully cross matched with the atomic data
 # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
@@ -274,7 +323,7 @@ sun_linemasks = sun_linemasks[~rejected_by_atomic_line_not_found]
 
 ispec.write_line_regions(sun_linemasks, "example_sun_linemasks.txt")
 
-#--- Barycentric velocity correction -------------------------------------------
+#--- Barycentric velocity correction from observation date/coordinates ---------
 logging.info("Calculating barycentric velocity correction...")
 day = 15
 month = 2
@@ -365,8 +414,9 @@ linemasks = ispec.fit_lines(line_regions, sun_spectrum, sun_continuum_model, \
                             chemical_elements_file = chemical_elements_file, \
                             molecules_file = molecules_file, \
                             telluric_linelist_file = telluric_linelist_file, \
+                            check_derivatives = False, \
                             vel_telluric = vel_telluric, discard_gaussian=False, \
-                            discard_voigt=True)
+                            discard_voigt=True, free_mu=False)
 # Exclude lines that have not been successfully cross matched with the atomic data
 # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
 rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)

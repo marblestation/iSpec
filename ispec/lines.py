@@ -228,7 +228,7 @@ def write_line_regions(line_regions, line_regions_filename):
     out.write("\n".join(["\t".join(map(str, (line['wave_peak'], line['wave_base'], line['wave_top'], line['note']))) for line in line_regions]))
     out.close()
 
-def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None):
+def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None, free_mu=False):
     """
     Fits a gaussian at a given wavelength location using a fitted continuum model.
 
@@ -252,16 +252,18 @@ def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None):
     parinfo[0]['fixed'] = True
     parinfo[1]['value'] = A # Only negative (absorption lines) and greater than the lowest point + 25%
     parinfo[1]['limited'] = [True, True]
-    parinfo[1]['limits'] = [np.min(((min_flux-baseline) * 1.25, -1e-10)), 0.]
+    parinfo[1]['limits'] = [np.min(((min_flux-baseline) * 1.25, -1e-10)), -1e-10]
     parinfo[2]['value'] = sig # Only positives (absorption lines) and lower than the spectrum slice
     parinfo[2]['limited'] = [True, True]
-    parinfo[2]['limits'] = [0., x[-1] - x[0]]
+    parinfo[2]['limits'] = [1e-10, x[-1] - x[0]]
     parinfo[3]['value'] = mu # Peak only within the spectrum slice
-    parinfo[3]['fixed'] = True
-    #parinfo[3]['fixed'] = False
-    #parinfo[3]['limited'] = [True, True]
-    #parinfo[3]['limits'] = [x[0], x[-1]]
-    ##parinfo[3]['limits'] = [mu - 0.005, mu + 0.005]
+    if not free_mu:
+        parinfo[3]['fixed'] = True
+    else:
+        parinfo[3]['fixed'] = False
+        parinfo[3]['limited'] = [True, True]
+        parinfo[3]['limits'] = [x[0], x[-1]]
+        #parinfo[3]['limits'] = [mu - 0.001, mu + 0.001]
 
     # If there are only 3 data point, fix 'mu'
     # - if not, the fit will fail with an exception because there are not
@@ -269,7 +271,58 @@ def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None):
     if len(spectrum_slice) == 3:
         parinfo[3]['fixed'] = True
 
-    model.fitData(x, y, parinfo=parinfo)
+
+    f = spectrum_slice['flux']
+    min_flux = np.min(f)
+    # More weight to the deeper fluxes, the upper part tend to be more contaminated by other lines
+    if min_flux < 0:
+        weights = f + -1*(min_flux) + 0.01 # Above zero
+        weights = np.min(weights) / weights
+    else:
+        weights = min_flux / f
+    weights -= np.min(weights)
+    weights = weights /np.max(weights)
+    model.fitData(x, y, parinfo=parinfo, weights=weights)
+    #model.fitData(x, y, parinfo=parinfo)
+
+    # TODO: Remove
+    if False:
+        #def func(x, a, mu, sig):
+            #return a*np.exp(-(x-mu)**2/(2*sig**2))
+
+        #def show():
+            #plt.plot(spectrum_slice['waveobs'], spectrum_slice['flux'])
+            #plt.plot(x, baseline+func(x, model.A(), model.mu(), model.sig()))
+            #plt.show()
+        #from scipy.signal import find_peaks_cwt
+        #peaks = find_peaks_cwt(y, np.arange(1, 10))
+        #print "*", len(peaks)
+        #print peaks
+        #show()
+
+        from scipy.optimize import curve_fit
+        # Let's create a function to model and create data
+        def func(x, a, mu, sig):
+            return a*np.exp(-(x-mu)**2/(2*sig**2))
+            #return ((a*1.)/np.sqrt(2*np.pi*sig**2))*np.exp(-(x-mu)**2/(2*sig**2))
+
+        # Executing curve_fit on noisy data
+        func2 = lambda x, a, sigma: func(x, a, mu, sigma)
+        popt, pcov = curve_fit(func2, x, y-baseline, p0 = [-1, 0.05])
+        #popt returns the best fit values for parameters of the given model (func)
+        #print popt
+
+        def show():
+            plt.plot(spectrum_slice['waveobs'], spectrum_slice['flux'])
+            plt.plot(x, baseline+func2(x, popt[0], popt[1]))
+            plt.plot(x[:-1], baseline+func(x[:-1], model.A(), model.mu(), model.sig()))
+            plt.show()
+        show()
+        #import pudb
+        #pudb.set_trace()
+        #import ipdb
+        #ipdb.set_trace()
+
 
     return model
 
@@ -289,21 +342,21 @@ def __fit_voigt(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=Non
     # Parameters estimators
     baseline = np.median(continuum_model(spectrum_slice['waveobs']))
     if A is None:
-        A = min_flux - baseline
+        A = np.min((min_flux - baseline, -1e-10))
     if sig is None:
-        sig = (x[-1] - x[0])/3.0
+        sig = np.max(((x[-1] - x[0])/3.0, 1e-10))
     if gamma is None:
-        gamma = (x[-1] - x[0])/2.0
+        gamma = np.max(((x[-1] - x[0])/2.0, 1e-10))
 
     parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for i in np.arange(5)]
     parinfo[0]['value'] = baseline # Continuum
     parinfo[0]['fixed'] = True
     parinfo[1]['value'] = A # Only negative (absorption lines) and greater than the lowest point + 25%
     parinfo[1]['limited'] = [True, True]
-    parinfo[1]['limits'] = [(min_flux-baseline) * 1.25, 0.]
+    parinfo[1]['limits'] = [(min_flux-baseline) * 1.25, -1e-10]
     parinfo[2]['value'] = sig # Only positives (absorption lines) and lower than the spectrum slice
     parinfo[2]['limited'] = [True, True]
-    parinfo[2]['limits'] = [0., x[-1] - x[0]]
+    parinfo[2]['limits'] = [1e-10, x[-1] - x[0]]
     parinfo[3]['value'] = mu # Peak only within the spectrum slice
     parinfo[3]['fixed'] = True
     #parinfo[3]['limited'] = [True, True]
@@ -311,7 +364,7 @@ def __fit_voigt(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=Non
     #parinfo[3]['limits'] = [mu - 0.005, mu + 0.005]
     parinfo[4]['value'] = gamma # Only positives (not zero, otherwise its a gaussian) and small (for nm, it should be <= 0.01 aprox but I leave it in relative terms considering the spectrum slice)
     parinfo[4]['limited'] = [True, True]
-    parinfo[4]['limits'] = [0.001, x[-1] - x[0]]
+    parinfo[4]['limits'] = [1e-10, x[-1] - x[0]]
 
     # If there are only 4 data point, fix 'mu'
     # - if not, the fit will fail with an exception because there are not
@@ -324,7 +377,7 @@ def __fit_voigt(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=Non
     return model
 
 
-def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None, discard_gaussian = False, discard_voigt = False):
+def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None, discard_gaussian = False, discard_voigt = False, free_mu=False):
     """
     Fits a gaussian and a voigt at a given wavelength location using a fitted continuum model.
 
@@ -343,7 +396,7 @@ def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None
         # - 1 fix parameter: mu (but it will set to free if there is enough data)
         if len(spectrum_slice) > 2:
             try:
-                gaussian_model = __fit_gaussian(spectrum_slice, continuum_model, mu, sig=sig, A=A)
+                gaussian_model = __fit_gaussian(spectrum_slice, continuum_model, mu, sig=sig, A=A, free_mu=free_mu)
 
                 residuals = gaussian_model.residuals()
                 rms_gaussian = np.sqrt(np.sum(np.power(residuals, 2)) / len(residuals))
@@ -541,14 +594,22 @@ def __create_linemasks_structure(num_peaks):
     return linemasks
 
 
-def find_linemasks(spectrum, continuum_model,  vald_linelist_file=None, chemical_elements_file=None, molecules_file=None, telluric_linelist_file=None, vel_telluric=0.0, minimum_depth=None, maximum_depth=None, discard_gaussian = False, discard_voigt = False, smoothed_spectrum=None, accepted_for_fitting=None, consider_omara=False, frame=None):
+def find_linemasks(spectrum, continuum_model,  vald_linelist_file=None, chemical_elements_file=None, molecules_file=None, telluric_linelist_file=None, vel_telluric=0.0, minimum_depth=None, maximum_depth=None, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, consider_omara=False, frame=None):
     """
     Generate a line masks for a spectrum by finding peaks and base points.
 
     It is recommended that the spectrum is normalized (better results are obtained).
+
+    It is recommended to provide a smoothed version of the spectra, so that the
+    line edges will be better determined.
+
     It tries to fit a gaussian and a voigt model and selects the best unless one of them is disabled by
     the discard_gaussian or discard_voigt argument (if both of them are disabled, there will be
     no fit information).
+
+    If 'check_derivates' is True, the fit will be limited not to the region limits
+    but to a refined smaller limits calculated from the second and third derivative
+    (convex+concave regions) from 'smoothed_spectrum' if present or 'spectrum' if not.
 
     To save computation time, min and max depth can be indicated and all the lines out
     of this range will not be considered for fit process (save CPU time) although
@@ -566,18 +627,16 @@ def find_linemasks(spectrum, continuum_model,  vald_linelist_file=None, chemical
     * If 'consider_omara' is True, then it will consider that the vald linelist contains
     O'Mara parameters for some lines and it will interpret it that way.
     """
-    #print "NOTICE: This method can generate overflow warnings due to the Least Square Algorithm"
-    #print "        used for the fitting process, but they can be ignored."
-    if smoothed_spectrum is None:
-        smoothed_spectrum = spectrum
-
     logging.info("Finding peaks and base points...")
     # Peaks and base points will agree with the following criteria:
     # - The first and last feature is a base point
     #    base_points[0] < peaks[0] < base_points[1] < ... < base_points[n-1] < peaks[n-1] < base_points[n]
     #    where n = len(base_points)
     # - len(base_points) = len(peaks) + 1
-    peaks, base_points = __find_peaks_and_base_points(smoothed_spectrum['waveobs'], smoothed_spectrum['flux'])
+    if smoothed_spectrum is None:
+        peaks, base_points = __find_peaks_and_base_points(spectrum['waveobs'], spectrum['flux'])
+    else:
+        peaks, base_points = __find_peaks_and_base_points(smoothed_spectrum['waveobs'], smoothed_spectrum['flux'])
     # If no peaks found, just finnish
     if len(peaks) == 0 or len(base_points) == 0:
         return None
@@ -586,12 +645,14 @@ def find_linemasks(spectrum, continuum_model,  vald_linelist_file=None, chemical
     # - In case that the peak is higher than the continuum, depth < 0
     continuum_at_peak = continuum_model(spectrum['waveobs'][peaks])
     flux_at_peak = spectrum['flux'][peaks]
-    depth = ((continuum_at_peak - flux_at_peak) / continuum_at_peak)
+    depth = 1 - (flux_at_peak /continuum_at_peak)
+    dfilter = depth < 0.0
+    depth[dfilter] = 0.0
 
     if minimum_depth is None:
-        minimum_depth = np.min(depth)
+        minimum_depth = np.max((0., np.min(depth)))
     if maximum_depth is None:
-        minimum_depth = np.max(depth)
+        minimum_depth = np.min((1., np.max(depth)))
 
     # To save computation time, min and max depth can be indicated and all the lines out
     # of this range will not be considered for fit process (save CPU time) although
@@ -632,7 +693,10 @@ def find_linemasks(spectrum, continuum_model,  vald_linelist_file=None, chemical
                                 vel_telluric = vel_telluric, \
                                 discard_gaussian = discard_gaussian, \
                                 discard_voigt = discard_voigt, \
-                                consider_omara = consider_omara)
+                                smoothed_spectrum = smoothed_spectrum, \
+                                check_derivatives = check_derivatives, \
+                                consider_omara = consider_omara, free_mu=True, \
+                                accepted_for_fitting=accepted_for_fitting)
 
     # Identify peaks higher than continuum
     # - Depth is negative if the peak is higher than the continuum
@@ -665,11 +729,11 @@ def find_linemasks(spectrum, continuum_model,  vald_linelist_file=None, chemical
 
     return linemasks
 
-def fit_lines(regions, spectrum, continuum_model,  vald_linelist_file=None, chemical_elements_file=None, molecules_file=None, telluric_linelist_file=None, vel_telluric=0.0, discard_gaussian = False, discard_voigt = False, smoothed_spectrum=None, accepted_for_fitting=None, consider_omara=False, frame=None):
+def fit_lines(regions, spectrum, continuum_model,  vald_linelist_file=None, chemical_elements_file=None, molecules_file=None, telluric_linelist_file=None, vel_telluric=0.0, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, consider_omara=False, free_mu=False, frame=None):
     """
     Fits gaussians models in the specified line regions.
     * 'regions' should be an array with 'wave_base', 'wave_peak' and 'wave_top' columns.
-    * If 'smoothed_spectrum' is present, the wave_base and wave_top can be adjusted before fitting
+    * If 'check_derivates' is True, the fit will be limited not to the region limits but to a refined smaller limits calculated from the second and third derivative (convex+concave regions) from 'smoothed_spectrum' if present or 'spectrum' if not.
     * If 'accepted_for_fitting' array is present, only those regions that are set to true
     will be fitted
 
@@ -736,9 +800,12 @@ def fit_lines(regions, spectrum, continuum_model,  vald_linelist_file=None, chem
     for i in np.arange(total_regions):
         fitting_not_possible = False
         if accepted_for_fitting is None or accepted_for_fitting[i]:
-            # Adjust edges
-            if smoothed_spectrum is not None:
-                new_base, new_top = __improve_linemask_edges(smoothed_spectrum['waveobs'], smoothed_spectrum['flux'], regions['base'][i], regions['top'][i], regions['peak'][i])
+            if check_derivatives:
+                # Adjust edges
+                if smoothed_spectrum is not None:
+                    new_base, new_top = __improve_linemask_edges(smoothed_spectrum['waveobs'], smoothed_spectrum['flux'], regions['base'][i], regions['top'][i], regions['peak'][i])
+                else:
+                    new_base, new_top = __improve_linemask_edges(spectrum['waveobs'], spectrum['flux'], regions['base'][i], regions['top'][i], regions['peak'][i])
             else:
                 new_base = regions['base'][i]
                 new_top = regions['top'][i]
@@ -758,7 +825,7 @@ def fit_lines(regions, spectrum, continuum_model,  vald_linelist_file=None, chem
                     spectrum_window = spectrum[wave_filter]
                 else:
                     spectrum_window = spectrum[new_base:new_top+1]
-                line_model, rms = __fit_line(spectrum_window, continuum_model, regions['wave_peak'][i], discard_gaussian = discard_gaussian, discard_voigt = discard_voigt)
+                line_model, rms = __fit_line(spectrum_window, continuum_model, regions['wave_peak'][i], discard_gaussian = discard_gaussian, discard_voigt = discard_voigt, free_mu=free_mu)
                 regions['mu'][i] = line_model.mu()
                 regions['sig'][i] = line_model.sig()
                 regions['A'][i] = line_model.A()
@@ -776,7 +843,7 @@ def fit_lines(regions, spectrum, continuum_model,  vald_linelist_file=None, chem
                 # - In case that the peak is higher than the continuum, depth < 0
                 continuum = line_model.baseline()
                 flux = line_model(line_model.mu())
-                regions['depth_fit'][i] = ((continuum - flux) / continuum)
+                regions['depth_fit'][i] = 1. - (flux / continuum)
                 # Relative depth is "peak - mean_base_point" with respect to the total continuum
                 # - In case that the mean base point is higher than the continuum, relative_depth < 0
                 # - relative_depth < depth is always true
@@ -785,10 +852,12 @@ def fit_lines(regions, spectrum, continuum_model,  vald_linelist_file=None, chem
 
                 # Equivalent Width
                 # - Include 99.9999998% of the gaussian area
-                #from_x = regions['mu'][i] - 6*regions['sig'][i]
-                #to_x = regions['mu'][i] + 6*regions['sig'][i]
-                #regions['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x)
-                regions['integrated_flux'][i] = -1 * line_model.A()
+                from_x = regions['mu'][i] - 6*regions['sig'][i]
+                to_x = regions['mu'][i] + 6*regions['sig'][i]
+                regions['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x)
+                # If it is a gaussian we can directly use A (but not if it is a voigt!)
+                #regions['integrated_flux'][i] = -1 * line_model.A()
+                #regions['integrated_flux'][i] = -1.*regions['A'][i]*np.sqrt(2*np.pi*regions['sig'][i]**2)
                 regions['ew'][i] = regions['integrated_flux'][i] / line_model.baseline()
                 # EW error from
                 # Vollmann & Eversberg, 2006: http://adsabs.harvard.edu/abs/2006AN....327..862V

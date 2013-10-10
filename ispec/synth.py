@@ -703,11 +703,12 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
 
     return parinfo
 
-def __create_EW_param_structure(initial_teff, initial_logg, initial_vmic, teff_range, logg_range):
+def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range):
     """
     Creates the structure needed for the mpfitmodel
     """
-    base = 3
+    base = 4
+    #free_params = ["teff", "logg", "vmic", "mh"]
     free_params = ["teff", "logg", "vmic"]
     parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base)]
     #
@@ -715,14 +716,18 @@ def __create_EW_param_structure(initial_teff, initial_logg, initial_vmic, teff_r
     parinfo[0]['value'] = initial_teff
     parinfo[0]['fixed'] = not parinfo[0]['parname'].lower() in free_params
     parinfo[0]['step'] = 500.0 # For auto-derivatives
+    #parinfo[0]['mpside'] = 2
+    #parinfo[0]['mpmaxstep'] = parinfo[0]['step'] * 1.5
     parinfo[0]['limited'] = [True, True]
     parinfo[0]['limits'] = [np.min(teff_range), np.max(teff_range)]
     #
     parinfo[1]['parname'] = "logg"
     parinfo[1]['value'] = initial_logg
     parinfo[1]['fixed'] = not parinfo[1]['parname'].lower() in free_params
-    parinfo[1]['step'] = 0.50 # For auto-derivatives
+    parinfo[1]['step'] = 0.5 # For auto-derivatives
+    #parinfo[1]['mpside'] = 2
     parinfo[1]['mpmaxstep'] = 0.50 # Maximum change to be made in the parameter
+    #parinfo[1]['mpmaxstep'] = parinfo[1]['step'] * 1.5
     parinfo[1]['limited'] = [True, True]
     parinfo[1]['limits'] = [np.min(logg_range), np.max(logg_range)]
     #
@@ -730,43 +735,20 @@ def __create_EW_param_structure(initial_teff, initial_logg, initial_vmic, teff_r
     parinfo[2]['value'] = initial_vmic
     parinfo[2]['fixed'] = not parinfo[2]['parname'].lower() in free_params
     parinfo[2]['step'] = 0.50 # For auto-derivatives
+    #parinfo[2]['mpside'] = 2
+    #parinfo[2]['mpmaxstep'] = parinfo[2]['step'] * 2.0
     parinfo[2]['limited'] = [True, True]
-    parinfo[2]['limits'] = [0.5, 50.0]
-
-    return parinfo
-
-def __create_finer_EW_param_structure(initial_teff, initial_logg, initial_vmic, teff_range, logg_range):
-    """
-    Creates the structure needed for the mpfitmodel
-    """
-    base = 3
-    free_params = ["teff", "logg", "vmic"]
-    parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base)]
+    parinfo[2]['limits'] = [0., 50.0]
     #
-    parinfo[0]['parname'] = "teff"
-    parinfo[0]['value'] = initial_teff
-    parinfo[0]['fixed'] = not parinfo[0]['parname'].lower() in free_params
-    parinfo[0]['step'] = 100.0 # For auto-derivatives
-    parinfo[0]['limited'] = [True, True]
-    #parinfo[0]['limits'] = [np.max((np.min(teff_range), initial_teff-500.)), np.min((np.max(teff_range), initial_teff+500.))]
-    parinfo[0]['limits'] = [np.min(teff_range), np.max(teff_range)]
-    #
-    parinfo[1]['parname'] = "logg"
-    parinfo[1]['value'] = initial_logg
-    parinfo[1]['fixed'] = not parinfo[1]['parname'].lower() in free_params
-    parinfo[1]['step'] = 0.10 # For auto-derivatives
-    #parinfo[1]['mpmaxstep'] = 0.50 # Maximum change to be made in the parameter
-    parinfo[1]['limited'] = [True, True]
-    #parinfo[1]['limits'] = [np.max((np.min(logg_range), initial_logg-0.5)), np.min((np.max(logg_range), initial_logg+0.5))]
-    parinfo[1]['limits'] = [np.min(logg_range), np.max(logg_range)]
-    #
-    parinfo[2]['parname'] = "Vmic"
-    parinfo[2]['value'] = initial_vmic
-    parinfo[2]['fixed'] = not parinfo[2]['parname'].lower() in free_params
-    parinfo[2]['step'] = 0.10 # For auto-derivatives
-    parinfo[2]['limited'] = [True, True]
-    #parinfo[2]['limits'] = [np.max((0.5, initial_vmic-0.5)), np.min((50.0, initial_vmic+0.5))]
-    parinfo[2]['limits'] = [0.5, 50.0]
+    parinfo[3]['parname'] = "MH"
+    parinfo[3]['value'] = initial_MH
+    parinfo[3]['fixed'] = not parinfo[3]['parname'].lower() in free_params
+    parinfo[3]['step'] = 0.05 # For auto-derivatives
+    #parinfo[3]['mpside'] = 2
+    #if not parinfo[3]['fixed']:
+        #parinfo[3]['mpmaxstep'] = parinfo[3]['step'] * 1.5
+    parinfo[3]['limited'] = [True, True]
+    parinfo[3]['limits'] = [np.min(MH_range), np.max(MH_range)]
 
     return parinfo
 
@@ -1231,7 +1213,7 @@ class EquivalentWidthModel(MPFitModel):
 
             # First iteration
             if self.lines_for_teff is None or self.lines_for_vmic is None:
-                self.select_good_lines(x_over_h)
+                self.select_good_lines(x_over_h, strict_teff=True, strict_vmic=True)
 
             values_to_evaluate = []
             fitted_lines_params = []
@@ -1262,17 +1244,24 @@ class EquivalentWidthModel(MPFitModel):
 
                 ## Gravity
                 abundance_diff = np.median(x_over_h[lines_for_teff]) - np.median(x_over_h[lines_for_vmic])
+                #abundance_diff2 = self.MH() - np.median(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
+                abundance_diff2 = self.MH() - np.median(x_over_h[self.lines_for_teff[0]])
 
-                print " # Element:          ", self.teff_elements[i], self.vmic_elements[i]
-                print "   Teff/Vmic slopes:  %.3f %.3f" % (m1, m2)
-                print "   Abundances diff:   %.2f" % abundance_diff
-                print "   Abundances stdev:  %.2f %.2f" % (np.std(x_over_h[lines_for_teff]), np.std(x_over_h[lines_for_vmic]))
-                print "   Abundances median: %.2f %.2f" % (np.median(x_over_h[lines_for_teff]), np.median(x_over_h[lines_for_vmic]))
+                print " # Element:                   ", self.teff_elements[i], self.vmic_elements[i]
+                print "   Teff/Vmic slopes:            %.2f %.2f" % (m1, m2)
+                print "   Abundances diff:             %.2f" % abundance_diff
+                print "   Abundances diff with model:  %.2f" % abundance_diff2
+                print "   Abundances stdev:            %.2f %.2f" % (np.std(x_over_h[lines_for_teff]), np.std(x_over_h[lines_for_vmic]))
+                print "   Abundances median:           %.2f %.2f" % (np.median(x_over_h[lines_for_teff]), np.median(x_over_h[lines_for_vmic]))
 
                 # Rounded to 3 and 2 decimals (using string convertion works better than np.round)
-                values_to_evaluate.append(float("%.3f" % m1))
-                values_to_evaluate.append(float("%.3f" % m2))
+                values_to_evaluate.append(float("%.2f" % m1))
+                values_to_evaluate.append(float("%.2f" % m2))
                 values_to_evaluate.append(float("%.2f" % abundance_diff))
+                #values_to_evaluate.append(float("%.2f" % abundance_diff2))
+                residuals = np.asarray(values_to_evaluate) - self.y
+                #print "Eval:", np.sum(np.tanh(self.weights*residuals)**2)
+                print " - Chisq:                       %.4f" % np.sum((self.weights*residuals)**2)
                 fitted_lines_params.append(m1)
                 fitted_lines_params.append(c1)
                 fitted_lines_params.append(m2)
@@ -1325,10 +1314,11 @@ class EquivalentWidthModel(MPFitModel):
                 print p + (pformat % x[i]) + '  '
         ##### Lines
         values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
-        self.select_good_lines(x_over_h) # Modifies self.lines_for_teff and self.lines_for_vmic
+        self.select_good_lines(x_over_h, strict_teff=True, strict_vmic=True) # Modifies self.lines_for_teff and self.lines_for_vmic
 
         ##### Metallicity
-        self._MH = np.median(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
+        #self._MH = np.median(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
+        self._MH = np.median(x_over_h[self.lines_for_teff[0]]) # Only from Fe 1
         self._MH = np.min((self._MH, self.max_MH))
         self._MH = np.max((self._MH, self.min_MH))
         self._eMH = np.std(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
@@ -1336,7 +1326,7 @@ class EquivalentWidthModel(MPFitModel):
         return 0
 
 
-    def select_good_lines(self, x_over_h):
+    def select_good_lines(self, x_over_h, strict_teff=True, strict_vmic=False):
         """
             Modifies self.lines_for_teff and self.lines_for_vmic
         """
@@ -1351,40 +1341,42 @@ class EquivalentWidthModel(MPFitModel):
             #if len(np.where(~bad)[0]) == 0:
                 #raise Exception("No good lines!")
 
-            # Outliers
-            x = self.linemasks['lower state (eV)'][~bad & lines_for_teff]
-            y = x_over_h[~bad & lines_for_teff]
-            A = np.vstack([x, np.ones(len(x))]).T
-            m0, c0 = np.linalg.lstsq(A, y)[0]
-            #lower_limit = m0*self.linemasks['lower state (eV)'] + c0 - 3*np.std(y)
-            #upper_limit = m0*self.linemasks['lower state (eV)'] + c0 + 3*np.std(y)
-            interq = np.percentile(y, 95) - np.percentile(y, 5)
-            lower_limit = m0*self.linemasks['lower state (eV)'] + c0 - interq/2.
-            upper_limit = m0*self.linemasks['lower state (eV)'] + c0 + interq/2.
-            reject_lines_for_teff = np.logical_or(x_over_h > upper_limit, x_over_h < lower_limit)
-            reject_lines_for_teff = np.logical_or(reject_lines_for_teff, bad)
-            #import matplotlib.pyplot as plt
-            #plt.scatter(x, y)
-            #plt.plot(x, m0*x + c0)
-            #plt.plot(x, m0*x + c0 + 3*np.std(y))
-            #plt.plot(x, m0*x + c0 - 3*np.std(y))
-            #plt.show()
+            if strict_teff:
+                # Outliers
+                x = self.linemasks['lower state (eV)'][~bad & lines_for_teff]
+                y = x_over_h[~bad & lines_for_teff]
+                A = np.vstack([x, np.ones(len(x))]).T
+                m0, c0 = np.linalg.lstsq(A, y)[0]
+                #lower_limit = m0*self.linemasks['lower state (eV)'] + c0 - 3*np.std(y)
+                #upper_limit = m0*self.linemasks['lower state (eV)'] + c0 + 3*np.std(y)
+                interq = np.percentile(y, 99) - np.percentile(y, 1)
+                lower_limit = m0*self.linemasks['lower state (eV)'] + c0 - interq/2.
+                upper_limit = m0*self.linemasks['lower state (eV)'] + c0 + interq/2.
+                reject_lines_for_teff = np.logical_or(x_over_h > upper_limit, x_over_h < lower_limit)
+                reject_lines_for_teff = np.logical_or(reject_lines_for_teff, bad)
+                #import matplotlib.pyplot as plt
+                #plt.scatter(x, y)
+                #plt.plot(x, m0*x + c0)
+                #plt.plot(x, m0*x + c0 + 3*np.std(y))
+                #plt.plot(x, m0*x + c0 - 3*np.std(y))
+                #plt.show()
 
-            # Discard bad lines and outliers
-            clean_lines_for_teff = np.logical_and(~reject_lines_for_teff, lines_for_teff)
-            # Ensure that there are at least some lines
-            if len(np.where(clean_lines_for_teff)[0]) <= 1:
-                # Discard only bad lines
-                clean_lines_for_teff = lines_for_teff[~bad]
+                # Discard bad lines and outliers
+                clean_lines_for_teff = np.logical_and(~reject_lines_for_teff, lines_for_teff)
+                # Ensure that there are at least some lines
                 if len(np.where(clean_lines_for_teff)[0]) <= 1:
-                    clean_lines_for_teff = lines_for_teff
-            if len(np.where(clean_lines_for_teff)[0]) <= 1:
-                raise Exception("Not enought lines for Teff (%i lines)" % len(np.where(clean_lines_for_teff)[0]))
+                    # Discard only bad lines
+                    clean_lines_for_teff = lines_for_teff[~bad]
+                    if len(np.where(clean_lines_for_teff)[0]) <= 1:
+                        clean_lines_for_teff = lines_for_teff
+                if len(np.where(clean_lines_for_teff)[0]) <= 1:
+                    raise Exception("Not enought lines for Teff (%i lines)" % len(np.where(clean_lines_for_teff)[0]))
+                else:
+                    self.lines_for_teff.append(clean_lines_for_teff)
             else:
-                self.lines_for_teff.append(clean_lines_for_teff)
                 ##### ACCEPT all
-                #self.lines_for_teff.append(lines_for_teff)
-
+                self.lines_for_teff.append(np.logical_and(lines_for_teff, np.logical_not(bad)))
+            print " > Selected", element, "lines for teff:", len(np.where(self.lines_for_teff[-1])[0]), "of", len(np.where(lines_for_teff)[0])
 
 
         # Select elements for determining the Vmic (traditionally Fe 2)
@@ -1392,40 +1384,44 @@ class EquivalentWidthModel(MPFitModel):
         for element in self.vmic_elements:
             lines_for_vmic = self.linemasks['element'] == element
 
-            x = np.log10(self.linemasks['ew'][~bad & lines_for_vmic]/self.linemasks['wave_peak'][~bad & lines_for_vmic])
-            y = x_over_h[~bad & lines_for_vmic]
-            A = np.vstack([x, np.ones(len(x))]).T
-            m0, c0 = np.linalg.lstsq(A, y)[0]
-            #lower_limit = m0*np.log10(self.linemasks['ew']/self.linemasks['wave_peak']) + c0 - 3*np.std(y)
-            #upper_limit = m0*np.log10(self.linemasks['ew']/self.linemasks['wave_peak']) + c0 + 3*np.std(y)
-            interq = np.percentile(y, 95) - np.percentile(y, 5)
-            lower_limit = m0*np.log10(self.linemasks['ew']/self.linemasks['wave_peak']) + c0 - interq/2.
-            upper_limit = m0*np.log10(self.linemasks['ew']/self.linemasks['wave_peak']) + c0 + interq/2.
-            reject_lines_for_vmic = np.logical_or(x_over_h > upper_limit, x_over_h < lower_limit)
-            reject_lines_for_vmic = np.logical_or(reject_lines_for_vmic, bad)
-            #import matplotlib.pyplot as plt
-            #plt.scatter(x, y)
-            #plt.plot(x, m0*x + c0)
-            #plt.plot(x, m0*x + c0 + 3*np.std(y))
-            #plt.plot(x, m0*x + c0 - 3*np.std(y))
-            #plt.show()
+            if strict_vmic:
+                x = np.log10(self.linemasks['ew'][~bad & lines_for_vmic]/self.linemasks['wave_peak'][~bad & lines_for_vmic])
+                y = x_over_h[~bad & lines_for_vmic]
+                A = np.vstack([x, np.ones(len(x))]).T
+                m0, c0 = np.linalg.lstsq(A, y)[0]
+                #lower_limit = m0*np.log10(self.linemasks['ew']/self.linemasks['wave_peak']) + c0 - 3*np.std(y)
+                #upper_limit = m0*np.log10(self.linemasks['ew']/self.linemasks['wave_peak']) + c0 + 3*np.std(y)
+                interq = np.percentile(y, 99) - np.percentile(y, 1)
+                lower_limit = m0*np.log10(self.linemasks['ew']/self.linemasks['wave_peak']) + c0 - interq/2.
+                upper_limit = m0*np.log10(self.linemasks['ew']/self.linemasks['wave_peak']) + c0 + interq/2.
+                reject_lines_for_vmic = np.logical_or(x_over_h > upper_limit, x_over_h < lower_limit)
+                reject_lines_for_vmic = np.logical_or(reject_lines_for_vmic, bad)
+                #import matplotlib.pyplot as plt
+                #plt.scatter(x, y)
+                #plt.plot(x, m0*x + c0)
+                #plt.plot(x, m0*x + c0 + 3*np.std(y))
+                #plt.plot(x, m0*x + c0 - 3*np.std(y))
+                #plt.show()
 
-            #discard = np.logical_or(bad, reject1)
-            #discard = np.logical_or(discard, reject2)
+                #discard = np.logical_or(bad, reject1)
+                #discard = np.logical_or(discard, reject2)
 
-            # Discard bad lines and outliers
-            clean_lines_for_vmic = np.logical_and(~reject_lines_for_vmic, lines_for_vmic)
-            if len(np.where(clean_lines_for_vmic)[0]) <= 1:
-                clean_lines_for_vmic = lines_for_vmic[~bad]
-                # Discard only bad lines
+                # Discard bad lines and outliers
+                clean_lines_for_vmic = np.logical_and(~reject_lines_for_vmic, lines_for_vmic)
                 if len(np.where(clean_lines_for_vmic)[0]) <= 1:
-                    clean_lines_for_vmic = lines_for_vmic
-            if len(np.where(clean_lines_for_vmic)[0]) <= 1:
-                raise Exception("Not enought lines for Vmic calculations (%i lines)" % len(np.where(clean_lines_for_vmic)[0]))
+                    clean_lines_for_vmic = lines_for_vmic[~bad]
+                    # Discard only bad lines
+                    if len(np.where(clean_lines_for_vmic)[0]) <= 1:
+                        clean_lines_for_vmic = lines_for_vmic
+                if len(np.where(clean_lines_for_vmic)[0]) <= 1:
+                    raise Exception("Not enought lines for Vmic calculations (%i lines)" % len(np.where(clean_lines_for_vmic)[0]))
+                else:
+                    self.lines_for_vmic.append(clean_lines_for_vmic)
             else:
-                self.lines_for_vmic.append(clean_lines_for_vmic)
                 ##### ACCEPT all
-                #self.lines_for_vmic.append(lines_for_vmic)
+                self.lines_for_vmic.append(np.logical_and(lines_for_vmic, np.logical_not(bad)))
+            print " > Selected", element, "lines for vmic:", len(np.where(self.lines_for_vmic[-1])[0]), "of", len(np.where(lines_for_vmic)[0])
+
 
 
     def fitData(self, linemasks, teff_elements=["Fe 1"], vmic_elements=["Fe 2"], parinfo=None, max_iterations=20, quiet=True):
@@ -1449,20 +1445,21 @@ class EquivalentWidthModel(MPFitModel):
         self.linemasks = linemasks
         self.teff_elements = teff_elements
         self.vmic_elements = vmic_elements
-        ftol = 1.e-4 # Terminate when the improvement in chisq between iterations is ftol > -(new_chisq/chisq)**2 +1
-        xtol = 1.e-4
-        gtol = 1.e-4
-        damp = 1.0   # Residuals are limited between -1.0 and 1.0 (np.tanh(residuals/1.0)) minimizing the influence of bad fluxes
+        ftol = 1.e-2 # Terminate when the improvement in chisq between iterations is ftol > -(new_chisq/chisq)**2 +1
+        xtol = 1.e-2
+        gtol = 1.e-2
+        damp = 0.0   # Residuals are limited between -1.0 and 1.0 (np.tanh(residuals/1.0)) minimizing the influence of bad fluxes
                      # * Spectrum must be a normalized one
+        #chisq_limit = 0.0002 # np.sum(np.asarray([0.00, 0.00, 0.01, 0.01])**2))
+        chisq_limit = 0.0001 # np.sum(np.asarray([0.00, 0.00, 0.01])**2))
         _t0 = default_timer()
 
         #index = np.asarray([0, 1, 2])
-        index = np.arange(4*len(teff_elements)) # 3 values: zero slopes and zero difference between element1 and element2
+        index = np.arange(3*len(teff_elements)) # 3 values: zero slopes and zero difference between element1 and element2
+        #index = np.arange(4*len(teff_elements)) # 3 values: zero slopes and zero difference between element1 and element2
         target_values = np.zeros(len(index))
         weights = np.ones(len(index))
-        #weights = np.asarray([1, 1./3, 1])
-        super(EquivalentWidthModel, self).fitData(index, target_values, weights=weights, parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet, iterfunct=self.defiter)
-        #super(EquivalentWidthModel, self).fitData(index, target_values, weights=weights, parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet, iterfunct='default')
+        super(EquivalentWidthModel, self).fitData(index, target_values, weights=weights, parinfo=parinfo, chisq_limit=chisq_limit, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet, iterfunct=self.defiter)
 
         values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
         residuals = values_to_evaluate - target_values
@@ -1488,13 +1485,25 @@ class EquivalentWidthModel(MPFitModel):
     def elogg(self): return self.m.perror[1]
     def evmic(self): return self.m.perror[2]
 
-    def MH(self): return self._MH
-    def eMH(self): return self._eMH
+    def MH(self): return self._parinfo[3]['value']
+    def eMH(self): return self.m.perror[3]
+
+    #def MH(self): return self._MH
+    #def eMH(self): return self._eMH
 
     def print_solution(self):
+        # Calculate MH
+        values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
+        #MH = np.median(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
+        #MH = np.std(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
+        MH = np.median(x_over_h[self.lines_for_teff[0]]) # Only from Fe 1
+        eMH = np.std(x_over_h[self.lines_for_teff[0]]) # Only from Fe 1
+
         header = "%8s\t%8s\t%8s\t%8s" % ("teff","logg","MH","vmic")
-        solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.teff(), self.logg(), self.MH(), self.vmic())
-        errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.eteff(), self.elogg(), self.eMH(), self.evmic())
+        #solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.teff(), self.logg(), self.MH(), self.vmic())
+        #errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.eteff(), self.elogg(), self.eMH(), self.evmic())
+        solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.teff(), self.logg(), MH, self.vmic())
+        errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.eteff(), self.elogg(), eMH, self.evmic())
 
         print "           ", header
         print "Solution:  ", solution
@@ -1503,7 +1512,7 @@ class EquivalentWidthModel(MPFitModel):
 
         print "Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second)
         header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","chisq(tanh)","rchisq(tanh)","chisq","rchisq","rms")
-        stats = "%8i\t%8i\t%8i\t%8.2f\t%8.4f\t%8.2f\t%8.4f\t%8.4f" % (self.m.dof, self.m.niter, self.m.nfev, self.chisq, self.reduced_chisq, self.basic_chisq, self.reduced_basic_chisq, self.rms)
+        stats = "%8i\t%8i\t%8i\t%8.4f\t%8.4f\t%8.4f\t%8.4f\t%8.4f" % (self.m.dof, self.m.niter, self.m.nfev, self.chisq, self.reduced_chisq, self.basic_chisq, self.reduced_basic_chisq, self.rms)
         print ""
         print "         ", header
         print "Stats:   ", stats
@@ -1515,8 +1524,9 @@ def modelize_spectrum_from_EW(linemasks, modeled_layers_pack, linelist, abundanc
     """
     teff_range = modeled_layers_pack[3]
     logg_range = modeled_layers_pack[4]
+    MH_range = modeled_layers_pack[5]
 
-    parinfo = __create_EW_param_structure(initial_teff, initial_logg, initial_vmic, teff_range, logg_range)
+    parinfo = __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range)
 
     EW_model = EquivalentWidthModel(modeled_layers_pack, linelist, abundances, MH=initial_MH)
 

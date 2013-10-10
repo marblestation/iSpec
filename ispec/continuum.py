@@ -19,7 +19,11 @@ import numpy as np
 from plotting import *
 from common import *
 from spectrum import *
-from pymodelfit import UniformCDFKnotSplineModel
+from scipy.ndimage.filters import maximum_filter
+from scipy.ndimage.filters import median_filter
+from scipy.ndimage.filters import gaussian_filter
+from pymodelfit import UniformKnotSplineModel
+from pymodelfit import UniformCDFKnotSplineModel # Old
 from scipy import interpolate
 import log
 import logging
@@ -164,11 +168,25 @@ def __determine_continuum_base_points(spectrum, discard_outliers=True, median_wa
 
     return continuum_base_points
 
-def fit_continuum(spectrum, independent_regions=None, continuum_regions=None, nknots=None, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy'):
-    #nknots = 2
-    #median_wave_range = 0.05
-    #max_wave_range = 0.2
+def fit_continuum(spectrum, from_resolution=None, independent_regions=None, continuum_regions=None, ignore=None, nknots=None, degree=3, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy', order='median+max', automatic_strong_line_detection=True):
+    """
+    Determine the level of the continuum and fit a model (uniformly spaced splines or single polynomy):
+        * If model is 'Fixed', the continuum will be fixed to the fixed_value and no continuum search or fitting will be performed
+        * The spectrum will be homogeneously resampled to the median wave_step found unless:
+            * If from_resolution is indicated, the spectrum will be resampled wave_step = min_wave / from_resolution
+            * If to_resolution is indicated, the spectrum will be convolved/degraded and resampled according to to_resolution
+        * If independent_regions are indicated, each region will have its own independent fit
+        * If continuum_regions are indicated, only those regions will be used to find continuum
+        * If ignore is indicated, those regions will be completely ignored
+        * If automatic_strong_line_detection is True, those max values with strong differences with each nearbours will be ignored
+        * If order is:
+            * 'median+max', continuum will be found by using first a median filter of step median_wave_step and then a max filter of max_wave_step
+            * 'max+median', continuum will be found by using the inversed filtering order of the previous point
+            * In both cases, a gaussina filter is applied in the end
+        * If model is 'Splines', nknots represent the number of splines (they will be distributed uniformly along the spectrum)
+        * If model is 'Splines' or 'Polynomy', degree represents the degree of the function used
 
+    """
     if independent_regions is not None:
         if len(independent_regions) == 0:
             raise Exception("No segments defined!")
@@ -182,7 +200,7 @@ def fit_continuum(spectrum, independent_regions=None, continuum_regions=None, nk
             wfilter = np.logical_and(spectrum['waveobs'] >= region['wave_base'], spectrum['waveobs'] <= region['wave_top'])
             try:
                 if len(spectrum[wfilter]) > 10:
-                    continuum = __fit_continuum(spectrum[wfilter], continuum_regions=continuum_regions, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
+                    continuum = __fit_continuum(spectrum[wfilter], from_resolution=from_resolution, continuum_regions=continuum_regions, ignore=ignore, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection)
                     # Save
                     wfilter = np.logical_and(xaxis >= region['wave_base'], xaxis <= region['wave_top'])
                     fluxes[np.where(wfilter)[0]] = continuum(xaxis[wfilter])
@@ -196,11 +214,204 @@ def fit_continuum(spectrum, independent_regions=None, continuum_regions=None, nk
         #continuum = interpolate.InterpolatedUnivariateSpline(xaxis, fluxes, k=3)
         continuum = interpolate.interp1d(xaxis, fluxes, kind='linear', bounds_error=False, fill_value=0.0)
     else:
-        continuum = __fit_continuum(spectrum, continuum_regions=continuum_regions, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
+        continuum = __fit_continuum(spectrum, from_resolution=from_resolution, continuum_regions=continuum_regions, ignore=ignore, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection)
     return continuum
 
 
-def __fit_continuum(spectrum, continuum_regions=None, nknots=None, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy'):
+def __max_filter(spectrum, max_filter_step):
+    if max_filter_step % 2 == 0:
+        max_filter_step += 1
+    logging.info("Max filter with step: %i" % max_filter_step)
+    smooth = create_spectrum_structure(spectrum['waveobs'])
+    smooth['flux'] = maximum_filter(spectrum['flux'], max_filter_step)
+    return smooth
+
+def __median_filter(spectrum, med_filter_step):
+    if med_filter_step % 2 == 0:
+        med_filter_step += 1
+    logging.info("Median filter with step: %i" % med_filter_step)
+    smooth = create_spectrum_structure(spectrum['waveobs'])
+    smooth['flux'] = median_filter(spectrum['flux'], med_filter_step)
+    return smooth
+
+def __gauss_filter(spectrum, gauss_filter_step):
+    logging.info("Gaussian filter with step: %i" % gauss_filter_step)
+    smooth = create_spectrum_structure(spectrum['waveobs'])
+    smooth['flux'] = gaussian_filter(spectrum['flux'], gauss_filter_step)
+    return smooth
+
+def __clean_outliers(smooth1, min_wave, max_wave, wave_step):
+    # Resample to have 1 point for each max window instead of N
+    wavelengths = np.arange(min_wave, max_wave, wave_step)
+    smooth1 = resample_spectrum(smooth1, wavelengths, method = "linear")
+
+    # Find strong differences in flux
+    diff1 = smooth1['flux'][:-1] - smooth1['flux'][1:]
+    diff1 = np.hstack((diff1, diff1[-1]))
+    diff2 = smooth1['flux'][1:] - smooth1['flux'][:-1]
+    diff2 = np.hstack((diff2[0], diff2))
+
+    ### With median and interquantile range (too aggressive)
+    #interq1 = np.percentile(diff1, 75) - np.percentile(diff1, 25)
+    #sfilter1 = np.logical_and(diff1 < np.median(diff1) + interq1, diff1 > np.median(diff1) - interq1)
+    #interq2 = np.percentile(diff2, 75) - np.percentile(diff2, 25)
+    #sfilter2 = np.logical_and(diff2 < np.median(diff2) + interq2, diff2 > np.median(diff2) - interq2)
+
+    ### With mean and standard deviation (more conservative)
+    sfilter1 = np.logical_and(diff1 < np.mean(diff1) + np.std(diff1), diff1 > np.mean(diff1) - np.std(diff1))
+    sfilter2 = np.logical_and(diff2 < np.mean(diff2) + np.std(diff2), diff2 > np.mean(diff2) - np.std(diff2))
+
+    sfilter = np.logical_and(sfilter1, sfilter2)
+    # Conserve always the first and last element
+    sfilter[0] = True
+    sfilter[-1] = True
+
+    # Use directly interp instead of ispec.resample_spectrum so that in the borders
+    # there will be no zeros for the extrapolated values but it will be repeated the last good value
+    smooth1['flux'] = np.interp(smooth1['waveobs'], smooth1['waveobs'][sfilter], smooth1['flux'][sfilter])
+    return smooth1
+
+
+def __fit_continuum(spectrum, from_resolution=None, to_resolution=None, ignore=None, continuum_regions=None, median_wave_range=0.1,  max_wave_range=1.0, nknots=None, degree=3, order="median+max", automatic_strong_line_detection=True, fixed_value=None, model='Splines'):
+    """
+    Spectrum should be homogeneously sampled if resolution is not specified.
+    """
+    if not model in ['Splines', 'Polynomy', 'Fixed value']:
+        raise Exception("Wrong model name!")
+
+    if model == 'Fixed value' and fixed_value is None:
+        raise Exception("Fixed value needed!")
+
+    class ConstantValue:
+        def __init__(self, value):
+            self.value = value
+
+        def __call__(self, x):
+            try:
+                return np.asarray([self.value] * len(x))
+            except TypeError:
+                # It's not an array, return a single value
+                return self.value
+
+    if model == 'Fixed value':
+        return ConstantValue(fixed_value)
+
+    if order == "max+median" and median_wave_range <= max_wave_range:
+        raise Exception("For 'max+median' order, median_wave_range should be greater than max_wave_rage!")
+    if order == "median+max" and median_wave_range >= max_wave_range:
+        raise Exception("For 'median+max' order, median_wave_range should be smaller than max_wave_rage!")
+
+
+    #from_resolution=115000
+    #from astropy.io import ascii
+    #strong_lines = ascii.read("absorption_lines.txt", delimiter="\t")
+    #ignore=strong_lines
+
+    # Resample to the minimum sampling required regarding its resolution
+    # (avoid oversampling that leads to slower fitting process)
+    if from_resolution is not None:
+        wave_step = np.min(spectrum['waveobs']) / from_resolution
+        wavelengths = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), wave_step)
+        logging.info("Resampling spectrum to wave_step: %.5f nm (R = %i)" % (wave_step, from_resolution))
+        resampled_spectrum = resample_spectrum(spectrum, wavelengths, method = "linear")
+
+        # Degrade the resolution to speed up the fitting process
+        if to_resolution is not None:
+            logging.info("Convolving spectrum from R = %i to R = %i" % (from_resolution, to_resolution))
+            convolved_spectrum = convolve_spectrum(resampled_spectrum, to_resolution, from_resolution)
+
+            wave_step = np.min(spectrum['waveobs']) / to_resolution
+            wavelengths = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), wave_step)
+            logging.info("Resampling spectrum to wave_step: %.5f nm (R = %i)" % (wave_step, to_resolution))
+            resampled_spectrum = resample_spectrum(convolved_spectrum, wavelengths, method = "linear")
+    else:
+        spectrum.sort(order='waveobs')
+        wave_step = np.median(np.abs(spectrum['waveobs'][1:] - spectrum['waveobs'][:-1]))
+        infered_resolution = np.min(spectrum['waveobs']) / wave_step
+        wavelengths = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), wave_step)
+        logging.info("Resampling spectrum to wave_step: %.5f nm (R ~ %i)" % (wave_step, infered_resolution))
+        resampled_spectrum = resample_spectrum(spectrum, wavelengths, method = "linear")
+        resampled_spectrum = spectrum
+
+    # Filter the spectrum to get the continuum
+    if order == "max+median":
+        ##### First maximum, secondly median
+        max_filter_step = int(max_wave_range / wave_step)
+        smooth1 = __max_filter(resampled_spectrum, max_filter_step)
+
+        ## [start] Cleaning
+        #------------------
+        gaps = resampled_spectrum['flux'] <= 0
+        if automatic_strong_line_detection and max_wave_range > 0:
+            smooth1 = __clean_outliers(smooth1[~gaps], np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), max_wave_range)
+            gaps = smooth1['flux'] <= 0 # Ideally it will be all false
+            wave_step = max_wave_range
+
+        # Regions to be ignored: discard their maximum and interpolate the maximum of
+        # the regions next to them
+        ignore1 = gaps
+        if ignore is not None:
+            ignore1 = np.logical_or(ignore1, create_wavelength_filter(smooth1, regions=ignore))
+        if continuum_regions is not None:
+            ignore1 = np.logical_or(ignore1, np.logical_not(create_wavelength_filter(smooth1, regions=continuum_regions)))
+        # Use directly interp instead of ispec.resample_spectrum so that in the borders
+        # there will be no zeros for the extrapolated values but it will be repeated the last good value
+        smooth1['flux'] = np.interp(smooth1['waveobs'], smooth1['waveobs'][~ignore1], smooth1['flux'][~ignore1])
+        #------------------
+        ## [end] Cleaning
+
+        med_filter_step = int(median_wave_range / wave_step)
+        smooth2 = __median_filter(smooth1, med_filter_step)
+
+        gauss_filter_step = np.max((2, int(med_filter_step/4.0)))
+        smooth3 = __gauss_filter(smooth2, gauss_filter_step)
+    elif order == "median+max":
+        ##### First median, secondly maximum
+        med_filter_step = int(median_wave_range / wave_step)
+        # Regions to be ignored: discard their median calculation
+        ignore1 = resampled_spectrum['flux'] <= 0
+        if ignore is not None:
+            ignore1 = np.logical_or(ignore1, create_wavelength_filter(resampled_spectrum, regions=ignore))
+        if continuum_regions is not None:
+            ignore1 = np.logical_or(ignore1, np.logical_not(create_wavelength_filter(resampled_spectrum, regions=continuum_regions)))
+        smooth1 = __median_filter(resampled_spectrum[~ignore1], med_filter_step)
+
+        max_filter_step = int(max_wave_range / wave_step)
+        smooth2 = __max_filter(smooth1, max_filter_step)
+
+        ## [start] Cleaning
+        #------------------
+        if automatic_strong_line_detection:
+            smooth2 = __clean_outliers(smooth2, np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), max_wave_range)
+            wave_step = max_wave_range
+            gauss_filter_step = 2
+        else:
+            gauss_filter_step = np.max((2, int(med_filter_step/4.0)))
+        #------------------
+        ## [end] Cleaning
+
+        smooth3 = __gauss_filter(smooth2, gauss_filter_step)
+    else:
+        raise Exception("Unknown order (the only valid ones are max+median or median+max)")
+
+    ##### Fit the continuum
+    # Resample avoiding zeros and using directly interp instead of ispec.resample_spectrum so that in the borders
+    # there will be no zeros for the extrapolated values but it will be repeated the last good value
+    continuum = create_spectrum_structure(spectrum['waveobs'])
+    continuum['flux'] = np.interp(continuum['waveobs'], smooth3['waveobs'], smooth3['flux'])
+    if model == "Splines":
+        if nknots is None:
+            # One each 5 nm
+            nknots = np.max([1, int((np.max(spectrum['waveobs']) - np.min(spectrum['waveobs'])) / 5.)])
+        continuum_model = UniformKnotSplineModel(nknots=nknots, degree=degree)
+        continuum_model.fitData(continuum['waveobs'], continuum['flux'])
+    else:
+        continuum_model = np.poly1d(np.polyfit(continuum['waveobs'], continuum['flux'], degree))
+    return continuum_model
+
+
+
+def __fit_continuum_old(spectrum, continuum_regions=None, nknots=None, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy'):
     """
     If fixed_value is specified, the continuum is fixed to the given value (always
     the same for any wavelength). If not, fit the continuum by following these steps:
@@ -273,7 +484,9 @@ def __fit_continuum(spectrum, continuum_regions=None, nknots=None, median_wave_r
     #    in those regions were there are an increment on the number of points (avoiding empty regions)
 
 
+    #from pymodelfit import UniformKnotSplineModel
     continuum_model = UniformCDFKnotSplineModel(nknots)
+    #continuum_model = UniformKnotSplineModel(nknots)
     fitting_error = False
     try:
         if model == "Splines":

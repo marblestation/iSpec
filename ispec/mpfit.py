@@ -601,7 +601,7 @@ class mpfit:
 
 
     def __init__(self, fcn, xall=None, functkw={}, parinfo=None,
-                 ftol=1.e-10, xtol=1.e-10, gtol=1.e-10,
+                 chisq_limit=None, ftol=1.e-10, xtol=1.e-10, gtol=1.e-10,
                  damp=0., maxiter=200, factor=100., nprint=1,
                  iterfunct='default', iterkw={}, nocovar=0,
                  rescale=0, autoderivative=1, quiet=0,
@@ -1296,9 +1296,11 @@ class mpfit:
                     self.fnorm = fnorm1
                     self.niter = self.niter + 1
 
+
                 # Tests for convergence
-                if (numpy.abs(actred) <= ftol) and (prered <= ftol) \
-                     and (0.5 * ratio <= 1):
+                #if ((numpy.abs(actred) <= ftol) and (prered <= ftol) \
+                if (chisq_limit is not None and self.fnorm**2 <= chisq_limit) or ((numpy.abs(actred) <= ftol) and (prered <= ftol) \
+                     and (0.5 * ratio <= 1)):
                      self.status = 1
                 if delta <= xtol*xnorm:
                     self.status = 2

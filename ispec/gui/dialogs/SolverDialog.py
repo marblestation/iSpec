@@ -21,7 +21,7 @@ class SolverDialog(CustomDialog):
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Line list"
-        component["options"] = ["VALD.300_1100nm", "VALD_with_molecules.300_1100nm", "GES.475_685nm", "GES_atom.475_685nm",  "Kurucz.300_1100nm", "NIST.300_1100nm", "SPECTRUM.300_1000nm"]
+        component["options"] = ["VALD.300_1100nm", "VALD_with_molecules.300_1100nm", "GES.475_685nm", "GES_atom.475_685nm", "GES_atom_v4.475_685nm", "GES_atom_hfs_v4.475_685nm","Kurucz.300_1100nm", "NIST.300_1100nm", "SPECTRUM.300_1000nm"]
         component["default"] = component["options"][3]
         self.__components.append(component)
         component = {}

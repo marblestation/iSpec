@@ -1680,10 +1680,10 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 #regions['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x)
             #wave_base = region.get_wave_base()
             #wave_top = region.get_wave_top()
-            #integrated_flux = -1 * region.line_model[self.active_spectrum].integrate(wave_base, wave_top)
-            integrated_flux = -1 * region.line_model[self.active_spectrum].A()
+            integrated_flux = -1 * region.line_model[self.active_spectrum].integrate()
             ew = integrated_flux / region.line_model[self.active_spectrum].baseline()
-            self.add_stats("Gaussian fit Equivalent Width (EW)", "%.4f" % ew)
+            ew = ew * 10000 # From nm to mA
+            self.add_stats("Gaussian fit Equivalent Width (EW)", "%.2f" % ew)
 
         if region.element_type == "lines" and region.line_extra.has_key(self.active_spectrum) and region.line_extra[self.active_spectrum] is not None:
             # Extras (all in string format separated by ;)
@@ -1798,14 +1798,21 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if self.check_operation_in_progress():
             return
 
+        # Give priority to the resolution determined by the velocity profile relative to telluric lines
+        if self.active_spectrum.resolution_telluric == 0.0:
+            R = self.active_spectrum.resolution_atomic
+        else:
+            R = self.active_spectrum.resolution_telluric
+
 
         key = "FitContinuumDialog"
         # Initial recommendation: 1 knot every 10 nm
-        nknots = np.max([1, int((np.max(self.active_spectrum.data['waveobs']) - np.min(self.active_spectrum.data['waveobs'])) / 10)])
+        nknots = np.max([1, int((np.max(self.active_spectrum.data['waveobs']) - np.min(self.active_spectrum.data['waveobs'])) / 5.)])
+        degree = 3
         if not self.active_spectrum.dialog.has_key(key):
             median_wave_range=0.1
             max_wave_range=1
-            self.active_spectrum.dialog[key] = FitContinuumDialog(self, "Properties for fitting continuum", nknots, median_wave_range, max_wave_range)
+            self.active_spectrum.dialog[key] = FitContinuumDialog(self, "Properties for fitting continuum", R, nknots, degree, median_wave_range, max_wave_range)
         self.active_spectrum.dialog[key].show(suggested_nknots=nknots)
 
         if self.active_spectrum.dialog[key].results is None:
@@ -1815,13 +1822,36 @@ SPECTRUM a Stellar Spectral Synthesis Program
         model = self.active_spectrum.dialog[key].results["Fitting model"]
         if model != "Fixed value":
             fixed_value = None
-            nknots = self.active_spectrum.dialog[key].results["Number of polynomial degrees/splines"]
+            nknots = self.active_spectrum.dialog[key].results["Number of splines"]
+            degree = self.active_spectrum.dialog[key].results["Degree"]
+            R = self.active_spectrum.dialog[key].results["Resolution"]
+            if R <= 0:
+                R = None
+            else:
+                self.active_spectrum.resolution_telluric = R
+                self.active_spectrum.resolution_atomic = R
             median_wave_range = self.active_spectrum.dialog[key].results["Wavelength step for median selection"]
             max_wave_range = self.active_spectrum.dialog[key].results["Wavelength step for max selection"]
             in_continuum = self.active_spectrum.dialog[key].results["Consider only continuum regions"] == 1
+            ignore_lines = self.active_spectrum.dialog[key].results["Ignore line regions"] == 1
             each_segment = self.active_spectrum.dialog[key].results["Treat each segment independently"] == 1
+            order = self.active_spectrum.dialog[key].results["Filtering order"]
+            automatic_strong_line_detection = self.active_spectrum.dialog[key].results["Automatically find and ignore strong lines"]
             if nknots is None or median_wave_range < 0 or max_wave_range < 0:
                 self.flash_status_message("Bad value.")
+                return
+
+            if order == "max+median" and median_wave_range <= max_wave_range:
+                msg = "For 'max+median' order, median_wave_range should be greater than max_wave_rage!"
+                title = "Bad parameters"
+                self.error(title, msg)
+                self.flash_status_message("Bad parameters.")
+                return
+            if order == "median+max" and median_wave_range >= max_wave_range:
+                msg = "For 'max+median' order, median_wave_range should be smaller than max_wave_rage!"
+                title = "Bad parameters"
+                self.error(title, msg)
+                self.flash_status_message("Bad parameters.")
                 return
 
             if in_continuum and len(self.region_widgets["continuum"]) == 0:
@@ -1829,6 +1859,12 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 title = "No continuum regions"
                 self.error(title, msg)
                 self.flash_status_message("No continuum regions found.")
+                return
+            if ignore_lines and len(self.region_widgets["lines"]) == 0:
+                msg = 'There are no line regions.'
+                title = "No line regions"
+                self.error(title, msg)
+                self.flash_status_message("No line regions found.")
                 return
             if each_segment and len(self.region_widgets["segments"]) == 0:
                 msg = 'There are no segments.'
@@ -1842,6 +1878,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             median_wave_range = None
             max_wave_range = None
             in_continuum = False
+            ignore_lines = False
             each_segment = False
         self.active_spectrum.dialog[key].destroy()
 
@@ -1849,11 +1886,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.operation_in_progress = True
         self.status_message("Fitting continuum...")
         self.update_progress(10)
-        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'in_continuum':in_continuum, 'each_segment': each_segment, 'median_wave_range':median_wave_range, 'max_wave_range':max_wave_range, 'fixed_value':fixed_value, 'model':model})
+        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'ignore_lines':ignore_lines, 'in_continuum':in_continuum, 'each_segment': each_segment, 'median_wave_range':median_wave_range, 'max_wave_range':max_wave_range, 'fixed_value':fixed_value, 'model':model, 'degree':degree, 'R':R, 'order':order, 'automatic_strong_line_detection':automatic_strong_line_detection})
         thread.setDaemon(True)
         thread.start()
 
-    def on_fit_continuum_thread(self, nknots, in_continuum=False, each_segment=False, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model="Polynomy"):
+    def on_fit_continuum_thread(self, nknots, ignore_lines=False, in_continuum=False, each_segment=False, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model="Polynomy", degree=3, R=None, order='median+max', automatic_strong_line_detection=True):
         try:
             if each_segment:
                 self.__update_numpy_arrays_from_widgets("segments")
@@ -1863,16 +1900,24 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             if in_continuum:
                 self.__update_numpy_arrays_from_widgets("continuum")
-                self.active_spectrum.continuum_model = ispec.fit_continuum(self.active_spectrum.data, independent_regions=independent_regions, continuum_regions=self.regions["continuum"] , nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
+                continuum_regions = self.regions["continuum"]
             else:
-                self.active_spectrum.continuum_model = ispec.fit_continuum(self.active_spectrum.data, independent_regions=independent_regions, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
+                continuum_regions = None
+
+            if ignore_lines:
+                self.__update_numpy_arrays_from_widgets("lines")
+                ignore_lines = self.regions["lines"]
+            else:
+                ignore_lines = None
+
+            self.active_spectrum.continuum_model = ispec.fit_continuum(self.active_spectrum.data, from_resolution=None, independent_regions=independent_regions, continuum_regions=continuum_regions, ignore=ignore_lines, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection)
             waveobs = self.active_spectrum.data['waveobs']
             self.active_spectrum.continuum_data = ispec.create_spectrum_structure(waveobs, self.active_spectrum.continuum_model(waveobs))
 
             self.queue.put((self.on_fit_continuum_finish, [nknots], {}))
         except Exception:
             self.operation_in_progress = False
-            self.queue.put((self.flash_status_message, ["Not enough data points to fit, reduce the number of nknots or increase the spectrum regions."], {}))
+            self.queue.put((self.flash_status_message, ["Not possible to fit continuum with the selected parameters."], {}))
 
 
     def on_fit_continuum_finish(self, nknots):
@@ -1901,7 +1946,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             velocity_upper_limit = self.velocity_atomic_upper_limit
             velocity_step = self.velocity_atomic_step
             templates = []
-            masks = ["Narval.Sun.370_1048", "Atlas.Sun.372_926nm", "Atlas.Arcturus.372_926nm", "HARPS_SOPHIE.G2.375_679nm", "HARPS_SOPHIE.K0.378_679nm", "Synthetic.Sun.300_1100nm", "VALD.Sun.300_1100nm"]
+            masks = ["Narval.Sun.370_1048nm", "Atlas.Sun.372_926nm", "Atlas.Arcturus.372_926nm", "HARPS_SOPHIE.G2.375_679nm", "HARPS_SOPHIE.K0.378_679nm", "Synthetic.Sun.300_1100nm", "VALD.Sun.300_1100nm"]
             mask_size = 2.0
             mask_depth = 0.1
         elif relative_to_telluric_data:
@@ -2123,20 +2168,28 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.error(title, msg)
             return
 
+        if self.active_spectrum.resolution_telluric == 0.0:
+            resolution = self.active_spectrum.resolution_atomic
+        else:
+            resolution = self.active_spectrum.resolution_telluric
+
         key = "FitLinesDialog"
         vel_telluric = self.active_spectrum.velocity_telluric
         if not self.active_spectrum.dialog.has_key(key):
-            self.active_spectrum.dialog[key] = FitLinesDialog(self, "Fit lines", vel_telluric)
+            self.active_spectrum.dialog[key] = FitLinesDialog(self, "Fit lines", resolution, vel_telluric)
         self.active_spectrum.dialog[key].show(updated_vel_telluric=vel_telluric)
 
         if self.active_spectrum.dialog[key].results is None:
             self.active_spectrum.dialog[key].destroy()
             return
 
+        resolution = self.active_spectrum.dialog[key].results["Resolution"]
         vel_telluric = self.active_spectrum.dialog[key].results["Velocity respect to telluric lines (km/s)"]
         selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
         selected_linelist += "/" + self.active_spectrum.dialog[key].results["Line list"].split(".")[1]
         linelist_file = resource_path("input/linelists/" + selected_linelist + ".lst")
+        free_mu = self.active_spectrum.dialog[key].results["Allow peak position adjustment"] == 1
+        check_derivatives = self.active_spectrum.dialog[key].results["Check derivatives before fitting"] == 1
         self.active_spectrum.dialog[key].destroy()
 
         if vel_telluric is None:
@@ -2144,6 +2197,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         self.active_spectrum.velocity_telluric = vel_telluric
+        if resolution <= 0:
+            resolution = None
+        else:
+            self.active_spectrum.resolution_telluric = resolution
+            self.active_spectrum.resolution_atomic = resolution
 
         # Remove drawd lines if they exist
         self.remove_drawn_fitted_lines()
@@ -2151,17 +2209,28 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         self.operation_in_progress = True
         self.status_message("Fitting lines...")
-        thread = threading.Thread(target=self.on_fit_lines_thread, args=(vel_telluric, linelist_file))
+        thread = threading.Thread(target=self.on_fit_lines_thread, args=(resolution, vel_telluric, linelist_file, free_mu, check_derivatives))
         thread.setDaemon(True)
         thread.start()
 
-    def on_fit_lines_thread(self, vel_telluric, vald_linelist_file):
+    def on_fit_lines_thread(self, resolution, vel_telluric, vald_linelist_file, free_mu, check_derivatives):
         self.__update_numpy_arrays_from_widgets("lines")
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
         molecules_file = resource_path("input/abundances/molecular_symbols.dat")
         telluric_linelist_file = resource_path("input/linelists/CCF/Tellurics.standard.atm_air_model.txt")
         consider_omara = "GES" in vald_linelist_file # O'Mara only for GES linelist
-        linemasks = ispec.fit_lines(self.regions["lines"], self.active_spectrum.data, self.active_spectrum.continuum_model, vald_linelist_file, chemical_elements_file=chemical_elements_file, molecules_file=molecules_file, telluric_linelist_file=telluric_linelist_file, vel_telluric=vel_telluric, discard_gaussian=False, discard_voigt=True, smoothed_spectrum=self.active_spectrum.data, consider_omara=consider_omara, frame=self)
+
+        if resolution is not None and resolution > 0:
+            logging.info("Smoothing spectrum...")
+            self.queue.put((self.status_message, ["Smoothing spectrum..."], {}))
+            smoothed_spectrum = ispec.convolve_spectrum(self.active_spectrum.data, 2*resolution, frame=self)
+        else:
+            smoothed_spectrum = None
+
+        logging.info("Fitting lines...")
+        self.queue.put((self.status_message, ["Fitting lines..."], {}))
+
+        linemasks = ispec.fit_lines(self.regions["lines"], self.active_spectrum.data, self.active_spectrum.continuum_model, vald_linelist_file, chemical_elements_file=chemical_elements_file, molecules_file=molecules_file, telluric_linelist_file=telluric_linelist_file, vel_telluric=vel_telluric, discard_gaussian=False, discard_voigt=True, check_derivatives=check_derivatives, smoothed_spectrum=smoothed_spectrum, consider_omara=consider_omara, free_mu=free_mu, frame=self)
         # Exclude lines that have not been successfully cross matched with the atomic data
         # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
         rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
@@ -2435,12 +2504,22 @@ SPECTRUM a Stellar Spectral Synthesis Program
         resolution = self.active_spectrum.dialog[key].results["Resolution"]
         self.active_spectrum.dialog[key].destroy()
 
+        if resolution <= 0:
+            resolution = None
+        else:
+            self.active_spectrum.resolution_telluric = resolution
+            self.active_spectrum.resolution_atomic = resolution
+
         elements = "lines"
         linemasks = self.regions["lines"]
 
-        logging.info("Smoothing spectrum...")
-        #self.queue.put((self.status_message, ["Smoothing spectrum..."], {}))
-        smoothed_spectrum = ispec.convolve_spectrum(self.active_spectrum.data, 2*resolution, frame=self)
+        if resolution is not None:
+            logging.info("Smoothing spectrum...")
+            #self.queue.put((self.status_message, ["Smoothing spectrum..."], {}))
+            smoothed_spectrum = ispec.convolve_spectrum(self.active_spectrum.data, 2*resolution, frame=self)
+        else:
+            smoothed_spectrum = self.active_spectrum.data
+
         logging.info("Adjusting line masks...")
         linemasks = ispec.adjust_linemasks(smoothed_spectrum, linemasks, max_margin=margin)
 
@@ -2490,32 +2569,36 @@ SPECTRUM a Stellar Spectral Synthesis Program
         resolution = self.active_spectrum.dialog[key].results["Resolution"]
         vel_telluric = self.active_spectrum.dialog[key].results["Velocity respect to telluric lines (km/s)"]
         discard_tellurics = self.active_spectrum.dialog[key].results["Discard affected by tellurics"] == 1
+        check_derivatives = self.active_spectrum.dialog[key].results["Check derivatives before fitting"] == 1
         in_segments = self.active_spectrum.dialog[key].results["Look for line masks in"] == "Only inside segments"
         selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
         selected_linelist += "/" + self.active_spectrum.dialog[key].results["Line list"].split(".")[1]
         linelist_file = resource_path("input/linelists/" + selected_linelist + ".lst")
         self.active_spectrum.dialog[key].destroy()
 
-        if max_depth is None or min_depth is None or resolution is None or vel_telluric is None or max_depth <= min_depth or max_depth <= 0 or min_depth < 0 or resolution <= 0:
+        if max_depth is None or min_depth is None or resolution is None or vel_telluric is None or max_depth <= min_depth or max_depth <= 0 or min_depth < 0 or resolution < 0:
             self.queue.put((self.flash_status_message, ["Bad value."], {}))
             return
         ## Save values
         self.find_lines_max_depth = max_depth
         self.find_lines_min_depth = min_depth
         self.active_spectrum.velocity_telluric = vel_telluric
-        self.active_spectrum.resolution_telluric = resolution
-        self.active_spectrum.resolution_atomic = resolution
+        if resolution <= 0:
+            resolution = None
+        else:
+            self.active_spectrum.resolution_telluric = resolution
+            self.active_spectrum.resolution_atomic = resolution
 
         if in_segments and (self.region_widgets["segments"] is None or len(self.region_widgets["segments"]) == 0):
             self.queue.put((self.flash_status_message, ["No segments found."], {}))
             return
 
         self.operation_in_progress = True
-        thread = threading.Thread(target=self.on_find_lines_thread, args=(max_depth, min_depth, elements, resolution, vel_telluric, discard_tellurics, linelist_file), kwargs={'in_segments':in_segments})
+        thread = threading.Thread(target=self.on_find_lines_thread, args=(max_depth, min_depth, elements, resolution, vel_telluric, discard_tellurics, linelist_file, check_derivatives), kwargs={'in_segments':in_segments})
         thread.setDaemon(True)
         thread.start()
 
-    def on_find_lines_thread(self, max_depth, min_depth, elements, resolution, vel_telluric, discard_tellurics, vald_linelist_file, in_segments=False):
+    def on_find_lines_thread(self, max_depth, min_depth, elements, resolution, vel_telluric, discard_tellurics, vald_linelist_file, check_derivatives, in_segments=False):
         if in_segments:
             # Select spectrum from regions
             self.update_numpy_arrays_from_widgets("segments")
@@ -2532,10 +2615,12 @@ SPECTRUM a Stellar Spectral Synthesis Program
         else:
             spectrum = self.active_spectrum.data
 
-        logging.info("Smoothing spectrum...")
-        self.queue.put((self.status_message, ["Smoothing spectrum..."], {}))
-        smoothed_spectrum = ispec.convolve_spectrum(spectrum, 2*resolution, frame=self)
-
+        if resolution is not None and resolution > 0:
+            logging.info("Smoothing spectrum...")
+            self.queue.put((self.status_message, ["Smoothing spectrum..."], {}))
+            smoothed_spectrum = ispec.convolve_spectrum(spectrum, 2*resolution, frame=self)
+        else:
+            smoothed_spectrum = None
 
         self.queue.put((self.status_message, ["Generating line masks, fitting gaussians and matching VALD lines..."], {}))
         logging.info("Generating line masks, fitting gaussians and matching VALD lines...")
@@ -2552,6 +2637,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                                 vel_telluric=vel_telluric, \
                                 minimum_depth=min_depth, maximum_depth=max_depth, \
                                 smoothed_spectrum=smoothed_spectrum, \
+                                check_derivatives=check_derivatives, \
                                 discard_gaussian=False, discard_voigt=True, \
                                 consider_omara=consider_omara )
 
@@ -2754,7 +2840,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             day, month, year = map(float, date_string.split("/"))
             hours, minutes, seconds = map(float, time_string.split(":"))
             ra_hours, ra_minutes, ra_seconds = map(float, ra.split(":"))
-            dec_degrees, dec_minutes, dec_seconds = map(float, dec.split(":"))
+            dec_degree, dec_minutes, dec_seconds = map(float, dec.split(":"))
         except:
             msg = 'Some input values are not in the expected data format.'
             title = "Bad values"
@@ -2762,12 +2848,12 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.flash_status_message("Bad value.")
             return
 
-        if None in [day, month, year, hours, minutes, seconds, ra_hours, ra_minutes, ra_seconds, dec_degrees, dec_minutes, dec_seconds]:
+        if None in [day, month, year, hours, minutes, seconds, ra_hours, ra_minutes, ra_seconds, dec_degree, dec_minutes, dec_seconds]:
             self.flash_status_message("Bad value.")
             return
 
         # Project velocity toward star
-        self.barycentric_vel = ispec.calculate_barycentric_velocity_correction((year, month, day, hours, minutes, seconds), (ra_hours, ra_minutes, ra_seconds, dec_degrees, dec_minutes, dec_seconds))
+        self.barycentric_vel = ispec.calculate_barycentric_velocity_correction((year, month, day, hours, minutes, seconds), (ra_hours, ra_minutes, ra_seconds, dec_degree, dec_minutes, dec_seconds))
 
         msg = "Barycentric velocity determined: " + str(self.barycentric_vel) + " km/s"
         title = "Barycentric velocity"
