@@ -179,7 +179,7 @@ from_resolution = 80000
 
 # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
 order='median+max'
-median_wave_range=0.1
+median_wave_range=0.01
 max_wave_range=1.0
 
 continuum_regions = ispec.read_continuum_regions(ispec_dir + "/input/regions/fe_lines_continuum.txt")
@@ -200,7 +200,7 @@ from_resolution = 80000
 
 # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
 order='median+max'
-median_wave_range=0.1
+median_wave_range=0.01
 max_wave_range=1.0
 
 segments = ispec.read_segment_regions(ispec_dir + "/input/regions/fe_lines_segments.txt")
@@ -212,27 +212,8 @@ sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_res
                         automatic_strong_line_detection=True)
 
 
-# EXAMPLE 4: Use the whole spectrum, strategy 'median+max'
-#==========
-# One spline per each 5 nm
-model = "Splines" # "Polynomy"
-degree = 3
-nknots = None # Automatic: 1 spline every 5 nm
-from_resolution = 80000
 
-# Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
-order='median+max'
-median_wave_range=0.1
-max_wave_range=1.0
-
-sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
-                            nknots=nknots, degree=degree, \
-                            median_wave_range=median_wave_range, \
-                            max_wave_range=max_wave_range, \
-                            model=model, order=order, \
-                            automatic_strong_line_detection=True)
-
-# EXAMPLE 5: Use the whole spectrum, strategy 'max+median'
+# EXAMPLE 4: Use the whole spectrum, strategy 'max+median'
 #==========
 # One spline per each 5 nm
 model = "Splines" # "Polynomy"
@@ -243,6 +224,27 @@ from_resolution = 80000
 # Strategy: Filter first MAXIMUM values and secondly medians in order to find the continuum
 order='max+median'
 median_wave_range=3.0
+max_wave_range=0.5
+
+sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+                            nknots=nknots, degree=degree, \
+                            median_wave_range=median_wave_range, \
+                            max_wave_range=max_wave_range, \
+                            model=model, order=order, \
+                            automatic_strong_line_detection=True)
+
+
+# EXAMPLE 5: Use the whole spectrum, strategy 'median+max'
+#==========
+# One spline per each 5 nm
+model = "Splines" # "Polynomy"
+degree = 3
+nknots = None # Automatic: 1 spline every 5 nm
+from_resolution = 80000
+
+# Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
+order='median+max'
+median_wave_range=0.01
 max_wave_range=1.0
 
 sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
@@ -252,6 +254,28 @@ sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_res
                             model=model, order=order, \
                             automatic_strong_line_detection=True)
 
+
+# EXAMPLE 6: Use the whole spectrum but ignoring some strong lines, strategy 'median+max'
+#==========
+# One spline per each 5 nm
+model = "Splines" # "Polynomy"
+degree = 3
+nknots = None # Automatic: 1 spline every 5 nm
+from_resolution = 80000
+
+# Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
+order='median+max'
+median_wave_range=0.01
+max_wave_range=1.0
+
+strong_lines = ispec.read_line_regions(ispec_dir + "/input/regions/strong_lines/absorption_lines.txt")
+sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+                            ignore=strong_lines, \
+                            nknots=nknots, degree=degree, \
+                            median_wave_range=median_wave_range, \
+                            max_wave_range=max_wave_range, \
+                            model=model, order=order, \
+                            automatic_strong_line_detection=True)
 
 #--- Continuum normalization ---------------------------------------------------
 logging.info("Continuum normalization...")

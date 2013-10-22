@@ -94,7 +94,7 @@ class FitContinuumDialog(CustomDialog):
     def show(self, suggested_nknots=None):
         self.results = None
         if suggested_nknots is not None:
-            self.__components[0]["text"] = "Suggested number of polynomial degrees/splines\n based on the wavelength range: %i" % suggested_nknots
+            self.__components[0]["text"] = "Suggested number of splines\n based on the wavelength range: %i" % suggested_nknots
         CustomDialog.__init__(self, self.__parent, self.__title, self.__components)
 
 

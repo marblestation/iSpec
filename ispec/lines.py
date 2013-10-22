@@ -400,6 +400,9 @@ def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None
 
                 residuals = gaussian_model.residuals()
                 rms_gaussian = np.sqrt(np.sum(np.power(residuals, 2)) / len(residuals))
+                #minimization_value = gaussian_model.m.fnorm
+                #degrees_of_freedom = gaussian_model.m.dof,
+                #chisq = np.sum(np.power(residuals, 2) * gaussian_model.weights)
                 discard_gaussian = False
             except Exception as e:
                 print e.message

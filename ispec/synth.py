@@ -1338,10 +1338,7 @@ class EquivalentWidthModel(MPFitModel):
         for element in self.teff_elements:
             lines_for_teff = self.linemasks['element'] == element
 
-            #if len(np.where(~bad)[0]) == 0:
-                #raise Exception("No good lines!")
-
-            if strict_teff:
+            if strict_teff and len(np.where(~bad & lines_for_teff)[0]) > 1:
                 # Outliers
                 x = self.linemasks['lower state (eV)'][~bad & lines_for_teff]
                 y = x_over_h[~bad & lines_for_teff]
@@ -1375,7 +1372,10 @@ class EquivalentWidthModel(MPFitModel):
                     self.lines_for_teff.append(clean_lines_for_teff)
             else:
                 ##### ACCEPT all
-                self.lines_for_teff.append(np.logical_and(lines_for_teff, np.logical_not(bad)))
+                if len(np.where(~bad & lines_for_teff)[0]) > 0:
+                    self.lines_for_teff.append(np.logical_and(lines_for_teff, np.logical_not(bad)))
+                else:
+                    self.lines_for_teff.append(lines_for_teff)
             print " > Selected", element, "lines for teff:", len(np.where(self.lines_for_teff[-1])[0]), "of", len(np.where(lines_for_teff)[0])
 
 
@@ -1384,7 +1384,8 @@ class EquivalentWidthModel(MPFitModel):
         for element in self.vmic_elements:
             lines_for_vmic = self.linemasks['element'] == element
 
-            if strict_vmic:
+
+            if strict_vmic and len(np.where(~bad & lines_for_vmic)[0]) > 1:
                 x = np.log10(self.linemasks['ew'][~bad & lines_for_vmic]/self.linemasks['wave_peak'][~bad & lines_for_vmic])
                 y = x_over_h[~bad & lines_for_vmic]
                 A = np.vstack([x, np.ones(len(x))]).T
@@ -1419,7 +1420,10 @@ class EquivalentWidthModel(MPFitModel):
                     self.lines_for_vmic.append(clean_lines_for_vmic)
             else:
                 ##### ACCEPT all
-                self.lines_for_vmic.append(np.logical_and(lines_for_vmic, np.logical_not(bad)))
+                if len(np.where(~bad & lines_for_vmic)[0]) > 0:
+                    self.lines_for_vmic.append(np.logical_and(lines_for_vmic, np.logical_not(bad)))
+                else:
+                    self.lines_for_vmic.append(lines_for_vmic)
             print " > Selected", element, "lines for vmic:", len(np.where(self.lines_for_vmic[-1])[0]), "of", len(np.where(lines_for_vmic)[0])
 
 

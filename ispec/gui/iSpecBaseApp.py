@@ -1806,12 +1806,14 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
 
         key = "FitContinuumDialog"
-        # Initial recommendation: 1 knot every 10 nm
-        nknots = np.max([1, int((np.max(self.active_spectrum.data['waveobs']) - np.min(self.active_spectrum.data['waveobs'])) / 5.)])
-        degree = 3
+        # Initial recommendation: 1 knot every 1 nm
+        nknots = np.max([1, int((np.max(self.active_spectrum.data['waveobs']) - np.min(self.active_spectrum.data['waveobs'])) / 1.)])
+        degree = 2
         if not self.active_spectrum.dialog.has_key(key):
-            median_wave_range=0.1
+            median_wave_range=0.01
             max_wave_range=1
+            #median_wave_range=0.5
+            #max_wave_range=0.1
             self.active_spectrum.dialog[key] = FitContinuumDialog(self, "Properties for fitting continuum", R, nknots, degree, median_wave_range, max_wave_range)
         self.active_spectrum.dialog[key].show(suggested_nknots=nknots)
 
@@ -1880,6 +1882,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
             in_continuum = False
             ignore_lines = False
             each_segment = False
+            order='median+max'
+            automatic_strong_line_detection = False
         self.active_spectrum.dialog[key].destroy()
 
 
