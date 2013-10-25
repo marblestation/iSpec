@@ -17,7 +17,7 @@
 #
 import numpy as np
 import numpy.lib.recfunctions as rfn # Extra functions
-import pyfits
+from astropy.io import fits as pyfits
 import scipy.ndimage as ndi
 from spectrum import *
 from plotting import *
@@ -125,8 +125,6 @@ def __read_fits_spectrum(spectrum_filename, fluxhdu="PRIMARY", errorhdu=None):
 def __read_spectrum(spectrum_filename):
     try:
         spectrum = np.array([tuple(line.rstrip('\r\n').split("\t")) for line in open(spectrum_filename,)][1:], dtype=[('waveobs', float),('flux', float),('err', float)])
-        if len(spectrum) == 0:
-            raise Exception("empty spectrum or incompatible format")
     except Exception as err:
         # try narval plain text format:
         # - ignores 2 first lines (header)
@@ -135,6 +133,8 @@ def __read_spectrum(spectrum_filename):
         # - columns separated by space
         narval = open(spectrum_filename,).readlines()[0].split('\r')
         spectrum = np.array([tuple(line.rstrip('\r').split()) for line in narval[2:-1]], dtype=[('waveobs', float),('flux', float),('err', float)])
+    if len(spectrum) == 0:
+        raise Exception("Empty spectrum or incompatible format")
     return spectrum
 
 def read_spectrum(spectrum_filename, fits_options={"fluxhdu": "PRIMARY", "errorhdu": None}):

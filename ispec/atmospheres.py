@@ -19,7 +19,6 @@ import os
 import sys
 import numpy as np
 from subprocess import Popen, PIPE
-import asciitable
 import math
 from datetime import datetime
 from scipy import interpolate

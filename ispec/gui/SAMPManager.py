@@ -24,7 +24,7 @@ from astropy.io.vo.table import parse
 from astropy.io.vo.tree import VOTableFile, Resource, Table, Field, Group
 import urllib2
 import numpy as np
-import pyfits
+from astropy.io import fits as pyfits
 import threading
 import logging
 

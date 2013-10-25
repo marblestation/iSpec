@@ -32,8 +32,7 @@ import matplotlib.pyplot as plt
 #from multiprocessing import Queue
 from Queue import Queue
 from Queue import Empty
-import asciitable
-
+from astropy.io import ascii
 import os
 import sys
 
@@ -2065,7 +2064,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if relative_to_atomic_data or relative_to_telluric_data:
             if not mask_name in self.ccf_mask.keys():
                 mask_file = resource_path("input/linelists/CCF/" + mask_name + ".txt")
-                self.ccf_mask[mask_name] = asciitable.read(mask_file)
+                self.ccf_mask[mask_name] = ascii.read(mask_file)._data
             mask_linelist = self.ccf_mask[mask_name]
         elif relative_to_template:
             mask_linelist = None

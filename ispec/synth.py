@@ -1245,7 +1245,7 @@ class EquivalentWidthModel(MPFitModel):
                 ## Gravity
                 abundance_diff = np.median(x_over_h[lines_for_teff]) - np.median(x_over_h[lines_for_vmic])
                 #abundance_diff2 = self.MH() - np.median(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
-                abundance_diff2 = self.MH() - np.median(x_over_h[self.lines_for_teff[0]])
+                abundance_diff2 = self.MH() - np.median(x_over_h[self.lines_for_teff[0]]) # Always [0] where Fe 1 is
 
                 print " # Element:                   ", self.teff_elements[i], self.vmic_elements[i]
                 print "   Teff/Vmic slopes:            %.2f %.2f" % (m1, m2)
@@ -1259,6 +1259,16 @@ class EquivalentWidthModel(MPFitModel):
                 values_to_evaluate.append(float("%.2f" % m2))
                 values_to_evaluate.append(float("%.2f" % abundance_diff))
                 #values_to_evaluate.append(float("%.2f" % abundance_diff2))
+                #abundances_to_evaluate = np.arange(len(self.linemasks))
+                ##abundances_to_evaluate[:] = 10.
+                #abundances_to_evaluate[:] = 0.
+                #abundances_to_evaluate[lines_for_teff] = x_over_h[lines_for_teff] - np.median(x_over_h[lines_for_teff])
+                #abundances_to_evaluate[lines_for_vmic] = x_over_h[lines_for_vmic] - np.median(x_over_h[lines_for_vmic])
+                # TODO: It will not work if there are more than 1 element (i.e. Fe and Ti)
+                abundances_to_evaluate = x_over_h - np.median(x_over_h[np.logical_or(lines_for_teff, lines_for_vmic)])
+                values_to_evaluate = np.hstack((values_to_evaluate,  abundances_to_evaluate)).tolist()
+                #values_to_evaluate = abundances_to_evaluate
+
                 residuals = np.asarray(values_to_evaluate) - self.y
                 #print "Eval:", np.sum(np.tanh(self.weights*residuals)**2)
                 print " - Chisq:                       %.4f" % np.sum((self.weights*residuals)**2)
@@ -1449,9 +1459,9 @@ class EquivalentWidthModel(MPFitModel):
         self.linemasks = linemasks
         self.teff_elements = teff_elements
         self.vmic_elements = vmic_elements
-        ftol = 1.e-2 # Terminate when the improvement in chisq between iterations is ftol > -(new_chisq/chisq)**2 +1
-        xtol = 1.e-2
-        gtol = 1.e-2
+        ftol = 1.e-4 # Terminate when the improvement in chisq between iterations is ftol > -(new_chisq/chisq)**2 +1
+        xtol = 1.e-4
+        gtol = 1.e-4
         damp = 0.0   # Residuals are limited between -1.0 and 1.0 (np.tanh(residuals/1.0)) minimizing the influence of bad fluxes
                      # * Spectrum must be a normalized one
         #chisq_limit = 0.0002 # np.sum(np.asarray([0.00, 0.00, 0.01, 0.01])**2))
@@ -1459,7 +1469,9 @@ class EquivalentWidthModel(MPFitModel):
         _t0 = default_timer()
 
         #index = np.asarray([0, 1, 2])
-        index = np.arange(3*len(teff_elements)) # 3 values: zero slopes and zero difference between element1 and element2
+        #index = np.arange(3*len(teff_elements)) # 3 values: zero slopes and zero difference between element1 and element2
+        index = np.arange(3*len(teff_elements) + len(linemasks)) # 3 values: zero slopes and zero difference between element1 and element2
+        #index = np.arange(len(linemasks))
         #index = np.arange(4*len(teff_elements)) # 3 values: zero slopes and zero difference between element1 and element2
         target_values = np.zeros(len(index))
         weights = np.ones(len(index))

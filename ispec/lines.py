@@ -16,7 +16,7 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 
-import asciitable
+from astropy.io import ascii
 import numpy as np
 import numpy.lib.recfunctions as rfn # Extra functions
 from scipy.fftpack import fft
@@ -55,9 +55,10 @@ def read_VALD_linelist(vald_file, minimum_depth=0.0, data_end=None):
     """
     # Original VALD linelist
     if data_end is None:
-        vald = asciitable.read(vald_file, delimiter=",", quotechar="'", data_start=3, names=["element", "wave (A)", "lower state (eV)", "Vmic (km/s)", "log(gf)", "rad", "stark", "waals", "factor", "depth", "Reference"], exclude_names=["Vmic (km/s)", "factor", "Reference"], guess=False)
+        vald = ascii.read(vald_file, delimiter=",", quotechar="'", data_start=3, names=["element", "wave (A)", "lower state (eV)", "Vmic (km/s)", "log(gf)", "rad", "stark", "waals", "factor", "depth", "Reference"], exclude_names=["Vmic (km/s)", "factor", "Reference"], guess=False)
     else:
-        vald = asciitable.read(vald_file, delimiter=",", quotechar="'", data_start=3, data_end=data_end, names=["element", "wave (A)", "lower state (eV)", "Vmic (km/s)", "log(gf)", "rad", "stark", "waals", "factor", "depth", "Reference"], exclude_names=["Vmic (km/s)", "factor", "Reference"], guess=False)
+        vald = ascii.read(vald_file, delimiter=",", quotechar="'", data_start=3, data_end=data_end, names=["element", "wave (A)", "lower state (eV)", "Vmic (km/s)", "log(gf)", "rad", "stark", "waals", "factor", "depth", "Reference"], exclude_names=["Vmic (km/s)", "factor", "Reference"], guess=False)
+    vald = vald._data
 
     ## Convert wavelengths from armstrong to nm
     #vald['wave (A)'] = vald['wave (A)'] / 10.0
@@ -95,7 +96,7 @@ def read_telluric_linelist(telluric_lines_file, minimum_depth=0.0):
     Read telluric linelist.
     """
     # Original VALD linelist
-    telluric_lines = asciitable.read(telluric_lines_file, delimiter="\t")
+    telluric_lines = ascii.read(telluric_lines_file, delimiter="\t")._data
 
     # Convert string to bool
     telluric_lines = rfn.rename_fields(telluric_lines, {'discarded':'discarded_string',})
@@ -967,14 +968,14 @@ def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elem
     O'Mara parameters for some lines and it will interpret it that way.
     """
     # Periodic table
-    chemical_elements = asciitable.read(chemical_elements_file, delimiter="\t")
+    chemical_elements = ascii.read(chemical_elements_file, delimiter="\t")._data
     # Some molecular symbols
     # - For diatomic molecules, the atomic_num specifies the atomic makeup of the molecule.
     #   Thus, H2 is 101.0, the two ``1''s referring to the two hydrogens, CH is 106.0,
     #   CO 608.0, MgH 112.0, TiO 822.0, etc.
     # - The lightest element always comes first in the code, so that 608.0 cannot be
     #   confused with NdO, which would be written 860.0.
-    molecules = asciitable.read(molecules_file, delimiter="\t")
+    molecules = ascii.read(molecules_file, delimiter="\t")._data
 
     # Sort before treating
     linemasks.sort(order=['wave_peak'])
@@ -1651,28 +1652,8 @@ def build_velocity_profile(spectrum, linelist=None, template=None, lower_velocit
         if template is not None:
             logging.warn("Building velocity profile with mask (ignoring template)")
 
-        #linelist_file = ispec_dir + "input/linelists/Kurucz.lst"
-        import asciitable
-        #linelist = asciitable.read(linelist_file, names=["wave_peak", "element", "depth"])
-        if len(linelist) > 500: # Not tellurics
-            #linelist = asciitable.read("input/Gerard.lst", names=["wave_peak", "depth"])
-            #linelist = asciitable.read("input/sun.lst", names=["wave_peak", "depth"])
-            #linelist = asciitable.read("input/masks/narval.sun.370_1048.txt", delimiter="\t")
-            #linelist = asciitable.read("input/arcturus.lst", names=["wave_peak", "depth"])
-            #linelist = asciitable.read("/home/sblancoc/apps/ispec/input/Gerard.lst", names=["wave_peak", "depth"])
-            pass
-
-        #xaxis = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), 0.000005)
-        #xaxis = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), 0.00005)
-        #xaxis = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), 0.0001)
-        #spectrum = resample_spectrum(spectrum, xaxis) # It can introduce zero fluxes
-        #wfilter = spectrum['flux'] > 0.0
-        #spectrum = spectrum[wfilter]
         linelist = linelist[linelist['depth'] > 0.01]
-        #linelist = linelist[linelist['depth'] < 0.9]
         lfilter = np.logical_and(linelist['wave_peak'] >= np.min(spectrum['waveobs']), linelist['wave_peak'] <= np.max(spectrum['waveobs']))
-        #linelist = linelist[lfilter]
-        #lfilter = np.logical_and(lfilter, linelist['element'] == "Fe 1")
         linelist = linelist[lfilter]
 
         velocity, ccf, ccf_err = __cross_correlation_function_uniform_in_velocity(spectrum, linelist, lower_velocity_limit, upper_velocity_limit, velocity_step, mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, frame=frame)
