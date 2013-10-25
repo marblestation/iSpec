@@ -1686,15 +1686,15 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         if region.element_type == "lines" and region.line_extra.has_key(self.active_spectrum) and region.line_extra[self.active_spectrum] is not None:
             # Extras (all in string format separated by ;)
-            VALD_wave_peak, species, lower_state, upper_state, loggf, fudge_factor, transition_type, rad, stark, waals, ew, element, telluric_wave_peak, telluric_depth = region.line_extra[self.active_spectrum].split(";")
-            self.add_stats("VALD element", element)
-            self.add_stats("VALD line wavelength", VALD_wave_peak)
-            self.add_stats("VALD lower state (cm^-1)", lower_state)
-            self.add_stats("VALD upper state (cm^-1)", upper_state)
-            self.add_stats("VALD log(gf)", loggf)
-            self.add_stats("VALD radiative damping constant", rad)
-            self.add_stats("VALD stark damping constant", stark)
-            self.add_stats("VALD van der Waals damping constant", waals)
+            atomic_wave_peak, species, lower_state, upper_state, loggf, fudge_factor, transition_type, rad, stark, waals, ew, element, telluric_wave_peak, telluric_depth = region.line_extra[self.active_spectrum].split(";")
+            self.add_stats("Atomic element", element)
+            self.add_stats("Atomic line wavelength", atomic_wave_peak)
+            self.add_stats("Atomic lower state (cm^-1)", lower_state)
+            self.add_stats("Atomic upper state (cm^-1)", upper_state)
+            self.add_stats("Atomic log(gf)", loggf)
+            self.add_stats("Atomic radiative damping constant", rad)
+            self.add_stats("Atomic stark damping constant", stark)
+            self.add_stats("Atomic van der Waals damping constant", waals)
             if telluric_wave_peak != "" and float(telluric_wave_peak) != 0:
                 self.add_stats("Tellurics: possibly affected by line at (nm)", telluric_wave_peak)
                 self.add_stats("Tellurics: typical line depth", "%.4f" % float(telluric_depth))
@@ -2190,9 +2190,10 @@ SPECTRUM a Stellar Spectral Synthesis Program
         vel_telluric = self.active_spectrum.dialog[key].results["Velocity respect to telluric lines (km/s)"]
         selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
         selected_linelist += "/" + self.active_spectrum.dialog[key].results["Line list"].split(".")[1]
-        linelist_file = resource_path("input/linelists/" + selected_linelist + ".lst")
+        linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
         free_mu = self.active_spectrum.dialog[key].results["Allow peak position adjustment"] == 1
         check_derivatives = self.active_spectrum.dialog[key].results["Check derivatives before fitting"] == 1
+        max_atomic_wave_diff = self.active_spectrum.dialog[key].results["Maximum atomic wavelength difference"]
         self.active_spectrum.dialog[key].destroy()
 
         if vel_telluric is None:
@@ -2212,16 +2213,15 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         self.operation_in_progress = True
         self.status_message("Fitting lines...")
-        thread = threading.Thread(target=self.on_fit_lines_thread, args=(resolution, vel_telluric, linelist_file, free_mu, check_derivatives))
+        thread = threading.Thread(target=self.on_fit_lines_thread, args=(resolution, vel_telluric, linelist_file, max_atomic_wave_diff, free_mu, check_derivatives))
         thread.setDaemon(True)
         thread.start()
 
-    def on_fit_lines_thread(self, resolution, vel_telluric, vald_linelist_file, free_mu, check_derivatives):
+    def on_fit_lines_thread(self, resolution, vel_telluric, atomic_linelist_file, max_atomic_wave_diff, free_mu, check_derivatives):
         self.__update_numpy_arrays_from_widgets("lines")
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
         molecules_file = resource_path("input/abundances/molecular_symbols.dat")
         telluric_linelist_file = resource_path("input/linelists/CCF/Tellurics.standard.atm_air_model.txt")
-        consider_omara = "GES" in vald_linelist_file # O'Mara only for GES linelist
 
         if resolution is not None and resolution > 0:
             logging.info("Smoothing spectrum...")
@@ -2233,10 +2233,16 @@ SPECTRUM a Stellar Spectral Synthesis Program
         logging.info("Fitting lines...")
         self.queue.put((self.status_message, ["Fitting lines..."], {}))
 
-        linemasks = ispec.fit_lines(self.regions["lines"], self.active_spectrum.data, self.active_spectrum.continuum_model, vald_linelist_file, chemical_elements_file=chemical_elements_file, molecules_file=molecules_file, telluric_linelist_file=telluric_linelist_file, vel_telluric=vel_telluric, discard_gaussian=False, discard_voigt=True, check_derivatives=check_derivatives, smoothed_spectrum=smoothed_spectrum, consider_omara=consider_omara, free_mu=free_mu, frame=self)
+        linemasks = ispec.fit_lines(self.regions["lines"], self.active_spectrum.data, self.active_spectrum.continuum_model, \
+                            atomic_linelist_file, chemical_elements_file=chemical_elements_file, molecules_file=molecules_file, \
+                            max_atomic_wave_diff = max_atomic_wave_diff, \
+                            telluric_linelist_file=telluric_linelist_file, vel_telluric=vel_telluric, \
+                            discard_gaussian=False, discard_voigt=True, \
+                            check_derivatives=check_derivatives, smoothed_spectrum=smoothed_spectrum, \
+                            free_mu=free_mu, frame=self)
         # Exclude lines that have not been successfully cross matched with the atomic data
         # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
-        rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
+        rejected_by_atomic_line_not_found = (linemasks['wave (nm)'] == 0)
         linemasks = linemasks[~rejected_by_atomic_line_not_found]
 
         self.queue.put((self.on_fit_lines_finnish, [linemasks], {}))
@@ -2260,7 +2266,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
                     recovered_regions[i]['wave_base'] = region.get_wave_base()
                     recovered_regions[i]['wave_top'] = region.get_wave_top()
                     recovered_regions[i]['wave_peak'] = region.get_wave_peak()
-                    recovered_regions[i]['note'] = region.get_note_text()
+                    #recovered_regions[i]['note'] = region.get_note_text()
+                    recovered_regions[i]['note'] = ""
                     i += 1
         else:
             diff_num_regions = 0
@@ -2284,7 +2291,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             line_extras = []
             i = 0
             for line in linemasks:
-                line_extra = str(line['VALD_wave_peak']) + ";" + str(line['species']) + ";"
+                line_extra = str(line['wave (nm)']) + ";" + str(line['species']) + ";"
                 line_extra = line_extra + str(line['lower state (cm^-1)']) + ";" + str(line['upper state (cm^-1)']) + ";"
                 line_extra = line_extra + str(line['log(gf)']) + ";" + str(line['fudge factor']) + ";"
                 line_extra = line_extra + str(line['transition type']) + ";" + str(line['rad']) + ";"
@@ -2576,7 +2583,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
         in_segments = self.active_spectrum.dialog[key].results["Look for line masks in"] == "Only inside segments"
         selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
         selected_linelist += "/" + self.active_spectrum.dialog[key].results["Line list"].split(".")[1]
-        linelist_file = resource_path("input/linelists/" + selected_linelist + ".lst")
+        linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
+        max_atomic_wave_diff = self.active_spectrum.dialog[key].results["Maximum atomic wavelength difference"]
         self.active_spectrum.dialog[key].destroy()
 
         if max_depth is None or min_depth is None or resolution is None or vel_telluric is None or max_depth <= min_depth or max_depth <= 0 or min_depth < 0 or resolution < 0:
@@ -2597,11 +2605,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         self.operation_in_progress = True
-        thread = threading.Thread(target=self.on_find_lines_thread, args=(max_depth, min_depth, elements, resolution, vel_telluric, discard_tellurics, linelist_file, check_derivatives), kwargs={'in_segments':in_segments})
+        thread = threading.Thread(target=self.on_find_lines_thread, args=(max_depth, min_depth, elements, resolution, vel_telluric, discard_tellurics, linelist_file, max_atomic_wave_diff, check_derivatives), kwargs={'in_segments':in_segments})
         thread.setDaemon(True)
         thread.start()
 
-    def on_find_lines_thread(self, max_depth, min_depth, elements, resolution, vel_telluric, discard_tellurics, vald_linelist_file, check_derivatives, in_segments=False):
+    def on_find_lines_thread(self, max_depth, min_depth, elements, resolution, vel_telluric, discard_tellurics, atomic_linelist_file, max_atomic_wave_diff, check_derivatives, in_segments=False):
         if in_segments:
             # Select spectrum from regions
             self.update_numpy_arrays_from_widgets("segments")
@@ -2625,24 +2633,24 @@ SPECTRUM a Stellar Spectral Synthesis Program
         else:
             smoothed_spectrum = None
 
-        self.queue.put((self.status_message, ["Generating line masks, fitting gaussians and matching VALD lines..."], {}))
-        logging.info("Generating line masks, fitting gaussians and matching VALD lines...")
+        self.queue.put((self.status_message, ["Generating line masks, fitting gaussians and matching atomic lines..."], {}))
+        logging.info("Generating line masks, fitting gaussians and matching atomic lines...")
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
         molecules_file = resource_path("input/abundances/molecular_symbols.dat")
         telluric_linelist_file = resource_path("input/linelists/CCF/Tellurics.standard.atm_air_model.txt")
 
-        consider_omara = "GES" in vald_linelist_file # O'Mara only for GES linelist
         linemasks = ispec.find_linemasks(spectrum, self.active_spectrum.continuum_model, \
-                                vald_linelist_file=vald_linelist_file, \
+                                atomic_linelist_file=atomic_linelist_file, \
                                 chemical_elements_file=chemical_elements_file, \
                                 molecules_file=molecules_file, \
+                                max_atomic_wave_diff = max_atomic_wave_diff, \
                                 telluric_linelist_file=telluric_linelist_file, \
                                 vel_telluric=vel_telluric, \
                                 minimum_depth=min_depth, maximum_depth=max_depth, \
                                 smoothed_spectrum=smoothed_spectrum, \
                                 check_derivatives=check_derivatives, \
                                 discard_gaussian=False, discard_voigt=True, \
-                                consider_omara=consider_omara )
+                                frame=self)
 
         # If no peaks found, just finnish
         if linemasks is None or len(linemasks) == 0:
@@ -2652,7 +2660,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         logging.info("Applying filters to discard bad line masks...")
         self.queue.put((self.status_message, ["Applying filters to discard bad line masks..."], {}))
 
-        rejected_by_atomic_line_not_found = (linemasks['VALD_wave_peak'] == 0)
+        rejected_by_atomic_line_not_found = (linemasks['wave (nm)'] == 0)
         rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
 
         discarded = linemasks['wave_peak'] <= 0 # All to false
@@ -2713,6 +2721,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             title = "Missing line masks"
             self.error(title, msg)
             self.flash_status_message("No line masks.")
+            return
 
         self.update_numpy_arrays_from_widgets("segments")
         if self.regions["segments"] is not None and \

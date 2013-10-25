@@ -46,56 +46,11 @@ import copy
 ########################################################################
 ## [START] LINE LISTS
 ########################################################################
-def read_VALD_linelist(vald_file, minimum_depth=0.0, data_end=None):
-    """
-    Load a VALD linelist (short format) and filter it selecting only lines of a minimum depth (0% by default).
-
-    - minimum_depth: filter out all the lines with a depth less than this percentage (0.05 = 5%)
-    - data_end can be negative in order to ignore the last nth rows (VALD usually adds references to the end of the file that should be ignored)
-    """
-    # Original VALD linelist
-    if data_end is None:
-        vald = ascii.read(vald_file, delimiter=",", quotechar="'", data_start=3, names=["element", "wave (A)", "lower state (eV)", "Vmic (km/s)", "log(gf)", "rad", "stark", "waals", "factor", "depth", "Reference"], exclude_names=["Vmic (km/s)", "factor", "Reference"], guess=False)
-    else:
-        vald = ascii.read(vald_file, delimiter=",", quotechar="'", data_start=3, data_end=data_end, names=["element", "wave (A)", "lower state (eV)", "Vmic (km/s)", "log(gf)", "rad", "stark", "waals", "factor", "depth", "Reference"], exclude_names=["Vmic (km/s)", "factor", "Reference"], guess=False)
-    vald = vald._data
-
-    ## Convert wavelengths from armstrong to nm
-    #vald['wave (A)'] = vald['wave (A)'] / 10.0
-    #vald = rfn.rename_fields(vald, {'wave (A)':'wave_peak',})
-    vald = rfn.append_fields(vald, "wave_peak", dtypes=float, data=vald['wave (A)'] / 10.0, usemask=False)
-
-    # Strings
-    vald['element'] = map(lambda x: x.replace("  ", " "), vald['element'])
-
-    # Discard duplicates: same element in the same wavelength and with the same lower state
-    # - It just takes the first occurence
-    vald = rfn.append_fields(vald, "duplicate", dtypes=bool, data=vald['wave (A)'] == -1, usemask=False)
-    vald.sort(order=['wave_peak', 'element', 'lower state (eV)'])
-    for element in np.unique(vald['element']):
-        #print element
-        ielement_vald = np.where(vald['element'] == element)[0]
-        selected_vald = vald[ielement_vald]
-        idups = selected_vald['wave_peak'][1:] - selected_vald['wave_peak'][:-1] == 0
-        idups = np.logical_and(idups, selected_vald['lower state (eV)'][1:] - selected_vald['lower state (eV)'][:-1] == 0)
-        vald['duplicate'][ielement_vald[idups]] = True
-    vald = vald[np.logical_not(vald['duplicate'])]
-    vald = rfn.drop_fields(vald, ['duplicate'])
-
-
-    if minimum_depth <= 0.0:
-        return vald
-    else:
-        # Filter
-        vald_limited = vald[vald['depth'] >= minimum_depth]
-        return vald_limited
-
 
 def read_telluric_linelist(telluric_lines_file, minimum_depth=0.0):
     """
     Read telluric linelist.
     """
-    # Original VALD linelist
     telluric_lines = ascii.read(telluric_lines_file, delimiter="\t")._data
 
     # Convert string to bool
@@ -115,6 +70,25 @@ def read_telluric_linelist(telluric_lines_file, minimum_depth=0.0):
         return telluric_lines_limited
 
 
+def __get_element(chemical_elements, molecules, species):
+    """
+    Convert species code form by the atomic number + "." + ionization state to element names type "Fe 1" or "Fe 2".
+    Returns "Discard" if not found.
+    """
+    atomic_num, ion_state = species.split(".")
+
+    tfilter = (chemical_elements['atomic_num'] == int(atomic_num))
+    if len(chemical_elements["symbol"][tfilter]) == 0:
+        # Symbol not found, maybe it is a molecule
+        mfilter = (molecules['atomic_num'] == int(atomic_num))
+        if len(molecules["symbol"][mfilter]) == 0:
+            return "Discard"
+        else:
+            symbol = str(molecules["symbol"][mfilter][0])
+    else:
+        symbol = str(chemical_elements["symbol"][tfilter][0])
+
+    return symbol + " " + str(int(ion_state) + 1)
 
 def __get_specie(chemical_elements, molecules, element_name):
     """
@@ -170,6 +144,13 @@ def __get_upper_state(lower_state, wavelength):
     E = h * f # Joules
     E = E * 6.24150974e18 # electron Volt (eV)
     return lower_state + E # eV
+
+
+def __inverse_cm_to_eV(value):
+    """
+    Units transformation from cm^-1 to eV
+    """
+    return value / 8065.73 # eV
 
 def __eV_to_inverse_cm(value):
     """
@@ -406,7 +387,8 @@ def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None
                 #chisq = np.sum(np.power(residuals, 2) * gaussian_model.weights)
                 discard_gaussian = False
             except Exception as e:
-                print e.message
+                if len(e.message) > 0:
+                    print e.message
 
     if not discard_voigt:
         # Default values for failed fit:
@@ -423,7 +405,8 @@ def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None
                 rms_voigt = np.sqrt(np.sum(np.power(residuals, 2)) / len(residuals))
                 discard_voigt = False
             except Exception as e:
-                print e.message
+                if len(e.message) > 0:
+                    print e.message
 
     if (not discard_gaussian and not discard_voigt and rms_gaussian <= rms_voigt) or (not discard_gaussian and discard_voigt):
         return gaussian_model, rms_gaussian
@@ -547,7 +530,26 @@ def __assert_structure(xcoord, yvalues, peaks, base_points):
     return peaks, base_points
 
 def __create_linemasks_structure(num_peaks):
-    linemasks = np.recarray((num_peaks, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100'), ('peak', int), ('base', int), ('top', int), ('depth', float), ('relative_depth', float), ('wave_base_fit', float), ('wave_top_fit', float), ('base_fit', int), ('top_fit', int), ('mu', float), ('sig', float), ('A', float), ('baseline', float), ('gamma', float), ('fwhm', float), ('fwhm_kms', float), ('R', float), ('depth_fit', float), ('relative_depth_fit', float), ('integrated_flux', float), ('ew', float), ('ew_err', float), ('rms', float), ('VALD_wave_peak', float), ('element', '|S4'), ('lower state (eV)', float), ('log(gf)', float), ('telluric_wave_peak', float), ('telluric_fwhm', float), ('telluric_R', float), ('telluric_depth', float), ('solar_depth', float), ('discarded', bool), ('species', '|S10'), ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), ('fudge factor', float), ('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8')])
+    linemasks = np.recarray((num_peaks, ), dtype=[ \
+            ('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100'), \
+            ('peak', int), ('base', int), ('top', int), \
+            ('depth', float), ('relative_depth', float), \
+            ('wave_base_fit', float), ('wave_top_fit', float), \
+            ('base_fit', int), ('top_fit', int), \
+            ('mu', float), ('sig', float), ('A', float), ('baseline', float), ('gamma', float), \
+            ('fwhm', float), ('fwhm_kms', float), ('R', float), \
+            ('depth_fit', float), ('relative_depth_fit', float), \
+            ('integrated_flux', float), ('ew', float), ('ew_err', float), \
+            ('rms', float), \
+            ('telluric_wave_peak', float), ('telluric_fwhm', float), ('telluric_R', float), ('telluric_depth', float), \
+            ('wave (nm)', '<f8'), ('wave (A)', '<f8'), \
+            ('species', '|S10'), ('element', '|S4'), \
+            ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), \
+            ('lower state (eV)', float), ('upper state (eV)', float), \
+            ('log(gf)', '<f8'), ('fudge factor', float), ('transition type', '|S10'), \
+            ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), \
+            ('line_strength', float), \
+            ('discarded', bool)])
     # Initialization
     linemasks['discarded'] = False
     # Line mask
@@ -562,11 +564,7 @@ def __create_linemasks_structure(num_peaks):
     linemasks['depth'] = 0.0
     # Relative depth is "peak - mean_base_point" with respect to the total continuum
     linemasks['relative_depth'] = 0
-    # Default values for line identification
-    linemasks['VALD_wave_peak'] = 0
-    linemasks['element'] = ""
-    linemasks['lower state (eV)'] = 0
-    linemasks['log(gf)'] = 0
+    # Default values for telluric affectation
     linemasks['telluric_wave_peak'] = 0
     linemasks['telluric_fwhm'] = 0
     linemasks['telluric_R'] = 0
@@ -590,15 +588,98 @@ def __create_linemasks_structure(num_peaks):
     linemasks['ew'] = 0.0
     linemasks['ew_err'] = 0.0
     linemasks['rms'] = 9999.0
+    # Default values for line identification
+    linemasks['wave (nm)'] = 0.0
+    linemasks['wave (A)'] = 0.0
     linemasks["species"] = ""
+    linemasks['element'] = ""
+    linemasks['log(gf)'] = 0
     linemasks["lower state (cm^-1)"] = 0
     linemasks["upper state (cm^-1)"] = 0
+    linemasks['lower state (eV)'] = 0
+    linemasks['upper state (eV)'] = 0
     linemasks["fudge factor"] = 1.0
     linemasks["transition type"] = "99"
+    linemasks["rad"] = 0
+    linemasks["stark"] = 0
+    linemasks["waals"] = 0
+    linemasks["line_strength"] = 0
     return linemasks
 
 
-def find_linemasks(spectrum, continuum_model,  vald_linelist_file=None, chemical_elements_file=None, molecules_file=None, telluric_linelist_file=None, vel_telluric=0.0, minimum_depth=None, maximum_depth=None, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, consider_omara=False, frame=None):
+def read_SPECTRUM_linelist(linelist_filename, chemical_elements_file=None, molecules_file=None):
+    """
+    Load a SPECTRUM linelist and add complementary information.
+
+    If chemical_elements and molecules is indicated, the field 'element' will be filled
+    with the name of the element + ionization state (i.e. 'Fe 1')
+    """
+    if chemical_elements_file is not None and molecules_file is not None:
+        # Periodic table
+        chemical_elements = ascii.read(chemical_elements_file, delimiter="\t")._data
+        # Some molecular symbols
+        # - For diatomic molecules, the atomic_num specifies the atomic makeup of the molecule.
+        #   Thus, H2 is 101.0, the two ``1''s referring to the two hydrogens, CH is 106.0,
+        #   CO 608.0, MgH 112.0, TiO 822.0, etc.
+        # - The lightest element always comes first in the code, so that 608.0 cannot be
+        #   confused with NdO, which would be written 860.0.
+        molecules = ascii.read(molecules_file, delimiter="\t")._data
+
+    raw_linelist = np.array([tuple(line.rstrip('\r\n').split()) for line in open(linelist_filename,)], \
+                            dtype=[('wave (A)', '<f8'), ('species', '|S10'), ('lower state (cm^-1)', int), \
+                            ('upper state (cm^-1)', int), ('log(gf)', '<f8'), ('fudge factor', '<f8'), \
+                            ('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), \
+                            ('note', '|S100')])
+    linelist = np.recarray((len(raw_linelist), ), dtype=[ \
+            ('wave (nm)', '<f8'), ('wave (A)', '<f8'), \
+            ('species', '|S10'), ('element', '|S4'), \
+            ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), \
+            ('lower state (eV)', float), ('upper state (eV)', float), \
+            ('log(gf)', '<f8'), ('fudge factor', float), ('transition type', '|S10'), \
+            ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), \
+            ('line_strength', float), \
+            ('note', '|S100')])
+    # Default values for line identification
+    linelist['wave (nm)'] = raw_linelist['wave (A)'] / 10.
+    linelist['wave (A)'] = raw_linelist['wave (A)']
+    linelist["species"] = raw_linelist['species']
+    if chemical_elements_file is not None and molecules_file is not None:
+        for i, species in enumerate(raw_linelist['species']):
+            linelist['element'][i] = __get_element(chemical_elements, molecules, species)
+    linelist["lower state (cm^-1)"] = raw_linelist['lower state (cm^-1)']
+    linelist["upper state (cm^-1)"] = raw_linelist['upper state (cm^-1)']
+    linelist['lower state (eV)'] = __inverse_cm_to_eV(raw_linelist['lower state (cm^-1)'])
+    linelist['upper state (eV)'] = __inverse_cm_to_eV(raw_linelist['upper state (cm^-1)'])
+    linelist['log(gf)'] = raw_linelist['log(gf)']
+    linelist["fudge factor"] = raw_linelist['fudge factor']
+    linelist["transition type"] = raw_linelist['transition type']
+    linelist["rad"] = raw_linelist['rad']
+    linelist["stark"] = raw_linelist['stark']
+    linelist["waals"] = raw_linelist['waals']
+    # Line strength is calculated by using a theoretical proxy: log(gf) - 5040/Teff
+    # - Mucciarelli et al. 2013 - GALA: An automatic tool for the abundance analysis of stellar spectra
+    # - Temperature of reference used by Gaia ESO Survey: 3000
+    teff_ref = 3000 # K
+    linelist["line_strength"] = raw_linelist['log(gf)'] - (5040./teff_ref)
+    linelist["note"] = raw_linelist['note']
+    return linelist
+
+def write_SPECTRUM_linelist(linelist, linelist_filename=None):
+    """
+    Saves a SPECTRUM linelist for spectral synthesis.
+    If filename is not specified, a temporary file is created and the name is returned.
+    """
+    if linelist_filename is not None:
+        out = open(linelist_filename, "w")
+    else:
+        # Temporary file
+        out = tempfile.NamedTemporaryFile(delete=False)
+    out.write("\n".join(["  ".join(map(str, (line['wave (A)'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'], line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['note']))) for line in linelist]))
+    out.close()
+    return out.name
+
+
+def find_linemasks(spectrum, continuum_model,  atomic_linelist_file=None, chemical_elements_file=None, molecules_file=None, max_atomic_wave_diff=0.0005, telluric_linelist_file=None, vel_telluric=0.0, minimum_depth=None, maximum_depth=None, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, consider_omara=False, frame=None):
     """
     Generate a line masks for a spectrum by finding peaks and base points.
 
@@ -627,9 +708,6 @@ def find_linemasks(spectrum, continuum_model,  vald_linelist_file=None, chemical
 
     Returns a complete structure with all the necessary information to
     determine if it is a line of interest.
-
-    * If 'consider_omara' is True, then it will consider that the vald linelist contains
-    O'Mara parameters for some lines and it will interpret it that way.
     """
     logging.info("Finding peaks and base points...")
     # Peaks and base points will agree with the following criteria:
@@ -690,16 +768,17 @@ def find_linemasks(spectrum, continuum_model,  vald_linelist_file=None, chemical
     accepted_for_fitting = np.logical_and(accepted_for_fitting, np.logical_not(rejected_by_noise))
 
     linemasks = fit_lines(linemasks, spectrum, continuum_model, \
-                                vald_linelist_file = vald_linelist_file, \
+                                atomic_linelist_file = atomic_linelist_file, \
                                 chemical_elements_file = chemical_elements_file, \
                                 molecules_file = molecules_file, \
+                                max_atomic_wave_diff = max_atomic_wave_diff, \
                                 telluric_linelist_file = telluric_linelist_file, \
                                 vel_telluric = vel_telluric, \
                                 discard_gaussian = discard_gaussian, \
                                 discard_voigt = discard_voigt, \
                                 smoothed_spectrum = smoothed_spectrum, \
                                 check_derivatives = check_derivatives, \
-                                consider_omara = consider_omara, free_mu=True, \
+                                free_mu=True, \
                                 accepted_for_fitting=accepted_for_fitting)
 
     # Identify peaks higher than continuum
@@ -733,7 +812,7 @@ def find_linemasks(spectrum, continuum_model,  vald_linelist_file=None, chemical
 
     return linemasks
 
-def fit_lines(regions, spectrum, continuum_model,  vald_linelist_file=None, chemical_elements_file=None, molecules_file=None, telluric_linelist_file=None, vel_telluric=0.0, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, consider_omara=False, free_mu=False, frame=None):
+def fit_lines(regions, spectrum, continuum_model,  atomic_linelist_file=None, chemical_elements_file=None, molecules_file=None, max_atomic_wave_diff=0.0005, telluric_linelist_file=None, vel_telluric=0.0, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, free_mu=False, frame=None):
     """
     Fits gaussians models in the specified line regions.
     * 'regions' should be an array with 'wave_base', 'wave_peak' and 'wave_top' columns.
@@ -741,16 +820,13 @@ def fit_lines(regions, spectrum, continuum_model,  vald_linelist_file=None, chem
     * If 'accepted_for_fitting' array is present, only those regions that are set to true
     will be fitted
 
-    If vald_linelist_file, chemical_elements_file, molecules_file are specified, the
+    If atomic_linelist_file, chemical_elements_file, molecules_file are specified, the
     lines will be cross-matched with the atomic information. In that case, the spectrum
     MUST be already radial velocity corrected.
 
     If telluric_linelist_file is specified, then it will try to identify which lines
     could be potentially affected by tellurics. It is mandatory to specify the
     velocity relative to the telluric lines.
-
-    If 'consider_omara' is True, then it will consider that the vald linelist contains
-    O'Mara parameters for some lines and it will interpret it that way.
 
     If the spectrum has reported errors, the EW error will be calculated (it needs
     the SNR that will be estimated snr = fluxes/errors)
@@ -885,9 +961,9 @@ def fit_lines(regions, spectrum, continuum_model,  vald_linelist_file=None, chem
             if frame is not None:
                 frame.update_progress(current_work_progress)
 
-    if None not in [vald_linelist_file, chemical_elements_file, molecules_file]:
+    if None not in [atomic_linelist_file, chemical_elements_file, molecules_file]:
         logging.info("Cross matching with atomic data...")
-        regions = __fill_linemasks_with_VALD_info(regions, vald_linelist_file, chemical_elements_file, molecules_file, diff_limit=0.005, vel_atomic=0.0, consider_omara=consider_omara)
+        regions = __fill_linemasks_with_atomic_data(regions, atomic_linelist_file, chemical_elements_file, molecules_file, diff_limit=max_atomic_wave_diff, vel_atomic=0.0)
     if telluric_linelist_file is not None:
         logging.info("Cross matching with telluric data...")
         regions = __fill_linemasks_with_telluric_info(regions, telluric_linelist_file, vel_telluric=vel_telluric)
@@ -960,23 +1036,11 @@ def __fill_linemasks_with_telluric_info(linemasks, telluric_linelist_file, vel_t
     return linemasks
 
 
-def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elements_file, molecules_file, diff_limit=0.005, vel_atomic=0.0, consider_omara=False):
+def __fill_linemasks_with_atomic_data(linemasks, atomic_linelist_file, chemical_elements_file, molecules_file, diff_limit=0.0005, vel_atomic=0.0):
     """
-    Cross-match linemasks with a VALD linelist in order to find
+    Cross-match linemasks with a atomic linelist in order to find
     the nearest lines and copy the information into the linemasks structure.
-    If 'consider_omara' is True, then it will consider that the vald linelist contains
-    O'Mara parameters for some lines and it will interpret it that way.
     """
-    # Periodic table
-    chemical_elements = ascii.read(chemical_elements_file, delimiter="\t")._data
-    # Some molecular symbols
-    # - For diatomic molecules, the atomic_num specifies the atomic makeup of the molecule.
-    #   Thus, H2 is 101.0, the two ``1''s referring to the two hydrogens, CH is 106.0,
-    #   CO 608.0, MgH 112.0, TiO 822.0, etc.
-    # - The lightest element always comes first in the code, so that 608.0 cannot be
-    #   confused with NdO, which would be written 860.0.
-    molecules = ascii.read(molecules_file, delimiter="\t")._data
-
     # Sort before treating
     linemasks.sort(order=['wave_peak'])
 
@@ -993,118 +1057,69 @@ def __fill_linemasks_with_VALD_info(linemasks, vald_linelist_file, chemical_elem
         linemasks['mu'] = linemasks['mu'] / ((vel_atomic / c) + 1)
 
 
-    ## Load original VALD linelist
-    # Discard very small lines (lesser than 1% of the continuum)
-    #vald_linelist = read_VALD_linelist(vald_linelist_file, minimum_depth=0.01)
-    # Do not discard by depth:
-    vald_linelist = read_VALD_linelist(vald_linelist_file, minimum_depth=0.0)
-
-    ### Replaced by line strength calculated from log(gf) so that we can sort also
-    ### lines without reported depths (i.e. molecules)
-    # Sort by wave_peak and descending depth (for that we create a temporary field)
-    #vald_linelist = rfn.append_fields(vald_linelist, "reverse_depth", dtypes=float, data=1-vald_linelist['depth'])
-    #vald_linelist.sort(order=['wave_peak', 'reverse_depth'])
-    #vald_linelist = rfn.drop_fields(vald_linelist, ['reverse_depth'])
-
-    # Line strength is calculated by using a theoretical proxy: log(gf) - 5040/Teff
-    # - Mucciarelli et al. 2013 - GALA: An automatic tool for the abundance analysis of stellar spectra
-    # - Temperature of reference used by Gaia ESO Survey: 3000
-    teff_ref = 3000 # K
-    line_strength = vald_linelist['log(gf)'] - (5040./teff_ref)
-    # Sort by wave_peak and descending strength (for that we create a temporary field)
-    vald_linelist = rfn.append_fields(vald_linelist, "line_strength", dtypes=float, data=line_strength)
-    vald_linelist.sort(order=['wave_peak', 'line_strength']) # Ascending
-    vald_linelist = rfn.drop_fields(vald_linelist, ['line_strength'])
+    ## Load atomic linelist
+    atomic_linelist = read_SPECTRUM_linelist(atomic_linelist_file, chemical_elements_file=chemical_elements_file, molecules_file=molecules_file)
+    atomic_linelist.sort(order=['wave (nm)', 'line_strength']) # Ascending
 
     clean_linemasks = linemasks[linemasks['wave_peak'] != 0]
     max_wave_peak = np.max(clean_linemasks['wave_peak'])
     min_wave_peak = np.min(clean_linemasks['wave_peak'])
 
-    if vald_linelist['wave_peak'][0] > min_wave_peak or vald_linelist['wave_peak'][-1] < max_wave_peak:
-        print "WARNING: VALD linelist does not cover the whole linemask wavelength range"
-        print "- VALD range from", vald_linelist['wave_peak'][0], "to", vald_linelist['wave_peak'][-1], "nm"
+    if atomic_linelist['wave (nm)'][0] > min_wave_peak or atomic_linelist['wave (nm)'][-1] < max_wave_peak:
+        print "WARNING: Atomic linelist '%s' does not cover the whole linemask wavelength range" % atomic_linelist_file
+        print "- Atomic line's range from", atomic_linelist['wave (nm)'][0], "to", atomic_linelist['wave (nm)'][-1], "nm"
         print "- Linemask range from", min_wave_peak, "to", max_wave_peak, "nm"
 
-    wfilter = (vald_linelist['wave_peak'] >= min_wave_peak - diff_limit) & (vald_linelist['wave_peak'] <= max_wave_peak + diff_limit)
-    vald_linelist = vald_linelist[wfilter]
+    wfilter = (atomic_linelist['wave (nm)'] >= min_wave_peak - diff_limit) & (atomic_linelist['wave (nm)'] <= max_wave_peak + diff_limit)
+    atomic_linelist = atomic_linelist[wfilter]
 
-    if len(vald_linelist) > 0:
+    if len(atomic_linelist) > 0:
         for j in np.arange(len(linemasks)):
             # Find index of the nearest line
-            diff = vald_linelist['wave_peak'] - linemasks['mu'][j]
-            #diff = vald_linelist['wave_peak'] - linemasks['wave_peak'][j]
+            diff = atomic_linelist['wave (nm)'] - linemasks['mu'][j]
+            #diff = atomic_linelist['wave (nm)'] - linemasks['wave_peak'][j]
+
+            # If there are several minimums within the diff limit (several lines with very close wavelength)...
             abs_diff = np.abs(diff)
             i = np.argmin(abs_diff)
 
             # If there are several minimums (several lines with same wavelength)...
-            min_diff = np.min(abs_diff)
+            min_diff = abs_diff[i]
             imin_diff = np.where(abs_diff == min_diff)[0]
             if len(imin_diff) > 1:
-                # Select the first non-molecule if it exists
+                # Select the first nonmolecule if it exists
                 # ... and since vald_linelist is sorted by wavelength and strength
                 #     the most strong among the atomic lines will be selected
                 for imin in imin_diff:
-                    species = __get_specie(chemical_elements, molecules, vald_linelist["element"][imin])
                     try:
-                        species = float(species) # species can contain "Discard" if the element is unknown
-                        if species <= 100.0: # Atom
+                        if float(atomic_linelist['species'][imin]) <= 100.0: # Atom
                             i = imin
                             break
                     except ValueError:
-                        # Unkown element, just continue
+                        # species can contain "Discard" if the element is unknown
+                        # just continue
                         continue
 
-            # Save the information
             if abs_diff[i] <= diff_limit:
-                linemasks['species'][j] = __get_specie(chemical_elements, molecules, vald_linelist["element"][i])
-                linemasks["VALD_wave_peak"][j] = vald_linelist["wave_peak"][i]
-                linemasks["element"][j] = vald_linelist["element"][i]
-                linemasks["lower state (eV)"][j] = vald_linelist["lower state (eV)"][i]
-                linemasks["log(gf)"][j] = vald_linelist["log(gf)"][i]
-                linemasks["solar_depth"][j] = vald_linelist["depth"][i]
-
-                # GA case by default
-                linemasks['transition type'][j] = "GA"
-                linemasks['rad'][j] = vald_linelist['rad'][i]
-                linemasks['stark'][j] = vald_linelist['stark'][i]
-                linemasks['waals'][j] = vald_linelist['waals'][i]
-
-
-                if consider_omara and vald_linelist['waals'][i] > 0:
-                    # OA Case
-                    # Anstee, Barklem & O'Mara theory for collisional broadening by hydrogen, so called ABO theory
-                    # * sigma.alpha parameter
-                    linemasks['transition type'][j] = "AO"
-                    linemasks['rad'][j] = vald_linelist['waals'][i] # For this subset in reality this is the sigma.alpha parameter, no the rad
-                    linemasks['stark'][j] = 0
-                    linemasks['waals'][j] = 0
-                elif (vald_linelist['rad'][i] <= 0 or vald_linelist['stark'][i] >= 0 or \
-                        vald_linelist['waals'][i] >= 0 or \
-                        (linemasks['species'][j] not in ["", "Discard"] and float(linemasks['species'][j]) >= 101.0)):
-                    # If it is a molecule or any of this criterias is not met:
-                    # - Radiative damping should be positive
-                    # - Stark should be zero or negative
-                    # - Van der Waals should be zero or negative
-                    linemasks['transition type'][j] = "99"
-                    linemasks['rad'][j] = 0
-                    linemasks['stark'][j] = 0
-                    linemasks['waals'][j] = 0
-
-
+                linemasks['wave (nm)'][j] = atomic_linelist['wave (nm)'][i]
+                linemasks['wave (A)'][j]= atomic_linelist['wave (A)'][i]
+                linemasks["species"][j] = atomic_linelist['species'][i]
+                linemasks['element'][j] = atomic_linelist['element'][i]
+                linemasks['log(gf)'][j] = atomic_linelist['log(gf)'][i]
+                linemasks["lower state (cm^-1)"][j] = atomic_linelist['lower state (cm^-1)'][i]
+                linemasks["upper state (cm^-1)"][j] = atomic_linelist['upper state (cm^-1)'][i]
+                linemasks['lower state (eV)'][j] = atomic_linelist['lower state (eV)'][i]
+                linemasks['upper state (eV)'][j] = atomic_linelist['upper state (eV)'][i]
+                linemasks["fudge factor"][j] = atomic_linelist['fudge factor'][i]
+                linemasks["transition type"][j] = atomic_linelist['transition type'][i]
+                linemasks["rad"][j] = atomic_linelist['rad'][i]
+                linemasks["stark"][j] = atomic_linelist['stark'][i]
+                linemasks["waals"][j] = atomic_linelist['waals'][i]
+                linemasks["line_strength"][j] = atomic_linelist['line_strength'][i]
 
     if vel_atomic != 0:
         linemasks['wave_peak'] = original_wave_peak
         linemasks['mu'] = original_mu
-
-    linemasks['upper state (cm^-1)'] = (__eV_to_inverse_cm(__get_upper_state(linemasks['lower state (eV)'], linemasks[ "VALD_wave_peak"]))).astype(int)
-    linemasks['lower state (cm^-1)'] = (__eV_to_inverse_cm(linemasks['lower state (eV)'])).astype(int)
-
-    # Molecule cases
-    species = linemasks['species'].copy()
-    nofloat = np.where(np.logical_or(species == "Discard", species == ""))[0]
-    species[nofloat] = "0.0" # If not, float conversion is going to fail
-    molecules = np.asarray(map(float, species)) >= 101.0
-    linemasks['upper state (cm^-1)'][molecules] = 0.0 # Since we do not have molecular band information, we should leave it to zero
 
     return linemasks
 

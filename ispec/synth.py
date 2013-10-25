@@ -24,6 +24,7 @@ from mpfitmodels import MPFitModel
 #from continuum import fit_continuum
 from abundances import write_SPECTRUM_abundances, write_SPECTRUM_fixed_abundances, determine_abundances
 from atmospheres import write_atmosphere, interpolate_atmosphere_layers
+from lines import write_SPECTRUM_linelist
 from spectrum import create_spectrum_structure, convolve_spectrum, correct_velocity, resample_spectrum
 from multiprocessing import Process
 from multiprocessing import Queue
@@ -33,31 +34,6 @@ from Queue import Empty
 import tempfile
 import log
 import logging
-
-def read_SPECTRUM_linelist(linelist_filename):
-    """
-    Load a SPECTRUM linelist for spectral synthesis
-    """
-    linelist = np.array([tuple(line.rstrip('\r\n').split()) for line in open(linelist_filename,)], \
-                            dtype=[('wave (A)', '<f8'), ('species', '|S10'), ('lower state (cm^-1)', int), \
-                            ('upper state (cm^-1)', int), ('log(gf)', '<f8'), ('fudge factor', '<f8'), \
-                            ('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), \
-                            ('note', '|S100')])
-    return linelist
-
-def write_SPECTRUM_linelist(linelist, linelist_filename=None):
-    """
-    Saves a SPECTRUM linelist for spectral synthesis.
-    If filename is not specified, a temporary file is created and the name is returned.
-    """
-    if linelist_filename is not None:
-        out = open(linelist_filename, "w")
-    else:
-        # Temporary file
-        out = tempfile.NamedTemporaryFile(delete=False)
-    out.write("\n".join(["  ".join(map(str, (line['wave (A)'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'], line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['note']))) for line in linelist]))
-    out.close()
-    return out.name
 
 
 def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=900, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, regions=None, waveobs_mask=None):

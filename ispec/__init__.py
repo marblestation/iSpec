@@ -44,7 +44,6 @@ try:
     from atmospheres import dump_modeled_layers_pack
     from synth import generate_spectrum
     from synth import modelize_spectrum
-    from synth import read_SPECTRUM_linelist
     from synth import modelize_spectrum_from_EW
 except ImportError as e:
     pass

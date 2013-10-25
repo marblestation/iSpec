@@ -25,8 +25,21 @@ class FitLinesDialog(CustomDialog):
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Line list"
-        component["options"] = ["VALD.300_1100nm", "GES.475_685nm"]
+        component["options"] = ["VALD_atom.300_1100nm", \
+                "GESv3.475_685nm", "GESv3_noABO.475_685nm", "GESv3_atom.475_685nm", "GESv3_atom_noABO.475_685nm", \
+                "GESv4_atom.475_685nm", "GESv4_atom_noABO.475_685nm", "GESv4_atom_hfs.475_685nm", "GESv4_atom_hfs_noABO.475_685nm", \
+                "GESv4_atom.845_895nm", "GESv4_atom_noABO.845_895nm", "GESv4_atom_hfs.845_895nm", "GESv4_atom_hfs_noABO.845_895nm", \
+                "SEPv1.655_1020nm", "SEPv1_noABO.655_1020nm", \
+                "Kurucz_atom.300_1100nm", "NIST_atom.300_1100nm", "SPECTRUM.300_1000nm"]
         component["default"] = component["options"][0]
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Entry"
+        component["text"] = "Maximum atomic wavelength difference"
+        component["text-type"] = "float" # float, int or str
+        component["default"] = 0.0005
+        component["minvalue"] = 0.0001
+        component["maxvalue"] = np.inf
         self.__components.append(component)
         component = {}
         component["type"] = "Checkbutton"

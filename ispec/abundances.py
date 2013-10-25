@@ -44,26 +44,25 @@ def write_abundance_lines(linemasks, filename=None):
     # Transfor units
     linemasks = linemasks.copy()
     linemasks['ew'] = 1000. * 10. * linemasks['ew'] # From nm to mA
-    linemasks['VALD_wave_peak'] = 10 * linemasks['VALD_wave_peak'] # From nm to Angstrom
 
     if filename is not None:
         out = open(filename, "w")
     else:
         # Temporary file
         out = tempfile.NamedTemporaryFile(delete=False)
-    #out.write("\n".join([" ".join(map(str, (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['ew'], line['element']))) for line in linemasks]))
+    #out.write("\n".join([" ".join(map(str, (line['wave (A)'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['ew'], line['element']))) for line in linemasks]))
     for line in linemasks:
         # The format is different depending on the broadening parameters
         if line['transition type'] == "AO":
             # O'Mara
-            text = "%.5f %s %i %i %f %.1f %s %.4f %f %s" % (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['ew'], line['element'])
+            text = "%.5f %s %i %i %f %.1f %s %.4f %f %s" % (line['wave (A)'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['ew'], line['element'])
         elif line['transition type'] == "GA":
             # Rad, Stark and Waals
-            text = "%.5f %s %i %i %f %.1f %s %.4f %.4f %.4f %f %s" % (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['ew'], line['element'])
+            text = "%.5f %s %i %i %f %.1f %s %.4f %.4f %.4f %f %s" % (line['wave (A)'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['ew'], line['element'])
         else:
             # For i.e. line['transition type'] == "99"
             # Let SPECTRUM calculate them
-            text = "%.5f %s %i %i %f %.1f %s %f %s" % (line['VALD_wave_peak'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['ew'], line['element'])
+            text = "%.5f %s %i %i %f %.1f %s %f %s" % (line['wave (A)'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['ew'], line['element'])
         out.write(text + "\n")
 
     out.close()
