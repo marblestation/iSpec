@@ -151,6 +151,200 @@ memo reset;
 FILE *opout;
 linedata *oneline;
 
+double eqwidth_lines();
+int flags = 0;
+int flagcd = 0;
+int flagSq = 0;
+char buf2[100];
+int lline ();
+int ew_and_depth(char *atmosphere_model_file, char *linelist_file, char *abundances_file, double microturbulence_vel, double start, double end, int verbose, int num_lines, double output_wave[], double output_code[], double output_ew[], double output_depth[], progressfunc user_func, void *user_data) {
+    /*char oname[60];*/
+    /*strcpy(oname, "/tmp/output.txt");*/
+    double eqmin = 0.0; // Minimum EW
+    /*char select[80];*/
+    /*strcpy(select, "/tmp/selected.txt");*/
+
+    int i, j, k, flag;
+    int flagv = 0;
+    int nflag = 0;
+    long n;
+    int code;
+    int flagw = 1;
+    double ah, ahe, waveref, wave, Flux, Depth, w, w0, vturb, vt, ew, original_abund;
+    double nabund, abund0, abund1, abundmid, wmid, Atot, AH;
+    atmosphere *model;
+    atominfo *atom;
+    linelist *list;
+    linedata *line;
+    isodata *isotope;
+    pfunc *V;
+    population *POP;
+    char *file, *ofile, name[60], lines[60], *flines, c, atmdat[60];
+    char tmp[10], isofile[80]; 
+    FILE *qf, *fp, *sel;
+    int nq = 0;
+    int ni;
+
+    setreset (0);
+    strcpy (atmdat, abundances_file);
+    if ((model = (atmosphere *) calloc (1, sizeof (atmosphere))) == NULL)
+        nrerror ("Allocation of memory for atmosphere failed");
+    if ((V = (pfunc *) calloc (1, sizeof (pfunc))) == NULL)
+        nrerror ("Allocation of memory for pfunc failed");
+    if ((atom = (atominfo *) calloc (NATOM, sizeof (atominfo))) == NULL)
+        nrerror ("Allocation of memory for atom failed");
+    if ((POP = (population *) calloc (NATOM - NMOL, sizeof (population))) == NULL)
+        nrerror ("Allocation of memory for population failed");
+    if ((line = (linedata *) calloc (1, sizeof (linedata))) == NULL)
+        nrerror ("Allocation of memory for line failed");
+    if ((isotope = (isodata *) calloc (500, sizeof (isodata))) == NULL)
+        nrerror ("Allocation of memory for isotope failed");
+
+    if (flagw == 1) {
+      printf ("\nLINES v2.75b  (C) Richard O. Gray May 13, 2008");
+      printf("\n* Linked to Python by Sergi Blanco Cuaresma - February 2012\n\n");
+    }
+
+	flagv = 0; // Verbose mode
+	flagI = 0; // Isotope mode
+	flagt = 0; // Stellar atmosphere model is in the ATLAS9/ATLAS12 format 
+	flagC = 0; //  print out a file cd.out which contains the `contribution function''`
+	flags = 1;  // output a linelist file (in exactly the format of the input 
+                // linelist file) containing those lines that have equivalent 
+                // widths greater than the minimum equivalent width
+    flagcd = flagC;
+    flagC = 0;
+
+    inmodel(model,atmosphere_model_file,flagw);
+    if((qf = fopen(linelist_file,"r")) == NULL) {
+        printf ("Cannot find line data file\n");
+        exit (1);
+    }
+    // Output file
+    fp = fopen (ofile, "w");
+
+
+    /*if (flags == 1) {*/
+        /*if ((sel = fopen (select, "w")) == NULL) {*/
+            /*printf ("\nCannot open output file for selected lines\n");*/
+            /*exit (1);*/
+        /*}*/
+    /*}*/
+
+    vt = microturbulence_vel; // km/s, if flagu == 0
+    vt *= 1.0e+05;
+    for (i = 0; i < Ntau; i++)
+        model->mtv[i] = vt;
+
+    ah = 0.911;
+    ahe = 0.089;
+    inatom(abundances_file, atom, model->MH,&ah,&ahe);
+
+
+    pfinit (V, atom, model, flagw);
+    if (flagw == 1) {
+        printf ("\nCalculating Number Densities\n");
+    }
+    if (model->teff <= 8500)
+        Density (model, atom, ah, ahe, flagw);
+    else if (model->teff >= 25000.0)
+        veryhotDensity (model, atom, ah, ahe, flagw);
+    else
+        hotDensity (model, atom, ah, ahe, flagw);
+    popinit (POP, atom, model, V, flagw);
+
+    waveref = 5000.0;
+    if (flagw == 1) {
+        printf ("Calculating Reference Opacities\n");
+    }
+    tauref (model, waveref);
+    if (flagw == 1) {
+        printf ("Entering Main Loop\n");
+    }
+
+    int pos = 0;
+    while ((nq = lline (&wave, line, atom, qf, start, end, isotope)) >= 1) {
+        if (wave > end){
+            break;
+        }
+        if ((wave >= start) && (nq != 2) && (nq != 3)) {
+            flag = 0;
+            /*    vturb = vt*1.0e+05; */
+            Depth = 1.0;
+            ew = eqwidth_lines(model, line, wave, V, POP, &Depth);
+            /*if (ew < eqmin && flagSq == 0)*/
+                /*continue;*/
+            /*fprintf (fp, "%8.3f  %5.1f  %8.3f  %6.4f\n", line[0].wave, line[0].code, ew, 1.0 - Depth);*/
+            output_wave[pos] = line[0].wave;
+            output_code[pos] = line[0].code;
+            output_ew[pos] = ew;
+            output_depth[pos] = Depth;
+        } else {
+            output_wave[pos] = 0;
+            output_code[pos] = 0;
+            output_ew[pos] = 0;
+            output_depth[pos] = 0;
+        }
+        if (pos % 4000 == 0) {
+            if(flagw == 1) printf("Wavelength %9.3f - Work completed %.2f\%\n", wave, ((1.0*pos)/num_lines)*100.0);
+            user_func(((1.0*pos)/num_lines)*100.0, user_data);
+        }
+        pos++;
+    }
+    /*fclose (fp);*/
+    /*if (flags == 1)*/
+        /*fclose (sel);*/
+    return (0);
+}
+
+double eqwidth_lines (model, line, wave, V, POP, Depth)
+     atmosphere *model;
+     linedata *line;
+     double wave;
+     pfunc *V;
+     population *POP;
+     double *Depth;
+{
+  double dwave = 0.005;
+  double w1, w2, w, d0, Flux;
+  int n = 0;
+  int flagq;
+  double q;
+
+  flagq = 0;
+  tauwave (model, wave);
+  Flux = flux (model, wave);
+  pop (line, 0, model, V, POP);
+  broad (model, line, 0, line[0].sig, line[0].alp, line[0].fac);
+  capnu (line, 0, model);
+
+  w = w1 = w2 = 0.0;
+  while (1)
+    {
+      eqtaukap (wave, model, line);
+      if (flagq == 0 && flagcd == 1)
+	flagC = 1;
+      w2 = depth (model, wave, Flux);
+      if (flagq == 0)
+	{
+	  *Depth = w2;
+	  flagq = 1;
+	}
+      if (flagq == 1 && flagcd == 1)
+	flagC = 0;
+      if (n == 0)
+	d0 = w2;
+      if (n > 0)
+	w += 0.5 * (w1 + w2) * dwave;
+      w1 = w2;
+/*  if(w2 < 0.10*d0) dwave = 0.01;
+    if(w2 < 0.02*d0) dwave = 0.05;  */
+      if (w2 < 0.00001)
+	return (2000 * w);
+      wave += dwave;
+      n++;
+    }
+}
 
 int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, char* fixed_abundances_file, double microturbulence_vel, int verbose, int num_measures, const double waveobs[], const double waveobs_mask[], double fluxes[], progressfunc user_func, void *user_data) {
     int i;

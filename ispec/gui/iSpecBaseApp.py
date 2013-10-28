@@ -93,11 +93,17 @@ class iSpecBaseApp(Tkinter.Tk):
         self.velocity_telluric_lower_limit = -100 # km/s
         self.velocity_telluric_upper_limit = 100 # km/s
         self.velocity_telluric_step = 0.5 # km/s
-        self.linelist_telluric = None
         self.velocity_atomic_lower_limit = -200 # km/s
         self.velocity_atomic_upper_limit = 200 # km/s
         self.velocity_atomic_step = 1.0 # km/s
+
         self.ccf_mask = {}
+        self.atomic_linelist = {}
+        self.chemical_elements = None
+        self.molecules = None
+        self.telluric_linelist = None
+        self.solar_abundances = {}
+
         self.velocity_template_lower_limit = -200 # km/s
         self.velocity_template_upper_limit = 200 # km/s
         self.velocity_template_step = 1.0 # km/s
@@ -109,8 +115,6 @@ class iSpecBaseApp(Tkinter.Tk):
         self.find_lines_max_depth = 1.00 # (% of the continuum)
         self.show_errors = False
 
-        self.linelist_SPECTRUM = {}
-        self.abundances_SPECTRUM = {}
 
         # Barycentric velocity determination (from date, time, right ascension and declination)
         self.barycentric_vel = 0.0 # km/s
@@ -1674,13 +1678,15 @@ SPECTRUM a Stellar Spectral Synthesis Program
             rms = region.line_model[self.active_spectrum].rms
             self.add_stats("Gaussian fit root mean squeare (RMS)", "%.4f" % rms)
 
-            #from_x = region.get_wave_peak() - 3*regions['sig'][i]
-            #to_x = region.get_wave_peak() + 3*regions['sig'][i]
-                #regions['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x)
-            #wave_base = region.get_wave_base()
-            #wave_top = region.get_wave_top()
-            integrated_flux = -1 * region.line_model[self.active_spectrum].integrate()
-            ew = integrated_flux / region.line_model[self.active_spectrum].baseline()
+            if type(region.line_model[self.active_spectrum]) is ispec.GaussianModel:
+                # If it is a gaussian we can directly use a formule (but not if it is a voigt!)
+                A = region.line_model[self.active_spectrum].A()
+                sig = region.line_model[self.active_spectrum].sig()
+                ew = -1.*A*np.sqrt(2*np.pi*sig**2) # nm
+                integrated_flux = ew * region.line_model[self.active_spectrum].baseline() # nm^2
+            else:
+                integrated_flux = -1 * region.line_model[self.active_spectrum].integrate()
+                ew = integrated_flux / region.line_model[self.active_spectrum].baseline()
             ew = ew * 10000 # From nm to mA
             self.add_stats("Gaussian fit Equivalent Width (EW)", "%.2f" % ew)
 
@@ -2030,7 +2036,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         thread.setDaemon(True)
         thread.start()
 
-    def __filter_telluric_lines(self, linelist_telluric, spectrum, velocity_lower_limit, velocity_upper_limit):
+    def __filter_telluric_lines(self, telluric_linelist, spectrum, velocity_lower_limit, velocity_upper_limit):
         """
         Select telluric lines inside a given velocity limits (km/s).
         """
@@ -2043,8 +2049,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
         wmax = spectrum['waveobs'][-1]
         delta_wmin = wmin * (velocity_lower_limit / (c/1000.0))
         delta_wmax = wmax * (velocity_upper_limit / (c/1000.0))
-        wfilter = (linelist_telluric['wave_peak'] <= wmax + delta_wmax) & (linelist_telluric['wave_peak'] >= wmin + delta_wmin)
-        linelist = linelist_telluric[wfilter]
+        wfilter = (telluric_linelist['wave_peak'] <= wmax + delta_wmax) & (telluric_linelist['wave_peak'] >= wmin + delta_wmin)
+        linelist = telluric_linelist[wfilter]
         # Discard not fitted lines
         rfilter = linelist['rms'] == 9999
         linelist = linelist[~rfilter]
@@ -2064,7 +2070,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if relative_to_atomic_data or relative_to_telluric_data:
             if not mask_name in self.ccf_mask.keys():
                 mask_file = resource_path("input/linelists/CCF/" + mask_name + ".txt")
-                self.ccf_mask[mask_name] = ascii.read(mask_file)._data
+                self.ccf_mask[mask_name] = ispec.read_linelist_mask(mask_file)
             mask_linelist = self.ccf_mask[mask_name]
         elif relative_to_template:
             mask_linelist = None
@@ -2190,11 +2196,25 @@ SPECTRUM a Stellar Spectral Synthesis Program
         vel_telluric = self.active_spectrum.dialog[key].results["Velocity respect to telluric lines (km/s)"]
         selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
         selected_linelist += "/" + self.active_spectrum.dialog[key].results["Line list"].split(".")[1]
-        linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
+        atomic_linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
         free_mu = self.active_spectrum.dialog[key].results["Allow peak position adjustment"] == 1
         check_derivatives = self.active_spectrum.dialog[key].results["Check derivatives before fitting"] == 1
         max_atomic_wave_diff = self.active_spectrum.dialog[key].results["Maximum atomic wavelength difference"]
         self.active_spectrum.dialog[key].destroy()
+
+        telluric_linelist_file = resource_path("input/linelists/CCF/Tellurics.standard.atm_air_model.txt")
+        chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
+        molecules_file = resource_path("input/abundances/molecular_symbols.dat")
+
+        # Read
+        if self.molecules is None:
+            self.molecules = ispec.read_molecular_symbols(molecules_file)
+        if self.chemical_elements is None:
+            self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
+        if not selected_linelist in self.atomic_linelist.keys():
+            self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file, self.chemical_elements, self.molecules)
+        if self.telluric_linelist is None:
+            self.telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
 
         if vel_telluric is None:
             self.flash_status_message("Bad value.")
@@ -2213,15 +2233,12 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         self.operation_in_progress = True
         self.status_message("Fitting lines...")
-        thread = threading.Thread(target=self.on_fit_lines_thread, args=(resolution, vel_telluric, linelist_file, max_atomic_wave_diff, free_mu, check_derivatives))
+        thread = threading.Thread(target=self.on_fit_lines_thread, args=(resolution, vel_telluric, selected_linelist, max_atomic_wave_diff, free_mu, check_derivatives))
         thread.setDaemon(True)
         thread.start()
 
-    def on_fit_lines_thread(self, resolution, vel_telluric, atomic_linelist_file, max_atomic_wave_diff, free_mu, check_derivatives):
+    def on_fit_lines_thread(self, resolution, vel_telluric, selected_linelist, max_atomic_wave_diff, free_mu, check_derivatives):
         self.__update_numpy_arrays_from_widgets("lines")
-        chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
-        molecules_file = resource_path("input/abundances/molecular_symbols.dat")
-        telluric_linelist_file = resource_path("input/linelists/CCF/Tellurics.standard.atm_air_model.txt")
 
         if resolution is not None and resolution > 0:
             logging.info("Smoothing spectrum...")
@@ -2234,9 +2251,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.queue.put((self.status_message, ["Fitting lines..."], {}))
 
         linemasks = ispec.fit_lines(self.regions["lines"], self.active_spectrum.data, self.active_spectrum.continuum_model, \
-                            atomic_linelist_file, chemical_elements_file=chemical_elements_file, molecules_file=molecules_file, \
+                            atomic_linelist=self.atomic_linelist[selected_linelist], \
                             max_atomic_wave_diff = max_atomic_wave_diff, \
-                            telluric_linelist_file=telluric_linelist_file, vel_telluric=vel_telluric, \
+                            telluric_linelist=self.telluric_linelist, vel_telluric=vel_telluric, \
                             discard_gaussian=False, discard_voigt=True, \
                             check_derivatives=check_derivatives, smoothed_spectrum=smoothed_spectrum, \
                             free_mu=free_mu, frame=self)
@@ -2533,9 +2550,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
         logging.info("Adjusting line masks...")
         linemasks = ispec.adjust_linemasks(smoothed_spectrum, linemasks, max_margin=margin)
 
-        self.remove_regions(elements)
+        self.remove_fitted_lines() # If they exist
+        self.remove_regions(elements, check_not_saved=False)
         self.regions[elements] = linemasks
-
         self.draw_regions(elements)
         self.not_saved[elements] = False
         self.update_title()
@@ -2583,9 +2600,23 @@ SPECTRUM a Stellar Spectral Synthesis Program
         in_segments = self.active_spectrum.dialog[key].results["Look for line masks in"] == "Only inside segments"
         selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
         selected_linelist += "/" + self.active_spectrum.dialog[key].results["Line list"].split(".")[1]
-        linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
+        atomic_linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
         max_atomic_wave_diff = self.active_spectrum.dialog[key].results["Maximum atomic wavelength difference"]
         self.active_spectrum.dialog[key].destroy()
+
+        telluric_linelist_file = resource_path("input/linelists/CCF/Tellurics.standard.atm_air_model.txt")
+        chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
+        molecules_file = resource_path("input/abundances/molecular_symbols.dat")
+
+        # Read
+        if self.molecules is None:
+            self.molecules = ispec.read_molecular_symbols(molecules_file)
+        if self.chemical_elements is None:
+            self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
+        if not selected_linelist in self.atomic_linelist.keys():
+            self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file, self.chemical_elements, self.molecules)
+        if self.telluric_linelist is None:
+            self.telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
 
         if max_depth is None or min_depth is None or resolution is None or vel_telluric is None or max_depth <= min_depth or max_depth <= 0 or min_depth < 0 or resolution < 0:
             self.queue.put((self.flash_status_message, ["Bad value."], {}))
@@ -2605,11 +2636,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         self.operation_in_progress = True
-        thread = threading.Thread(target=self.on_find_lines_thread, args=(max_depth, min_depth, elements, resolution, vel_telluric, discard_tellurics, linelist_file, max_atomic_wave_diff, check_derivatives), kwargs={'in_segments':in_segments})
+        thread = threading.Thread(target=self.on_find_lines_thread, args=(max_depth, min_depth, elements, resolution, vel_telluric, discard_tellurics, selected_linelist, max_atomic_wave_diff, check_derivatives), kwargs={'in_segments':in_segments})
         thread.setDaemon(True)
         thread.start()
 
-    def on_find_lines_thread(self, max_depth, min_depth, elements, resolution, vel_telluric, discard_tellurics, atomic_linelist_file, max_atomic_wave_diff, check_derivatives, in_segments=False):
+    def on_find_lines_thread(self, max_depth, min_depth, elements, resolution, vel_telluric, discard_tellurics, selected_linelist, max_atomic_wave_diff, check_derivatives, in_segments=False):
         if in_segments:
             # Select spectrum from regions
             self.update_numpy_arrays_from_widgets("segments")
@@ -2635,16 +2666,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         self.queue.put((self.status_message, ["Generating line masks, fitting gaussians and matching atomic lines..."], {}))
         logging.info("Generating line masks, fitting gaussians and matching atomic lines...")
-        chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
-        molecules_file = resource_path("input/abundances/molecular_symbols.dat")
-        telluric_linelist_file = resource_path("input/linelists/CCF/Tellurics.standard.atm_air_model.txt")
 
         linemasks = ispec.find_linemasks(spectrum, self.active_spectrum.continuum_model, \
-                                atomic_linelist_file=atomic_linelist_file, \
-                                chemical_elements_file=chemical_elements_file, \
-                                molecules_file=molecules_file, \
+                                atomic_linelist=self.atomic_linelist[selected_linelist], \
                                 max_atomic_wave_diff = max_atomic_wave_diff, \
-                                telluric_linelist_file=telluric_linelist_file, \
+                                telluric_linelist=self.telluric_linelist, \
                                 vel_telluric=vel_telluric, \
                                 minimum_depth=min_depth, maximum_depth=max_depth, \
                                 smoothed_spectrum=smoothed_spectrum, \
@@ -3234,15 +3260,15 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         self.active_spectrum.velocity_telluric = vel_telluric
 
-        if self.linelist_telluric is None:
-            telluric_lines_file = resource_path("input/linelists/CCF/Tellurics.standard.atm_air_model.txt")
-            self.linelist_telluric = ispec.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
+        if self.telluric_linelist is None:
+            telluric_linelist_file = resource_path("input/linelists/CCF/Tellurics.standard.atm_air_model.txt")
+            self.telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
 
         # - Filter regions that may be affected by telluric lines
-        #dfilter = self.linelist_telluric['depth'] > np.percentile(self.linelist_telluric['depth'], 75) # (only the 25% of the deepest ones)
-        dfilter = self.linelist_telluric['depth'] > min_depth
+        #dfilter = self.telluric_linelist['depth'] > np.percentile(self.telluric_linelist['depth'], 75) # (only the 25% of the deepest ones)
+        dfilter = self.telluric_linelist['depth'] > min_depth
         tfilter = ispec.create_filter_for_regions_affected_by_tellurics(self.active_spectrum.data['waveobs'], \
-                                    self.linelist_telluric[dfilter], min_velocity=-vel_telluric+min_vel, max_velocity=-vel_telluric+max_vel)
+                                    self.telluric_linelist[dfilter], min_velocity=-vel_telluric+min_vel, max_velocity=-vel_telluric+max_vel)
 
         if len(self.active_spectrum.data[tfilter]) == 0:
             msg = "This action cannot be done since it would produce a spectrum without measurements."
@@ -3815,8 +3841,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             self.dialog[key].destroy()
 
-            #linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + "/300_1100nm.lst")
-            linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
+            atomic_linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
             abundances_file = resource_path("input/abundances/" + selected_abundances + "/stdatom.dat")
 
             if in_segments:
@@ -3841,14 +3866,20 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 return
 
             # Load SPECTRUM linelist
-            if not linelist_file in self.linelist_SPECTRUM.keys():
-                self.linelist_SPECTRUM[linelist_file] = ispec.read_SPECTRUM_linelist(linelist_file)
-            linelist = self.linelist_SPECTRUM[linelist_file]
+            chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
+            molecules_file = resource_path("input/abundances/molecular_symbols.dat")
+            if self.molecules is None:
+                self.molecules = ispec.read_molecular_symbols(molecules_file)
+            if self.chemical_elements is None:
+                self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
+            if not selected_linelist in self.atomic_linelist.keys():
+                self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file, self.chemical_elements, self.molecules)
+            linelist = self.atomic_linelist[selected_linelist]
 
             # Load SPECTRUM abundances
-            if not abundances_file in self.abundances_SPECTRUM.keys():
-                self.abundances_SPECTRUM[abundances_file] = ispec.read_SPECTRUM_abundances(abundances_file)
-            abundances = self.abundances_SPECTRUM[abundances_file]
+            if not abundances_file in self.solar_abundances.keys():
+                self.solar_abundances[abundances_file] = ispec.read_solar_abundances(abundances_file)
+            abundances = self.solar_abundances[abundances_file]
 
             # Prepare atmosphere model
             self.status_message("Interpolating atmosphere model...")
@@ -4004,9 +4035,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         # Load SPECTRUM abundances
-        if not abundances_file in self.abundances_SPECTRUM.keys():
-            self.abundances_SPECTRUM[abundances_file] = ispec.read_SPECTRUM_abundances(abundances_file)
-        abundances = self.abundances_SPECTRUM[abundances_file]
+        if not abundances_file in self.solar_abundances.keys():
+            self.solar_abundances[abundances_file] = ispec.read_solar_abundances(abundances_file)
+        abundances = self.solar_abundances[abundances_file]
 
         # Prepare atmosphere model
         self.status_message("Interpolating atmosphere model...")
@@ -4131,8 +4162,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             self.active_spectrum.dialog[key].destroy()
 
-            #linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + "/300_1100nm.lst")
-            linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
+            atomic_linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
             abundances_file = resource_path("input/abundances/" + selected_abundances + "/stdatom.dat")
 
             if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
@@ -4148,14 +4178,20 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 return
 
             # Load SPECTRUM linelist
-            if not linelist_file in self.linelist_SPECTRUM.keys():
-                self.linelist_SPECTRUM[linelist_file] = ispec.read_SPECTRUM_linelist(linelist_file)
-            linelist = self.linelist_SPECTRUM[linelist_file]
+            chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
+            molecules_file = resource_path("input/abundances/molecular_symbols.dat")
+            if self.molecules is None:
+                self.molecules = ispec.read_molecular_symbols(molecules_file)
+            if self.chemical_elements is None:
+                self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
+            if not selected_linelist in self.atomic_linelist.keys():
+                self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file, self.chemical_elements, self.molecules)
+            linelist = self.atomic_linelist[selected_linelist]
 
             # Load SPECTRUM abundances
-            if not abundances_file in self.abundances_SPECTRUM.keys():
-                self.abundances_SPECTRUM[abundances_file] = ispec.read_SPECTRUM_abundances(abundances_file)
-            abundances = self.abundances_SPECTRUM[abundances_file]
+            if not abundances_file in self.solar_abundances.keys():
+                self.solar_abundances[abundances_file] = ispec.read_solar_abundances(abundances_file)
+            abundances = self.solar_abundances[abundances_file]
 
             if not free_element_abundance:
                 # No fixed abundances

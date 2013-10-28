@@ -22,9 +22,9 @@ from datetime import datetime, timedelta
 import numpy as np
 from mpfitmodels import MPFitModel
 #from continuum import fit_continuum
-from abundances import write_SPECTRUM_abundances, write_SPECTRUM_fixed_abundances, determine_abundances
+from abundances import write_solar_abundances, write_SPECTRUM_fixed_abundances, determine_abundances
 from atmospheres import write_atmosphere, interpolate_atmosphere_layers
-from lines import write_SPECTRUM_linelist
+from lines import write_atomic_linelist
 from spectrum import create_spectrum_structure, convolve_spectrum, correct_velocity, resample_spectrum
 from multiprocessing import Process
 from multiprocessing import Queue
@@ -103,13 +103,13 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abun
         atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH)
         remove_tmp_atm_file = True
     if abundances_file is None:
-        abundances_file = write_SPECTRUM_abundances(abundances)
+        abundances_file = write_solar_abundances(abundances)
         remove_tmp_abund_file = True
     if fixed_abundances_file is None:
         fixed_abundances_file = write_SPECTRUM_fixed_abundances(fixed_abundances)
         remove_tmp_fixed_abund_file = True
     if linelist_file is None:
-        linelist_file = write_SPECTRUM_linelist(linelist)
+        linelist_file = write_atomic_linelist(linelist)
         remove_tmp_linelist_file = True
     nlayers = len(atmosphere_layers)
 
@@ -164,6 +164,82 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abun
 
     return fluxes
 
+
+def calculate_theoretical_ew_and_depth(atmosphere_layers, teff, logg, MH, linelist, abundances, microturbulence_vel = 2.0, atmosphere_layers_file=None, abundances_file=None, linelist_file=None, verbose=0, gui_queue=None, timeout=900):
+    """
+    """
+
+    # OPTIMIZATION: Use already saved files to reduce input/output time
+    remove_tmp_atm_file = False
+    remove_tmp_abund_file = False
+    remove_tmp_linelist_file = False
+    if atmosphere_layers_file is None:
+        atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH)
+        remove_tmp_atm_file = True
+    if abundances_file is None:
+        abundances_file = write_solar_abundances(abundances)
+        remove_tmp_abund_file = True
+    if linelist_file is None:
+        linelist_file = write_atomic_linelist(linelist)
+        remove_tmp_linelist_file = True
+    nlayers = len(atmosphere_layers)
+    start = np.min(linelist['wave (A)']) - 0.1
+    end = np.max(linelist['wave (A)']) + 0.1
+    num_lines = len(linelist)
+
+    # Generate spectrum should be run in a separate process in order
+    # to force the reload of the "synthesizer" module which
+    # contains C code with static variables in functions that should
+    # be reinitialized to work properly
+    # * The best solution would be to improve the C code but since it is too complex
+    #   this hack has been implemented
+    #process_communication_queue = Queue()
+    process_communication_queue = JoinableQueue()
+
+    p = Process(target=__calculate_ew_and_depth, args=(process_communication_queue, atmosphere_layers_file, linelist_file, abundances_file, num_lines), kwargs={'microturbulence_vel': microturbulence_vel, 'nlayers': nlayers, 'start': start, 'end':end, 'verbose': verbose})
+    p.start()
+    output_wave = np.zeros(len(linelist))
+    output_code = np.zeros(len(linelist))
+    output_ew = np.zeros(len(linelist))
+    output_depth = np.zeros(len(linelist))
+    num_seconds = 0
+    # Constantly check that the process has not died without returning any result and blocking the queue call
+    while p.is_alive() and num_seconds < timeout:
+        try:
+            data = process_communication_queue.get(timeout=1)
+            if type(data) is tuple:
+                # Results received!
+                output_wave, output_code, output_ew, output_depth = data
+                break
+            elif gui_queue is not None:
+                # GUI update
+                # It allows communications between process in order to update the GUI progress bar
+                gui_queue.put(data)
+                gui_queue.join()
+            process_communication_queue.task_done()
+        except Empty:
+            # No results, continue waiting
+            pass
+        num_seconds += 1
+    if num_seconds >= timeout:
+        logging.error("A timeout has occurred in the synthetic spectrum generation.")
+        p.terminate()
+    else:
+        p.join()
+
+    if remove_tmp_atm_file:
+        os.remove(atmosphere_layers_file)
+    if remove_tmp_abund_file:
+        os.remove(abundances_file)
+    if remove_tmp_linelist_file:
+        os.remove(linelist_file)
+
+    resulting_linelist = linelist.copy()
+    resulting_linelist["valid_theoretical_ew_depth"] = np.abs(output_wave - linelist['wave (A)']) < 1e-5
+    resulting_linelist["theoretical_ew"] = np.round(output_ew, 2)
+    resulting_linelist["theoretical_depth"] = np.round(output_depth, 2)
+    return resulting_linelist
+
 def __enqueue_progress(process_communication_queue, v):
     process_communication_queue.put(("self.update_progress(%i)" % v))
     process_communication_queue.join()
@@ -189,6 +265,16 @@ def __generate_spectrum(process_communication_queue, waveobs, waveobs_mask, atmo
         fluxes = convolve_spectrum(spectrum, R, from_resolution=None, frame=None)['flux']
     process_communication_queue.put(fluxes)
 
+def __calculate_ew_and_depth(process_communication_queue, atmosphere_model_file, linelist_file, abundances_file, num_lines, microturbulence_vel = 2.0, nlayers=56, start=3000, end=11000, verbose=0):
+    """
+    start and end in Amstrom
+    """
+    import synthesizer
+
+    #update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
+    update_progress_func = lambda v: __enqueue_progress(process_communication_queue, v)
+    output_wave, output_code, output_ew, output_depth = synthesizer.calculate_ew_and_depth(atmosphere_model_file, linelist_file, abundances_file, num_lines, microturbulence_vel, nlayers, start, end, verbose, update_progress_func)
+    process_communication_queue.put((output_wave, output_code, output_ew, output_depth))
 
 
 def apply_post_fundamental_effects(waveobs, fluxes, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, gui_queue=None, timeout=900):
@@ -453,8 +539,8 @@ class SynthModel(MPFitModel):
         _t0 = default_timer()
 
         # Write abundances and linelist to avoid writing the same info in each iteration
-        self.abundances_file = write_SPECTRUM_abundances(self.abundances)
-        self.linelist_file = write_SPECTRUM_linelist(self.linelist)
+        self.abundances_file = write_solar_abundances(self.abundances)
+        self.linelist_file = write_atomic_linelist(self.linelist)
 
         super(SynthModel, self).fitData(waveobs[self.comparing_mask], fluxes[self.comparing_mask], weights=weights[self.comparing_mask], parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet)
 
@@ -702,7 +788,7 @@ def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_
     parinfo[1]['fixed'] = not parinfo[1]['parname'].lower() in free_params
     parinfo[1]['step'] = 0.5 # For auto-derivatives
     #parinfo[1]['mpside'] = 2
-    parinfo[1]['mpmaxstep'] = 0.50 # Maximum change to be made in the parameter
+    #parinfo[1]['mpmaxstep'] = 0.50 # Maximum change to be made in the parameter
     #parinfo[1]['mpmaxstep'] = parinfo[1]['step'] * 1.5
     parinfo[1]['limited'] = [True, True]
     parinfo[1]['limits'] = [np.min(logg_range), np.max(logg_range)]
@@ -1050,7 +1136,7 @@ class EquivalentWidthModel(MPFitModel):
     Match synthetic spectrum to observed spectrum
     * Requires the synthetic spectrum generation functionality on
     """
-    def __init__(self, modeled_layers_pack, linelist, abundances, teff=5000, logg=3.0, MH=0.0, vmic=2.0):
+    def __init__(self, modeled_layers_pack, linelist, abundances, teff=5000, logg=3.0, MH=0.0, vmic=2.0, adjust_model_metalicity=False):
         self.elements = {}
         #self.elements["1"] = "H"
         #self.elements["2"] = "He"
@@ -1155,6 +1241,7 @@ class EquivalentWidthModel(MPFitModel):
         self.modeled_layers_pack = modeled_layers_pack
         self.linelist = linelist
         self.abundances = abundances
+        self.adjust_model_metalicity = adjust_model_metalicity
         self.lines_for_teff = None
         self.lines_for_vmic = None
         #
@@ -1189,7 +1276,7 @@ class EquivalentWidthModel(MPFitModel):
 
             # First iteration
             if self.lines_for_teff is None or self.lines_for_vmic is None:
-                self.select_good_lines(x_over_h, strict_teff=True, strict_vmic=True)
+                self.select_good_lines(x_over_h, strict_teff=False, strict_vmic=False)
 
             values_to_evaluate = []
             fitted_lines_params = []
@@ -1224,30 +1311,31 @@ class EquivalentWidthModel(MPFitModel):
                 abundance_diff2 = self.MH() - np.median(x_over_h[self.lines_for_teff[0]]) # Always [0] where Fe 1 is
 
                 print " # Element:                   ", self.teff_elements[i], self.vmic_elements[i]
-                print "   Teff/Vmic slopes:            %.2f %.2f" % (m1, m2)
-                print "   Abundances diff:             %.2f" % abundance_diff
-                print "   Abundances diff with model:  %.2f" % abundance_diff2
-                print "   Abundances stdev:            %.2f %.2f" % (np.std(x_over_h[lines_for_teff]), np.std(x_over_h[lines_for_vmic]))
-                print "   Abundances median:           %.2f %.2f" % (np.median(x_over_h[lines_for_teff]), np.median(x_over_h[lines_for_vmic]))
+                print "   Teff/Vmic slopes:            %.6f %.6f" % (m1, m2)
+                print "   Abundances diff:             %.6f" % abundance_diff
+                print "   Abundances diff with model:  %.6f" % abundance_diff2
+                print "   Abundances stdev:            %.6f %.6f" % (np.std(x_over_h[lines_for_teff]), np.std(x_over_h[lines_for_vmic]))
+                print "   Abundances median:           %.6f %.6f" % (np.median(x_over_h[lines_for_teff]), np.median(x_over_h[lines_for_vmic]))
 
                 # Rounded to 3 and 2 decimals (using string convertion works better than np.round)
-                values_to_evaluate.append(float("%.2f" % m1))
-                values_to_evaluate.append(float("%.2f" % m2))
-                values_to_evaluate.append(float("%.2f" % abundance_diff))
-                #values_to_evaluate.append(float("%.2f" % abundance_diff2))
+                values_to_evaluate.append(float("%.6f" % m1))
+                values_to_evaluate.append(float("%.6f" % m2))
+                values_to_evaluate.append(float("%.6f" % abundance_diff))
+                if self.adjust_model_metalicity:
+                    values_to_evaluate.append(float("%.2f" % abundance_diff2))
                 #abundances_to_evaluate = np.arange(len(self.linemasks))
                 ##abundances_to_evaluate[:] = 10.
                 #abundances_to_evaluate[:] = 0.
                 #abundances_to_evaluate[lines_for_teff] = x_over_h[lines_for_teff] - np.median(x_over_h[lines_for_teff])
                 #abundances_to_evaluate[lines_for_vmic] = x_over_h[lines_for_vmic] - np.median(x_over_h[lines_for_vmic])
                 # TODO: It will not work if there are more than 1 element (i.e. Fe and Ti)
-                abundances_to_evaluate = x_over_h - np.median(x_over_h[np.logical_or(lines_for_teff, lines_for_vmic)])
-                values_to_evaluate = np.hstack((values_to_evaluate,  abundances_to_evaluate)).tolist()
+                #abundances_to_evaluate = x_over_h - np.median(x_over_h[np.logical_or(lines_for_teff, lines_for_vmic)])
+                #values_to_evaluate = np.hstack((values_to_evaluate,  abundances_to_evaluate)).tolist()
                 #values_to_evaluate = abundances_to_evaluate
 
                 residuals = np.asarray(values_to_evaluate) - self.y
                 #print "Eval:", np.sum(np.tanh(self.weights*residuals)**2)
-                print " - Chisq:                       %.4f" % np.sum((self.weights*residuals)**2)
+                print " - Chisq:                       %.10g" % np.sum((self.weights*residuals)**2)
                 fitted_lines_params.append(m1)
                 fitted_lines_params.append(c1)
                 fitted_lines_params.append(m2)
@@ -1300,7 +1388,7 @@ class EquivalentWidthModel(MPFitModel):
                 print p + (pformat % x[i]) + '  '
         ##### Lines
         values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
-        self.select_good_lines(x_over_h, strict_teff=True, strict_vmic=True) # Modifies self.lines_for_teff and self.lines_for_vmic
+        self.select_good_lines(x_over_h, strict_teff=False, strict_vmic=False) # Modifies self.lines_for_teff and self.lines_for_vmic
 
         ##### Metallicity
         #self._MH = np.median(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
@@ -1438,17 +1526,18 @@ class EquivalentWidthModel(MPFitModel):
         ftol = 1.e-4 # Terminate when the improvement in chisq between iterations is ftol > -(new_chisq/chisq)**2 +1
         xtol = 1.e-4
         gtol = 1.e-4
-        damp = 0.0   # Residuals are limited between -1.0 and 1.0 (np.tanh(residuals/1.0)) minimizing the influence of bad fluxes
-                     # * Spectrum must be a normalized one
+        damp = 0.0   # Not active: Residuals are limited between -1.0 and 1.0 (np.tanh(residuals/1.0)) minimizing the influence of bad fluxes
         #chisq_limit = 0.0002 # np.sum(np.asarray([0.00, 0.00, 0.01, 0.01])**2))
-        chisq_limit = 0.0001 # np.sum(np.asarray([0.00, 0.00, 0.01])**2))
+        chisq_limit = 1.0e-5 # 0.00001
         _t0 = default_timer()
 
         #index = np.asarray([0, 1, 2])
-        #index = np.arange(3*len(teff_elements)) # 3 values: zero slopes and zero difference between element1 and element2
-        index = np.arange(3*len(teff_elements) + len(linemasks)) # 3 values: zero slopes and zero difference between element1 and element2
+        #index = np.arange(3*len(teff_elements) + len(linemasks)) # 3 values: zero slopes and zero difference between element1 and element2
         #index = np.arange(len(linemasks))
-        #index = np.arange(4*len(teff_elements)) # 3 values: zero slopes and zero difference between element1 and element2
+        if self.adjust_model_metalicity:
+            index = np.arange(4*len(teff_elements)) # 4 values: zero slopes and zero difference between element1 and element2, difference with model
+        else:
+            index = np.arange(3*len(teff_elements)) # 3 values: zero slopes and zero difference between element1 and element2
         target_values = np.zeros(len(index))
         weights = np.ones(len(index))
         super(EquivalentWidthModel, self).fitData(index, target_values, weights=weights, parinfo=parinfo, chisq_limit=chisq_limit, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet, iterfunct=self.defiter)
@@ -1504,14 +1593,14 @@ class EquivalentWidthModel(MPFitModel):
 
         print "Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second)
         header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","chisq(tanh)","rchisq(tanh)","chisq","rchisq","rms")
-        stats = "%8i\t%8i\t%8i\t%8.4f\t%8.4f\t%8.4f\t%8.4f\t%8.4f" % (self.m.dof, self.m.niter, self.m.nfev, self.chisq, self.reduced_chisq, self.basic_chisq, self.reduced_basic_chisq, self.rms)
+        stats = "%8i\t%8i\t%8i\t%8.6f\t%8.6f\t%8.6f\t%8.6f\t%8.6f" % (self.m.dof, self.m.niter, self.m.nfev, self.chisq, self.reduced_chisq, self.basic_chisq, self.reduced_basic_chisq, self.rms)
         print ""
         print "         ", header
         print "Stats:   ", stats
         print "Return code:", self.m.status
 
 
-def modelize_spectrum_from_EW(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, teff_elements=["Fe 1"], vmic_elements=["Fe 2"], max_iterations=20):
+def modelize_spectrum_from_EW(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, teff_elements=["Fe 1"], vmic_elements=["Fe 2"], adjust_model_metalicity=False, max_iterations=20):
     """
     """
     teff_range = modeled_layers_pack[3]
@@ -1520,7 +1609,7 @@ def modelize_spectrum_from_EW(linemasks, modeled_layers_pack, linelist, abundanc
 
     parinfo = __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range)
 
-    EW_model = EquivalentWidthModel(modeled_layers_pack, linelist, abundances, MH=initial_MH)
+    EW_model = EquivalentWidthModel(modeled_layers_pack, linelist, abundances, MH=initial_MH, adjust_model_metalicity=adjust_model_metalicity)
 
     lfilter = None
     for element in np.hstack((teff_elements, vmic_elements)):

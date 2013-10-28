@@ -41,10 +41,6 @@ def write_abundance_lines(linemasks, filename=None):
     If filename is not specified, a temporary file is created and the name is returned.
 
     """
-    # Transfor units
-    linemasks = linemasks.copy()
-    linemasks['ew'] = 1000. * 10. * linemasks['ew'] # From nm to mA
-
     if filename is not None:
         out = open(filename, "w")
     else:
@@ -94,9 +90,9 @@ def write_SPECTRUM_fixed_abundances(fixed_abundances, filename=None):
     return out.name
 
 
-def read_SPECTRUM_abundances(abundances_filename):
+def read_solar_abundances(abundances_filename):
     """
-    Load a SPECTRUM abundances file for spectral synthesis
+    Load a SPECTRUM format abundances file for spectral synthesis
 
     Abund field should be in terms of number densities relative to the total number density
     (log(N/Ntot) scale).
@@ -107,7 +103,7 @@ def read_SPECTRUM_abundances(abundances_filename):
                             ('I4', '<f8'), ('maxcharge', int)])
     return abundances
 
-def write_SPECTRUM_abundances(abundances, abundances_filename=None):
+def write_solar_abundances(abundances, abundances_filename=None):
     """
     Saves a SPECTRUM abundances file for spectral synthesis
 
@@ -143,7 +139,7 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
 
     linemasks_file = write_abundance_lines(linemasks)
     atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH)
-    abundances_file = write_SPECTRUM_abundances(abundances)
+    abundances_file = write_solar_abundances(abundances)
     num_measures = len(linemasks)
     nlayers = len(atmosphere_layers)
 

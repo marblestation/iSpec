@@ -300,6 +300,14 @@ def write_spectrum(spectrum, spectrum_filename):
         out.write("\n".join(["\t".join(map(str, (line['waveobs'], line['flux'], line['err']))) for line in spectrum]))
         out.close()
 
+def normalize_spectrum(spectrum, continuum_model):
+    """
+    Normalizes a spectrum given a continuum fit
+    """
+    normalized_spectrum = create_spectrum_structure(spectrum['waveobs'])
+    normalized_spectrum['flux'] = spectrum['flux'] / continuum_model(spectrum['waveobs'])
+    normalized_spectrum['err'] = spectrum['err'] / continuum_model(spectrum['waveobs'])
+    return normalized_spectrum
 
 def estimate_snr(flux, num_points=10, frame=None):
     """

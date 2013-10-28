@@ -1,7 +1,7 @@
 """
     This file is part of Spectra.
     Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
-    
+
     Spectra is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -68,6 +68,7 @@ cdef extern from "spectrum276e/spectrum.h":
 
 cdef extern from "synthesizer_func.h":
     ctypedef void (*progressfunc)(double num, void *user_data)
+    int ew_and_depth(char *atmosphere_model_file, char *linelist_file, char *abundances_file, double microturbulence_vel, double start, double end, int verbose, int num_measures, double *output_wave, double *output_code, double *output_ew, double *output_depth, progressfunc user_func, void *user_data)
     int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, char *fixed_abundances_file, double microturbulence_vel, int verbose, int num_measures, double* waveobs, double* waveobs_mask, double *fluxes, progressfunc user_func, void *user_data)
     int macroturbulence_spectrum(double *waveobs, double *fluxes, int num_measures, double macroturbulence, int verbose, progressfunc user_func, void *user_data)
     int rotation_spectrum(double *waveobs, double *fluxes, int num_measures, double vsini, double limb_darkening_coeff, int verbose, progressfunc user_func, void *user_data)
@@ -134,11 +135,11 @@ def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.double_t,ndim
 
     if update_progress_func==None:
         update_progress_func = dummy_func
-    
-    synthesize_spectrum(atmosphere_model_file, linelist_file, abundances_file, 
+
+    synthesize_spectrum(atmosphere_model_file, linelist_file, abundances_file,
             fixed_abundances_file,
-            microturbulence_vel, verbose, num_measures, <double*> waveobs.data, 
-            <double*> waveobs_mask.data, 
+            microturbulence_vel, verbose, num_measures, <double*> waveobs.data,
+            <double*> waveobs_mask.data,
             <double*> fluxes.data, callback, <void*>update_progress_func)
 
     fluxes = apply_post_fundamental_effects(waveobs, fluxes, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, R, verbose, update_progress_func)
@@ -157,18 +158,18 @@ def apply_post_fundamental_effects(np.ndarray[np.double_t,ndim=1] waveobs, np.nd
         update_progress_func = dummy_func
 
     if macroturbulence > 0:
-        macroturbulence_spectrum(<double*> waveobs.data, <double*> fluxes.data, 
+        macroturbulence_spectrum(<double*> waveobs.data, <double*> fluxes.data,
             num_measures, macroturbulence, verbose, callback, <void*>update_progress_func)
     if vsini > 0 or limb_darkening_coeff > 0:
         rotation_spectrum(<double*> waveobs.data, <double*> fluxes.data, num_measures,
             vsini, limb_darkening_coeff, verbose, callback, <void*>update_progress_func)
     if R > 0:
-        resolution_spectrum(<double*> waveobs.data, <double*> fluxes.data, 
+        resolution_spectrum(<double*> waveobs.data, <double*> fluxes.data,
             num_measures, R, verbose, callback, <void*>update_progress_func)
     return fluxes
 
 
-    
+
 # microtturbulence velocity in km/s
 def abundances(char* atmosphere_model_file, char* linelist_file, int num_measures, char* abundances_file, double microturbulence_vel = 2.0, int nlayers=56, int verbose = 0, update_progress_func=None):
     if not os.path.exists(atmosphere_model_file):
@@ -223,12 +224,72 @@ def abundances(char* atmosphere_model_file, char* linelist_file, int num_measure
 
     if update_progress_func==None:
         update_progress_func = dummy_func
-    
-    abundances_determination(atmosphere_model_file, linelist_file, num_measures, abundances_file, 
-            microturbulence_vel, verbose, <double*> abundances.data, 
+
+    abundances_determination(atmosphere_model_file, linelist_file, num_measures, abundances_file,
+            microturbulence_vel, verbose, <double*> abundances.data,
             <double*> normal_abundances.data, <double*> relative_abundances.data,
             callback, <void*>update_progress_func)
-    
+
     return abundances, normal_abundances, relative_abundances
 
+
+def calculate_ew_and_depth(char* atmosphere_model_file, char* linelist_file, char* abundances_file, int num_lines, double microturbulence_vel = 2.0, int nlayers = 56, double start=3000, double end=11000, int verbose = 0, update_progress_func=None):
+    if not os.path.exists(atmosphere_model_file):
+        raise Exception("Atmosphere model file '%s' does not exists!" % atmosphere_model_file)
+    if not os.path.exists(linelist_file):
+        raise Exception("Line list file '%s' does not exists!" % linelist_file)
+    if not os.path.exists(abundances_file):
+        raise Exception("Abundances file '%s' does not exists!" % abundances_file)
+    global Ntau
+    global flagr
+    global flagc
+    global flagk
+    global flagg
+    global flagmph
+    global flagI
+    global flagt
+    global flagp
+    global flagP
+    global flagu
+    global flagO
+    global flagC
+    global mghla
+    global mghlb
+    global mu
+    global NI
+    Ntau = nlayers  # 72 layers for castelli-kurucz atmosphere models, 56 for MARCS
+    flagr = 0
+    flagc = 0
+    flagk = 0
+    flagg = 0
+    flagmgh = 0
+    flagI = 0   # Isotopes (1: True, 0: False) If 1 it produces segmentation fault (original SPECTRUM problem)
+    flagt = 0
+    flagp = 0
+    flagP = 0
+    flagu = 0
+    flagO = 0
+    flagC = 0
+    mghla = 0
+    mghlb = 0
+    mu = 1.0
+    NI = 0
+
+    cdef np.ndarray[np.double_t,ndim=1] output_wave = np.zeros(num_lines, dtype=float)
+    cdef np.ndarray[np.double_t,ndim=1] output_code = np.zeros(num_lines, dtype=float)
+    cdef np.ndarray[np.double_t,ndim=1] output_ew = np.zeros(num_lines, dtype=float)
+    cdef np.ndarray[np.double_t,ndim=1] output_depth= np.zeros(num_lines, dtype=float)
+    if num_lines <= 0:
+        # We need at least 1 wavelengths, if not return an zeroed result
+        return output_wave, output_ew, output_depth
+
+    if update_progress_func==None:
+        update_progress_func = dummy_func
+
+    ew_and_depth(atmosphere_model_file, linelist_file, abundances_file, \
+            microturbulence_vel, start, end, verbose, num_lines, \
+            <double*> output_wave.data, <double*> output_code.data, <double*> output_ew.data, <double*> output_depth.data, \
+           callback, <void*>update_progress_func)
+
+    return output_wave, output_code, output_ew, output_depth
 

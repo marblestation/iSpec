@@ -71,7 +71,7 @@ class FindLinesDialog(CustomDialog):
         component["type"] = "Entry"
         component["text"] = "Maximum atomic wavelength difference"
         component["text-type"] = "float" # float, int or str
-        component["default"] = 0.0005
+        component["default"] = 0.005
         component["minvalue"] = 0.00001
         component["maxvalue"] = np.inf
         self.__components.append(component)

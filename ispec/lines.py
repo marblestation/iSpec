@@ -90,6 +90,19 @@ def __get_element(chemical_elements, molecules, species):
 
     return symbol + " " + str(int(ion_state) + 1)
 
+def __get_abund_rank(chemical_elements, species):
+    """
+    Convert species code form by the atomic number + "." + ionization state to element names type "Fe 1" or "Fe 2".
+    Returns "Discard" if not found.
+    """
+    atomic_num, ion_state = species.split(".")
+
+    tfilter = (chemical_elements['atomic_num'] == int(atomic_num))
+    if len(chemical_elements["symbol"][tfilter]) == 0:
+        return np.max(chemical_elements["solar_abund_rank"])
+    else:
+        return chemical_elements["solar_abund_rank"][tfilter][0]
+
 def __get_specie(chemical_elements, molecules, element_name):
     """
     Convert element names type "Fe 1" or "Fe 2" to species code form by the atomic number + "." + ionization state.
@@ -163,6 +176,36 @@ def __eV_to_inverse_cm(value):
 ########################################################################
 ## [END] LINE LIST
 ########################################################################
+
+def read_linelist_mask(mask_file):
+    """
+    Read linelist for building a mask and doing cross-correlation with the
+    build_velocity_profile function.
+
+    The linelist should contain at least the columns wave_peak (in nm) and depth.
+    """
+    ccf_mask = ascii.read(mask_file)._data
+    return ccf_mask
+
+def read_chemical_elements(chemical_elements_file):
+    """
+    Read information about the chemical elements (periodic table)
+    """
+    chemical_elements = ascii.read(chemical_elements_file, delimiter="\t")._data
+    return chemical_elements
+
+def read_molecular_symbols(molecules_file):
+    """
+    Read information about the molecules (symbol and "atomic number")
+      - For diatomic molecules, the atomic_num specifies the atomic makeup of the molecule.
+        Thus, H2 is 101.0, the two ``1''s referring to the two hydrogens, CH is 106.0,
+        CO 608.0, MgH 112.0, TiO 822.0, etc.
+      - The lightest element always comes first in the code, so that 608.0 cannot be
+        confused with NdO, which would be written 860.0.
+    """
+    molecules = ascii.read(molecules_file, delimiter="\t")._data
+    return molecules
+
 
 def read_line_regions(line_regions_filename):
     """
@@ -539,7 +582,7 @@ def __create_linemasks_structure(num_peaks):
             ('mu', float), ('sig', float), ('A', float), ('baseline', float), ('gamma', float), \
             ('fwhm', float), ('fwhm_kms', float), ('R', float), \
             ('depth_fit', float), ('relative_depth_fit', float), \
-            ('integrated_flux', float), ('ew', float), ('ew_err', float), \
+            ('integrated_flux', float), ('ewr', float), ('ew', float), ('ew_err', float), \
             ('rms', float), \
             ('telluric_wave_peak', float), ('telluric_fwhm', float), ('telluric_R', float), ('telluric_depth', float), \
             ('wave (nm)', '<f8'), ('wave (A)', '<f8'), \
@@ -548,7 +591,9 @@ def __create_linemasks_structure(num_peaks):
             ('lower state (eV)', float), ('upper state (eV)', float), \
             ('log(gf)', '<f8'), ('fudge factor', float), ('transition type', '|S10'), \
             ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), \
+            ('valid_theoretical_ew_depth', bool), ('theoretical_ew', float), ('theoretical_depth', float), \
             ('line_strength', float), \
+            ('solar_abund_rank', int), \
             ('discarded', bool)])
     # Initialization
     linemasks['discarded'] = False
@@ -585,7 +630,8 @@ def __create_linemasks_structure(num_peaks):
     linemasks['depth_fit'] = 0.0
     linemasks['relative_depth_fit'] = 0.0
     linemasks['integrated_flux'] = 0.0
-    linemasks['ew'] = 0.0
+    linemasks['ewr'] = 0.0 # Reduced equivalent width
+    linemasks['ew'] = 0.0 # Equivalent width
     linemasks['ew_err'] = 0.0
     linemasks['rms'] = 9999.0
     # Default values for line identification
@@ -603,29 +649,35 @@ def __create_linemasks_structure(num_peaks):
     linemasks["rad"] = 0
     linemasks["stark"] = 0
     linemasks["waals"] = 0
+    linemasks["valid_theoretical_ew_depth"] = False
+    linemasks["theoretical_ew"] = 0
+    linemasks["theoretical_depth"] = 0
     linemasks["line_strength"] = 0
+    linemasks["solar_abund_rank"] = 0
     return linemasks
 
 
-def read_SPECTRUM_linelist(linelist_filename, chemical_elements_file=None, molecules_file=None):
+def read_atomic_linelist(linelist_filename, chemical_elements, molecules):
     """
-    Load a SPECTRUM linelist and add complementary information.
+    Load a SPECTRUM format linelist and add complementary information.
 
     If chemical_elements and molecules is indicated, the field 'element' will be filled
     with the name of the element + ionization state (i.e. 'Fe 1')
     """
-    if chemical_elements_file is not None and molecules_file is not None:
-        # Periodic table
-        chemical_elements = ascii.read(chemical_elements_file, delimiter="\t")._data
-        # Some molecular symbols
-        # - For diatomic molecules, the atomic_num specifies the atomic makeup of the molecule.
-        #   Thus, H2 is 101.0, the two ``1''s referring to the two hydrogens, CH is 106.0,
-        #   CO 608.0, MgH 112.0, TiO 822.0, etc.
-        # - The lightest element always comes first in the code, so that 608.0 cannot be
-        #   confused with NdO, which would be written 860.0.
-        molecules = ascii.read(molecules_file, delimiter="\t")._data
-
-    raw_linelist = np.array([tuple(line.rstrip('\r\n').split()) for line in open(linelist_filename,)], \
+    try:
+        has_depths = True
+        raw_linelist = np.array([tuple(line.rstrip('\r\n').split()) for line in open(linelist_filename,)], \
+                            dtype=[('wave (A)', '<f8'), ('species', '|S10'), ('lower state (cm^-1)', int), \
+                            ('upper state (cm^-1)', int), ('log(gf)', '<f8'), ('fudge factor', '<f8'), \
+                            ('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), \
+                            ('note', '|S100'), \
+                            ('valid_theoretical_ew_depth', '|S100'), \
+                            ('theoretical_ew', '<f8'), \
+                            ('theoretical_depth', '<f8')])
+    except Exception, e:
+        has_depths = False
+        # Without valid_theoretical_ew_depth, ew and depth
+        raw_linelist = np.array([tuple(line.rstrip('\r\n').split()) for line in open(linelist_filename,)], \
                             dtype=[('wave (A)', '<f8'), ('species', '|S10'), ('lower state (cm^-1)', int), \
                             ('upper state (cm^-1)', int), ('log(gf)', '<f8'), ('fudge factor', '<f8'), \
                             ('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), \
@@ -637,15 +689,20 @@ def read_SPECTRUM_linelist(linelist_filename, chemical_elements_file=None, molec
             ('lower state (eV)', float), ('upper state (eV)', float), \
             ('log(gf)', '<f8'), ('fudge factor', float), ('transition type', '|S10'), \
             ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), \
+            ('valid_theoretical_ew_depth', bool), ('theoretical_ew', float), ('theoretical_depth', float), \
             ('line_strength', float), \
+            ('solar_abund_rank', int), \
             ('note', '|S100')])
     # Default values for line identification
     linelist['wave (nm)'] = raw_linelist['wave (A)'] / 10.
     linelist['wave (A)'] = raw_linelist['wave (A)']
     linelist["species"] = raw_linelist['species']
-    if chemical_elements_file is not None and molecules_file is not None:
+    if chemical_elements is not None and molecules is not None:
         for i, species in enumerate(raw_linelist['species']):
             linelist['element'][i] = __get_element(chemical_elements, molecules, species)
+            linelist['solar_abund_rank'][i] = __get_abund_rank(chemical_elements, species)
+    else:
+        linelist['element'] = ""
     linelist["lower state (cm^-1)"] = raw_linelist['lower state (cm^-1)']
     linelist["upper state (cm^-1)"] = raw_linelist['upper state (cm^-1)']
     linelist['lower state (eV)'] = __inverse_cm_to_eV(raw_linelist['lower state (cm^-1)'])
@@ -658,13 +715,23 @@ def read_SPECTRUM_linelist(linelist_filename, chemical_elements_file=None, molec
     linelist["waals"] = raw_linelist['waals']
     # Line strength is calculated by using a theoretical proxy: log(gf) - 5040/Teff
     # - Mucciarelli et al. 2013 - GALA: An automatic tool for the abundance analysis of stellar spectra
+    # - Mucciarelli et al. 2010 - Microturbulent velocity from stellar spectra: a comparison between different approaches
     # - Temperature of reference used by Gaia ESO Survey: 3000
     teff_ref = 3000 # K
-    linelist["line_strength"] = raw_linelist['log(gf)'] - (5040./teff_ref)
+    linelist["line_strength"] = raw_linelist['log(gf)'] - (5040./teff_ref)*linelist['lower state (eV)']
+    #line_strength_proxy = the oscillator strength - the Boltzmann factor (5040./Teff) * excitation potential
     linelist["note"] = raw_linelist['note']
+    if has_depths:
+        linelist["valid_theoretical_ew_depth"] = raw_linelist['valid_theoretical_ew_depth'] == "True"
+        linelist["theoretical_ew"] = raw_linelist['theoretical_ew']
+        linelist["theoretical_depth"] = raw_linelist['theoretical_depth']
+    else:
+        linelist["valid_theoretical_ew_depth"] = False
+        linelist["theoretical_ew"] = 0.0
+        linelist["theoretical_depth"] = 0.0
     return linelist
 
-def write_SPECTRUM_linelist(linelist, linelist_filename=None):
+def write_atomic_linelist(linelist, linelist_filename=None):
     """
     Saves a SPECTRUM linelist for spectral synthesis.
     If filename is not specified, a temporary file is created and the name is returned.
@@ -674,12 +741,13 @@ def write_SPECTRUM_linelist(linelist, linelist_filename=None):
     else:
         # Temporary file
         out = tempfile.NamedTemporaryFile(delete=False)
-    out.write("\n".join(["  ".join(map(str, (line['wave (A)'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'], line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['note']))) for line in linelist]))
+    #4750.196  26.0  36078  57130  -3.662  1.0  GA  8.09  -4.61  -7.32  Fe_1  True  0.27  0.01
+    out.write("\n".join(["  ".join(map(str, (line['wave (A)'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'], line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['note'], line['valid_theoretical_ew_depth'], line['theoretical_ew'], line['theoretical_depth']))) for line in linelist]))
     out.close()
     return out.name
 
 
-def find_linemasks(spectrum, continuum_model,  atomic_linelist_file=None, chemical_elements_file=None, molecules_file=None, max_atomic_wave_diff=0.0005, telluric_linelist_file=None, vel_telluric=0.0, minimum_depth=None, maximum_depth=None, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, consider_omara=False, frame=None):
+def find_linemasks(spectrum, continuum_model, atomic_linelist=None, max_atomic_wave_diff=0.0005, telluric_linelist=None, vel_telluric=0.0, minimum_depth=None, maximum_depth=None, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, consider_omara=False, frame=None):
     """
     Generate a line masks for a spectrum by finding peaks and base points.
 
@@ -768,11 +836,9 @@ def find_linemasks(spectrum, continuum_model,  atomic_linelist_file=None, chemic
     accepted_for_fitting = np.logical_and(accepted_for_fitting, np.logical_not(rejected_by_noise))
 
     linemasks = fit_lines(linemasks, spectrum, continuum_model, \
-                                atomic_linelist_file = atomic_linelist_file, \
-                                chemical_elements_file = chemical_elements_file, \
-                                molecules_file = molecules_file, \
+                                atomic_linelist = atomic_linelist, \
                                 max_atomic_wave_diff = max_atomic_wave_diff, \
-                                telluric_linelist_file = telluric_linelist_file, \
+                                telluric_linelist = telluric_linelist, \
                                 vel_telluric = vel_telluric, \
                                 discard_gaussian = discard_gaussian, \
                                 discard_voigt = discard_voigt, \
@@ -812,7 +878,7 @@ def find_linemasks(spectrum, continuum_model,  atomic_linelist_file=None, chemic
 
     return linemasks
 
-def fit_lines(regions, spectrum, continuum_model,  atomic_linelist_file=None, chemical_elements_file=None, molecules_file=None, max_atomic_wave_diff=0.0005, telluric_linelist_file=None, vel_telluric=0.0, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, free_mu=False, frame=None):
+def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wave_diff=0.0005, telluric_linelist=None, vel_telluric=0.0, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, free_mu=False, frame=None):
     """
     Fits gaussians models in the specified line regions.
     * 'regions' should be an array with 'wave_base', 'wave_peak' and 'wave_top' columns.
@@ -820,11 +886,11 @@ def fit_lines(regions, spectrum, continuum_model,  atomic_linelist_file=None, ch
     * If 'accepted_for_fitting' array is present, only those regions that are set to true
     will be fitted
 
-    If atomic_linelist_file, chemical_elements_file, molecules_file are specified, the
+    If atomic_linelist is specified, the
     lines will be cross-matched with the atomic information. In that case, the spectrum
     MUST be already radial velocity corrected.
 
-    If telluric_linelist_file is specified, then it will try to identify which lines
+    If telluric_linelist is specified, then it will try to identify which lines
     could be potentially affected by tellurics. It is mandatory to specify the
     velocity relative to the telluric lines.
 
@@ -906,6 +972,8 @@ def fit_lines(regions, spectrum, continuum_model,  atomic_linelist_file=None, ch
                 else:
                     spectrum_window = spectrum[new_base:new_top+1]
                 line_model, rms = __fit_line(spectrum_window, continuum_model, regions['wave_peak'][i], discard_gaussian = discard_gaussian, discard_voigt = discard_voigt, free_mu=free_mu)
+                if free_mu and (line_model.mu() <= spectrum_window['waveobs'][0] or line_model.mu() >= spectrum_window['waveobs'][-1]):
+                    raise Exception("Fitted wave peak (mu) outside the limits!")
                 regions['mu'][i] = line_model.mu()
                 regions['sig'][i] = line_model.sig()
                 regions['A'][i] = line_model.A()
@@ -934,11 +1002,15 @@ def fit_lines(regions, spectrum, continuum_model,  atomic_linelist_file=None, ch
                 # - Include 99.9999998% of the gaussian area
                 from_x = regions['mu'][i] - 6*regions['sig'][i]
                 to_x = regions['mu'][i] + 6*regions['sig'][i]
-                regions['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x)
-                # If it is a gaussian we can directly use A (but not if it is a voigt!)
-                #regions['integrated_flux'][i] = -1 * line_model.A()
-                #regions['integrated_flux'][i] = -1.*regions['A'][i]*np.sqrt(2*np.pi*regions['sig'][i]**2)
-                regions['ew'][i] = regions['integrated_flux'][i] / line_model.baseline()
+                if type(line_model) is GaussianModel:
+                    # If it is a gaussian we can directly use a formule (but not if it is a voigt!)
+                    regions['integrated_flux'][i] = -1.*regions['A'][i]*np.sqrt(2*np.pi*regions['sig'][i]**2) # nm
+                    regions['ew'][i] = regions['integrated_flux'][i] / line_model.baseline() # nm
+                else:
+                    regions['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x) # nm^2
+                    regions['ew'][i] = regions['integrated_flux'][i] / line_model.baseline() # nm
+                regions['ewr'][i] = np.log10(regions['ew'][i] / regions['mu'][i])
+                regions['ew'][i] *= 10000. # from nm to mA
                 # EW error from
                 # Vollmann & Eversberg, 2006: http://adsabs.harvard.edu/abs/2006AN....327..862V
                 if snr is not None:
@@ -946,7 +1018,7 @@ def fit_lines(regions, spectrum, continuum_model,  atomic_linelist_file=None, ch
                     mean_flux_continuum = np.mean(continuum_model(spectrum['waveobs'][regions['base_fit'][i]:regions['top_fit'][i]+1]))
                     diff_wavelength = spectrum['waveobs'][regions['top_fit'][i]] - spectrum['waveobs'][regions['base_fit'][i]]
                     regions['ew_err'][i] = np.sqrt(1 + mean_flux_continuum / mean_flux) * ((diff_wavelength - regions['ew'][i])/snr)
-                    #print "%.2f\t%.2f\t%.2f" % (regions['ew'][i]*10000, regions['ew_err'][i]*10000, regions['ew_err'][i] / regions['ew'][i])
+                    #print "%.2f\t%.2f\t%.2f" % (regions['ew'][i], regions['ew_err'][i], regions['ew_err'][i] / regions['ew'][i])
                 # RMS
                 regions['rms'][i] = rms
             except Exception as e:
@@ -961,17 +1033,17 @@ def fit_lines(regions, spectrum, continuum_model,  atomic_linelist_file=None, ch
             if frame is not None:
                 frame.update_progress(current_work_progress)
 
-    if None not in [atomic_linelist_file, chemical_elements_file, molecules_file]:
+    if atomic_linelist is not None:
         logging.info("Cross matching with atomic data...")
-        regions = __fill_linemasks_with_atomic_data(regions, atomic_linelist_file, chemical_elements_file, molecules_file, diff_limit=max_atomic_wave_diff, vel_atomic=0.0)
-    if telluric_linelist_file is not None:
+        regions = __fill_linemasks_with_atomic_data(regions, atomic_linelist, diff_limit=max_atomic_wave_diff, vel_atomic=0.0)
+    if telluric_linelist is not None:
         logging.info("Cross matching with telluric data...")
-        regions = __fill_linemasks_with_telluric_info(regions, telluric_linelist_file, vel_telluric=vel_telluric)
+        regions = __fill_linemasks_with_telluric_info(regions, telluric_linelist, vel_telluric=vel_telluric)
 
     return regions
 
 
-def __fill_linemasks_with_telluric_info(linemasks, telluric_linelist_file, vel_telluric=0.0):
+def __fill_linemasks_with_telluric_info(linemasks, telluric_linelist, vel_telluric=0.0):
     """
     Adds info to those linemasks that can be affected by tellurics.
     Different nearby linemasks can be affected by the same telluric line.
@@ -991,9 +1063,7 @@ def __fill_linemasks_with_telluric_info(linemasks, telluric_linelist_file, vel_t
         linemasks['wave_peak'] = linemasks['wave_peak'] / ((vel_telluric / c) + 1)
         linemasks['mu'] = linemasks['mu'] / ((vel_telluric / c) + 1)
 
-    # Discard very small lines (lesser than 1% of the continuum)
-    telluric_linelist = read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
-    # The discarded flag is not a good one because there are clear lines mark as true (i.e. 628.0392 nm)
+    # The discarded flag in the telluric linelist is not a good one because there are clear lines mark as true (i.e. 628.0392 nm)
     #telluric_linelist = telluric_linelist[telluric_linelist['discarded'] != True]
     # It is better to clear the not fitted telluric lines:
     telluric_linelist = telluric_linelist[telluric_linelist['rms'] < 9999]
@@ -1036,7 +1106,7 @@ def __fill_linemasks_with_telluric_info(linemasks, telluric_linelist_file, vel_t
     return linemasks
 
 
-def __fill_linemasks_with_atomic_data(linemasks, atomic_linelist_file, chemical_elements_file, molecules_file, diff_limit=0.0005, vel_atomic=0.0):
+def __fill_linemasks_with_atomic_data(linemasks, atomic_linelist, diff_limit=0.0005, vel_atomic=0.0):
     """
     Cross-match linemasks with a atomic linelist in order to find
     the nearest lines and copy the information into the linemasks structure.
@@ -1057,16 +1127,15 @@ def __fill_linemasks_with_atomic_data(linemasks, atomic_linelist_file, chemical_
         linemasks['mu'] = linemasks['mu'] / ((vel_atomic / c) + 1)
 
 
-    ## Load atomic linelist
-    atomic_linelist = read_SPECTRUM_linelist(atomic_linelist_file, chemical_elements_file=chemical_elements_file, molecules_file=molecules_file)
-    atomic_linelist.sort(order=['wave (nm)', 'line_strength']) # Ascending
+    ## Sort
+    #atomic_linelist.sort(order=['wave (nm)']) # Ascending
 
     clean_linemasks = linemasks[linemasks['wave_peak'] != 0]
     max_wave_peak = np.max(clean_linemasks['wave_peak'])
     min_wave_peak = np.min(clean_linemasks['wave_peak'])
 
     if atomic_linelist['wave (nm)'][0] > min_wave_peak or atomic_linelist['wave (nm)'][-1] < max_wave_peak:
-        print "WARNING: Atomic linelist '%s' does not cover the whole linemask wavelength range" % atomic_linelist_file
+        print "WARNING: The atomic linelist does not cover the whole linemask wavelength range"
         print "- Atomic line's range from", atomic_linelist['wave (nm)'][0], "to", atomic_linelist['wave (nm)'][-1], "nm"
         print "- Linemask range from", min_wave_peak, "to", max_wave_peak, "nm"
 
@@ -1075,32 +1144,18 @@ def __fill_linemasks_with_atomic_data(linemasks, atomic_linelist_file, chemical_
 
     if len(atomic_linelist) > 0:
         for j in np.arange(len(linemasks)):
-            # Find index of the nearest line
             diff = atomic_linelist['wave (nm)'] - linemasks['mu'][j]
             #diff = atomic_linelist['wave (nm)'] - linemasks['wave_peak'][j]
 
-            # If there are several minimums within the diff limit (several lines with very close wavelength)...
+            # Find index of the nearest lines
             abs_diff = np.abs(diff)
-            i = np.argmin(abs_diff)
-
-            # If there are several minimums (several lines with same wavelength)...
-            min_diff = abs_diff[i]
-            imin_diff = np.where(abs_diff == min_diff)[0]
-            if len(imin_diff) > 1:
-                # Select the first nonmolecule if it exists
-                # ... and since vald_linelist is sorted by wavelength and strength
-                #     the most strong among the atomic lines will be selected
-                for imin in imin_diff:
-                    try:
-                        if float(atomic_linelist['species'][imin]) <= 100.0: # Atom
-                            i = imin
-                            break
-                    except ValueError:
-                        # species can contain "Discard" if the element is unknown
-                        # just continue
-                        continue
-
-            if abs_diff[i] <= diff_limit:
+            imin_diff = np.where(abs_diff <= diff_limit)[0]
+            if len(imin_diff) == 0:
+                continue
+            else:
+                # Select the line that has the biggest theoretical depth (usually calculates with a solar spectrum)
+                ii = np.argmax(atomic_linelist['theoretical_depth'][imin_diff])
+                i = imin_diff[ii]
                 linemasks['wave (nm)'][j] = atomic_linelist['wave (nm)'][i]
                 linemasks['wave (A)'][j]= atomic_linelist['wave (A)'][i]
                 linemasks["species"][j] = atomic_linelist['species'][i]
@@ -1115,7 +1170,11 @@ def __fill_linemasks_with_atomic_data(linemasks, atomic_linelist_file, chemical_
                 linemasks["rad"][j] = atomic_linelist['rad'][i]
                 linemasks["stark"][j] = atomic_linelist['stark'][i]
                 linemasks["waals"][j] = atomic_linelist['waals'][i]
+                linemasks["valid_theoretical_ew_depth"][j] = atomic_linelist['valid_theoretical_ew_depth'][i]
+                linemasks["theoretical_ew"][j] = atomic_linelist['theoretical_ew'][i]
+                linemasks["theoretical_depth"][j] = atomic_linelist['theoretical_depth'][i]
                 linemasks["line_strength"][j] = atomic_linelist['line_strength'][i]
+                linemasks["solar_abund_rank"][j] = atomic_linelist['solar_abund_rank'][i]
 
     if vel_atomic != 0:
         linemasks['wave_peak'] = original_wave_peak
