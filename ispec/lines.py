@@ -1153,9 +1153,17 @@ def __fill_linemasks_with_atomic_data(linemasks, atomic_linelist, diff_limit=0.0
             if len(imin_diff) == 0:
                 continue
             else:
-                # Select the line that has the biggest theoretical depth (usually calculates with a solar spectrum)
-                ii = np.argmax(atomic_linelist['theoretical_depth'][imin_diff])
-                i = imin_diff[ii]
+                # Select the line that has the biggest theoretical depth (usually calculated with a solar spectrum)
+                max_depth = np.max(atomic_linelist['theoretical_depth'][imin_diff])
+                imax_depth = np.where(atomic_linelist['theoretical_depth'][imin_diff] >= max_depth)[0]
+                if len(imax_depth) > 1:
+                    # For the same theoretical depth, select the line that has the biggest EW (usually calculated with a solar spectrum)
+                    iii = np.argmax(atomic_linelist['theoretical_ew'][imin_diff[imax_depth]])
+                    ii = imax_depth[iii]
+                    i = imin_diff[ii]
+                else:
+                    ii = np.argmax(atomic_linelist['theoretical_depth'][imin_diff])
+                    i = imin_diff[ii]
                 linemasks['wave (nm)'][j] = atomic_linelist['wave (nm)'][i]
                 linemasks['wave (A)'][j]= atomic_linelist['wave (A)'][i]
                 linemasks["species"][j] = atomic_linelist['species'][i]
@@ -1559,7 +1567,7 @@ def __cross_correlation_function_uniform_in_velocity(spectrum, mask, lower_veloc
     ccf = ccf/max_ccf # Normalize
     ccf_err = ccf_err/max_ccf # Propagate errors
 
-    return velocity, ccf, ccf_err
+    return velocity, ccf, ccf_err, len(flux)
 
 
 
@@ -1730,19 +1738,19 @@ def build_velocity_profile(spectrum, linelist=None, template=None, lower_velocit
         lfilter = np.logical_and(linelist['wave_peak'] >= np.min(spectrum['waveobs']), linelist['wave_peak'] <= np.max(spectrum['waveobs']))
         linelist = linelist[lfilter]
 
-        velocity, ccf, ccf_err = __cross_correlation_function_uniform_in_velocity(spectrum, linelist, lower_velocity_limit, upper_velocity_limit, velocity_step, mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, frame=frame)
-        return velocity, ccf, ccf_err
+        velocity, ccf, ccf_err, nbins = __cross_correlation_function_uniform_in_velocity(spectrum, linelist, lower_velocity_limit, upper_velocity_limit, velocity_step, mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, frame=frame)
+        return velocity, ccf, ccf_err, nbins
     elif template is not None:
         ## Obtain the cross-correlate function by shifting the template
-        velocity, ccf, ccf_err = __cross_correlation_function_uniform_in_velocity(spectrum, template, lower_velocity_limit, upper_velocity_limit, velocity_step, template=True, fourier=False, frame=frame)
+        velocity, ccf, ccf_err, nbins = __cross_correlation_function_uniform_in_velocity(spectrum, template, lower_velocity_limit, upper_velocity_limit, velocity_step, template=True, fourier=False, frame=frame)
         #velocity, ccf, ccf_err = __cross_correlation_function_template(spectrum, template, lower_velocity_limit = lower_velocity_limit, upper_velocity_limit=upper_velocity_limit, velocity_step = velocity_step, frame=frame)
 
-        return velocity, ccf, ccf_err
+        return velocity, ccf, ccf_err, nbins
     else:
         raise Exception("A linelist or template should be specified")
 
 
-def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False, depth_percent_limit=10, model='2nd order polynomial + auto fit'):
+def modelize_velocity_profile(xcoord, fluxes, errors, nbins, only_one_peak=False, depth_percent_limit=10, model='2nd order polynomial + auto fit'):
     """
     Fits a model ('Gaussian' or 'Voigt') to the deepest peaks in the velocity
     profile. If it is 'Auto', a gaussian and a voigt will be fitted and the best
@@ -1938,7 +1946,30 @@ def modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=False, depth
             else:
                 final_model = gaussian_model
                 #logging.info("Gaussian profile fitted with RMS %.5f" % (rms_gaussian))
-            #logging.info("Peak found at %.2f km/s (fitted at %.2f km/s)" % (xcoord[peaks[i]], final_model.mu()))
+#
+            # Calculate velocity error based on:
+            # Zucker 2003, "Cross-correlation and maximum-likelihood analysis: a new approach to combining cross-correlation functions"
+            # http://adsabs.harvard.edu/abs/2003MNRAS.342.1291Z
+            inverted_fluxes = 1-fluxes
+            distance = xcoord[1] - xcoord[0]
+            first_derivative = np.gradient(inverted_fluxes, distance)
+            second_derivative = np.gradient(first_derivative, distance)
+            ## With the interpolation, the resulting error works worse:
+            #first_derivative_peak = np.interp(final_model.mu(), xcoord, first_derivative)
+            #second_derivative_peak = np.interp(final_model.mu(), xcoord, second_derivative)
+            peak = xcoord.searchsorted(final_model.mu())
+            first_derivative_peak = first_derivative[peak]
+            second_derivative_peak = second_derivative[peak]
+            if first_derivative_peak == 0:
+                first_derivative_peak = 1e-10
+            if second_derivative_peak == 0:
+                second_derivative_peak = 1e-10
+            sharpness = second_derivative_peak / first_derivative_peak
+            line_snr = np.power(first_derivative_peak, 2) / (1 - np.power(first_derivative_peak, 2))
+            error = np.sqrt(np.abs(1 / (nbins * sharpness * line_snr))) # Use abs instead of a simple '-1*' because sometime the result is negative and the sqrt cannot be calculated
+
+            final_model.set_emu(error)
+            logging.info("Peak found at %.2f km/s (fitted at %.2f +/- %.2f km/s)" % (xcoord[peaks[i]], final_model.mu(), final_model.emu()))
             models.append(final_model)
         except Exception, e:
             print type(e), e.message

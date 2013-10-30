@@ -2091,16 +2091,16 @@ SPECTRUM a Stellar Spectral Synthesis Program
                     if self.spectra[i].name == template:
                         template_spectrum = self.spectra[i].data
                         break
-            xcoord, fluxes, errors = ispec.build_velocity_profile(self.active_spectrum.data, template=template_spectrum, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, fourier=fourier, frame=self)
+            xcoord, fluxes, errors, nbins = ispec.build_velocity_profile(self.active_spectrum.data, template=template_spectrum, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, fourier=fourier, frame=self)
         else:
-            xcoord, fluxes, errors = ispec.build_velocity_profile(self.active_spectrum.data, linelist=mask_linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, frame=self)
+            xcoord, fluxes, errors, nbins = ispec.build_velocity_profile(self.active_spectrum.data, linelist=mask_linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, frame=self)
 
-        self.queue.put((self.on_determine_velocity_finish, [xcoord, fluxes, errors, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, mask_linelist, model], {}))
+        self.queue.put((self.on_determine_velocity_finish, [xcoord, fluxes, errors, nbins, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, mask_linelist, model], {}))
 
-    def on_determine_velocity_finish(self, xcoord, fluxes, errors, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, mask_linelist, model):
+    def on_determine_velocity_finish(self, xcoord, fluxes, errors, nbins, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, mask_linelist, model):
         # Modelize
         if relative_to_atomic_data or relative_to_template:
-            models = ispec.modelize_velocity_profile(xcoord, fluxes, errors, model=model)
+            models = ispec.modelize_velocity_profile(xcoord, fluxes, errors, nbins, model=model)
             if len(models) > 1:
                 accept = ispec.select_good_velocity_profile_models(models, xcoord, fluxes)
                 if len(models[accept]) == 0:
@@ -2108,7 +2108,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 else:
                     models = models[accept]
         else:
-            models = ispec.modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=True, model=model)
+            models = ispec.modelize_velocity_profile(xcoord, fluxes, errors, nbins, only_one_peak=True, model=model)
 
         if len(models) == 0:
             fwhm = 0.0

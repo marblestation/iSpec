@@ -103,11 +103,11 @@ def determine_radial_velocity_with_mask():
     #mask_file = ispec_dir + "input/linelists/CCF/VALD.Sun.300_1100nm.txt"
     ccf_mask = ispec.read_linelist_mask(mask_file)
 
-    xcoord, fluxes, errors = ispec.build_velocity_profile(mu_cas_a_spectrum, \
+    xcoord, fluxes, errors, nbins = ispec.build_velocity_profile(mu_cas_a_spectrum, \
                                                 linelist=ccf_mask, lower_velocity_limit=-200.0, \
                                                 upper_velocity_limit=200.0, velocity_step=1.0)
 
-    models = ispec.modelize_velocity_profile(xcoord, fluxes, errors)
+    models = ispec.modelize_velocity_profile(xcoord, fluxes, errors, nbins)
     best = ispec.select_good_velocity_profile_models(models, xcoord, fluxes)
     models = models[best]
 
@@ -115,7 +115,8 @@ def determine_radial_velocity_with_mask():
     components = len(models)
     # First component:
     rv = np.round(models[0].mu(), 2) # km/s
-    return rv, components
+    rv_err = np.round(models[0].emu(), 2) # km/s
+    return rv, rv_err, components
 
 
 def determine_radial_velocity_with_template():
@@ -128,11 +129,11 @@ def determine_radial_velocity_with_template():
     # - Read observed template
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
 
-    xcoord, fluxes, errors = ispec.build_velocity_profile(mu_cas_a_spectrum, \
+    xcoord, fluxes, errors, nbins = ispec.build_velocity_profile(mu_cas_a_spectrum, \
                                                 template=template, lower_velocity_limit=-200.0, \
                                                 upper_velocity_limit=200.0, velocity_step=1.0)
 
-    models = ispec.modelize_velocity_profile(xcoord, fluxes, errors)
+    models = ispec.modelize_velocity_profile(xcoord, fluxes, errors, nbins)
     best = ispec.select_good_velocity_profile_models(models, xcoord, fluxes)
     models = models[best]
 
@@ -140,7 +141,8 @@ def determine_radial_velocity_with_template():
     components = len(models)
     # First component:
     rv = np.round(models[0].mu(), 2) # km/s
-    return rv, components
+    rv_err = np.round(models[0].emu(), 2) # km/s
+    return rv, rv_err, components
 
 def correct_radial_velocity():
     mu_cas_a_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_mu_cas.s.gz")
@@ -158,13 +160,14 @@ def determine_tellurics_shift():
     telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Tellurics.standard.atm_air_model.txt"
     linelist_telluric = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
 
-    xcoord, fluxes, errors = ispec.build_velocity_profile(sun_spectrum, \
+    xcoord, fluxes, errors, nbins = ispec.build_velocity_profile(sun_spectrum, \
                                             linelist=linelist_telluric, lower_velocity_limit=-100.0, \
                                             upper_velocity_limit=100.0, velocity_step=0.5)
 
-    models = ispec.modelize_velocity_profile(xcoord, fluxes, errors, only_one_peak=True)
+    models = ispec.modelize_velocity_profile(xcoord, fluxes, errors, nbins, only_one_peak=True)
     bv = np.round(models[0].mu(), 2) # km/s
-    return bv
+    bv_err = np.round(models[0].emu(), 2) # km/s
+    return bv, bv_err
 
 
 def degrade_resolution():
@@ -707,6 +710,7 @@ def determine_abundances_from_EW():
                                 atomic_linelist = atomic_linelist, \
                                 max_atomic_wave_diff = 0.005, \
                                 telluric_linelist = telluric_linelist, \
+                                smoothed_spectrum = None, \
                                 check_derivatives = False, \
                                 vel_telluric = vel_telluric, discard_gaussian=False, \
                                 discard_voigt=True, free_mu=False)
@@ -1049,6 +1053,7 @@ def determine_astrophysical_parameters_from_EW():
                                 atomic_linelist = atomic_linelist, \
                                 max_atomic_wave_diff = 0.005, \
                                 telluric_linelist = telluric_linelist, \
+                                smoothed_spectrum = None, \
                                 check_derivatives = False, \
                                 vel_telluric = vel_telluric, discard_gaussian=False, \
                                 discard_voigt=True, free_mu=False)

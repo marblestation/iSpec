@@ -42,7 +42,7 @@ class VelocityProfileDialog(CustomDialog):
             self.__stats.append("%-50s: %s" % ("Template", str(self.__template)))
         for i, model in enumerate(models):
             self.__stats.append("%-50s: %10.2f" % ("Mean (km/s)", np.round(model.mu(), 2)))
-            self.__stats.append("%-50s: %10.4f" % ("Min. error (+/- km/s)", np.round(self.__velocity_step/2., 4)))
+            self.__stats.append("%-50s: %10.2f" % ("Error (+/- km/s)", np.round(model.emu(), 2)))
             self.__stats.append("%-50s: %10.2f" % ("Baseline", np.round(model.baseline(), 2)))
             self.__stats.append("%-50s: %10.2f" % ("A (rel. intensity)", np.round(model.A(), 2)))
             self.__stats.append("%-50s: %10.2f" % ("Sigma (km/s)", np.round(model.sig(), 2)))

@@ -127,6 +127,15 @@ class GaussianModel(MPFitModel):
     def A(self): return self._parinfo[1]['value']
     def sig(self): return self._parinfo[2]['value']
     def mu(self): return self._parinfo[3]['value']
+    def ebaseline(self): return self.m.perror[0]
+    def eA(self): return self.m.perror[1]
+    def esig(self): return self.m.perror[2]
+    def emu(self): return self.m.perror[3]
+
+    def set_emu(self, emu):
+        # Overwrite the calculated error from covariance matrix in the least square algorithm
+        # by a given value calculated externally (useful for radial velocity errors)
+        self.m.perror[3] = emu
 
     def _make_gauss(self):
         #k = self.A() / (self.sig() * np.sqrt(2*np.pi))
@@ -199,6 +208,16 @@ class VoigtModel(MPFitModel):
     def sig(self): return self._parinfo[2]['value']
     def mu(self): return self._parinfo[3]['value']
     def gamma(self): return self._parinfo[4]['value']
+    def ebaseline(self): return self.m.perror[0]
+    def eA(self): return self.m.perror[1]
+    def esig(self): return self.m.perror[2]
+    def emu(self): return self.m.perror[3]
+    def egamma(self): return self.m.perror[4]
+
+    def set_emu(self, emu):
+        # Overwrite the calculated error from covariance matrix in the least square algorithm
+        # by a given value calculated externally (useful for radial velocity errors)
+        self.m.perror[3] = emu
 
     def _make_voigt(self):
         if self.sig == 0:

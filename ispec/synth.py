@@ -1622,20 +1622,34 @@ def modelize_spectrum_from_EW(linemasks, modeled_layers_pack, linelist, abundanc
     print "\n"
     EW_model.print_solution()
 
+    # Calculate MH
+    values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = EW_model.last_final_values
+    MH = np.median(x_over_h[selected_x_over_h[0]]) # Only from Fe 1
+    eMH = np.std(x_over_h[selected_x_over_h[0]]) # Only from Fe 1
+
     # Collect information to be returned
     params = {}
     params['teff'] = EW_model.teff()
     params['logg'] = EW_model.logg()
-    params['MH'] = EW_model.MH()
+    params['MH'] = MH
     params['vmic'] = EW_model.vmic()
 
     errors = {}
     errors['teff'] = EW_model.eteff()
     errors['logg'] = EW_model.elogg()
-    errors['MH'] = EW_model.eMH()
+    errors['MH'] = eMH
     errors['vmic'] = EW_model.evmic()
 
     status = {}
+    values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = EW_model.last_final_values
+    # Save parameters (only for Fe, if there are more elements they will not be saved)
+    status['slope_for_teff'] = values_to_evaluate[0]
+    status['slope_for_vmic'] = values_to_evaluate[1]
+    status['abundance_diff'] = values_to_evaluate[2]
+    status['lines_for_teff'] = len(np.where(selected_x_over_h[0])[0])
+    status['lines_for_vmic'] = len(np.where(selected_x_over_h[1])[0])
+    status['model_MH'] = EW_model.MH()
+
     status['days'] = EW_model.calculation_time.day-1
     status['hours'] = EW_model.calculation_time.hour
     status['minutes'] = EW_model.calculation_time.minute
@@ -1649,8 +1663,6 @@ def modelize_spectrum_from_EW(linemasks, modeled_layers_pack, linelist, abundanc
     status['niter'] = EW_model.m.niter
     status['nsynthesis'] = EW_model.m.nfev
     status['status'] = EW_model.m.status
-
-    values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = EW_model.last_final_values
 
     return params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params
 
