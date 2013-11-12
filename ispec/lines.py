@@ -103,37 +103,6 @@ def __get_abund_rank(chemical_elements, species):
     else:
         return chemical_elements["solar_abund_rank"][tfilter][0]
 
-def __get_specie(chemical_elements, molecules, element_name):
-    """
-    Convert element names type "Fe 1" or "Fe 2" to species code form by the atomic number + "." + ionization state.
-    Returns "Discard" if not found.
-    """
-    element = element_name.split() # Do not specify " " to avoid problems with elements with double spaces like "V  1"
-
-    # Element not present or with a bad format, skip
-    if element_name == "" or len(element) != 2:
-        return "Discard"
-
-    symbol = element[0]
-    try:
-        element.remove('') # Make sure there are not additional spaces between the symbol and the ionization state
-        element.remove('')
-        element.remove('')
-    except ValueError as e:
-        pass
-    ionization = str(int(element[1]) - 1)
-
-    tfilter = (chemical_elements['symbol'] == symbol)
-    if len(chemical_elements[tfilter]["atomic_num"]) == 0:
-        # Symbol not found, maybe it is a molecule
-        mfilter = (molecules['symbol'] == symbol)
-        if len(molecules[mfilter]["atomic_num"]) == 0:
-            specie = "Discard"
-        else:
-            specie = str(molecules[mfilter]["atomic_num"][0]) + "." + ionization
-    else:
-        specie = str(chemical_elements[tfilter]["atomic_num"][0]) + "." + ionization
-    return specie
 
 
 def __get_upper_state(lower_state, wavelength):
@@ -177,10 +146,13 @@ def __eV_to_inverse_cm(value):
 ## [END] LINE LIST
 ########################################################################
 
+
+
+
 def read_linelist_mask(mask_file):
     """
     Read linelist for building a mask and doing cross-correlation with the
-    build_velocity_profile function.
+    cross correlation function.
 
     The linelist should contain at least the columns wave_peak (in nm) and depth.
     """
@@ -580,6 +552,7 @@ def __create_linemasks_structure(num_peaks):
             ('wave_base_fit', float), ('wave_top_fit', float), \
             ('base_fit', int), ('top_fit', int), \
             ('mu', float), ('sig', float), ('A', float), ('baseline', float), ('gamma', float), \
+            ('mu_err', float), \
             ('fwhm', float), ('fwhm_kms', float), ('R', float), \
             ('depth_fit', float), ('relative_depth_fit', float), \
             ('integrated_flux', float), ('ewr', float), ('ew', float), ('ew_err', float), \
@@ -620,6 +593,7 @@ def __create_linemasks_structure(num_peaks):
     linemasks['wave_base_fit'] = 0.0
     linemasks['wave_top_fit'] = 0.0
     linemasks['mu'] = 0.0
+    linemasks['mu_err'] = 0.0
     linemasks['sig'] = 0.0
     linemasks['A'] = 0.0
     linemasks['baseline'] = 0.0
@@ -974,7 +948,35 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                 line_model, rms = __fit_line(spectrum_window, continuum_model, regions['wave_peak'][i], discard_gaussian = discard_gaussian, discard_voigt = discard_voigt, free_mu=free_mu)
                 if free_mu and (line_model.mu() <= spectrum_window['waveobs'][0] or line_model.mu() >= spectrum_window['waveobs'][-1]):
                     raise Exception("Fitted wave peak (mu) outside the limits!")
+
+                # Calculate wave_peak position error derived from the velocity error calculation based on:
+                # Zucker 2003, "Cross-correlation and maximum-likelihood analysis: a new approach to combining cross-correlation functions"
+                # http://adsabs.harvard.edu/abs/2003MNRAS.342.1291Z
+                nbins = len(spectrum_window)
+                inverted_fluxes = 1-spectrum_window['flux']
+                distance = spectrum_window['waveobs'][1] - spectrum_window['waveobs'][0]
+                first_derivative = np.gradient(inverted_fluxes, distance)
+                second_derivative = np.gradient(first_derivative, distance)
+                ## Using the exact velocity, the resulting error are less coherents (i.e. sometimes you can get lower errors when using bigger steps):
+                #second_derivative_peak = np.interp(line_model.mu(), spectrum_window['waveobs'], second_derivative)
+                #inverted_fluxes_peak = line_model.mu()
+                ## More coherent results:
+                peak = spectrum_window['waveobs'].searchsorted(line_model.mu())
+                inverted_fluxes_peak = inverted_fluxes[peak]
+                second_derivative_peak = second_derivative[peak]
+                if inverted_fluxes_peak == 0:
+                    inverted_fluxes_peak = 1e-10
+                if second_derivative_peak == 0:
+                    second_derivative_peak = 1e-10
+                sharpness = second_derivative_peak / inverted_fluxes_peak
+                line_snr = np.power(inverted_fluxes_peak, 2) / (1 - np.power(inverted_fluxes_peak, 2))
+                # Use abs instead of a simple '-1*' because sometime the result is negative and the sqrt cannot be calculated
+                error = np.sqrt(np.abs(1 / (nbins * sharpness * line_snr)))
+                #print line_model.mu(), error, "=", nbins, sharpness, line_snr
+                line_model.set_emu(error)
+
                 regions['mu'][i] = line_model.mu()
+                regions['mu_err'][i] = line_model.emu()
                 regions['sig'][i] = line_model.sig()
                 regions['A'][i] = line_model.A()
                 regions['baseline'][i] = line_model.baseline()
@@ -1017,7 +1019,7 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                     mean_flux = np.mean(spectrum['flux'][regions['base_fit'][i]:regions['top_fit'][i]+1])
                     mean_flux_continuum = np.mean(continuum_model(spectrum['waveobs'][regions['base_fit'][i]:regions['top_fit'][i]+1]))
                     diff_wavelength = spectrum['waveobs'][regions['top_fit'][i]] - spectrum['waveobs'][regions['base_fit'][i]]
-                    regions['ew_err'][i] = np.sqrt(1 + mean_flux_continuum / mean_flux) * ((diff_wavelength - regions['ew'][i])/snr)
+                    regions['ew_err'][i] = np.sqrt(1 + mean_flux_continuum / mean_flux) * ((diff_wavelength - (regions['ew'][i]/10000.))/snr)
                     #print "%.2f\t%.2f\t%.2f" % (regions['ew'][i], regions['ew_err'][i], regions['ew_err'][i] / regions['ew'][i])
                 # RMS
                 regions['rms'][i] = rms
@@ -1719,7 +1721,60 @@ def __select_lines_for_mask(linemasks, minimum_depth=0.01, velocity_mask_size = 
             i += 1
     return selected
 
-def build_velocity_profile(spectrum, linelist=None, template=None, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, mask_size=2.0, mask_depth=0.01, fourier=False, frame=None):
+
+
+def cross_correlate_with_mask(spectrum, linelist, lower_velocity_limit=-200, upper_velocity_limit=200, velocity_step=1.0, mask_size=None, mask_depth=0.01, fourier=False, only_one_peak=False, model='2nd order polynomial + gaussian fit', frame=None):
+    """
+    Determines the velocity profile by cross-correlating the spectrum with
+    a mask built from a line list mask.
+
+    If mask_size is not specified, the double of the velocity step will be taken,
+    which generally it is the recommended value.
+
+    :returns:
+        - Array with fitted gaussian models sorted by depth (deepest at position 0)
+        - CCF structure with 'x' (velocities), 'y' (relative intensities), 'err'
+
+    """
+    if mask_size is None:
+        mask_size = 2*velocity_step # Recommended
+    return __cross_correlate(spectrum, linelist=linelist, template=None, \
+                lower_velocity_limit=lower_velocity_limit, upper_velocity_limit = upper_velocity_limit, \
+                velocity_step=velocity_step, \
+                mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, \
+                only_one_peak=only_one_peak, depth_percent_limit=10, model=model, \
+                frame=None)
+
+def cross_correlate_with_template(spectrum, template, lower_velocity_limit=-200, upper_velocity_limit=200, velocity_step=1.0, fourier=False, only_one_peak=False, model='2nd order polynomial + gaussian fit', frame=None):
+    """
+    Determines the velocity profile by cross-correlating the spectrum with
+    a spectrum template.
+
+    :returns:
+        - Array with fitted gaussian models sorted by depth (deepest at position 0)
+        - CCF structure with 'x' (velocities), 'y' (relative intensities), 'err'
+    """
+    return __cross_correlate(spectrum, linelist=None, template=template, \
+            lower_velocity_limit=lower_velocity_limit, upper_velocity_limit = upper_velocity_limit, \
+            velocity_step=velocity_step, \
+            mask_size=None, mask_depth=None, fourier=fourier, \
+            only_one_peak=only_one_peak, depth_percent_limit=10, model=model, \
+            frame=None)
+
+def __cross_correlate(spectrum, linelist=None, template=None, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, mask_size=2.0, mask_depth=0.01, fourier=False, only_one_peak=False, depth_percent_limit=10, model='2nd order polynomial + gaussian fit', frame=None):
+    ccf, nbins = __build_velocity_profile(spectrum, \
+            linelist = linelist, template = template, \
+            lower_velocity_limit = lower_velocity_limit, upper_velocity_limit = upper_velocity_limit, \
+            velocity_step=velocity_step, \
+            mask_size=mask_size, mask_depth=mask_depth, \
+            fourier=fourier, frame=frame)
+
+    models = __modelize_velocity_profile(ccf, nbins, only_one_peak=only_one_peak, \
+                                            depth_percent_limit=depth_percent_limit, model=model)
+    best = select_good_velocity_profile_models(models, ccf)
+    return models[best], ccf
+
+def __build_velocity_profile(spectrum, linelist=None, template=None, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, mask_size=2.0, mask_depth=0.01, fourier=False, frame=None):
     """
     Determines the velocity profile by cross-correlating the spectrum with:
 
@@ -1727,7 +1782,8 @@ def build_velocity_profile(spectrum, linelist=None, template=None, lower_velocit
     * a spectrum template if template is specified
 
     :returns:
-        Velocity coordenates, normalized fluxes (relative intensities) and number of used lines.
+        CCF structure with 'x' (velocities), 'y' (relative intensities), 'err'
+        together with the number of spectrum's bins used in the cross correlation.
 
     """
     if linelist is not None:
@@ -1739,18 +1795,22 @@ def build_velocity_profile(spectrum, linelist=None, template=None, lower_velocit
         linelist = linelist[lfilter]
 
         velocity, ccf, ccf_err, nbins = __cross_correlation_function_uniform_in_velocity(spectrum, linelist, lower_velocity_limit, upper_velocity_limit, velocity_step, mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, frame=frame)
-        return velocity, ccf, ccf_err, nbins
     elif template is not None:
         ## Obtain the cross-correlate function by shifting the template
         velocity, ccf, ccf_err, nbins = __cross_correlation_function_uniform_in_velocity(spectrum, template, lower_velocity_limit, upper_velocity_limit, velocity_step, template=True, fourier=False, frame=frame)
         #velocity, ccf, ccf_err = __cross_correlation_function_template(spectrum, template, lower_velocity_limit = lower_velocity_limit, upper_velocity_limit=upper_velocity_limit, velocity_step = velocity_step, frame=frame)
 
-        return velocity, ccf, ccf_err, nbins
     else:
         raise Exception("A linelist or template should be specified")
 
+    ccf_struct = np.recarray((len(velocity), ), dtype=[('x', float),('y', float), ('err', float)])
+    ccf_struct['x'] = velocity
+    ccf_struct['y'] = ccf
+    ccf_struct['err'] = ccf_err
+    return ccf_struct, nbins
 
-def modelize_velocity_profile(xcoord, fluxes, errors, nbins, only_one_peak=False, depth_percent_limit=10, model='2nd order polynomial + auto fit'):
+
+def __modelize_velocity_profile(ccf, nbins, only_one_peak=False, depth_percent_limit=10, model='2nd order polynomial + gaussian fit'):
     """
     Fits a model ('Gaussian' or 'Voigt') to the deepest peaks in the velocity
     profile. If it is 'Auto', a gaussian and a voigt will be fitted and the best
@@ -1769,8 +1829,11 @@ def modelize_velocity_profile(xcoord, fluxes, errors, nbins, only_one_peak=False
 
     """
     models = []
-    if len(xcoord) == 0 or len(fluxes) == 0:
+    if len(ccf) == 0:
         return models
+    xcoord = ccf['x']
+    fluxes = ccf['y']
+    errors = ccf['err']
 
     # Smooth flux
     sig = 1
@@ -1954,19 +2017,21 @@ def modelize_velocity_profile(xcoord, fluxes, errors, nbins, only_one_peak=False
             distance = xcoord[1] - xcoord[0]
             first_derivative = np.gradient(inverted_fluxes, distance)
             second_derivative = np.gradient(first_derivative, distance)
-            ## With the interpolation, the resulting error works worse:
-            #first_derivative_peak = np.interp(final_model.mu(), xcoord, first_derivative)
+            ## Using the exact velocity, the resulting error are less coherents (i.e. sometimes you can get lower errors when using bigger steps):
             #second_derivative_peak = np.interp(final_model.mu(), xcoord, second_derivative)
+            #inverted_fluxes_peak = final_model.mu()
+            ## More coherent results:
             peak = xcoord.searchsorted(final_model.mu())
-            first_derivative_peak = first_derivative[peak]
+            inverted_fluxes_peak = inverted_fluxes[peak]
             second_derivative_peak = second_derivative[peak]
-            if first_derivative_peak == 0:
-                first_derivative_peak = 1e-10
+            if inverted_fluxes_peak == 0:
+                inverted_fluxes_peak = 1e-10
             if second_derivative_peak == 0:
                 second_derivative_peak = 1e-10
-            sharpness = second_derivative_peak / first_derivative_peak
-            line_snr = np.power(first_derivative_peak, 2) / (1 - np.power(first_derivative_peak, 2))
-            error = np.sqrt(np.abs(1 / (nbins * sharpness * line_snr))) # Use abs instead of a simple '-1*' because sometime the result is negative and the sqrt cannot be calculated
+            sharpness = second_derivative_peak / inverted_fluxes_peak
+            line_snr = np.power(inverted_fluxes_peak, 2) / (1 - np.power(inverted_fluxes_peak, 2))
+            # Use abs instead of a simple '-1*' because sometime the result is negative and the sqrt cannot be calculated
+            error = np.sqrt(np.abs(1 / (nbins * sharpness * line_snr)))
 
             final_model.set_emu(error)
             logging.info("Peak found at %.2f km/s (fitted at %.2f +/- %.2f km/s)" % (xcoord[peaks[i]], final_model.mu(), final_model.emu()))
@@ -1977,7 +2042,7 @@ def modelize_velocity_profile(xcoord, fluxes, errors, nbins, only_one_peak=False
 
     return np.asarray(models)
 
-def select_good_velocity_profile_models(models, xcoord, fluxes):
+def select_good_velocity_profile_models(models, ccf):
     """
     Select the modeled peaks that are not deeper than mean flux + 6*standard deviation
     unless it is the only detected peak.
@@ -1985,6 +2050,9 @@ def select_good_velocity_profile_models(models, xcoord, fluxes):
     accept = []
     if len(models) == 0:
         return accept
+
+    xcoord = ccf['x']
+    fluxes = ccf['y']
 
     ## We want to calculate the mean and standard deviation of the velocity profile
     ## but discounting the effect of the deepest detected lines:

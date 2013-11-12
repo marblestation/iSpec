@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 import numpy as np
 from mpfitmodels import MPFitModel
 #from continuum import fit_continuum
-from abundances import write_solar_abundances, write_SPECTRUM_fixed_abundances, determine_abundances
+from abundances import write_solar_abundances, write_fixed_abundances, determine_abundances
 from atmospheres import write_atmosphere, interpolate_atmosphere_layers
 from lines import write_atomic_linelist
 from spectrum import create_spectrum_structure, convolve_spectrum, correct_velocity, resample_spectrum
@@ -70,16 +70,16 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abun
     """
     if fixed_abundances is None:
         # No fixed abundances
-        fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
+        fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float), ('element', '|S30')])
 
-    # All synthetic spectra contain a -0.28 shift (unknown reason) so we correct it
-    # by moving the waveobs in the other sense:
-    # ** The shift has been validated comparing with radial velocities from HARPS
-    #    for a wide range of samples in the parameter space (benchmark stars)
-    rv_shift = 0.28
-    spectrum = create_spectrum_structure(waveobs)
-    spectrum = correct_velocity(spectrum, rv_shift)
-    waveobs = spectrum['waveobs']
+    ## All synthetic spectra contain a -0.28 shift (unknown reason) so we correct it
+    ## by moving the waveobs in the other sense:
+    ## ** The shift has been validated comparing with radial velocities from HARPS
+    ##    for a wide range of samples in the parameter space (benchmark stars)
+    #rv_shift = 0.28
+    #spectrum = create_spectrum_structure(waveobs)
+    #spectrum = correct_velocity(spectrum, rv_shift)
+    #waveobs = spectrum['waveobs']
 
     if waveobs_mask is None:
         if regions is None:
@@ -106,7 +106,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abun
         abundances_file = write_solar_abundances(abundances)
         remove_tmp_abund_file = True
     if fixed_abundances_file is None:
-        fixed_abundances_file = write_SPECTRUM_fixed_abundances(fixed_abundances)
+        fixed_abundances_file = write_fixed_abundances(fixed_abundances)
         remove_tmp_fixed_abund_file = True
     if linelist_file is None:
         linelist_file = write_atomic_linelist(linelist)
@@ -575,10 +575,11 @@ class SynthModel(MPFitModel):
     def continuum_correction(self): return self._parinfo[8]['value']
     def free_abundances(self):
         base = 9
-        fixed_abundances = np.recarray((len(self._parinfo)-base, ), dtype=[('code', int),('Abund', float)])
+        fixed_abundances = np.recarray((len(self._parinfo)-base, ), dtype=[('code', int),('Abund', float), ('element', '|S30')])
         for i in xrange(len(self._parinfo)-base):
             fixed_abundances['code'] = int(self._parinfo[base+i]['parname'])
             fixed_abundances['Abund'] = self._parinfo[base+i]['value']
+            fixed_abundances['element'] = ""
         return fixed_abundances
 
     def eteff(self): return self.m.perror[0]
@@ -765,14 +766,17 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
 
     return parinfo
 
-def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range):
+def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range, adjust_model_metalicity=False):
     """
     Creates the structure needed for the mpfitmodel
     """
     base = 4
-    #free_params = ["teff", "logg", "vmic", "mh"]
-    free_params = ["teff", "logg", "vmic"]
-    parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base)]
+    if adjust_model_metalicity:
+        free_params = ["teff", "logg", "vmic", "mh"]
+    else:
+        free_params = ["teff", "logg", "vmic"]
+    #parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base)]
+    parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for i in np.arange(base)]
     #
     parinfo[0]['parname'] = "teff"
     parinfo[0]['value'] = initial_teff
@@ -985,7 +989,11 @@ def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, 
 
     if free_abundances is None:
         # No fixed abundances
-        free_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
+        free_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float), ('element', '|S30')])
+    else:
+        # Add free abundances as free params
+        for element in free_abundances:
+            free_params.append(str(element['code']))
 
     if segments is None:
         waveobs_mask = np.ones(len(waveobs)) # Compute fluxes for all the wavelengths
@@ -1282,40 +1290,107 @@ class EquivalentWidthModel(MPFitModel):
             fitted_lines_params = []
             selected_x_over_h = []
             for i, (lines_for_teff, lines_for_vmic) in enumerate(zip(self.lines_for_teff, self.lines_for_vmic)):
-                ## Temperature
-                # y = mx + c
+                ### Temperature
+                ## y = mx + c
+                #x = self.linemasks['lower state (eV)'][lines_for_teff]
+                #y = x_over_h[lines_for_teff]
+                #A = np.vstack([x, np.ones(len(x))]).T
+                #m1, c1 = np.linalg.lstsq(A, y)[0]
+                ##import matplotlib.pyplot as plt
+                ##plt.scatter(x, y)
+                ##plt.plot(x, m1*x + c1)
+                ##plt.show()
+
+                ### Vmic
+                ## y = mx + c
+                #x = self.linemasks['ewr'][lines_for_vmic]
+                #y = x_over_h[lines_for_vmic]
+                #A = np.vstack([x, np.ones(len(x))]).T
+                #m2, c2 = np.linalg.lstsq(A, y)[0]
+                ##import matplotlib.pyplot as plt
+                ##plt.scatter(x, y)
+                ##plt.plot(x, m2*x + c2)
+                ##plt.show()
+
+                import statsmodels.api as sm
+                ### Temperature
+                ## y = mx + c
                 x = self.linemasks['lower state (eV)'][lines_for_teff]
                 y = x_over_h[lines_for_teff]
-                A = np.vstack([x, np.ones(len(x))]).T
-                m1, c1 = np.linalg.lstsq(A, y)[0]
+                # RLM (Robust least squares)
+                # Huber's T norm with the (default) median absolute deviation scaling
+                # - http://en.wikipedia.org/wiki/Huber_loss_function
+                # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
+                x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
+                huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
+                linear_model = huber_t.fit()
+                #linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
+                m1 = linear_model.params[0]
+                c1 = linear_model.params[1]
+                fe1 = np.median(linear_model.fittedvalues)
                 #import matplotlib.pyplot as plt
                 #plt.scatter(x, y)
                 #plt.plot(x, m1*x + c1)
                 #plt.show()
 
-                ## Vmic
-                # y = mx + c
-                x = np.log10(self.linemasks['ew'][lines_for_vmic]/self.linemasks['wave_peak'][lines_for_vmic])
+                ### Vmic
+                ## y = mx + c
+                x = self.linemasks['ewr'][lines_for_teff]
+                y = x_over_h[lines_for_teff]
+                # RLM (Robust least squares)
+                # Huber's T norm with the (default) median absolute deviation scaling
+                # - http://en.wikipedia.org/wiki/Huber_loss_function
+                # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
+                x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
+                huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
+                linear_model = huber_t.fit()
+                #linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
+                m2 = linear_model.params[0]
+                c2 = linear_model.params[1]
+                ##fe2 = np.median(linear_model.fittedvalues)
+                #import matplotlib.pyplot as plt
+                #plt.scatter(x, y)
+                #plt.plot(x, m2*x + c2)
+                #plt.show()
+
+                ### Fe2
+                ## y = mx + c
+                x = self.linemasks['ewr'][lines_for_vmic]
                 y = x_over_h[lines_for_vmic]
-                A = np.vstack([x, np.ones(len(x))]).T
-                m2, c2 = np.linalg.lstsq(A, y)[0]
+                # RLM (Robust least squares)
+                # Huber's T norm with the (default) median absolute deviation scaling
+                # - http://en.wikipedia.org/wiki/Huber_loss_function
+                # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
+                x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
+                huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
+                linear_model = huber_t.fit()
+                #linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
+                #m3 = linear_model.params[0]
+                #c3 = linear_model.params[1]
+                fe2 = np.median(linear_model.fittedvalues)
                 #import matplotlib.pyplot as plt
                 #plt.scatter(x, y)
-                #plt.plot(x, m1*x + c1)
+                #plt.plot(x, m2*x + c2)
                 #plt.show()
 
+
+
+                #fe1 = np.median(x_over_h[lines_for_teff])
+                #fe2 = np.median(x_over_h[lines_for_vmic])
 
                 ## Gravity
-                abundance_diff = np.median(x_over_h[lines_for_teff]) - np.median(x_over_h[lines_for_vmic])
+                abundance_diff = fe1 - fe2
+                #abundance_diff = np.median(x_over_h[lines_for_teff]) - np.median(x_over_h[lines_for_vmic])
                 #abundance_diff2 = self.MH() - np.median(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
-                abundance_diff2 = self.MH() - np.median(x_over_h[self.lines_for_teff[0]]) # Always [0] where Fe 1 is
+                #abundance_diff2 = self.MH() - np.median(x_over_h[self.lines_for_teff[0]]) # Always [0] where Fe 1 is
+                abundance_diff2 = self.MH() - fe1
 
                 print " # Element:                   ", self.teff_elements[i], self.vmic_elements[i]
                 print "   Teff/Vmic slopes:            %.6f %.6f" % (m1, m2)
                 print "   Abundances diff:             %.6f" % abundance_diff
                 print "   Abundances diff with model:  %.6f" % abundance_diff2
                 print "   Abundances stdev:            %.6f %.6f" % (np.std(x_over_h[lines_for_teff]), np.std(x_over_h[lines_for_vmic]))
-                print "   Abundances median:           %.6f %.6f" % (np.median(x_over_h[lines_for_teff]), np.median(x_over_h[lines_for_vmic]))
+                print "   Abundances median:           %.6f %.6f" % (np.median(fe1), np.median(fe2))
 
                 # Rounded to 3 and 2 decimals (using string convertion works better than np.round)
                 values_to_evaluate.append(float("%.6f" % m1))
@@ -1323,6 +1398,7 @@ class EquivalentWidthModel(MPFitModel):
                 values_to_evaluate.append(float("%.6f" % abundance_diff))
                 if self.adjust_model_metalicity:
                     values_to_evaluate.append(float("%.2f" % abundance_diff2))
+                values_to_evaluate.append(float("%.2f" % abundance_diff2))
                 #abundances_to_evaluate = np.arange(len(self.linemasks))
                 ##abundances_to_evaluate[:] = 10.
                 #abundances_to_evaluate[:] = 0.
@@ -1386,16 +1462,37 @@ class EquivalentWidthModel(MPFitModel):
                 iprint = 1
             if iprint:
                 print p + (pformat % x[i]) + '  '
-        ##### Lines
-        values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
-        self.select_good_lines(x_over_h, strict_teff=False, strict_vmic=False) # Modifies self.lines_for_teff and self.lines_for_vmic
 
         ##### Metallicity
-        #self._MH = np.median(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
-        self._MH = np.median(x_over_h[self.lines_for_teff[0]]) # Only from Fe 1
+        values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
+        import statsmodels.api as sm
+        ### Temperature
+        ## y = mx + c
+        x = self.linemasks['lower state (eV)'][self.lines_for_teff[0]]
+        y = x_over_h[self.lines_for_teff[0]]
+        # RLM (Robust least squares)
+        # Huber's T norm with the (default) median absolute deviation scaling
+        # - http://en.wikipedia.org/wiki/Huber_loss_function
+        # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
+        x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
+        huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
+        linear_model = huber_t.fit()
+        #linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
+        m1 = linear_model.params[0]
+        c1 = linear_model.params[1]
+        fe1 = np.median(linear_model.fittedvalues)
+
+        ##self._MH = np.median(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
+        #self._MH = np.median(x_over_h[self.lines_for_teff[0]]) # Only from Fe 1
+        self._MH = np.median(linear_model.fittedvalues)
         self._MH = np.min((self._MH, self.max_MH))
         self._MH = np.max((self._MH, self.min_MH))
         self._eMH = np.std(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
+
+
+        ##### Lines
+        values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
+        self.select_good_lines(x_over_h, strict_teff=False, strict_vmic=False) # Modifies self.lines_for_teff and self.lines_for_vmic
 
         return 0
 
@@ -1460,15 +1557,15 @@ class EquivalentWidthModel(MPFitModel):
 
 
             if strict_vmic and len(np.where(~bad & lines_for_vmic)[0]) > 1:
-                x = np.log10(self.linemasks['ew'][~bad & lines_for_vmic]/self.linemasks['wave_peak'][~bad & lines_for_vmic])
+                x = self.linemasks['ewr'][~bad & lines_for_vmic]
                 y = x_over_h[~bad & lines_for_vmic]
                 A = np.vstack([x, np.ones(len(x))]).T
                 m0, c0 = np.linalg.lstsq(A, y)[0]
-                #lower_limit = m0*np.log10(self.linemasks['ew']/self.linemasks['wave_peak']) + c0 - 3*np.std(y)
-                #upper_limit = m0*np.log10(self.linemasks['ew']/self.linemasks['wave_peak']) + c0 + 3*np.std(y)
+                #lower_limit = m0*self.linemasks['ewr'] + c0 - 3*np.std(y)
+                #upper_limit = m0*self.linemasks['ewr'] + c0 + 3*np.std(y)
                 interq = np.percentile(y, 99) - np.percentile(y, 1)
-                lower_limit = m0*np.log10(self.linemasks['ew']/self.linemasks['wave_peak']) + c0 - interq/2.
-                upper_limit = m0*np.log10(self.linemasks['ew']/self.linemasks['wave_peak']) + c0 + interq/2.
+                lower_limit = m0*self.linemasks['ewr'] + c0 - interq/2.
+                upper_limit = m0*self.linemasks['ewr'] + c0 + interq/2.
                 reject_lines_for_vmic = np.logical_or(x_over_h > upper_limit, x_over_h < lower_limit)
                 reject_lines_for_vmic = np.logical_or(reject_lines_for_vmic, bad)
                 #import matplotlib.pyplot as plt
@@ -1528,7 +1625,12 @@ class EquivalentWidthModel(MPFitModel):
         gtol = 1.e-4
         damp = 0.0   # Not active: Residuals are limited between -1.0 and 1.0 (np.tanh(residuals/1.0)) minimizing the influence of bad fluxes
         #chisq_limit = 0.0002 # np.sum(np.asarray([0.00, 0.00, 0.01, 0.01])**2))
-        chisq_limit = 1.0e-5 # 0.00001
+        #chisq_limit = 1.0e-5 # 0.00001
+        #chisq_limit = 1.0e-2 # 0.01
+        #chisq_limit = 1.5e-4 # 0.00015 = np.sum(np.asarray([0.005, 0.005, 0.01])**2))
+        #chisq_limit = 3.0e-4 # 0.0003 = np.sum(np.asarray([0.01, 0.01, 0.01])**2))
+        chisq_limit = 4.0e-4 # 0.0004 = np.sum(np.asarray([0.01, 0.01, 0.01, 0.01])**2))
+
         _t0 = default_timer()
 
         #index = np.asarray([0, 1, 2])
@@ -1537,9 +1639,15 @@ class EquivalentWidthModel(MPFitModel):
         if self.adjust_model_metalicity:
             index = np.arange(4*len(teff_elements)) # 4 values: zero slopes and zero difference between element1 and element2, difference with model
         else:
-            index = np.arange(3*len(teff_elements)) # 3 values: zero slopes and zero difference between element1 and element2
+            #index = np.arange(3*len(teff_elements)) # 3 values: zero slopes and zero difference between element1 and element2
+            index = np.arange(4*len(teff_elements)) # 3 values: zero slopes and zero difference between element1 and element2
         target_values = np.zeros(len(index))
         weights = np.ones(len(index))
+        #weights = np.asarray([3,1,2])
+        #weights = np.asarray([100,100,1])
+        #weights = np.asarray([1000,1,100])
+        #weights = np.asarray([100,1,1000])
+        #weights = np.asarray([1,1000,1])
         super(EquivalentWidthModel, self).fitData(index, target_values, weights=weights, parinfo=parinfo, chisq_limit=chisq_limit, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet, iterfunct=self.defiter)
 
         values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
@@ -1566,11 +1674,11 @@ class EquivalentWidthModel(MPFitModel):
     def elogg(self): return self.m.perror[1]
     def evmic(self): return self.m.perror[2]
 
-    def MH(self): return self._parinfo[3]['value']
-    def eMH(self): return self.m.perror[3]
+    #def MH(self): return self._parinfo[3]['value']
+    #def eMH(self): return self.m.perror[3]
 
-    #def MH(self): return self._MH
-    #def eMH(self): return self._eMH
+    def MH(self): return self._MH
+    def eMH(self): return self._eMH
 
     def print_solution(self):
         # Calculate MH
@@ -1600,14 +1708,14 @@ class EquivalentWidthModel(MPFitModel):
         print "Return code:", self.m.status
 
 
-def modelize_spectrum_from_EW(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, teff_elements=["Fe 1"], vmic_elements=["Fe 2"], adjust_model_metalicity=False, max_iterations=20):
+def modelize_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, teff_elements=["Fe 1"], vmic_elements=["Fe 2"], adjust_model_metalicity=False, max_iterations=20):
     """
     """
     teff_range = modeled_layers_pack[3]
     logg_range = modeled_layers_pack[4]
     MH_range = modeled_layers_pack[5]
 
-    parinfo = __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range)
+    parinfo = __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range, adjust_model_metalicity=adjust_model_metalicity)
 
     EW_model = EquivalentWidthModel(modeled_layers_pack, linelist, abundances, MH=initial_MH, adjust_model_metalicity=adjust_model_metalicity)
 

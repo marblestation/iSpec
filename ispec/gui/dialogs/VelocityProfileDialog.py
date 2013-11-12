@@ -20,10 +20,10 @@ class VelocityProfileDialog(CustomDialog):
         axes.set_xlabel("velocity (km/s)", fontsize="10")
         axes.set_ylabel("relative intensity", fontsize="10")
 
-    def register(self, xcoord, fluxes, errors, models, telluric_fwhm=None):
-        self.__xcoord = xcoord
-        self.__fluxes = fluxes
-        self.__errors = errors
+    def register(self, ccf, models, telluric_fwhm=None):
+        self.__xcoord = ccf['x']
+        self.__fluxes = ccf['y']
+        self.__errors = ccf['err']
         self.__models = models
         # The default values have been previously updated with the user selected values
         self.__velocity_step = float(self.__components[4]["default"])

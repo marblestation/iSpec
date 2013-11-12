@@ -29,6 +29,15 @@ import random
 import sys
 import log
 import logging
+import cPickle as pickle
+import gzip
+
+def save_results(dump_filename, data):
+    pickle.dump(data, gzip.open(dump_filename, "wb", compresslevel=3), protocol=2)
+
+def restore_results(dump_filename):
+    return pickle.load(gzip.open(dump_filename, "rb"))
+
 
 def report_progress(current_work_progress, last_reported_progress):
     """

@@ -55,7 +55,7 @@ class MPFitModel(object):
         else:
             return([status, (self.y - model)])
 
-    def fitData(self, x, y, weights=None, parinfo=None, chisq_limit=None, ftol=1.e-10, xtol=1.e-10, gtol=1.e-10, damp=0, maxiter=200, iterfunct='default', quiet=True):
+    def fitData(self, x, y, weights=None, parinfo=None, chisq_limit=None, ftol=1.e-10, xtol=1.e-10, gtol=1.e-10, damp=0, maxiter=200, iterfunct='default', epsfcn=None, quiet=True):
         """
         - ftol: Termination occurs when both the actual
                 and predicted relative reductions in the sum of squares are at most
@@ -76,7 +76,7 @@ class MPFitModel(object):
         if parinfo is not None:
             self._parinfo = parinfo
 
-        m = mpfit.mpfit(self._model_evaluation_function, parinfo=self._parinfo, chisq_limit=chisq_limit, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=maxiter, iterfunct=iterfunct, quiet=quiet)
+        m = mpfit.mpfit(self._model_evaluation_function, parinfo=self._parinfo, chisq_limit=chisq_limit, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=maxiter, epsfcn=epsfcn, iterfunct=iterfunct, quiet=quiet)
 
         if (m.status <= 0):
            raise Exception(m.errmsg)
@@ -102,6 +102,7 @@ class GaussianModel(MPFitModel):
     # WARNING: Dot not modify attributes A, sig or mu directly from outside the class!
     def __init__(self, baseline=0, A=-0.025, sig=0.25, mu=0):
         p = [baseline, A, sig, mu]
+        self.__emu = 0.
         super(GaussianModel, self).__init__(p)
 
     def _model_function(self, x, p=None):
@@ -130,12 +131,20 @@ class GaussianModel(MPFitModel):
     def ebaseline(self): return self.m.perror[0]
     def eA(self): return self.m.perror[1]
     def esig(self): return self.m.perror[2]
-    def emu(self): return self.m.perror[3]
+    def emu(self):
+        if self.m is not None:
+            return self.m.perror[3]
+        else:
+            return self.__emu
+
 
     def set_emu(self, emu):
         # Overwrite the calculated error from covariance matrix in the least square algorithm
         # by a given value calculated externally (useful for radial velocity errors)
-        self.m.perror[3] = emu
+        if self.m is not None:
+            self.m.perror[3] = emu
+        else:
+            self.__emu = emu
 
     def _make_gauss(self):
         #k = self.A() / (self.sig() * np.sqrt(2*np.pi))
@@ -176,6 +185,7 @@ class VoigtModel(MPFitModel):
     # WARNING: Dot not modify attributes A, sig, mu or gamma directly from outside the class!
     def __init__(self, baseline=0, A=-0.025, sig=0.25, mu=0, gamma=0.025):
         p = [baseline, A, sig, mu, gamma]
+        self.__emu = 0.
         super(VoigtModel, self).__init__(p)
 
     def _model_function(self, x, p=None):
@@ -211,13 +221,20 @@ class VoigtModel(MPFitModel):
     def ebaseline(self): return self.m.perror[0]
     def eA(self): return self.m.perror[1]
     def esig(self): return self.m.perror[2]
-    def emu(self): return self.m.perror[3]
+    def emu(self):
+        if self.m is not None:
+            return self.m.perror[3]
+        else:
+            return self.__emu
     def egamma(self): return self.m.perror[4]
 
     def set_emu(self, emu):
         # Overwrite the calculated error from covariance matrix in the least square algorithm
         # by a given value calculated externally (useful for radial velocity errors)
-        self.m.perror[3] = emu
+        if self.m is not None:
+            self.m.perror[3] = emu
+        else:
+            self.__emu = emu
 
     def _make_voigt(self):
         if self.sig == 0:

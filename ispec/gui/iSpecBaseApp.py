@@ -1672,6 +1672,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         if region.element_type == "lines" and region.line_plot_id.has_key(self.active_spectrum) and region.line_model[self.active_spectrum] is not None:
             self.add_stats("Gaussian mean (mu)", "%.4f" % region.line_model[self.active_spectrum].mu())
+            self.add_stats("Gaussian mean (mu) error", "%.4f" % region.line_model[self.active_spectrum].emu())
             self.add_stats("Gaussian amplitude (A)", "%.4f" % region.line_model[self.active_spectrum].A())
             self.add_stats("Gaussian standard deviation (sigma)", "%.4f" % region.line_model[self.active_spectrum].sig())
             self.add_stats("Gaussian base level (mean continuum)", "%.4f" % region.line_model[self.active_spectrum].baseline())
@@ -1683,7 +1684,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 A = region.line_model[self.active_spectrum].A()
                 sig = region.line_model[self.active_spectrum].sig()
                 ew = -1.*A*np.sqrt(2*np.pi*sig**2) # nm
-                integrated_flux = ew * region.line_model[self.active_spectrum].baseline() # nm^2
+                integrated_flux = ew / region.line_model[self.active_spectrum].baseline() # nm^2
             else:
                 integrated_flux = -1 * region.line_model[self.active_spectrum].integrate()
                 ew = integrated_flux / region.line_model[self.active_spectrum].baseline()
@@ -2091,24 +2092,26 @@ SPECTRUM a Stellar Spectral Synthesis Program
                     if self.spectra[i].name == template:
                         template_spectrum = self.spectra[i].data
                         break
-            xcoord, fluxes, errors, nbins = ispec.build_velocity_profile(self.active_spectrum.data, template=template_spectrum, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, fourier=fourier, frame=self)
-        else:
-            xcoord, fluxes, errors, nbins = ispec.build_velocity_profile(self.active_spectrum.data, linelist=mask_linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, frame=self)
+            #xcoord, fluxes, errors, nbins = ispec.build_velocity_profile(self.active_spectrum.data, template=template_spectrum, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, fourier=fourier, frame=self)
+            models, ccf = ispec.cross_correlate_with_template(self.active_spectrum.data, template_spectrum, \
+                                    lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, \
+                                    velocity_step=velocity_step, \
+                                    fourier = fourier, \
+                                    model = model, \
+                                    only_one_peak = relative_to_telluric_data)
 
-        self.queue.put((self.on_determine_velocity_finish, [xcoord, fluxes, errors, nbins, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, mask_linelist, model], {}))
-
-    def on_determine_velocity_finish(self, xcoord, fluxes, errors, nbins, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, mask_linelist, model):
-        # Modelize
-        if relative_to_atomic_data or relative_to_template:
-            models = ispec.modelize_velocity_profile(xcoord, fluxes, errors, nbins, model=model)
-            if len(models) > 1:
-                accept = ispec.select_good_velocity_profile_models(models, xcoord, fluxes)
-                if len(models[accept]) == 0:
-                    models = models[:1]
-                else:
-                    models = models[accept]
         else:
-            models = ispec.modelize_velocity_profile(xcoord, fluxes, errors, nbins, only_one_peak=True, model=model)
+            #xcoord, fluxes, errors, nbins = ispec.build_velocity_profile(self.active_spectrum.data, linelist=mask_linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, frame=self)
+            models, ccf = ispec.cross_correlate_with_mask(self.active_spectrum.data, mask_linelist, \
+                                    lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, \
+                                    velocity_step=velocity_step, mask_size=mask_size, mask_depth=mask_depth, \
+                                    fourier = fourier, \
+                                    model = model, \
+                                    only_one_peak = relative_to_telluric_data)
+
+        self.queue.put((self.on_determine_velocity_finish, [models, ccf, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, mask_linelist, model], {}))
+
+    def on_determine_velocity_finish(self, models, ccf, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, mask_linelist, model):
 
         if len(models) == 0:
             fwhm = 0.0
@@ -2149,7 +2152,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.operation_in_progress = False
 
         key = "VelocityProfileDialog:"+str(relative_to_atomic_data)+str(relative_to_telluric_data)+str(relative_to_template)
-        self.active_spectrum.dialog[key].register(xcoord, fluxes, errors, models, telluric_fwhm=telluric_fwhm)
+        self.active_spectrum.dialog[key].register(ccf, models, telluric_fwhm=telluric_fwhm)
         self.active_spectrum.dialog[key].show()
 
         if self.active_spectrum.dialog[key].results is None:
@@ -2317,6 +2320,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 line_extra = line_extra + str(line['telluric_wave_peak']) + ";" + str(line['telluric_depth'])
                 line_extras.append(line_extra)
                 line_model = ispec.GaussianModel(baseline=line['baseline'], A=line['A'], sig=line['sig'], mu=line['mu'])
+                line_model.set_emu(line['mu_err'])
                 line_model.rms = line['rms']
                 line_models.append(line_model)
                 if line["telluric_wave_peak"] != 0:
@@ -3321,10 +3325,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
         wave_base = self.dialog[key].results["Base wavelength"]
         wave_top = self.dialog[key].results["Top wavelength"]
         in_segments = self.dialog[key].results["Consider"] == "Segments"
+        in_linemasks = self.dialog[key].results["Consider"] == "Line masks"
         replace_by = self.dialog[key].results["Replace by"]
         self.dialog[key].destroy()
 
-        if not in_segments and (wave_base is None or wave_top is None or wave_top <= wave_base):
+        if (not in_segments and not in_linemasks) and (wave_base is None or wave_top is None or wave_top <= wave_base):
             self.flash_status_message("Bad value.")
             return
 
@@ -3332,11 +3337,18 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.queue.put((self.flash_status_message, ["No segments found."], {}))
             return
 
-        if not in_segments:
+        if in_linemasks and (self.region_widgets["lines"] is None or len(self.region_widgets["lines"]) == 0):
+            self.queue.put((self.flash_status_message, ["No line masks found."], {}))
+            return
+
+        if not in_segments and not in_linemasks:
             wfilter = ispec.create_wavelength_filter(self.active_spectrum.data, wave_base=wave_base, wave_top=wave_top)
-        else:
+        elif in_segments:
             self.__update_numpy_arrays_from_widgets("segments")
             wfilter = ispec.create_wavelength_filter(self.active_spectrum.data, regions=self.regions["segments"])
+        else:
+            self.__update_numpy_arrays_from_widgets("lines")
+            wfilter = ispec.create_wavelength_filter(self.active_spectrum.data, regions=self.regions["lines"])
 
         if len(self.active_spectrum.data[wfilter]) == 0:
             msg = "This action cannot be done since it would produce a spectrum without measurements."

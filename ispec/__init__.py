@@ -36,6 +36,7 @@ try:
     from abundances import determine_abundances
     from abundances import read_solar_abundances
     from abundances import write_abundance_lines
+    from abundances import create_free_abundances_structure
     from atmospheres import interpolate_atmosphere_layers
     from atmospheres import load_modeled_layers_pack
     from atmospheres import valid_atmosphere_target
@@ -44,11 +45,11 @@ try:
     from atmospheres import dump_modeled_layers_pack
     from synth import generate_spectrum
     from synth import modelize_spectrum
-    from synth import modelize_spectrum_from_EW
+    from synth import modelize_spectrum_from_ew
     from synth import calculate_theoretical_ew_and_depth
 except ImportError as e:
     pass
-from common import calculate_barycentric_velocity_correction, sigma_clipping, interquartile_range_filtering
+from common import calculate_barycentric_velocity_correction, sigma_clipping, interquartile_range_filtering, save_results, restore_results
 from spectrum import *
 from continuum import *
 from lines import *

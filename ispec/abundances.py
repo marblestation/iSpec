@@ -25,6 +25,8 @@ from Queue import Empty
 import log
 import logging
 
+
+
 def write_abundance_lines(linemasks, filename=None):
     """
     Write line regions file with the following format:
@@ -64,7 +66,66 @@ def write_abundance_lines(linemasks, filename=None):
     out.close()
     return out.name
 
-def write_SPECTRUM_fixed_abundances(fixed_abundances, filename=None):
+def __get_element_specie(element_name, chemical_elements, molecules=None):
+    """
+    Convert element names type "Fe 1" or "Fe 2" to species code form by the atomic number + "." + ionization state
+    (i.e. "Fe 2" -> "26.1").
+    Or if the elenemt name does not include the ionization state, the returned code correspond only to the atomic_number
+    (i.e. "Fe" -> "26").
+    Raises an exception if not found.
+    """
+    element = element_name.split() # Do not specify " " to avoid problems with elements with double spaces like "V  1"
+
+    # Element not present or with a bad format, skip
+    if element_name == "":
+        raise Exception("Empty element name!")
+
+    symbol = element[0]
+    try:
+        element.remove('') # Make sure there are not additional spaces between the symbol and the ionization state
+        element.remove('')
+        element.remove('')
+    except ValueError as e:
+        pass
+
+
+    tfilter = (chemical_elements['symbol'] == symbol)
+    if len(chemical_elements[tfilter]["atomic_num"]) == 0:
+        if molecules is not None:
+            # Symbol not found, maybe it is a molecule
+            mfilter = (molecules['symbol'] == symbol)
+            if len(molecules[mfilter]["atomic_num"]) == 0:
+                raise Exception("Unkown '%s' element!" % symbol)
+            else:
+                specie = str(molecules[mfilter]["atomic_num"][0])
+        else:
+            raise Exception("Unkown '%s' element!" % symbol)
+    else:
+        specie = str(chemical_elements[tfilter]["atomic_num"][0])
+
+    if len(element) == 2:
+        ionization = str(int(element[1]) - 1)
+        specie = specie + "." + ionization
+
+    return specie
+
+
+def create_free_abundances_structure(free_abundance_elements, chemical_elements, solar_abundances):
+    """
+    Create the needed structure to determine elemental abundances for a given
+    list of elements (i.e. ["Fe"] or ["Fe", "Mg", "Ca"]).
+    """
+    free_abundances = np.recarray((len(free_abundance_elements), ), dtype=[('code', int),('Abund', float), ('element', '|S30')])
+    for element_name in free_abundance_elements:
+        specie = __get_element_specie(element_name, chemical_elements, molecules=None)
+        if "." in specie:
+            raise Exception("Bad format '%s'" % element_name)
+        free_abundances['code'] = int(specie)
+        free_abundances['Abund'] = solar_abundances['Abund'][solar_abundances['code'] == int(specie)]
+        free_abundances['element'] = element_name
+    return free_abundances
+
+def write_fixed_abundances(fixed_abundances, filename=None):
     """
     Write a fixed abundances file the following format:
     ::

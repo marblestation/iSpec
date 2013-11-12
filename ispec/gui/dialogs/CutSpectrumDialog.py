@@ -25,7 +25,7 @@ class CutSpectrumDialog(CustomDialog):
         component = {}
         component["type"] = "Radiobutton"
         component["text"] = "Consider"
-        component["options"] = ["Custom range (defined above)", "Segments"]
+        component["options"] = ["Custom range (defined above)", "Segments", "Line masks"]
         component["default"] = component["options"][0]
         self.__components.append(component)
         component = {}
