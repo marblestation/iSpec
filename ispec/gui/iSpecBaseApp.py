@@ -1820,7 +1820,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
             max_wave_range=1
             #median_wave_range=0.5
             #max_wave_range=0.1
-            self.active_spectrum.dialog[key] = FitContinuumDialog(self, "Properties for fitting continuum", R, nknots, degree, median_wave_range, max_wave_range)
+            strong_line_probability = 0.50
+            self.active_spectrum.dialog[key] = FitContinuumDialog(self, "Properties for fitting continuum", R, nknots, degree, median_wave_range, max_wave_range, strong_line_probability)
         self.active_spectrum.dialog[key].show(suggested_nknots=nknots)
 
         if self.active_spectrum.dialog[key].results is None:
@@ -1845,6 +1846,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             each_segment = self.active_spectrum.dialog[key].results["Treat each segment independently"] == 1
             order = self.active_spectrum.dialog[key].results["Filtering order"]
             automatic_strong_line_detection = self.active_spectrum.dialog[key].results["Automatically find and ignore strong lines"]
+            strong_line_probability = self.active_spectrum.dialog[key].results["Strong line probability threshold"]
             if nknots is None or median_wave_range < 0 or max_wave_range < 0:
                 self.flash_status_message("Bad value.")
                 return
@@ -1890,17 +1892,18 @@ SPECTRUM a Stellar Spectral Synthesis Program
             each_segment = False
             order='median+max'
             automatic_strong_line_detection = False
+            strong_line_probability = 0
         self.active_spectrum.dialog[key].destroy()
 
 
         self.operation_in_progress = True
         self.status_message("Fitting continuum...")
         self.update_progress(10)
-        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'ignore_lines':ignore_lines, 'in_continuum':in_continuum, 'each_segment': each_segment, 'median_wave_range':median_wave_range, 'max_wave_range':max_wave_range, 'fixed_value':fixed_value, 'model':model, 'degree':degree, 'R':R, 'order':order, 'automatic_strong_line_detection':automatic_strong_line_detection})
+        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'ignore_lines':ignore_lines, 'in_continuum':in_continuum, 'each_segment': each_segment, 'median_wave_range':median_wave_range, 'max_wave_range':max_wave_range, 'fixed_value':fixed_value, 'model':model, 'degree':degree, 'R':R, 'order':order, 'automatic_strong_line_detection':automatic_strong_line_detection, 'strong_line_probability': strong_line_probability})
         thread.setDaemon(True)
         thread.start()
 
-    def on_fit_continuum_thread(self, nknots, ignore_lines=False, in_continuum=False, each_segment=False, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model="Polynomy", degree=3, R=None, order='median+max', automatic_strong_line_detection=True):
+    def on_fit_continuum_thread(self, nknots, ignore_lines=False, in_continuum=False, each_segment=False, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model="Polynomy", degree=3, R=None, order='median+max', automatic_strong_line_detection=True, strong_line_probability=0.50):
         try:
             if each_segment:
                 self.__update_numpy_arrays_from_widgets("segments")
@@ -1920,7 +1923,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             else:
                 ignore_lines = None
 
-            self.active_spectrum.continuum_model = ispec.fit_continuum(self.active_spectrum.data, from_resolution=None, independent_regions=independent_regions, continuum_regions=continuum_regions, ignore=ignore_lines, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection)
+            self.active_spectrum.continuum_model = ispec.fit_continuum(self.active_spectrum.data, from_resolution=None, independent_regions=independent_regions, continuum_regions=continuum_regions, ignore=ignore_lines, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection, strong_line_probability=strong_line_probability)
             waveobs = self.active_spectrum.data['waveobs']
             self.active_spectrum.continuum_data = ispec.create_spectrum_structure(waveobs, self.active_spectrum.continuum_model(waveobs))
 

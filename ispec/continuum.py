@@ -168,7 +168,7 @@ def __determine_continuum_base_points(spectrum, discard_outliers=True, median_wa
 
     return continuum_base_points
 
-def fit_continuum(spectrum, from_resolution=None, independent_regions=None, continuum_regions=None, ignore=None, nknots=None, degree=3, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy', order='median+max', automatic_strong_line_detection=True):
+def fit_continuum(spectrum, from_resolution=None, independent_regions=None, continuum_regions=None, ignore=None, nknots=None, degree=3, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy', order='median+max', automatic_strong_line_detection=True, strong_line_probability=0.50):
     """
     Determine the level of the continuum and fit a model (uniformly spaced splines or single polynomy):
         * If model is 'Fixed', the continuum will be fixed to the fixed_value and no continuum search or fitting will be performed
@@ -178,7 +178,8 @@ def fit_continuum(spectrum, from_resolution=None, independent_regions=None, cont
         * If independent_regions are indicated, each region will have its own independent fit
         * If continuum_regions are indicated, only those regions will be used to find continuum
         * If ignore is indicated, those regions will be completely ignored
-        * If automatic_strong_line_detection is True, those max values with strong differences with each nearbours will be ignored
+        * If automatic_strong_line_detection is True, those values with strong differences with each nearbours will be ignored
+          and the strong_line_probability will be used as level of confidence
         * If order is:
             * 'median+max', continuum will be found by using first a median filter of step median_wave_step and then a max filter of max_wave_step
             * 'max+median', continuum will be found by using the inversed filtering order of the previous point
@@ -200,7 +201,7 @@ def fit_continuum(spectrum, from_resolution=None, independent_regions=None, cont
             wfilter = np.logical_and(spectrum['waveobs'] >= region['wave_base'], spectrum['waveobs'] <= region['wave_top'])
             try:
                 if len(spectrum[wfilter]) > 10:
-                    continuum = __fit_continuum(spectrum[wfilter], from_resolution=from_resolution, continuum_regions=continuum_regions, ignore=ignore, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection)
+                    continuum = __fit_continuum(spectrum[wfilter], from_resolution=from_resolution, continuum_regions=continuum_regions, ignore=ignore, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection, strong_line_probability=strong_line_probability)
                     # Save
                     wfilter = np.logical_and(xaxis >= region['wave_base'], xaxis <= region['wave_top'])
                     fluxes[np.where(wfilter)[0]] = continuum(xaxis[wfilter])
@@ -214,7 +215,7 @@ def fit_continuum(spectrum, from_resolution=None, independent_regions=None, cont
         #continuum = interpolate.InterpolatedUnivariateSpline(xaxis, fluxes, k=3)
         continuum = interpolate.interp1d(xaxis, fluxes, kind='linear', bounds_error=False, fill_value=0.0)
     else:
-        continuum = __fit_continuum(spectrum, from_resolution=from_resolution, continuum_regions=continuum_regions, ignore=ignore, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection)
+        continuum = __fit_continuum(spectrum, from_resolution=from_resolution, continuum_regions=continuum_regions, ignore=ignore, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection, strong_line_probability=strong_line_probability)
     return continuum
 
 
@@ -240,7 +241,7 @@ def __gauss_filter(spectrum, gauss_filter_step):
     smooth['flux'] = gaussian_filter(spectrum['flux'], gauss_filter_step)
     return smooth
 
-def __clean_outliers(spectrum, min_wave, max_wave, wave_step, ignored_regions, strict=False):
+def __clean_outliers(spectrum, min_wave, max_wave, wave_step, ignored_regions, probability=0.50):
     # Resample to have 1 point for each max window instead of N
     wavelengths = np.arange(min_wave, max_wave, wave_step/2.)
     # Resample avoiding zeros and using directly interp instead of ispec.resample_spectrum so that in the borders
@@ -255,16 +256,69 @@ def __clean_outliers(spectrum, min_wave, max_wave, wave_step, ignored_regions, s
     diff2 = smooth1['flux'][1:] - smooth1['flux'][:-1]
     diff2 = np.hstack((diff2[0], diff2))
 
-    if strict:
-        ### With median and interquantile range (too aggressive)
-        interq1 = np.percentile(diff1, 75) - np.percentile(diff1, 25)
-        interq2 = np.percentile(diff2, 75) - np.percentile(diff2, 25)
-        sfilter1 = np.logical_and(diff1 < np.median(diff1) + interq1, diff1 > np.median(diff1) - interq1)
-        sfilter2 = np.logical_and(diff2 < np.median(diff2) + interq2, diff2 > np.median(diff2) - interq2)
-    else:
-        ### With mean and standard deviation (more conservative)
-        sfilter1 = np.logical_and(diff1 < np.mean(diff1) + np.std(diff1), diff1 > np.mean(diff1) - np.std(diff1))
-        sfilter2 = np.logical_and(diff2 < np.mean(diff2) + np.std(diff2), diff2 > np.mean(diff2) - np.std(diff2))
+    #if strict:
+        #### With median and interquantile range (too aggressive)
+        #interq1 = np.percentile(diff1, 75) - np.percentile(diff1, 25)
+        #interq2 = np.percentile(diff2, 75) - np.percentile(diff2, 25)
+        #sfilter1 = np.logical_and(diff1 < np.median(diff1) + interq1, diff1 > np.median(diff1) - interq1)
+        #sfilter2 = np.logical_and(diff2 < np.median(diff2) + interq2, diff2 > np.median(diff2) - interq2)
+    #else:
+        #### With mean and standard deviation (more conservative)
+        #sfilter1 = np.logical_and(diff1 < np.mean(diff1) + np.std(diff1), diff1 > np.mean(diff1) - np.std(diff1))
+        #sfilter2 = np.logical_and(diff2 < np.mean(diff2) + np.std(diff2), diff2 > np.mean(diff2) - np.std(diff2))
+
+    #sfilter10 = sfilter1
+    #sfilter20 = sfilter2
+    #sfilter0 = np.logical_and(sfilter10, sfilter20)
+
+    # Outliers
+    import statsmodels.api as sm
+    x = np.arange(len(diff1))
+    y = diff1
+    # RLM (Robust least squares)
+    # Huber's T norm with the (default) median absolute deviation scaling
+    # - http://en.wikipedia.org/wiki/Huber_loss_function
+    # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
+    x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
+    huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
+    linear_model = huber_t.fit()
+    sfilter1 = linear_model.weights > 1.-probability
+    #import matplotlib.pyplot as plt
+    #plt.scatter(x, y)
+    #plt.scatter(x[sfilter1], y[sfilter1], color="red")
+    #plt.show()
+
+
+    import statsmodels.api as sm
+    x = np.arange(len(diff2))
+    y = diff2
+    # RLM (Robust least squares)
+    # Huber's T norm with the (default) median absolute deviation scaling
+    # - http://en.wikipedia.org/wiki/Huber_loss_function
+    # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
+    #x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
+    huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
+    linear_model = huber_t.fit()
+    sfilter2 = linear_model.weights > 1.-probability
+    #import matplotlib.pyplot as plt
+    #plt.scatter(x, y)
+    #plt.scatter(x[sfilter2], y[sfilter2], color="red")
+    #plt.show()
+
+    sfilter = np.logical_and(sfilter1, sfilter2)
+    #import pudb
+    #pudb.set_trace()
+    #import matplotlib.pyplot as plt
+    #plt.scatter(x, y)
+    #plt.scatter(x[sfilter0], y[sfilter0], color="red")
+    #plt.figure()
+    #plt.scatter(x, y)
+    #plt.scatter(x[sfilter], y[sfilter], color="red")
+    #plt.plot(x, linear_model.fittedvalues)
+    #plt.show()
+
+
+
     # The extremes cannot be evaluated (we have added artificially in the diff1/2 vector)
     # so by default we accept them
     sfilter1[-1] = True
@@ -322,7 +376,7 @@ def __create_gap_regions(spectrum):
     return gap_regions
 
 
-def __fit_continuum(spectrum, from_resolution=None, to_resolution=None, ignore=None, continuum_regions=None, median_wave_range=0.1,  max_wave_range=1.0, nknots=None, degree=3, order="median+max", automatic_strong_line_detection=True, fixed_value=None, model='Splines'):
+def __fit_continuum(spectrum, from_resolution=None, to_resolution=None, ignore=None, continuum_regions=None, median_wave_range=0.1,  max_wave_range=1.0, nknots=None, degree=3, order="median+max", automatic_strong_line_detection=True, strong_line_probability=0.50, fixed_value=None, model='Splines'):
     """
     Spectrum should be homogeneously sampled if resolution is not specified.
     """
@@ -416,7 +470,7 @@ def __fit_continuum(spectrum, from_resolution=None, to_resolution=None, ignore=N
         smooth1 = __clean_ignored_regions(smooth1, ignored_regions)
 
         if automatic_strong_line_detection and max_wave_range > 0:
-            smooth1 = __clean_outliers(smooth1, np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), max_wave_range, ignored_regions, strict=True)
+            smooth1 = __clean_outliers(smooth1, np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), max_wave_range, ignored_regions, probability=strong_line_probability)
             wave_step = max_wave_range
 
         med_filter_step = int(median_wave_range / wave_step)
@@ -447,7 +501,7 @@ def __fit_continuum(spectrum, from_resolution=None, to_resolution=None, ignore=N
         smooth2 = __clean_ignored_regions(smooth2, ignored_regions)
 
         if automatic_strong_line_detection:
-            smooth2 = __clean_outliers(smooth2, np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), max_wave_range, ignored_regions, strict=False)
+            smooth2 = __clean_outliers(smooth2, np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), max_wave_range, ignored_regions, probability=strong_line_probability)
             wave_step = max_wave_range
             gauss_filter_step = 2
         else:

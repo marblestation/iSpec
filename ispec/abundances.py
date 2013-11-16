@@ -184,7 +184,7 @@ def write_solar_abundances(abundances, abundances_filename=None):
     return out.name
 
 
-def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, verbose=0, gui_queue=None, timeout=900):
+def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, gui_queue=None, timeout=900):
     """
     Determine abundances from equivalent widths (linemasks previously fitted and
     cross-matched with an atomic linelist).
@@ -203,6 +203,8 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
     abundances_file = write_solar_abundances(abundances)
     num_measures = len(linemasks)
     nlayers = len(atmosphere_layers)
+    if ignore == None:
+        ignore = np.ones(num_measures) # Compute fluxes for all the wavelengths
 
     # Generate spectrum should be run in a separate process in order
     # to force the reload of the "synthesizer" module which
@@ -213,7 +215,7 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
     #process_communication_queue = Queue()
     process_communication_queue = JoinableQueue()
 
-    p = Process(target=__determine_abundances, args=(process_communication_queue, atmosphere_layers_file, linemasks_file, num_measures, abundances_file,), kwargs={'microturbulence_vel': microturbulence_vel, 'nlayers': nlayers, 'verbose': verbose})
+    p = Process(target=__determine_abundances, args=(process_communication_queue, atmosphere_layers_file, linemasks_file, num_measures, ignore, abundances_file,), kwargs={'microturbulence_vel': microturbulence_vel, 'nlayers': nlayers, 'verbose': verbose})
     p.start()
     # Default values
     spec_abund = np.zeros(num_measures)
@@ -252,7 +254,7 @@ def __enqueue_progress(process_communication_queue, v):
     process_communication_queue.put(("self.update_progress(%i)" % v))
     process_communication_queue.join()
 
-def __determine_abundances(process_communication_queue, atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel = 2.0, nlayers=56, verbose=0):
+def __determine_abundances(process_communication_queue, atmosphere_model_file, linelist_file, num_measures, ignore, abundances_file, microturbulence_vel = 2.0, nlayers=56, verbose=0):
     """
     Determine abundances from equivalent widths (linemasks previously fitted and
     cross-matched with an atomic linelist).
@@ -267,6 +269,6 @@ def __determine_abundances(process_communication_queue, atmosphere_model_file, l
     """
     import synthesizer
     update_progress_func = lambda v: __enqueue_progress(process_communication_queue, v)
-    abundances = synthesizer.abundances(atmosphere_model_file, linelist_file, num_measures, abundances_file, microturbulence_vel, nlayers, verbose, update_progress_func)
+    abundances = synthesizer.abundances(atmosphere_model_file, linelist_file, num_measures, ignore, abundances_file, microturbulence_vel, nlayers, verbose, update_progress_func)
     process_communication_queue.put(abundances)
 

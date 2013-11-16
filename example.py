@@ -244,7 +244,8 @@ def normalize_spectrum_using_continuum_regions():
                             median_wave_range=median_wave_range, \
                             max_wave_range=max_wave_range, \
                             model=model, order=order, \
-                            automatic_strong_line_detection=True)
+                            automatic_strong_line_detection=True, \
+                            strong_line_probability=0.5)
 
     #--- Continuum normalization ---------------------------------------------------
     logging.info("Continuum normalization...")
@@ -278,7 +279,8 @@ def normalize_spectrum_in_segments():
                             median_wave_range=median_wave_range, \
                             max_wave_range=max_wave_range, \
                             model=model, order=order, \
-                            automatic_strong_line_detection=True)
+                            automatic_strong_line_detection=True, \
+                            strong_line_probability=0.5)
 
     #--- Continuum normalization ---------------------------------------------------
     logging.info("Continuum normalization...")
@@ -311,7 +313,8 @@ def normalize_whole_spectrum_strategy2():
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
                                 model=model, order=order, \
-                                automatic_strong_line_detection=True)
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5)
 
     #--- Continuum normalization ---------------------------------------------------
     logging.info("Continuum normalization...")
@@ -344,7 +347,8 @@ def normalize_whole_spectrum_strategy1():
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
                                 model=model, order=order, \
-                                automatic_strong_line_detection=True)
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5)
 
     #--- Continuum normalization ---------------------------------------------------
     logging.info("Continuum normalization...")
@@ -379,7 +383,8 @@ def normalize_whole_spectrum_strategy1_ignoring_strong_lines():
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
                                 model=model, order=order, \
-                                automatic_strong_line_detection=True)
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5)
 
     #--- Continuum normalization ---------------------------------------------------
     logging.info("Continuum normalization...")
@@ -403,14 +408,13 @@ def filter_cosmic_rays():
     median_wave_range=0.01
     max_wave_range=1.0
 
-    strong_lines = ispec.read_line_regions(ispec_dir + "/input/regions/strong_lines/absorption_lines.txt")
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
-                                ignore=strong_lines, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
                                 model=model, order=order, \
-                                automatic_strong_line_detection=True)
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5)
     #--- Filtering cosmic rays -----------------------------------------------------
     # Spectrum should be already normalized
     cosmics = ispec.create_filter_cosmic_rays(sun_spectrum, sun_continuum_model, \
@@ -434,14 +438,13 @@ def find_continuum_regions():
     median_wave_range=0.01
     max_wave_range=1.0
 
-    strong_lines = ispec.read_line_regions(ispec_dir + "/input/regions/strong_lines/absorption_lines.txt")
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
-                                ignore=strong_lines, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
                                 model=model, order=order, \
-                                automatic_strong_line_detection=True)
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5)
     #--- Find continuum regions ----------------------------------------------------
     logging.info("Finding continuum regions...")
     resolution = 80000
@@ -470,14 +473,13 @@ def find_continuum_regions_in_segments():
     median_wave_range=0.01
     max_wave_range=1.0
 
-    strong_lines = ispec.read_line_regions(ispec_dir + "/input/regions/strong_lines/absorption_lines.txt")
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
-                                ignore=strong_lines, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
                                 model=model, order=order, \
-                                automatic_strong_line_detection=True)
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5)
     #--- Find continuum regions in segments ----------------------------------------
     logging.info("Finding continuum regions...")
     resolution = 80000
@@ -509,14 +511,13 @@ def find_linemasks():
     median_wave_range=0.01
     max_wave_range=1.0
 
-    strong_lines = ispec.read_line_regions(ispec_dir + "/input/regions/strong_lines/absorption_lines.txt")
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
-                                ignore=strong_lines, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
                                 model=model, order=order, \
-                                automatic_strong_line_detection=True)
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5)
     #--- Find linemasks ------------------------------------------------------------
     logging.info("Finding line masks...")
     #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
@@ -696,14 +697,13 @@ def fit_lines_and_determine_ew():
     median_wave_range=0.01
     max_wave_range=1.0
 
-    strong_lines = ispec.read_line_regions(ispec_dir + "/input/regions/strong_lines/absorption_lines.txt")
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
-                                ignore=strong_lines, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
                                 model=model, order=order, \
-                                automatic_strong_line_detection=True)
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5)
     #--- Fit lines -----------------------------------------------------------------
     logging.info("Fitting lines...")
     atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
@@ -874,14 +874,13 @@ def determine_astrophysical_parameters_using_synth_spectra():
     median_wave_range=0.01
     max_wave_range=1.0
 
-    strong_lines = ispec.read_line_regions(ispec_dir + "/input/regions/strong_lines/absorption_lines.txt")
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
-                                ignore=strong_lines, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
                                 model=model, order=order, \
-                                automatic_strong_line_detection=True)
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5)
     #--- Modelize spectra ----------------------------------------------------------
     # Parameters
     initial_teff = 5750.0
@@ -1005,14 +1004,13 @@ def determine_abundances_using_synth_spectra():
     median_wave_range=0.01
     max_wave_range=1.0
 
-    strong_lines = ispec.read_line_regions(ispec_dir + "/input/regions/strong_lines/absorption_lines.txt")
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
-                                ignore=strong_lines, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
                                 model=model, order=order, \
-                                automatic_strong_line_detection=True)
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5)
     #--- Modelize spectra ----------------------------------------------------------
     # Parameters
     initial_teff = 5777.0
@@ -1113,7 +1111,7 @@ def determine_astrophysical_parameters_from_ew():
     #--- Continuum fit -------------------------------------------------------------
     # One spline per each 5 nm
     model = "Splines" # "Polynomy"
-    degree = 3
+    degree = 2
     nknots = None # Automatic: 1 spline every 1 nm
     from_resolution = 80000
 
@@ -1122,14 +1120,13 @@ def determine_astrophysical_parameters_from_ew():
     median_wave_range=0.01
     max_wave_range=1.0
 
-    strong_lines = ispec.read_line_regions(ispec_dir + "/input/regions/strong_lines/absorption_lines.txt")
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
-                                ignore=strong_lines, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
                                 model=model, order=order, \
-                                automatic_strong_line_detection=True)
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5)
     #--- Fit lines -----------------------------------------------------------------
     logging.info("Fitting lines...")
     #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
@@ -1162,7 +1159,7 @@ def determine_astrophysical_parameters_from_ew():
 
 
     vel_telluric = 17.79 # km/s
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines.txt")
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines_biglist.txt")
     line_regions = ispec.adjust_linemasks(sun_spectrum, line_regions, max_margin=0.5)
     # Spectrum should be already radial velocity corrected
     linemasks = ispec.fit_lines(line_regions, sun_spectrum, sun_continuum_model, \
@@ -1173,10 +1170,23 @@ def determine_astrophysical_parameters_from_ew():
                                 check_derivatives = False, \
                                 vel_telluric = vel_telluric, discard_gaussian=False, \
                                 discard_voigt=True, free_mu=False)
+    # Discard lines that are not cross matched with the same original element stored in the note
+    linemasks = linemasks[linemasks['element'] == line_regions['note']]
+
+    # Discard bad masks
+    flux_peak = sun_spectrum['flux'][linemasks['peak']]
+    flux_base = sun_spectrum['flux'][linemasks['base']]
+    flux_top = sun_spectrum['flux'][linemasks['top']]
+    bad_mask = np.logical_or(linemasks['wave_peak'] <= linemasks['wave_base'], linemasks['wave_peak'] >= linemasks['wave_top'])
+    bad_mask = np.logical_or(bad_mask, flux_peak >= flux_base)
+    bad_mask = np.logical_or(bad_mask, flux_peak >= flux_top)
+    linemasks = linemasks[~bad_mask]
+
     # Exclude lines that have not been successfully cross matched with the atomic data
     # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
     rejected_by_atomic_line_not_found = (linemasks['wave (nm)'] == 0)
     linemasks = linemasks[~rejected_by_atomic_line_not_found]
+
     # Exclude lines that may be affected by tellurics
     rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
     linemasks = linemasks[~rejected_by_telluric_line]
@@ -1246,17 +1256,17 @@ def determine_astrophysical_parameters_from_ew():
     # Reduced equivalent width
     # Filter too weak/strong lines
     # * Criteria presented in paper of GALA
-    efilter = np.logical_and(linemasks['ewr'] >= -5.8, linemasks['ewr'] <= -4.65)
+    #efilter = np.logical_and(linemasks['ewr'] >= -5.8, linemasks['ewr'] <= -4.65)
+    efilter = np.logical_and(linemasks['ewr'] >= -6.0, linemasks['ewr'] <= -4.3)
     # Filter high excitation potential lines
     # * Criteria from Eric J. Bubar "Equivalent Width Abundance Analysis In Moog"
     efilter = np.logical_and(efilter, linemasks['lower state (eV)'] <= 5.0)
+    efilter = np.logical_and(efilter, linemasks['lower state (eV)'] >= 0.5)
     ## Filter also bad fits
     efilter = np.logical_and(efilter, linemasks['rms'] < 0.05)
 
     results = ispec.modelize_spectrum_from_ew(linemasks[efilter], modeled_layers_pack, atomic_linelist,\
                         solar_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, \
-                        teff_elements=["Fe 1"], vmic_elements=["Fe 2"], \
-                        adjust_model_metalicity=False, \
                         max_iterations=20)
     params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params = results
 
@@ -1282,14 +1292,13 @@ def determine_abundances_from_ew():
     median_wave_range=0.01
     max_wave_range=1.0
 
-    strong_lines = ispec.read_line_regions(ispec_dir + "/input/regions/strong_lines/absorption_lines.txt")
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
-                                ignore=strong_lines, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
                                 model=model, order=order, \
-                                automatic_strong_line_detection=True)
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5)
     #--- Fit lines -----------------------------------------------------------------
     logging.info("Fitting lines...")
     atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
@@ -1333,10 +1342,12 @@ def determine_abundances_from_ew():
                                 check_derivatives = False, \
                                 vel_telluric = vel_telluric, discard_gaussian=False, \
                                 discard_voigt=True, free_mu=False)
+
     # Exclude lines that have not been successfully cross matched with the atomic data
     # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
     rejected_by_atomic_line_not_found = (linemasks['wave (nm)'] == 0)
     linemasks = linemasks[~rejected_by_atomic_line_not_found]
+
     # Exclude lines that may be affected by tellurics
     rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
     linemasks = linemasks[~rejected_by_telluric_line]

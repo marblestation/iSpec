@@ -73,7 +73,7 @@ cdef extern from "synthesizer_func.h":
     int macroturbulence_spectrum(double *waveobs, double *fluxes, int num_measures, double macroturbulence, int verbose, progressfunc user_func, void *user_data)
     int rotation_spectrum(double *waveobs, double *fluxes, int num_measures, double vsini, double limb_darkening_coeff, int verbose, progressfunc user_func, void *user_data)
     int resolution_spectrum(double *waveobs, double *fluxes, int num_measures, int R, int verbose, progressfunc user_func, void *user_data)
-    int abundances_determination(char *atmosphere_model_file, char *linelist_file, int num_measures, char *abundances_file, double microturbulence_vel, int verbose, double* abundances, double *normal_abundances, double*relative_abundances, progressfunc user_func, void *user_data)
+    int abundances_determination(char *atmosphere_model_file, char *linelist_file, int num_measures, char *abundances_file, double microturbulence_vel, int verbose, double* ignore, double* abundances, double *normal_abundances, double*relative_abundances, progressfunc user_func, void *user_data)
 
 #### Callback
 def dummy_func(double num):
@@ -171,7 +171,7 @@ def apply_post_fundamental_effects(np.ndarray[np.double_t,ndim=1] waveobs, np.nd
 
 
 # microtturbulence velocity in km/s
-def abundances(char* atmosphere_model_file, char* linelist_file, int num_measures, char* abundances_file, double microturbulence_vel = 2.0, int nlayers=56, int verbose = 0, update_progress_func=None):
+def abundances(char* atmosphere_model_file, char* linelist_file, int num_measures, np.ndarray[np.double_t,ndim=1] ignore, char* abundances_file, double microturbulence_vel = 2.0, int nlayers=56, int verbose = 0, update_progress_func=None):
     if not os.path.exists(atmosphere_model_file):
         raise Exception("Atmosphere model file '%s' does not exists!" % atmosphere_model_file)
     if not os.path.exists(linelist_file):
@@ -226,7 +226,9 @@ def abundances(char* atmosphere_model_file, char* linelist_file, int num_measure
         update_progress_func = dummy_func
 
     abundances_determination(atmosphere_model_file, linelist_file, num_measures, abundances_file,
-            microturbulence_vel, verbose, <double*> abundances.data,
+            microturbulence_vel, verbose,
+            <double*> ignore.data,
+            <double*> abundances.data,
             <double*> normal_abundances.data, <double*> relative_abundances.data,
             callback, <void*>update_progress_func)
 

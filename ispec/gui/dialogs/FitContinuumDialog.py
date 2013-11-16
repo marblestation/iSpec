@@ -2,7 +2,7 @@ import numpy as np
 from CustomDialog import *
 
 class FitContinuumDialog(CustomDialog):
-    def __init__(self, parent, title, R, nknots, degrees, median_wave_range, max_wave_range):
+    def __init__(self, parent, title, R, nknots, degrees, median_wave_range, max_wave_range, strong_line_probability):
         self.__parent = parent
         self.__title = title
         self.__components = []
@@ -60,6 +60,14 @@ class FitContinuumDialog(CustomDialog):
         component["type"] = "Checkbutton"
         component["text"] = "Automatically find and ignore strong lines"
         component["default"] = True
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Entry"
+        component["text"] = "Strong line probability threshold"
+        component["text-type"] = "float" # float, int or str
+        component["default"] = strong_line_probability
+        component["minvalue"] = 0.0
+        component["maxvalue"] = 1.0
         self.__components.append(component)
         component = {}
         component["type"] = "Checkbutton"

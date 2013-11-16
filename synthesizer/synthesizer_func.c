@@ -839,7 +839,7 @@ population *POP;
   }
 }
 
-int abundances_determination(char *atmosphere_model_file, char *linelist_file, int num_measures, char *abundances_file, double microturbulence_vel, int verbose, double abundances[], double normal_abundances[], double relative_abundances[], progressfunc user_func, void *user_data) {
+int abundances_determination(char *atmosphere_model_file, char *linelist_file, int num_measures, char *abundances_file, double microturbulence_vel, int verbose, const double ignore[], double abundances[], double normal_abundances[], double relative_abundances[], progressfunc user_func, void *user_data) {
   int i,j,k,flag;
   int code;
   int flagw = verbose;
@@ -900,35 +900,42 @@ int abundances_determination(char *atmosphere_model_file, char *linelist_file, i
 
   int pos = 0;
   while(bwline(&wave,line,atom,&ew,qf) == 1) {
-     if(line[0].code == 6.0 || line[0].code == 7.0 || line[0].code == 8.0) 
-       flagCNO = 1;
-     else flagCNO = 0;
-     original_abund = line[0].abund;
-     flag = 0;
-     line[0].abund = original_abund;
-     while(eqwidth(model,line,atom,wave,V,POP) > ew) {
-	    line[0].abund /= FACTOR;
-     }
-     abund0 = line[0].abund;
-     line[0].abund = original_abund;
-     while(eqwidth(model,line,atom,wave,V,POP) < ew)
-	 line[0].abund *= FACTOR;
-     abund1 = line[0].abund;
-     for(j=1;j<=JMAX;j++) {
-       abundmid = line[0].abund = (abund0 + abund1)/2.0;
-       wmid = eqwidth(model,line,atom,wave,V,POP);
-       if(wmid >= ew) abund1 = abundmid;
-       if(wmid < ew) abund0 = abundmid;
-       if(fabs(log10(abund1/abund0)) <= 0.0002) break;
-     }
-     Atot = log10((abund1+abund0)/2.0);
-     AH = Atot + 0.0405 + 12.0;
-     MH = Atot - log10(original_abund) + model->MH;
-     /*printf("%8.3f  %5.1f %6.3f  %4.2f  %7.3f  %7.3f  %6.3f\n",line[0].wave,*/
-               /*line[0].code,line[0].El,microturbulence_vel,Atot,AH,MH);*/
-     abundances[pos] = Atot;
-     normal_abundances[pos] = AH;
-     relative_abundances[pos] = MH;
+    // Only compute not masked wavelengths
+    if (ignore[pos] == 1.0) {
+         if(line[0].code == 6.0 || line[0].code == 7.0 || line[0].code == 8.0) 
+           flagCNO = 1;
+         else flagCNO = 0;
+         original_abund = line[0].abund;
+         flag = 0;
+         line[0].abund = original_abund;
+         while(eqwidth(model,line,atom,wave,V,POP) > ew) {
+            line[0].abund /= FACTOR;
+         }
+         abund0 = line[0].abund;
+         line[0].abund = original_abund;
+         while(eqwidth(model,line,atom,wave,V,POP) < ew)
+         line[0].abund *= FACTOR;
+         abund1 = line[0].abund;
+         for(j=1;j<=JMAX;j++) {
+           abundmid = line[0].abund = (abund0 + abund1)/2.0;
+           wmid = eqwidth(model,line,atom,wave,V,POP);
+           if(wmid >= ew) abund1 = abundmid;
+           if(wmid < ew) abund0 = abundmid;
+           if(fabs(log10(abund1/abund0)) <= 0.0002) break;
+         }
+         Atot = log10((abund1+abund0)/2.0);
+         AH = Atot + 0.0405 + 12.0;
+         MH = Atot - log10(original_abund) + model->MH;
+         /*printf("%8.3f  %5.1f %6.3f  %4.2f  %7.3f  %7.3f  %6.3f\n",line[0].wave,*/
+                   /*line[0].code,line[0].El,microturbulence_vel,Atot,AH,MH);*/
+         abundances[pos] = Atot;
+         normal_abundances[pos] = AH;
+         relative_abundances[pos] = MH;
+    } else {
+         abundances[pos] = 0;
+         normal_abundances[pos] = 0;
+         relative_abundances[pos] = 0;
+    }
      
      if (pos % 25 == 0) {
             if(flagw == 1) printf("Wavelength %9.3f - Work completed %.2f\%\n", wave, ((1.0*pos)/num_measures)*100.0);

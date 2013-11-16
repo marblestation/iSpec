@@ -1255,6 +1255,16 @@ class EquivalentWidthModel(MPFitModel):
         #
         self.calculation_time = 0
         self.cache = {}
+        self.m1 = None
+        self.c1 = None
+        self.m2 = None
+        self.c2 = None
+        self.fe1 = None
+        self.fe2 = None
+        self.fe1_std = None
+        self.fe2_std = None
+        self.fe1_filter = None
+        self.fe2_filter = None
         p = [teff, logg, vmic]
         self._MH = MH
         self._eMH = 0.0
@@ -1273,154 +1283,112 @@ class EquivalentWidthModel(MPFitModel):
 
         key = "%.2f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.vmic())
         if self.cache.has_key(key):
+            hit_cache = True
             print "Cache:", key
             self.last_final_values = self.cache[key]
+            spec_abund, normal_abund, x_over_h, x_over_fe = self.cache[key]
         else:
+            hit_cache = False
             print "Generating:", key
             # Optimization to avoid too small changes in parameters or repetition
             atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH())
+            if self.fe1_filter is None or self.fe2_filter is None:
+                ignore = np.ones(len(self.linemasks)) # Do not ignore any line since it's the first execution and it has not been done any selection
+            else:
+                ignore = np.zeros(len(self.linemasks))
+                ignore[np.where(np.logical_or(self.fe1_filter, self.fe2_filter))[0]] = 1.0 # Do not ignore selected fe1/2 lines
             spec_abund, normal_abund, x_over_h, x_over_fe = determine_abundances(atmosphere_layers, \
-                    self.teff(), self.logg(), self.MH(), self.linemasks, self.abundances, microturbulence_vel = self.vmic(), verbose=0)
+                    self.teff(), self.logg(), self.MH(), self.linemasks, self.abundances, microturbulence_vel = self.vmic(), \
+                    ignore=ignore, verbose=0)
+            self.cache[key] = (spec_abund, normal_abund, x_over_h, x_over_fe)
 
-            # First iteration
-            if self.lines_for_teff is None or self.lines_for_vmic is None:
-                self.select_good_lines(x_over_h, strict_teff=False, strict_vmic=False)
+        # First iteration
+        if self.fe1_filter is None or self.fe2_filter is None:
+            self.select_good_lines(x_over_h, strict=True)
 
-            values_to_evaluate = []
-            fitted_lines_params = []
-            selected_x_over_h = []
-            for i, (lines_for_teff, lines_for_vmic) in enumerate(zip(self.lines_for_teff, self.lines_for_vmic)):
-                ### Temperature
-                ## y = mx + c
-                #x = self.linemasks['lower state (eV)'][lines_for_teff]
-                #y = x_over_h[lines_for_teff]
-                #A = np.vstack([x, np.ones(len(x))]).T
-                #m1, c1 = np.linalg.lstsq(A, y)[0]
-                ##import matplotlib.pyplot as plt
-                ##plt.scatter(x, y)
-                ##plt.plot(x, m1*x + c1)
-                ##plt.show()
+        values_to_evaluate = []
+        fitted_lines_params = []
+        selected_x_over_h = []
 
-                ### Vmic
-                ## y = mx + c
-                #x = self.linemasks['ewr'][lines_for_vmic]
-                #y = x_over_h[lines_for_vmic]
-                #A = np.vstack([x, np.ones(len(x))]).T
-                #m2, c2 = np.linalg.lstsq(A, y)[0]
-                ##import matplotlib.pyplot as plt
-                ##plt.scatter(x, y)
-                ##plt.plot(x, m2*x + c2)
-                ##plt.show()
+        import statsmodels.api as sm
+        ### Temperature
+        ## y = mx + c
+        x = self.linemasks['lower state (eV)'][self.fe1_filter]
+        y = x_over_h[self.fe1_filter]
+        x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
+        linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
+        self.m1 = linear_model.params[0]
+        self.c1 = linear_model.params[1]
+        self.fe1 = np.median(x_over_h[self.fe1_filter])
+        self.fe1_std = np.std(x_over_h[self.fe1_filter])
+        ##self.fe1 = np.median(linear_model.fittedvalues)
+        ##self.fe1_std = np.std(linear_model.fittedvalues)
+        #print "Fe 1", np.median(linear_model.fittedvalues), np.median(x_over_h[self.fe1_filter])
+        #print "    ", np.std(linear_model.fittedvalues), np.std(x_over_h[self.fe1_filter])
+        #import matplotlib.pyplot as plt
+        #plt.scatter(x, y)
+        #plt.plot(x, m1*x + c1)
+        #plt.show()
 
-                import statsmodels.api as sm
-                ### Temperature
-                ## y = mx + c
-                x = self.linemasks['lower state (eV)'][lines_for_teff]
-                y = x_over_h[lines_for_teff]
-                # RLM (Robust least squares)
-                # Huber's T norm with the (default) median absolute deviation scaling
-                # - http://en.wikipedia.org/wiki/Huber_loss_function
-                # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
-                x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
-                huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
-                linear_model = huber_t.fit()
-                #linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
-                m1 = linear_model.params[0]
-                c1 = linear_model.params[1]
-                fe1 = np.median(linear_model.fittedvalues)
-                #import matplotlib.pyplot as plt
-                #plt.scatter(x, y)
-                #plt.plot(x, m1*x + c1)
-                #plt.show()
+        ### Vmic
+        ## y = mx + c
+        x = self.linemasks['ewr'][self.fe1_filter]
+        y = x_over_h[self.fe1_filter]
+        x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
+        linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
+        self.m2 = linear_model.params[0]
+        self.c2 = linear_model.params[1]
+        #import matplotlib.pyplot as plt
+        #plt.scatter(x, y)
+        #plt.plot(x, m2*x + c2)
+        #plt.show()
 
-                ### Vmic
-                ## y = mx + c
-                x = self.linemasks['ewr'][lines_for_teff]
-                y = x_over_h[lines_for_teff]
-                # RLM (Robust least squares)
-                # Huber's T norm with the (default) median absolute deviation scaling
-                # - http://en.wikipedia.org/wiki/Huber_loss_function
-                # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
-                x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
-                huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
-                linear_model = huber_t.fit()
-                #linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
-                m2 = linear_model.params[0]
-                c2 = linear_model.params[1]
-                ##fe2 = np.median(linear_model.fittedvalues)
-                #import matplotlib.pyplot as plt
-                #plt.scatter(x, y)
-                #plt.plot(x, m2*x + c2)
-                #plt.show()
+        ### Fe2
+        ## y = mx + c
+        x = self.linemasks['ewr'][self.fe2_filter]
+        y = x_over_h[self.fe2_filter]
+        x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
+        linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
+        self.fe2 = np.median(x_over_h[self.fe2_filter])
+        self.fe2_std = np.std(x_over_h[self.fe2_filter])
+        ##self.fe2 = np.median(linear_model.fittedvalues)
+        ##self.fe2_std = np.std(linear_model.fittedvalues)
+        #print "Fe 2", np.median(linear_model.fittedvalues), np.median(x_over_h[self.fe2_filter])
+        #print "    ", np.std(linear_model.fittedvalues), np.std(x_over_h[self.fe2_filter])
+        #import matplotlib.pyplot as plt
+        #plt.scatter(x, y)
+        #plt.plot(x, m2*x + c2)
+        #plt.show()
 
-                ### Fe2
-                ## y = mx + c
-                x = self.linemasks['ewr'][lines_for_vmic]
-                y = x_over_h[lines_for_vmic]
-                # RLM (Robust least squares)
-                # Huber's T norm with the (default) median absolute deviation scaling
-                # - http://en.wikipedia.org/wiki/Huber_loss_function
-                # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
-                x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
-                huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
-                linear_model = huber_t.fit()
-                #linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
-                #m3 = linear_model.params[0]
-                #c3 = linear_model.params[1]
-                fe2 = np.median(linear_model.fittedvalues)
-                #import matplotlib.pyplot as plt
-                #plt.scatter(x, y)
-                #plt.plot(x, m2*x + c2)
-                #plt.show()
+        ## Gravity
+        abundance_diff = self.fe1 - self.fe2
+        abundance_diff2 = self.MH() - self.fe1
 
+        # Rounded to 3 and 2 decimals (using string convertion works better than np.round)
+        values_to_evaluate.append(float("%.6f" % self.m1))
+        values_to_evaluate.append(float("%.6f" % self.m2))
+        values_to_evaluate.append(float("%.6f" % abundance_diff))
+        if self.adjust_model_metalicity:
+            values_to_evaluate.append(float("%.2f" % abundance_diff2))
+        residuals = np.asarray(values_to_evaluate) - self.y
 
+        if not hit_cache:
+            print " # Element:                   Fe 1 / Fe 2\n",
+            print "   Teff/Vmic slopes:            %.6f %.6f" % (self.m1, self.m2)
+            print "   Abundances diff:             %.6f" % abundance_diff
+            print "   Abundances diff with model:  %.6f" % abundance_diff2
+            print "   Abundances stdev:            %.6f %.6f" % (np.std(x_over_h[self.fe1_filter]), np.std(x_over_h[self.fe2_filter]))
+            print "   Abundances median:           %.6f %.6f" % (np.median(self.fe1), np.median(self.fe2))
+            #print "Eval:", np.sum(np.tanh(self.weights*residuals)**2)
+            print " - Chisq:                       %.10g" % np.sum((self.weights*residuals)**2)
 
-                #fe1 = np.median(x_over_h[lines_for_teff])
-                #fe2 = np.median(x_over_h[lines_for_vmic])
-
-                ## Gravity
-                abundance_diff = fe1 - fe2
-                #abundance_diff = np.median(x_over_h[lines_for_teff]) - np.median(x_over_h[lines_for_vmic])
-                #abundance_diff2 = self.MH() - np.median(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
-                #abundance_diff2 = self.MH() - np.median(x_over_h[self.lines_for_teff[0]]) # Always [0] where Fe 1 is
-                abundance_diff2 = self.MH() - fe1
-
-                print " # Element:                   ", self.teff_elements[i], self.vmic_elements[i]
-                print "   Teff/Vmic slopes:            %.6f %.6f" % (m1, m2)
-                print "   Abundances diff:             %.6f" % abundance_diff
-                print "   Abundances diff with model:  %.6f" % abundance_diff2
-                print "   Abundances stdev:            %.6f %.6f" % (np.std(x_over_h[lines_for_teff]), np.std(x_over_h[lines_for_vmic]))
-                print "   Abundances median:           %.6f %.6f" % (np.median(fe1), np.median(fe2))
-
-                # Rounded to 3 and 2 decimals (using string convertion works better than np.round)
-                values_to_evaluate.append(float("%.6f" % m1))
-                values_to_evaluate.append(float("%.6f" % m2))
-                values_to_evaluate.append(float("%.6f" % abundance_diff))
-                if self.adjust_model_metalicity:
-                    values_to_evaluate.append(float("%.2f" % abundance_diff2))
-                values_to_evaluate.append(float("%.2f" % abundance_diff2))
-                #abundances_to_evaluate = np.arange(len(self.linemasks))
-                ##abundances_to_evaluate[:] = 10.
-                #abundances_to_evaluate[:] = 0.
-                #abundances_to_evaluate[lines_for_teff] = x_over_h[lines_for_teff] - np.median(x_over_h[lines_for_teff])
-                #abundances_to_evaluate[lines_for_vmic] = x_over_h[lines_for_vmic] - np.median(x_over_h[lines_for_vmic])
-                # TODO: It will not work if there are more than 1 element (i.e. Fe and Ti)
-                #abundances_to_evaluate = x_over_h - np.median(x_over_h[np.logical_or(lines_for_teff, lines_for_vmic)])
-                #values_to_evaluate = np.hstack((values_to_evaluate,  abundances_to_evaluate)).tolist()
-                #values_to_evaluate = abundances_to_evaluate
-
-                residuals = np.asarray(values_to_evaluate) - self.y
-                #print "Eval:", np.sum(np.tanh(self.weights*residuals)**2)
-                print " - Chisq:                       %.10g" % np.sum((self.weights*residuals)**2)
-                fitted_lines_params.append(m1)
-                fitted_lines_params.append(c1)
-                fitted_lines_params.append(m2)
-                fitted_lines_params.append(c2)
-                selected_x_over_h.append(lines_for_teff.copy())
-                selected_x_over_h.append(lines_for_vmic.copy())
-            self.last_final_values = (np.asarray(values_to_evaluate), x_over_h, selected_x_over_h, fitted_lines_params)
-            self.cache[key] = self.last_final_values
-
+        fitted_lines_params.append(self.m1)
+        fitted_lines_params.append(self.c1)
+        fitted_lines_params.append(self.m2)
+        fitted_lines_params.append(self.c2)
+        selected_x_over_h.append(self.fe1_filter.copy())
+        selected_x_over_h.append(self.fe2_filter.copy())
+        self.last_final_values = (np.asarray(values_to_evaluate), x_over_h, selected_x_over_h, fitted_lines_params)
 
         values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
         return values_to_evaluate.copy()
@@ -1464,151 +1432,119 @@ class EquivalentWidthModel(MPFitModel):
                 print p + (pformat % x[i]) + '  '
 
         ##### Metallicity
-        values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
-        import statsmodels.api as sm
-        ### Temperature
-        ## y = mx + c
-        x = self.linemasks['lower state (eV)'][self.lines_for_teff[0]]
-        y = x_over_h[self.lines_for_teff[0]]
-        # RLM (Robust least squares)
-        # Huber's T norm with the (default) median absolute deviation scaling
-        # - http://en.wikipedia.org/wiki/Huber_loss_function
-        # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
-        x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
-        huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
-        linear_model = huber_t.fit()
-        #linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
-        m1 = linear_model.params[0]
-        c1 = linear_model.params[1]
-        fe1 = np.median(linear_model.fittedvalues)
-
-        ##self._MH = np.median(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
-        #self._MH = np.median(x_over_h[self.lines_for_teff[0]]) # Only from Fe 1
-        self._MH = np.median(linear_model.fittedvalues)
-        self._MH = np.min((self._MH, self.max_MH))
-        self._MH = np.max((self._MH, self.min_MH))
-        self._eMH = np.std(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
+        #self._MH = self.fe1
+        #self._MH = np.min((self._MH, self.max_MH))
+        #self._MH = np.max((self._MH, self.min_MH))
+        #self._eMH = np.std(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
 
 
         ##### Lines
-        values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
-        self.select_good_lines(x_over_h, strict_teff=False, strict_vmic=False) # Modifies self.lines_for_teff and self.lines_for_vmic
+        #values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
+        #self.select_good_lines(x_over_h, strict=True) # Modifies self.lines_for_teff and self.lines_for_vmic
 
         return 0
 
 
-    def select_good_lines(self, x_over_h, strict_teff=True, strict_vmic=False):
+    def select_good_lines(self, x_over_h, strict=True):
         """
-            Modifies self.lines_for_teff and self.lines_for_vmic
+            Modifies self.fe1_filter and self.fe2_filter
         """
         # Out of range
         bad = np.logical_or(x_over_h > 1.0, x_over_h < -5)
         #### Line selection
-        # Select elements for determining the Teff (traditionally Fe 1)
-        self.lines_for_teff = []
-        for element in self.teff_elements:
-            lines_for_teff = self.linemasks['element'] == element
+        fe1_filter = self.linemasks['element'] == "Fe 1"
+        fe2_filter = self.linemasks['element'] == "Fe 2"
 
-            if strict_teff and len(np.where(~bad & lines_for_teff)[0]) > 1:
-                # Outliers
-                x = self.linemasks['lower state (eV)'][~bad & lines_for_teff]
-                y = x_over_h[~bad & lines_for_teff]
-                A = np.vstack([x, np.ones(len(x))]).T
-                m0, c0 = np.linalg.lstsq(A, y)[0]
-                #lower_limit = m0*self.linemasks['lower state (eV)'] + c0 - 3*np.std(y)
-                #upper_limit = m0*self.linemasks['lower state (eV)'] + c0 + 3*np.std(y)
-                interq = np.percentile(y, 99) - np.percentile(y, 1)
-                lower_limit = m0*self.linemasks['lower state (eV)'] + c0 - interq/2.
-                upper_limit = m0*self.linemasks['lower state (eV)'] + c0 + interq/2.
-                reject_lines_for_teff = np.logical_or(x_over_h > upper_limit, x_over_h < lower_limit)
-                reject_lines_for_teff = np.logical_or(reject_lines_for_teff, bad)
-                #import matplotlib.pyplot as plt
-                #plt.scatter(x, y)
-                #plt.plot(x, m0*x + c0)
-                #plt.plot(x, m0*x + c0 + 3*np.std(y))
-                #plt.plot(x, m0*x + c0 - 3*np.std(y))
-                #plt.show()
+        if strict and len(np.where(~bad)[0]) > 1:
+            # Outliers
+            import statsmodels.api as sm
+            x = self.linemasks['lower state (eV)']
+            y = x_over_h
+            # RLM (Robust least squares)
+            # Huber's T norm with the (default) median absolute deviation scaling
+            # - http://en.wikipedia.org/wiki/Huber_loss_function
+            # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
+            x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
+            huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
+            linear_model = huber_t.fit()
+            reject_filter1 = linear_model.weights < 0.90
+            reject_filter1 = np.logical_or(reject_filter1, bad)
+            #import matplotlib.pyplot as plt
+            #plt.scatter(self.linemasks['lower state (eV)'], x_over_h)
+            #plt.scatter(self.linemasks['lower state (eV)'][reject_filter1], x_over_h[reject_filter1], color="red")
+            #plt.show()
 
-                # Discard bad lines and outliers
-                clean_lines_for_teff = np.logical_and(~reject_lines_for_teff, lines_for_teff)
-                # Ensure that there are at least some lines
-                if len(np.where(clean_lines_for_teff)[0]) <= 1:
-                    # Discard only bad lines
-                    clean_lines_for_teff = lines_for_teff[~bad]
-                    if len(np.where(clean_lines_for_teff)[0]) <= 1:
-                        clean_lines_for_teff = lines_for_teff
-                if len(np.where(clean_lines_for_teff)[0]) <= 1:
-                    raise Exception("Not enought lines for Teff (%i lines)" % len(np.where(clean_lines_for_teff)[0]))
-                else:
-                    self.lines_for_teff.append(clean_lines_for_teff)
+            # Outliers
+            import statsmodels.api as sm
+            x = self.linemasks['ewr']
+            y = x_over_h
+            # RLM (Robust least squares)
+            # Huber's T norm with the (default) median absolute deviation scaling
+            # - http://en.wikipedia.org/wiki/Huber_loss_function
+            # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
+            x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
+            huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
+            linear_model = huber_t.fit()
+            reject_filter2 = linear_model.weights < 0.90
+            reject_filter2 = np.logical_or(reject_filter2, bad)
+            #import matplotlib.pyplot as plt
+            #plt.scatter(self.linemasks['ewr'], x_over_h)
+            #plt.scatter(self.linemasks['ewr'][reject_filter2], x_over_h[reject_filter2], color="red")
+            #plt.show()
+
+            reject_filter = np.logical_or(reject_filter1, reject_filter2)
+
+            # Discard bad lines and outliers
+            clean_fe1_filter = np.logical_and(~reject_filter, fe1_filter)
+            # Ensure that there are at least some lines
+            if len(np.where(clean_fe1_filter)[0]) <= 1:
+                # Discard only bad lines
+                clean_fe1_filter = np.logical_and(~bad, fe1_filter)
+                if len(np.where(clean_fe1_filter)[0]) <= 1:
+                    clean_fe1_filter = fe1_filter
+            if len(np.where(clean_fe1_filter)[0]) <= 1:
+                raise Exception("Not enought lines for Fe 1 (%i lines)" % len(np.where(clean_fe1_filter)[0]))
             else:
-                ##### ACCEPT all
-                if len(np.where(~bad & lines_for_teff)[0]) > 0:
-                    self.lines_for_teff.append(np.logical_and(lines_for_teff, np.logical_not(bad)))
-                else:
-                    self.lines_for_teff.append(lines_for_teff)
-            print " > Selected", element, "lines for teff:", len(np.where(self.lines_for_teff[-1])[0]), "of", len(np.where(lines_for_teff)[0])
+                self.fe1_filter = clean_fe1_filter
 
+            # Discard bad lines and outliers
+            clean_fe2_filter = np.logical_and(~reject_filter, fe2_filter)
+            # Ensure that there are at least some lines
+            if len(np.where(clean_fe2_filter)[0]) <= 1:
+                # Discard only bad lines
+                clean_fe2_filter = np.logical_and(~bad, fe2_filter)
+                if len(np.where(clean_fe2_filter)[0]) <= 1:
+                    clean_fe2_filter = fe2_filter
 
-        # Select elements for determining the Vmic (traditionally Fe 2)
-        self.lines_for_vmic = []
-        for element in self.vmic_elements:
-            lines_for_vmic = self.linemasks['element'] == element
+            ## Discard ONLY bad lines for Fe 2
+            #clean_fe2_filter = np.logical_and(~bad, fe2_filter)
+            ## Ensure that there are at least some lines
+            #if len(np.where(clean_fe2_filter)[0]) >= 1:
+                #clean_fe2_filter = fe2_filter
 
-
-            if strict_vmic and len(np.where(~bad & lines_for_vmic)[0]) > 1:
-                x = self.linemasks['ewr'][~bad & lines_for_vmic]
-                y = x_over_h[~bad & lines_for_vmic]
-                A = np.vstack([x, np.ones(len(x))]).T
-                m0, c0 = np.linalg.lstsq(A, y)[0]
-                #lower_limit = m0*self.linemasks['ewr'] + c0 - 3*np.std(y)
-                #upper_limit = m0*self.linemasks['ewr'] + c0 + 3*np.std(y)
-                interq = np.percentile(y, 99) - np.percentile(y, 1)
-                lower_limit = m0*self.linemasks['ewr'] + c0 - interq/2.
-                upper_limit = m0*self.linemasks['ewr'] + c0 + interq/2.
-                reject_lines_for_vmic = np.logical_or(x_over_h > upper_limit, x_over_h < lower_limit)
-                reject_lines_for_vmic = np.logical_or(reject_lines_for_vmic, bad)
-                #import matplotlib.pyplot as plt
-                #plt.scatter(x, y)
-                #plt.plot(x, m0*x + c0)
-                #plt.plot(x, m0*x + c0 + 3*np.std(y))
-                #plt.plot(x, m0*x + c0 - 3*np.std(y))
-                #plt.show()
-
-                #discard = np.logical_or(bad, reject1)
-                #discard = np.logical_or(discard, reject2)
-
-                # Discard bad lines and outliers
-                clean_lines_for_vmic = np.logical_and(~reject_lines_for_vmic, lines_for_vmic)
-                if len(np.where(clean_lines_for_vmic)[0]) <= 1:
-                    clean_lines_for_vmic = lines_for_vmic[~bad]
-                    # Discard only bad lines
-                    if len(np.where(clean_lines_for_vmic)[0]) <= 1:
-                        clean_lines_for_vmic = lines_for_vmic
-                if len(np.where(clean_lines_for_vmic)[0]) <= 1:
-                    raise Exception("Not enought lines for Vmic calculations (%i lines)" % len(np.where(clean_lines_for_vmic)[0]))
-                else:
-                    self.lines_for_vmic.append(clean_lines_for_vmic)
+            if len(np.where(clean_fe2_filter)[0]) <= 1:
+                raise Exception("Not enought lines for Fe 1 (%i lines)" % len(np.where(clean_fe2_filter)[0]))
             else:
-                ##### ACCEPT all
-                if len(np.where(~bad & lines_for_vmic)[0]) > 0:
-                    self.lines_for_vmic.append(np.logical_and(lines_for_vmic, np.logical_not(bad)))
-                else:
-                    self.lines_for_vmic.append(lines_for_vmic)
-            print " > Selected", element, "lines for vmic:", len(np.where(self.lines_for_vmic[-1])[0]), "of", len(np.where(lines_for_vmic)[0])
+                self.fe2_filter = clean_fe2_filter
+        else:
+            ##### ACCEPT all
+            if len(np.where(~bad & fe1_filter)[0]) > 0:
+                self.fe1_filter = np.logical_and(fe1_filter, np.logical_not(bad))
+            else:
+                self.fe1_filter = fe1_filter
+            if len(np.where(~bad & fe2_filter)[0]) > 0:
+                self.fe2_filter = np.logical_and(fe2_filter, np.logical_not(bad))
+            else:
+                self.fe2_filter = fe2_filter
+        print " > Selected Fe 1 lines for teff:", len(np.where(self.fe1_filter)[0]), "of", len(np.where(fe1_filter)[0])
+        print " > Selected Fe 2 lines for vmic:", len(np.where(self.fe2_filter)[0]), "of", len(np.where(fe2_filter)[0])
 
 
 
-    def fitData(self, linemasks, teff_elements=["Fe 1"], vmic_elements=["Fe 2"], parinfo=None, max_iterations=20, quiet=True):
+    def fitData(self, linemasks, parinfo=None, max_iterations=20, quiet=True):
         base = 3
         if len(parinfo) < base:
             raise Exception("Wrong number of parameters!")
-
-        if len(teff_elements) != len(vmic_elements):
-            raise Exception("Inconsistent number of teff/vmic elements!")
-
-        if teff_elements[0] != "Fe 1" or vmic_elements[0] != "Fe 2":
-            raise Exception("First element should be always Fe 1/2!")
 
 
         if sys.platform == "win32":
@@ -1618,8 +1554,6 @@ class EquivalentWidthModel(MPFitModel):
             # On most other platforms the best timer is time.time()
             default_timer = time.time
         self.linemasks = linemasks
-        self.teff_elements = teff_elements
-        self.vmic_elements = vmic_elements
         ftol = 1.e-4 # Terminate when the improvement in chisq between iterations is ftol > -(new_chisq/chisq)**2 +1
         xtol = 1.e-4
         gtol = 1.e-4
@@ -1634,13 +1568,11 @@ class EquivalentWidthModel(MPFitModel):
         _t0 = default_timer()
 
         #index = np.asarray([0, 1, 2])
-        #index = np.arange(3*len(teff_elements) + len(linemasks)) # 3 values: zero slopes and zero difference between element1 and element2
         #index = np.arange(len(linemasks))
         if self.adjust_model_metalicity:
-            index = np.arange(4*len(teff_elements)) # 4 values: zero slopes and zero difference between element1 and element2, difference with model
+            index = np.arange(4) # 4 values: zero slopes and zero difference between element1 and element2, difference with model
         else:
-            #index = np.arange(3*len(teff_elements)) # 3 values: zero slopes and zero difference between element1 and element2
-            index = np.arange(4*len(teff_elements)) # 3 values: zero slopes and zero difference between element1 and element2
+            index = np.arange(3) # 3 values: zero slopes and zero difference between element1 and element2
         target_values = np.zeros(len(index))
         weights = np.ones(len(index))
         #weights = np.asarray([3,1,2])
@@ -1660,7 +1592,7 @@ class EquivalentWidthModel(MPFitModel):
         self.basic_chisq = np.sum((weights * residuals)**2)
         self.reduced_basic_chisq = self.basic_chisq / self.m.dof
 
-        self.cache = {}
+        #self.cache = {}
 
         _t1 = default_timer()
         sec = timedelta(seconds=int(_t1 - _t0))
@@ -1674,19 +1606,19 @@ class EquivalentWidthModel(MPFitModel):
     def elogg(self): return self.m.perror[1]
     def evmic(self): return self.m.perror[2]
 
-    #def MH(self): return self._parinfo[3]['value']
-    #def eMH(self): return self.m.perror[3]
+    def MH(self): return self._parinfo[3]['value']
+    def eMH(self): return self.m.perror[3]
 
-    def MH(self): return self._MH
-    def eMH(self): return self._eMH
+    #def MH(self): return self._MH
+    #def eMH(self): return self._eMH
 
     def print_solution(self):
         # Calculate MH
         values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
         #MH = np.median(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
         #MH = np.std(x_over_h[np.logical_or(self.lines_for_teff[0], self.lines_for_vmic[0])])
-        MH = np.median(x_over_h[self.lines_for_teff[0]]) # Only from Fe 1
-        eMH = np.std(x_over_h[self.lines_for_teff[0]]) # Only from Fe 1
+        MH = self.fe1
+        eMH = self.fe1_std
 
         header = "%8s\t%8s\t%8s\t%8s" % ("teff","logg","MH","vmic")
         #solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.teff(), self.logg(), self.MH(), self.vmic())
@@ -1708,7 +1640,7 @@ class EquivalentWidthModel(MPFitModel):
         print "Return code:", self.m.status
 
 
-def modelize_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, teff_elements=["Fe 1"], vmic_elements=["Fe 2"], adjust_model_metalicity=False, max_iterations=20):
+def modelize_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, adjust_model_metalicity=False, max_iterations=20):
     """
     """
     teff_range = modeled_layers_pack[3]
@@ -1719,21 +1651,17 @@ def modelize_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundanc
 
     EW_model = EquivalentWidthModel(modeled_layers_pack, linelist, abundances, MH=initial_MH, adjust_model_metalicity=adjust_model_metalicity)
 
-    lfilter = None
-    for element in np.hstack((teff_elements, vmic_elements)):
-        if lfilter is None:
-            lfilter = linemasks['element'] == element
-        else:
-            lfilter = np.logical_or(lfilter, linemasks['element'] == element)
+    lfilter = linemasks['element'] == "Fe 1"
+    lfilter = np.logical_or(lfilter, linemasks['element'] == "Fe 2")
     linemasks = linemasks[lfilter]
-    EW_model.fitData(linemasks, teff_elements=teff_elements, vmic_elements=vmic_elements, parinfo=parinfo, max_iterations=max_iterations, quiet=False)
+    EW_model.fitData(linemasks, parinfo=parinfo, max_iterations=max_iterations, quiet=False)
     print "\n"
     EW_model.print_solution()
 
     # Calculate MH
     values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = EW_model.last_final_values
-    MH = np.median(x_over_h[selected_x_over_h[0]]) # Only from Fe 1
-    eMH = np.std(x_over_h[selected_x_over_h[0]]) # Only from Fe 1
+    MH = EW_model.fe1
+    eMH = EW_model.fe1_std
 
     # Collect information to be returned
     params = {}
