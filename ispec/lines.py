@@ -225,12 +225,14 @@ def write_line_regions(line_regions, line_regions_filename):
     out.write("\n".join(["\t".join(map(str, (line['wave_peak'], line['wave_base'], line['wave_top'], line['note']))) for line in line_regions]))
     out.close()
 
-def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None, free_mu=False):
+def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None, baseline_margin=0., free_mu=False):
     """
     Fits a gaussian at a given wavelength location using a fitted continuum model.
 
     - For absorption lines, it will alway be true: model.A() < 0 and model.sig() > 0.
     - A mu parameter (model.mu) outside the region used for the fitting it is also a symptom of bad fit.
+    - If baseline_margin is different from 0, the continuum will be adjusted by letting
+      free the baseline in between [(1.-baseline_margin)*baseline, (1+baseline_margin)*baseline]
     """
     model = GaussianModel()
     x = spectrum_slice['waveobs']
@@ -243,10 +245,20 @@ def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None, free_m
         A = np.min((min_flux - baseline, -1e-10))
     if sig is None:
         sig = np.max(((x[-1] - x[0])/3.0, 1e-10))
+    if free_mu and (mu < x[0] or mu > x[-1]):
+        # Correct mu in case it is outside limits
+        mu = spectrum_slice['waveobs'][np.argmin(spectrum_slice['flux'])]
+
 
     parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for i in np.arange(4)]
     parinfo[0]['value'] = baseline # Continuum
-    parinfo[0]['fixed'] = True
+    if baseline_margin == 0:
+        parinfo[0]['fixed'] = True
+    else:
+        parinfo[0]['fixed'] = False
+        parinfo[0]['limited'] = [True, True]
+        #parinfo[0]['limits'] = [0.95*baseline, 1.05*baseline]
+        parinfo[0]['limits'] = [(1.-baseline_margin)*baseline, (1+baseline_margin)*baseline]
     parinfo[1]['value'] = A # Only negative (absorption lines) and greater than the lowest point + 25%
     parinfo[1]['limited'] = [True, True]
     parinfo[1]['limits'] = [np.min(((min_flux-baseline) * 1.25, -1e-10)), -1e-10]
@@ -315,21 +327,19 @@ def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None, free_m
             plt.plot(x[:-1], baseline+func(x[:-1], model.A(), model.mu(), model.sig()))
             plt.show()
         show()
-        #import pudb
-        #pudb.set_trace()
-        #import ipdb
-        #ipdb.set_trace()
 
 
     return model
 
-def __fit_voigt(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None):
+def __fit_voigt(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None, baseline_margin=0, free_mu=False):
     """
     Fits a voigt at a given wavelength location using a fitted continuum model.
 
     - For absorption lines, it will alway be true: model.A() < 0 and model.sig() > 0.
     - For absorption lines, model.gamma() < 0 indicates strange wings and probably a bad fit.
     - A mu parameter (model.mu) outside the region used for the fitting it is also a symptom of bad fit.
+    - If baseline_margin is different from 0, the continuum will be adjusted by letting
+      free the baseline in between [(1.-baseline_margin)*baseline, (1+baseline_margin)*baseline]
     """
     model = VoigtModel()
     x = spectrum_slice['waveobs']
@@ -344,10 +354,20 @@ def __fit_voigt(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=Non
         sig = np.max(((x[-1] - x[0])/3.0, 1e-10))
     if gamma is None:
         gamma = np.max(((x[-1] - x[0])/2.0, 1e-10))
+    if free_mu and (mu < x[0] or mu > x[-1]):
+        # Correct mu in case it is outside limits
+        mu = spectrum_slice['waveobs'][np.argmin(spectrum_slice['flux'])]
+
 
     parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for i in np.arange(5)]
     parinfo[0]['value'] = baseline # Continuum
-    parinfo[0]['fixed'] = True
+    if baseline_margin == 0:
+        parinfo[0]['fixed'] = True
+    else:
+        parinfo[0]['fixed'] = False
+        parinfo[0]['limited'] = [True, True]
+        #parinfo[0]['limits'] = [0.95*baseline, 1.05*baseline]
+        parinfo[0]['limits'] = [(1.-baseline_margin)*baseline, (1+baseline_margin)*baseline]
     parinfo[1]['value'] = A # Only negative (absorption lines) and greater than the lowest point + 25%
     parinfo[1]['limited'] = [True, True]
     parinfo[1]['limits'] = [(min_flux-baseline) * 1.25, -1e-10]
@@ -355,10 +375,13 @@ def __fit_voigt(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=Non
     parinfo[2]['limited'] = [True, True]
     parinfo[2]['limits'] = [1e-10, x[-1] - x[0]]
     parinfo[3]['value'] = mu # Peak only within the spectrum slice
-    parinfo[3]['fixed'] = True
-    #parinfo[3]['limited'] = [True, True]
-    ##parinfo[3]['limits'] = [x[0], x[-1]]
-    #parinfo[3]['limits'] = [mu - 0.005, mu + 0.005]
+    if not free_mu:
+        parinfo[3]['fixed'] = True
+    else:
+        parinfo[3]['fixed'] = False
+        parinfo[3]['limited'] = [True, True]
+        parinfo[3]['limits'] = [x[0], x[-1]]
+        #parinfo[3]['limits'] = [mu - 0.001, mu + 0.001]
     parinfo[4]['value'] = gamma # Only positives (not zero, otherwise its a gaussian) and small (for nm, it should be <= 0.01 aprox but I leave it in relative terms considering the spectrum slice)
     parinfo[4]['limited'] = [True, True]
     parinfo[4]['limits'] = [1e-10, x[-1] - x[0]]
@@ -374,7 +397,7 @@ def __fit_voigt(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=Non
     return model
 
 
-def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None, discard_gaussian = False, discard_voigt = False, free_mu=False):
+def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None, discard_gaussian = False, discard_voigt = False, baseline_margin=0, free_mu=False):
     """
     Fits a gaussian and a voigt at a given wavelength location using a fitted continuum model.
 
@@ -382,6 +405,8 @@ def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None
     - For absorption lines, it will alway be true: model.A() < 0 and model.sig() > 0.
     - For absorption lines fitted with voigt, model.gamma() < 0 indicates strange wings and probably a bad fit
     - A mu parameter (model.mu) outside the region used for the fitting it is also a symptom of bad fit.
+    - If baseline_margin is different from 0, the continuum will be adjusted by letting
+      free the baseline in between [(1.-baseline_margin)*baseline, (1+baseline_margin)*baseline]
     """
     if not discard_gaussian:
         # Default values for failed fit:
@@ -393,7 +418,7 @@ def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None
         # - 1 fix parameter: mu (but it will set to free if there is enough data)
         if len(spectrum_slice) > 2:
             try:
-                gaussian_model = __fit_gaussian(spectrum_slice, continuum_model, mu, sig=sig, A=A, free_mu=free_mu)
+                gaussian_model = __fit_gaussian(spectrum_slice, continuum_model, mu, sig=sig, A=A, baseline_margin=baseline_margin, free_mu=free_mu)
 
                 residuals = gaussian_model.residuals()
                 rms_gaussian = np.sqrt(np.sum(np.power(residuals, 2)) / len(residuals))
@@ -402,8 +427,9 @@ def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None
                 #chisq = np.sum(np.power(residuals, 2) * gaussian_model.weights)
                 discard_gaussian = False
             except Exception as e:
-                if len(e.message) > 0:
-                    print e.message
+                pass
+                #if len(e.message) > 0:
+                    #print e.message
 
     if not discard_voigt:
         # Default values for failed fit:
@@ -415,13 +441,14 @@ def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None
         # - 1 fix parameter: mu (but it will set to free if there is enough data)
         if len(spectrum_slice) > 3:
             try:
-                voigt_model = __fit_voigt(spectrum_slice, continuum_model, mu, sig=sig, A=A, gamma=gamma)
+                voigt_model = __fit_voigt(spectrum_slice, continuum_model, mu, sig=sig, A=A, gamma=gamma, baseline_margin=baseline_margin, free_mu=free_mu)
                 residuals = voigt_model.residuals()
                 rms_voigt = np.sqrt(np.sum(np.power(residuals, 2)) / len(residuals))
                 discard_voigt = False
             except Exception as e:
-                if len(e.message) > 0:
-                    print e.message
+                pass
+                #if len(e.message) > 0:
+                    #print e.message
 
     if (not discard_gaussian and not discard_voigt and rms_gaussian <= rms_voigt) or (not discard_gaussian and discard_voigt):
         return gaussian_model, rms_gaussian
@@ -852,7 +879,7 @@ def find_linemasks(spectrum, continuum_model, atomic_linelist=None, max_atomic_w
 
     return linemasks
 
-def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wave_diff=0.0005, telluric_linelist=None, vel_telluric=0.0, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, free_mu=False, frame=None):
+def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wave_diff=0.0005, telluric_linelist=None, vel_telluric=0.0, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, continuum_adjustment_margin=0.0, free_mu=False, frame=None):
     """
     Fits gaussians models in the specified line regions.
     * 'regions' should be an array with 'wave_base', 'wave_peak' and 'wave_top' columns.
@@ -872,6 +899,9 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
     the SNR that will be estimated snr = fluxes/errors)
 
     NOTE: It is recommended to use an already normalized spectrum
+
+    - If baseline_margin is different from 0, the continuum will be adjusted by letting
+      free the baseline in between [(1.-baseline_margin)*baseline, (1+baseline_margin)*baseline]
 
     :returns:
         Array with additional columns such as 'mu', 'sig', 'A', 'baseline'...
@@ -945,7 +975,7 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                     spectrum_window = spectrum[wave_filter]
                 else:
                     spectrum_window = spectrum[new_base:new_top+1]
-                line_model, rms = __fit_line(spectrum_window, continuum_model, regions['wave_peak'][i], discard_gaussian = discard_gaussian, discard_voigt = discard_voigt, free_mu=free_mu)
+                line_model, rms = __fit_line(spectrum_window, continuum_model, regions['wave_peak'][i], discard_gaussian = discard_gaussian, discard_voigt = discard_voigt, baseline_margin=continuum_adjustment_margin, free_mu=free_mu)
                 if free_mu and (line_model.mu() <= spectrum_window['waveobs'][0] or line_model.mu() >= spectrum_window['waveobs'][-1]):
                     raise Exception("Fitted wave peak (mu) outside the limits!")
 
@@ -1742,7 +1772,7 @@ def cross_correlate_with_mask(spectrum, linelist, lower_velocity_limit=-200, upp
                 lower_velocity_limit=lower_velocity_limit, upper_velocity_limit = upper_velocity_limit, \
                 velocity_step=velocity_step, \
                 mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, \
-                only_one_peak=only_one_peak, depth_percent_limit=10, model=model, \
+                only_one_peak=only_one_peak, peak_probability=0.75, model=model, \
                 frame=None)
 
 def cross_correlate_with_template(spectrum, template, lower_velocity_limit=-200, upper_velocity_limit=200, velocity_step=1.0, fourier=False, only_one_peak=False, model='2nd order polynomial + gaussian fit', frame=None):
@@ -1758,10 +1788,10 @@ def cross_correlate_with_template(spectrum, template, lower_velocity_limit=-200,
             lower_velocity_limit=lower_velocity_limit, upper_velocity_limit = upper_velocity_limit, \
             velocity_step=velocity_step, \
             mask_size=None, mask_depth=None, fourier=fourier, \
-            only_one_peak=only_one_peak, depth_percent_limit=10, model=model, \
+            only_one_peak=only_one_peak, peak_probability=0.75, model=model, \
             frame=None)
 
-def __cross_correlate(spectrum, linelist=None, template=None, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, mask_size=2.0, mask_depth=0.01, fourier=False, only_one_peak=False, depth_percent_limit=10, model='2nd order polynomial + gaussian fit', frame=None):
+def __cross_correlate(spectrum, linelist=None, template=None, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, mask_size=2.0, mask_depth=0.01, fourier=False, only_one_peak=False, peak_probability=0.75, model='2nd order polynomial + gaussian fit', frame=None):
     ccf, nbins = __build_velocity_profile(spectrum, \
             linelist = linelist, template = template, \
             lower_velocity_limit = lower_velocity_limit, upper_velocity_limit = upper_velocity_limit, \
@@ -1770,9 +1800,12 @@ def __cross_correlate(spectrum, linelist=None, template=None, lower_velocity_lim
             fourier=fourier, frame=frame)
 
     models = __modelize_velocity_profile(ccf, nbins, only_one_peak=only_one_peak, \
-                                            depth_percent_limit=depth_percent_limit, model=model)
-    best = select_good_velocity_profile_models(models, ccf)
-    return models[best], ccf
+                                            peak_probability=peak_probability, model=model)
+    # We have improved the peak probability detection using RLM, a priori it is not needed
+    # this best selection:
+    #best = select_good_velocity_profile_models(models, ccf)
+    #return models[best], ccf
+    return models, ccf
 
 def __build_velocity_profile(spectrum, linelist=None, template=None, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, mask_size=2.0, mask_depth=0.01, fourier=False, frame=None):
     """
@@ -1810,7 +1843,7 @@ def __build_velocity_profile(spectrum, linelist=None, template=None, lower_veloc
     return ccf_struct, nbins
 
 
-def __modelize_velocity_profile(ccf, nbins, only_one_peak=False, depth_percent_limit=10, model='2nd order polynomial + gaussian fit'):
+def __modelize_velocity_profile(ccf, nbins, only_one_peak=False, peak_probability=0.75, model='2nd order polynomial + gaussian fit'):
     """
     Fits a model ('Gaussian' or 'Voigt') to the deepest peaks in the velocity
     profile. If it is 'Auto', a gaussian and a voigt will be fitted and the best
@@ -1822,6 +1855,10 @@ def __modelize_velocity_profile(ccf, nbins, only_one_peak=False, depth_percent_l
     * For Radial Velocity profiles, more than 1 outlier peak implies that the star is a spectroscopic binary.
 
     WARNING: fluxes and errors are going to be modified by a linear normalization process
+
+    Detected peaks are evaluated to discard noise, a probability is assigned to each one
+    in function to a linear model. If more than one peak is found, those with a peak probability
+    lower than the specified by the argument will be discarded.
 
     :returns:
         Array of fitted models and an array with the margin errors for model.mu() to be able to know the interval
@@ -1881,16 +1918,30 @@ def __modelize_velocity_profile(ccf, nbins, only_one_peak=False, depth_percent_l
             # Just try with the deepest line
             selected_peaks_indices = []
         else:
-            # Identify peak that belong to a % of the deepest fluxes (10% by default)
-            selected_peaks_indices = np.where(fluxes[peaks] + errors[peaks] < np.percentile(fluxes, depth_percent_limit))[0]
-            # Sort the interesting peaks from more to less deep
-            sorted_peaks_indices = np.argsort(fluxes[peaks[selected_peaks_indices]])
-            selected_peaks_indices = selected_peaks_indices[sorted_peaks_indices]
+            import statsmodels.api as sm
+            #x = np.arange(len(peaks))
+            #y = fluxes[peaks]
+            x = xcoord
+            y = fluxes
+            # RLM (Robust least squares)
+            # Huber's T norm with the (default) median absolute deviation scaling
+            # - http://en.wikipedia.org/wiki/Huber_loss_function
+            # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
+            x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
+            huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
+            linear_model = huber_t.fit()
+            #import pudb
+            #pudb.set_trace()
+            selected_peaks_indices = np.where(linear_model.weights[peaks] < 1. - peak_probability)[0]
 
         if len(selected_peaks_indices) == 0:
             # Try with the deepest line
             sorted_peak_indices = np.argsort(fluxes[peaks])
             selected_peaks_indices = [sorted_peak_indices[0]]
+        else:
+            # Sort the interesting peaks from more to less deep
+            sorted_peaks_indices = np.argsort(fluxes[peaks[selected_peaks_indices]])
+            selected_peaks_indices = selected_peaks_indices[sorted_peaks_indices]
     else:
         # If no peaks found, just consider the deepest point and mark the base and top
         # as the limits of the whole data
@@ -2097,3 +2148,49 @@ def select_good_velocity_profile_models(models, ccf):
 
 ############## [end] Radial velocity
 
+
+#def refine_ew(spectrum, linemasks, continuum_model, resolution=None, margin=0.05):
+    ## Normalize spectrum
+    #spectrum = create_spectrum_structure(spectrum['waveobs'], spectrum['flux'])
+    #spectrum['flux'] /= continuum_model(spectrum['waveobs'])
+    #linemasks = linemasks.copy()
+    #diff = []
+    #for i in xrange(len(linemasks)):
+        #line_region = linemasks[i:i+1]
+        #wfilter = spectrum['waveobs'] >= line_region['wave_base'] - margin
+        #wfilter = np.logical_and(wfilter, spectrum['waveobs'] <= line_region['wave_base'] + margin)
+        #spectrum_window = spectrum[wfilter]
+        ##--- Local continuum fit -------------------------------------------------------
+        #model = "Polynomy" # Linear model (1 degree) for local continuum
+        #degree = 1
+        #nknots = None
+
+        ## Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
+        #order='median+max'
+        #median_wave_range=0.1 # Bigger than for non local continuum fit
+        #max_wave_range=1.0
+
+        ## Fit locally in each individual segment
+        #local_continuum_model = fit_continuum(spectrum_window, from_resolution=resolution, \
+                                    #nknots=nknots, degree=degree,\
+                                    #median_wave_range=median_wave_range, \
+                                    #max_wave_range=max_wave_range, \
+                                    #model=model, order=order, \
+                                    #automatic_strong_line_detection=False)
+        ##--- Fit lines -----------------------------------------------------------------
+        ## Spectrum should be already radial velocity corrected
+        #original_ew = linemasks['ew'][i]
+        #line_region = fit_lines(line_region, spectrum, local_continuum_model, \
+                                    #atomic_linelist = None, \
+                                    #max_atomic_wave_diff = 0.005, \
+                                    #telluric_linelist = None, \
+                                    #smoothed_spectrum = None, \
+                                    #check_derivatives = False, \
+                                    #vel_telluric = 0, discard_gaussian=False, \
+                                    #discard_voigt=True, free_mu=False)
+        ##print original_ew - line_region['ew'], "=", original_ew, "-", line_region['ew'], "::", linemasks['ew'][i]
+        #diff.append(original_ew - line_region['ew'][0])
+
+    ##import pudb
+    ##pudb.set_trace()
+    #return linemasks

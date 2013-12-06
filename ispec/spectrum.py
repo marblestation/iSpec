@@ -125,6 +125,8 @@ def __read_fits_spectrum(spectrum_filename, fluxhdu="PRIMARY", errorhdu=None):
 def __read_spectrum(spectrum_filename):
     try:
         spectrum = np.array([tuple(line.rstrip('\r\n').split("\t")) for line in open(spectrum_filename,)][1:], dtype=[('waveobs', float),('flux', float),('err', float)])
+        if len(spectrum) == 0:
+            raise Exception("Empty spectrum or incompatible format")
     except Exception as err:
         # try narval plain text format:
         # - ignores 2 first lines (header)
@@ -237,31 +239,32 @@ def write_spectrum(spectrum, spectrum_filename):
             # Regularly sampled spectrum
             data = spectrum['flux']
             header = pyfits.Header()
-            header.update('TTYPE1', "FLUX")
-            header.update('TUNIT1', "COUNTS")
-            header.update('CD1_1', spectrum['waveobs'][1] - spectrum['waveobs'][0])
-            header.update('CRVAL1', spectrum['waveobs'][0])
-            header.update('CRPIX1', 1)
+            header.set('TTYPE1', "FLUX")
+            header.set('TUNIT1', "COUNTS")
+            header.set('CD1_1', spectrum['waveobs'][1] - spectrum['waveobs'][0])
+            header.set('CDELT1', spectrum['waveobs'][1] - spectrum['waveobs'][0]) # For old software
+            header.set('CRVAL1', spectrum['waveobs'][0])
+            header.set('CRPIX1', 1)
 
-            header.update('NAXIS', 1)
-            header.update('NAXIS1', len(spectrum['flux']))
+            header.set('NAXIS', 1)
+            header.set('NAXIS1', len(spectrum['flux']))
         else:
             # Since it is not regularly sampled, add the wavelength and flux together
             # in a matrix
             data = np.vstack([spectrum['waveobs'], spectrum['flux']])
             header = pyfits.Header()
-            header.update('TTYPE1', "WAVELENGTH")
-            header.update('TUNIT1', "NM")
-            header.update('TTYPE2', "FLUX")
-            header.update('TUNIT2', "COUNTS")
-            header.update('NAXIS', 2)
-            header.update('NAXIS1', len(spectrum['waveobs']))
-            header.update('NAXIS2', 2) # waveobs and flux
-        header.update('CUNIT1', "NM")
-        header.update('CTYPE1', "WAVELENGTH")
-        header.update('ORIGIN', "iSpec")
-        #header.update('VERSION', "iSpec")
-        header.update('UTCSAVED', time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
+            header.set('TTYPE1', "WAVELENGTH")
+            header.set('TUNIT1', "NM")
+            header.set('TTYPE2', "FLUX")
+            header.set('TUNIT2', "COUNTS")
+            header.set('NAXIS', 2)
+            header.set('NAXIS1', len(spectrum['waveobs']))
+            header.set('NAXIS2', 2) # waveobs and flux
+        header.set('CUNIT1', "NM")
+        header.set('CTYPE1', "WAVELENGTH")
+        header.set('ORIGIN', "iSpec")
+        #header.set('VERSION', "iSpec")
+        header.set('UTCSAVED', time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
         primary_hdu = pyfits.PrimaryHDU(data=data, header=header)
 
         # Add an HDU extension with errors if they exist
@@ -269,10 +272,10 @@ def write_spectrum(spectrum, spectrum_filename):
             # Error extension
             data = spectrum['err']
             header = pyfits.Header()
-            header.update('TTYPE1', "FLUX")
-            header.update('TUNIT1', "COUNTS")
-            header.update('NAXIS', 1)
-            header.update('NAXIS1', len(spectrum['err']))
+            header.set('TTYPE1', "FLUX")
+            header.set('TUNIT1', "COUNTS")
+            header.set('NAXIS', 1)
+            header.set('NAXIS1', len(spectrum['err']))
 
             sigma_hdu = pyfits.ImageHDU(data=data, header=header, name="SIGMA")
             fits = pyfits.HDUList([primary_hdu, sigma_hdu])

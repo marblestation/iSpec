@@ -913,8 +913,9 @@ int abundances_determination(char *atmosphere_model_file, char *linelist_file, i
          }
          abund0 = line[0].abund;
          line[0].abund = original_abund;
-         while(eqwidth(model,line,atom,wave,V,POP) < ew)
-         line[0].abund *= FACTOR;
+         while(eqwidth(model,line,atom,wave,V,POP) < ew) {
+             line[0].abund *= FACTOR;
+         }
          abund1 = line[0].abund;
          for(j=1;j<=JMAX;j++) {
            abundmid = line[0].abund = (abund0 + abund1)/2.0;
@@ -926,8 +927,9 @@ int abundances_determination(char *atmosphere_model_file, char *linelist_file, i
          Atot = log10((abund1+abund0)/2.0);
          AH = Atot + 0.0405 + 12.0;
          MH = Atot - log10(original_abund) + model->MH;
-         /*printf("%8.3f  %5.1f %6.3f  %4.2f  %7.3f  %7.3f  %6.3f\n",line[0].wave,*/
-                   /*line[0].code,line[0].El,microturbulence_vel,Atot,AH,MH);*/
+         /*printf("%8.3f  %5.1f %6.3f  %4.2f  %7.3f  %7.3f  %6.3f (%.2f) : %7.3f %7.3f %i\n",line[0].wave,*/
+                   /*line[0].code,line[0].El,microturbulence_vel,Atot,AH,MH,*/
+                   /*ew, abund1, abund0, j);*/
          abundances[pos] = Atot;
          normal_abundances[pos] = AH;
          relative_abundances[pos] = MH;

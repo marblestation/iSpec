@@ -112,9 +112,11 @@ def convolve_spectrum(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.doub
                 if err[i] > 0:
                     convolved_err[i] += err_window[x] * gaussian[x]
                     #convolved_err[i] += (err_window[x] * gaussian[x]) * (err_window[x] * gaussian[x]) # Independent measurements
-        convolved_flux[i] /= total_gaussian
-        #convolved_err[i] = sqrt(convolved_err[i]) # Independent measurements
-        convolved_err[i] /= total_gaussian
+        # Validate that the gaussian has been efective applied (in the borders it could lead to a zero division)
+        if total_gaussian > 0:
+            convolved_flux[i] /= total_gaussian
+            #convolved_err[i] = sqrt(convolved_err[i]) # Independent measurements
+            convolved_err[i] /= total_gaussian
 
         current_work_progress = (i*1.0 / total_points) * 100
         if (int(current_work_progress) % 10 == 0 and current_work_progress - last_reported_progress > 10) or last_reported_progress < 0 or current_work_progress == 100:

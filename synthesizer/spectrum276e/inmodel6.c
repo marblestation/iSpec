@@ -33,7 +33,9 @@ int flagw;
            header but can deal with Castelli models with extra columns */
         fgets(buffer, 80, fp);
         model->teff = atof(strtok(buffer, " "));
-        if (model->teff > 60000.0 || model->teff < 3000.0)
+        // SBC: I have modifiend the lower limit to match the real limit of MARCS model atmosphere
+        /*if (model->teff > 60000.0 || model->teff < 3000.0)*/
+        if (model->teff > 60000.0 || model->teff < 2500.0)
             printf("It looks like this model does not have the traditional SPECTRUM\nheader.  You may need to use the t switch, especially if you\nget a segmentation fault.\n");
         model->logg = atof(strtok(NULL, " "));
         model->MH = atof(strtok(NULL, " "));

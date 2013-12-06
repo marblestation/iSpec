@@ -43,6 +43,7 @@ try:
     from atmospheres import read_kurucz_atmospheres
     from atmospheres import build_modeled_interpolated_layer_values
     from atmospheres import dump_modeled_layers_pack
+    from atmospheres import write_atmosphere
     from synth import generate_spectrum
     from synth import modelize_spectrum
     from synth import modelize_spectrum_from_ew

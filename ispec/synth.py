@@ -696,7 +696,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[0]['fixed'] = not parinfo[0]['parname'].lower() in free_params
     parinfo[0]['step'] = 100.0 # For auto-derivatives
     parinfo[0]['limited'] = [True, True]
-    parinfo[0]['limits'] = [np.min(teff_range), np.max(teff_range)]
+    parinfo[0]['limits'] = [np.min(teff_range)+100.0, np.max(teff_range)-100.0]
     #
     parinfo[1]['parname'] = "logg"
     parinfo[1]['value'] = initial_logg
@@ -704,14 +704,14 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[1]['step'] = 0.10 # For auto-derivatives
     #parinfo[1]['mpmaxstep'] = 0.50 # Maximum change to be made in the parameter
     parinfo[1]['limited'] = [True, True]
-    parinfo[1]['limits'] = [np.min(logg_range), np.max(logg_range)]
+    parinfo[1]['limits'] = [np.min(logg_range)+0.10, np.max(logg_range)-0.10]
     #
     parinfo[2]['parname'] = "MH"
     parinfo[2]['value'] = initial_MH
     parinfo[2]['fixed'] = not parinfo[2]['parname'].lower() in free_params
     parinfo[2]['step'] = 0.05 # For auto-derivatives
     parinfo[2]['limited'] = [True, True]
-    parinfo[2]['limits'] = [np.min(MH_range), np.max(MH_range)]
+    parinfo[2]['limits'] = [np.min(MH_range)+0.05, np.max(MH_range)-0.05]
     #
     parinfo[3]['parname'] = "Vmic"
     parinfo[3]['value'] = initial_vmic
@@ -1396,8 +1396,8 @@ class EquivalentWidthModel(MPFitModel):
     # Default procedure to be called every iteration.  It simply prints
     # the parameter values.
     import scipy
-    blas_enorm32, = scipy.lib.blas.get_blas_funcs(['nrm2'],np.array([0],dtype=np.float32))
-    blas_enorm64, = scipy.lib.blas.get_blas_funcs(['nrm2'],np.array([0],dtype=np.float64))
+    blas_enorm32, = scipy.linalg.blas.get_blas_funcs(['nrm2'],np.array([0],dtype=np.float32))
+    blas_enorm64, = scipy.linalg.blas.get_blas_funcs(['nrm2'],np.array([0],dtype=np.float64))
     def defiter(self, fcn, x, iter, fnorm=None, functkw=None,
                        quiet=0, iterstop=None, parinfo=None,
                        format=None, pformat='%.10g', dof=1):
@@ -1679,11 +1679,11 @@ def modelize_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundanc
     status = {}
     values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = EW_model.last_final_values
     # Save parameters (only for Fe, if there are more elements they will not be saved)
-    status['slope_for_teff'] = values_to_evaluate[0]
-    status['slope_for_vmic'] = values_to_evaluate[1]
+    status['slope_excitation_potential'] = values_to_evaluate[0]
+    status['slope_ewr'] = values_to_evaluate[1]
     status['abundance_diff'] = values_to_evaluate[2]
-    status['lines_for_teff'] = len(np.where(selected_x_over_h[0])[0])
-    status['lines_for_vmic'] = len(np.where(selected_x_over_h[1])[0])
+    status['fe1_lines'] = len(np.where(selected_x_over_h[0])[0])
+    status['fe2_lines'] = len(np.where(selected_x_over_h[1])[0])
     status['model_MH'] = EW_model.MH()
 
     status['days'] = EW_model.calculation_time.day-1

@@ -746,7 +746,9 @@ def fit_lines_and_determine_ew():
                                 smoothed_spectrum = None, \
                                 check_derivatives = False, \
                                 vel_telluric = vel_telluric, discard_gaussian=False, \
-                                discard_voigt=True, free_mu=False)
+                                discard_voigt=True, free_mu=True)
+    # Discard lines that are not cross matched with the same original element stored in the note
+    linemasks = linemasks[linemasks['element'] == line_regions['note']]
     # Exclude lines that have not been successfully cross matched with the atomic data
     # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
     rejected_by_atomic_line_not_found = (linemasks['wave (nm)'] == 0)
@@ -1108,6 +1110,29 @@ def determine_abundances_using_synth_spectra():
 
 def determine_astrophysical_parameters_from_ew():
     sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    #--- Read lines and adjust them ------------------------------------------------
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines_biglist.txt")
+    line_regions = ispec.adjust_linemasks(sun_spectrum, line_regions, max_margin=0.5)
+    ##--- Local continuum fit -------------------------------------------------------
+    #model = "Polynomy" # Linear model (1 degree) for local continuum
+    #degree = 1
+    #nknots = None
+    #from_resolution = 80000
+
+    ## Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
+    #order='median+max'
+    #median_wave_range=0.1 # Bigger than for non local continuum fit
+    #max_wave_range=1.0
+
+    ## Fit locally in each individual segment
+    #segments = ispec.create_segments_around_lines(line_regions, margin=0.25)
+    #sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+                                #independent_regions=segments, nknots=nknots, degree=degree,\
+                                #median_wave_range=median_wave_range, \
+                                #max_wave_range=max_wave_range, \
+                                #model=model, order=order, \
+                                #automatic_strong_line_detection=False, \
+                                #strong_line_probability=0.5)
     #--- Continuum fit -------------------------------------------------------------
     # One spline per each 5 nm
     model = "Splines" # "Polynomy"
@@ -1159,8 +1184,8 @@ def determine_astrophysical_parameters_from_ew():
 
 
     vel_telluric = 17.79 # km/s
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines_biglist.txt")
-    line_regions = ispec.adjust_linemasks(sun_spectrum, line_regions, max_margin=0.5)
+    #continuum_adjustment_margin = 0.05 # Allow +/-5% free baseline fit around continuum
+    continuum_adjustment_margin = 0.0
     # Spectrum should be already radial velocity corrected
     linemasks = ispec.fit_lines(line_regions, sun_spectrum, sun_continuum_model, \
                                 atomic_linelist = atomic_linelist, \
@@ -1169,7 +1194,8 @@ def determine_astrophysical_parameters_from_ew():
                                 smoothed_spectrum = None, \
                                 check_derivatives = False, \
                                 vel_telluric = vel_telluric, discard_gaussian=False, \
-                                discard_voigt=True, free_mu=False)
+                                discard_voigt=True, \
+                                continuum_adjustment_margin=continuum_adjustment_margin, free_mu=True)
     # Discard lines that are not cross matched with the same original element stored in the note
     linemasks = linemasks[linemasks['element'] == line_regions['note']]
 
@@ -1190,6 +1216,15 @@ def determine_astrophysical_parameters_from_ew():
     # Exclude lines that may be affected by tellurics
     rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
     linemasks = linemasks[~rejected_by_telluric_line]
+
+    # Too blended lines
+    #base_flux = sun_spectrum['flux'][linemasks['base']] / sun_continuum_model(sun_spectrum['waveobs'][linemasks['base']])
+    #top_flux = sun_spectrum['flux'][linemasks['top']] / sun_continuum_model(sun_spectrum['waveobs'][linemasks['top']])
+    ##too_blended = np.logical_or(base_flux < 0.80, top_flux < 0.80) # This works with continuum free between 0.95*baseline and baseline
+    ##too_blended = np.logical_or(base_flux < 0.95, top_flux < 0.95) # This does not work with continuum free between 0.95*baseline and baseline
+    #too_blended = np.logical_or(base_flux < 0.80, top_flux < 0.80)
+    #linemasks = linemasks[~too_blended]
+
 
     #--- Modelize spectra from EW --------------------------------------------------
     # Parameters
@@ -1278,8 +1313,33 @@ def determine_astrophysical_parameters_from_ew():
 
     return params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params
 
+
+
 def determine_abundances_from_ew():
     sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    #--- Read lines and adjust them ------------------------------------------------
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines_biglist.txt")
+    line_regions = ispec.adjust_linemasks(sun_spectrum, line_regions, max_margin=0.5)
+    #--- Local continuum fit -------------------------------------------------------
+    #model = "Polynomy" # Linear model (1 degree) for local continuum
+    #degree = 1
+    #nknots = None
+    #from_resolution = 80000
+
+    ## Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
+    #order='median+max'
+    #median_wave_range=0.1 # Bigger than for non local continuum fit
+    #max_wave_range=1.0
+
+    ## Fit locally in each individual segment
+    #segments = ispec.create_segments_around_lines(line_regions, margin=0.25)
+    #sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+                                #independent_regions=segments, nknots=nknots, degree=degree,\
+                                #median_wave_range=median_wave_range, \
+                                #max_wave_range=max_wave_range, \
+                                #model=model, order=order, \
+                                #automatic_strong_line_detection=False, \
+                                #strong_line_probability=0.5)
     #--- Continuum fit -------------------------------------------------------------
     # One spline per each 5 nm
     model = "Splines" # "Polynomy"
@@ -1301,12 +1361,12 @@ def determine_abundances_from_ew():
                                 strong_line_probability=0.5)
     #--- Fit lines -----------------------------------------------------------------
     logging.info("Fitting lines...")
-    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
     #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv3/475_685nm.lst"
     #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv3_noABO/475_685nm.lst"
     #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv3_atom/475_685nm.lst"
     #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv3_atom_noABO/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom/475_685nm.lst"
+    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom/475_685nm.lst"
     #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_noABO/475_685nm.lst"
     #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs/475_685nm.lst"
     #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_noABO/475_685nm.lst"
@@ -1331,8 +1391,6 @@ def determine_abundances_from_ew():
 
 
     vel_telluric = 17.79 # km/s
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines.txt")
-    line_regions = ispec.adjust_linemasks(sun_spectrum, line_regions, max_margin=0.5)
     # Spectrum should be already radial velocity corrected
     linemasks = ispec.fit_lines(line_regions, sun_spectrum, sun_continuum_model, \
                                 atomic_linelist = atomic_linelist, \
@@ -1341,7 +1399,9 @@ def determine_abundances_from_ew():
                                 smoothed_spectrum = None, \
                                 check_derivatives = False, \
                                 vel_telluric = vel_telluric, discard_gaussian=False, \
-                                discard_voigt=True, free_mu=False)
+                                discard_voigt=True, free_mu=True)
+    # Discard lines that are not cross matched with the same original element stored in the note
+    linemasks = linemasks[linemasks['element'] == line_regions['note']]
 
     # Exclude lines that have not been successfully cross matched with the atomic data
     # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
@@ -1351,6 +1411,15 @@ def determine_abundances_from_ew():
     # Exclude lines that may be affected by tellurics
     rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
     linemasks = linemasks[~rejected_by_telluric_line]
+
+
+    # TODO:
+    #base_flux = sun_spectrum['flux'][linemasks['base']] / sun_continuum_model(sun_spectrum['waveobs'][linemasks['base']])
+    #top_flux = sun_spectrum['flux'][linemasks['top']] / sun_continuum_model(sun_spectrum['waveobs'][linemasks['top']])
+    #too_blended = np.logical_or(base_flux < 0.90, top_flux < 0.90)
+    #print "Blended:", len(linemasks), len(linemasks[too_blended])
+    #linemasks = linemasks[~too_blended]
+    #linemasks = ispec.refine_ew(sun_spectrum, linemasks, resolution=80000, margin=0.05)
 
     #--- Determining abundances by EW of the previously fitted lines ---------------
     # Parameters
@@ -1542,7 +1611,7 @@ if __name__ == '__main__':
     add_noise_to_spectrum()
     determine_astrophysical_parameters_using_synth_spectra()
     determine_abundances_using_synth_spectra()
-    determine_astrophysical_parameters_from_ew()
+    #determine_astrophysical_parameters_from_ew()
     determine_abundances_from_ew()
     calculate_theoretical_ew_and_depth()
     paralelize_code()

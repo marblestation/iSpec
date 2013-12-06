@@ -230,6 +230,14 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
             if type(data) == tuple:
                 # Results received!
                 spec_abund, normal_abund, x_over_h = data
+                #import pudb
+                #pudb.set_trace()
+                #sun_log_Nx_over_Ntotal = abundances['Abund'][abundances['code'] == 26]]
+                #x_absolute = free_abundances['Abund'][i] + 12. - sun_log_Nh_over_Ntotal # absolute, A(X)
+                ##x_over_fe = free_abundances['Abund'][i] - sun_log_Nx_over_Ntotal
+                ##x_over_h = x_over_fe + self.MH()
+                #x_over_h = free_abundances['Abund'][i] - sun_log_Nx_over_Ntotal
+                #x_over_fe = x_over_h - self.MH()
                 x_over_fe = x_over_h - MH
                 break
             elif gui_queue is not None:
