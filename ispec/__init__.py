@@ -45,12 +45,13 @@ try:
     from atmospheres import dump_modeled_layers_pack
     from atmospheres import write_atmosphere
     from synth import generate_spectrum
-    from synth import modelize_spectrum
-    from synth import modelize_spectrum_from_ew
+    from synth import model_spectrum, precompute_synthetic_grid, estimate_initial_ap
+    from synth import estimate_vmic, estimate_vmac
+    from synth import model_spectrum_from_ew
     from synth import calculate_theoretical_ew_and_depth
 except ImportError as e:
     pass
-from common import calculate_barycentric_velocity_correction, sigma_clipping, interquartile_range_filtering, save_results, restore_results
+from common import calculate_barycentric_velocity_correction, sigma_clipping, interquartile_range_filtering, save_results, restore_results, mkdir_p
 from spectrum import *
 from continuum import *
 from lines import *

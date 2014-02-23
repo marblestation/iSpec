@@ -128,9 +128,11 @@ def convolve_spectrum(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.doub
     return waveobs, convolved_flux, convolved_err
 
 
+
+
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def bessel_interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.double_t,ndim=1] fluxes, np.ndarray[np.double_t,ndim=1] err, np.ndarray[np.double_t,ndim=1] resampled_waveobs, frame=None):
+def interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.double_t,ndim=1] fluxes, np.ndarray[np.double_t,ndim=1] err, np.ndarray[np.double_t,ndim=1] resampled_waveobs, bessel=False, zero_edges=True, frame=None):
     """
     Interpolate flux for a given wavelength by using Bessel's Central-Difference Interpolation.
     It considers:
@@ -178,30 +180,26 @@ def bessel_interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.d
         if index == total_points:
             # DISCARD: Linear extrapolation using index-1 and index-2
             # flux = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index-1]-fluxes[index-2])/(waveobs[index-1]-waveobs[index-2]))
-            # JUST DUPLICATE:
-            #resampled_flux[i] = fluxes[index-1]
-            # JUST ZERO:
-            resampled_flux[i] = 0.0
-            resampled_err[i] = 0.0
-        elif index == 1 or index == total_points-1:
-            # Do not interpolate if any of the fluxes is zero or negative
-            if fluxes[index-1] <= 1e-10 or fluxes[index] <= 1e-10:
+            if zero_edges:
+                # JUST ZERO:
                 resampled_flux[i] = 0.0
                 resampled_err[i] = 0.0
             else:
-                # Linear interpolation between index and index-1
-                # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
-                resampled_flux[i] = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index]-fluxes[index-1])/(waveobs[index]-waveobs[index-1]))
-                resampled_err[i] = err[index-1] + (objective_wavelength - waveobs[index-1]) * ((err[index]-err[index-1])/(waveobs[index]-waveobs[index-1]))
+                # JUST DUPLICATE:
+                resampled_flux[i] = fluxes[index-1]
+                resampled_err[i] = err[index-1]
         #elif index == 0 and waveobs[index] != objective_wavelength:
         elif index == 0:
             # DISCARD: Linear extrapolation using index+1 and index
             # flux = fluxes[index] + (objective_wavelength - waveobs[index]) * ((fluxes[index+1]-fluxes[index])/(waveobs[index+1]-waveobs[index]))
-            # JUST DUPLICATE:
-            #resampled_flux[i] = fluxes[index]
-            # JUST ZERO:
-            resampled_flux[i] = 0.0
-            resampled_err[i] = 0.0
+            if zero_edges:
+                # JUST ZERO:
+                resampled_flux[i] = 0.0
+                resampled_err[i] = 0.0
+            else:
+                # JUST DUPLICATE:
+                resampled_flux[i] = fluxes[index]
+                resampled_err[i] = err[index]
         # Do not do this optimization because it can produce a value surounded
         # by zeros because of the condition "Do not interpolate if any of the
         # fluxes is zero or negative" implemented in the rest of the cases
@@ -209,39 +207,70 @@ def bessel_interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.d
             #resampled_flux[i] = fluxes[index]
             #resampled_err[i] = err[index]
         else:
-            # Bessel's Central-Difference Interpolation with 4 points
-            #   p = [(x - x0) / (x1 - x0)]
-            #   f(x) = f(x0) + p ( f(x1) - f(x0) ) + [ p ( p - 1 ) / 4 ] ( f(x2) - f(x1) - f(x0) + f(x-1) )
-            # where x-1 < x0 < objective_wavelength = x < x1 < x2 and f() is the flux
-            #   http://physics.gmu.edu/~amin/phys251/Topics/NumAnalysis/Approximation/polynomialInterp.html
-
-            #  x-1= index - 2
-            #  x0 = index - 1
-            #  x  = objective_wavelength
-            #  x1 = index
-            #  x2 = index + 1
-
-            ## Array access optimization
-            flux_x_1 = fluxes[index - 2]
-            wave_x0 = waveobs[index-1]
-            flux_x0 = fluxes[index - 1]
-            wave_x1 = waveobs[index]
-            flux_x1 = fluxes[index]
-            flux_x2 = fluxes[index + 1]
-
-            err_x_1 = err[index - 2]
-            err_x0 = err[index - 1]
-            err_x1 = err[index]
-            err_x2 = err[index + 1]
-
-            # Do not interpolate if any of the fluxes is zero or negative
-            if flux_x_1 <= 1e-10 or flux_x0 <= 1e-10 or flux_x1 <= 1e-10 or flux_x2 <= 1e-10:
-                resampled_flux[i] = 0.0
-                resampled_err[i] = 0.0
+            # Linear if indicated by bessel=False or if we are at the beginning or end of the spectrum
+            if not bessel or index == 1 or index == total_points-1:
+                # Do not interpolate if any of the fluxes is zero or negative
+                if fluxes[index-1] <= 1e-10 or fluxes[index] <= 1e-10:
+                    resampled_flux[i] = 0.0
+                    resampled_err[i] = 0.0
+                else:
+                    # Linear interpolation between index and index-1
+                    # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
+                    d1 = np.round(objective_wavelength - waveobs[index-1], 5)
+                    d2 = np.round(waveobs[index]-waveobs[index-1], 5)
+                    resampled_flux[i] = fluxes[index-1] + d1 * ((fluxes[index]-fluxes[index-1])/d2)
+                    # Same formula as for interpolation but I have re-arranged the terms to make
+                    # clear that it is valid for error propagation (sum of errors multiplied by constant values)
+                    resampled_err[i] = (err[index-1] * (d2 - d1)  + (err[index] * d1)) / d2
+                    # Do not allow negative fluxes or errors
+                    if resampled_err[i] < 0:
+                        resampled_err[i] = 1e-10
+                    if resampled_flux[i] < 0:
+                        resampled_flux[i] = 0
+                        resampled_err[i] = 0
             else:
-                p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
-                resampled_flux[i] = flux_x0 + p * (flux_x1 - flux_x0) + (p * (p - 1) / 4) * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
-                resampled_err[i] = err_x0 + p * (err_x1 - err_x0) + (p * (p - 1) / 4) * (err_x2 - err_x1 - err_x0 + err_x_1)
+                # Bessel's Central-Difference Interpolation with 4 points
+                #   p = [(x - x0) / (x1 - x0)]
+                #   f(x) = f(x0) + p ( f(x1) - f(x0) ) + [ p ( p - 1 ) / 4 ] ( f(x2) - f(x1) - f(x0) + f(x-1) )
+                # where x-1 < x0 < objective_wavelength = x < x1 < x2 and f() is the flux
+                #   http://physics.gmu.edu/~amin/phys251/Topics/NumAnalysis/Approximation/polynomialInterp.html
+
+                #  x-1= index - 2
+                #  x0 = index - 1
+                #  x  = objective_wavelength
+                #  x1 = index
+                #  x2 = index + 1
+
+                ## Array access optimization
+                flux_x_1 = fluxes[index - 2]
+                wave_x0 = waveobs[index-1]
+                flux_x0 = fluxes[index - 1]
+                wave_x1 = waveobs[index]
+                flux_x1 = fluxes[index]
+                flux_x2 = fluxes[index + 1]
+
+                err_x_1 = err[index - 2]
+                err_x0 = err[index - 1]
+                err_x1 = err[index]
+                err_x2 = err[index + 1]
+
+                # Do not interpolate if any of the fluxes is zero or negative
+                if flux_x_1 <= 1e-10 or flux_x0 <= 1e-10 or flux_x1 <= 1e-10 or flux_x2 <= 1e-10:
+                    resampled_flux[i] = 0.0
+                    resampled_err[i] = 0.0
+                else:
+                    p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
+                    factor = (p * (p - 1) / 4)
+                    resampled_flux[i] = flux_x0 + p * (flux_x1 - flux_x0) + factor * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
+                    # Same formula as for interpolation but I have re-arranged the terms to make
+                    # clear that it is valid for error propagation (sum of errors multiplied by constant values)
+                    resampled_err[i] = err_x_1 * factor + err_x0 * (1 - p - factor) + err_x1 * (p - factor) + err_x2 * factor
+                    # Do not allow negative fluxes or errors
+                    if resampled_err[i] < 0:
+                        resampled_err[i] = 1e-10
+                    if resampled_flux[i] < 0:
+                        resampled_flux[i] = 0
+                        resampled_err[i] = 0
 
         current_work_progress = (i*1.0 / new_total_points) * 100
         if (int(current_work_progress) % 10 == 0 and current_work_progress - last_reported_progress > 10) or last_reported_progress < 0 or current_work_progress == 100:
@@ -252,5 +281,4 @@ def bessel_interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.d
 
 
     return resampled_waveobs, resampled_flux, resampled_err
-
 

@@ -58,6 +58,11 @@ class FitContinuumDialog(CustomDialog):
         self.__components.append(component)
         component = {}
         component["type"] = "Checkbutton"
+        component["text"] = "Use spectrum's errors as weights for the fitting process"
+        component["default"] = True
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
         component["text"] = "Automatically find and ignore strong lines"
         component["default"] = True
         self.__components.append(component)

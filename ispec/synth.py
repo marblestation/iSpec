@@ -23,17 +23,43 @@ import numpy as np
 from mpfitmodels import MPFitModel
 #from continuum import fit_continuum
 from abundances import write_solar_abundances, write_fixed_abundances, determine_abundances
-from atmospheres import write_atmosphere, interpolate_atmosphere_layers
+from atmospheres import write_atmosphere, interpolate_atmosphere_layers, valid_atmosphere_target
 from lines import write_atomic_linelist
-from spectrum import create_spectrum_structure, convolve_spectrum, correct_velocity, resample_spectrum
+from common import mkdir_p
+from spectrum import create_spectrum_structure, convolve_spectrum, correct_velocity, resample_spectrum, read_spectrum, normalize_spectrum, create_wavelength_filter, read_spectrum, write_spectrum
 from multiprocessing import Process
 from multiprocessing import Queue
 from multiprocessing import JoinableQueue
 from Queue import Empty
 
+from astropy.io import fits
+from astropy.io import ascii
+from astropy.table import Table, Column
+import multiprocessing
+from multiprocessing import Pool
+
 import tempfile
 import log
 import logging
+
+
+class Constants:
+    ###################################
+    # CONSTANTS
+    ###################################
+    SYNTH_STEP_TEFF = 100.
+    SYNTH_STEP_LOGG = 0.1
+    SYNTH_STEP_MH = 0.05
+    SYNTH_STEP_VMIC = 0.5
+    SYNTH_STEP_VMAC = 2.0
+    SYNTH_STEP_VSINI = 2.0
+    SYNTH_STEP_LIMB_DARKENING_COEFF = 0.2
+    SYNTH_STEP_R = 100
+    ###################################
+    EW_STEP_TEFF = 500.
+    EW_STEP_LOGG = 0.5
+    EW_STEP_MH = 0.05
+    EW_STEP_VMIC = 0.5
 
 
 def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=900, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, regions=None, waveobs_mask=None):
@@ -346,7 +372,8 @@ class SynthModel(MPFitModel):
     Match synthetic spectrum to observed spectrum
     * Requires the synthetic spectrum generation functionality on
     """
-    def __init__(self, modeled_layers_pack, linelist, abundances, teff=5000, logg=3.0, MH=0.0, vmic=2.0, vmac=0.0, vsini=2.0, limb_darkening_coeff=0.0, R=0, continuum_correction=1.0):
+    def __init__(self, modeled_layers_pack, linelist, abundances, teff=5000, logg=3.0, MH=0.0, vmic=2.0, vmac=0.0, vsini=2.0, limb_darkening_coeff=0.0, R=0, precomputed_grid_dir=None):
+        self.precomputed_grid_dir = precomputed_grid_dir
         self.elements = {}
         #self.elements["1"] = "H"
         #self.elements["2"] = "He"
@@ -456,12 +483,10 @@ class SynthModel(MPFitModel):
         self.waveobs = None
         self.waveobs_mask = None
         self.cache = {}
-        p = [teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, R, continuum_correction]
+        p = [teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, R ]
         #
         self.abundances_file = None
         self.linelist_file = None
-        self.noise = None
-        self.last_continuum_correction = None
         super(SynthModel, self).__init__(p)
 
     def _model_function(self, x, p=None):
@@ -475,48 +500,44 @@ class SynthModel(MPFitModel):
         fixed_abundances = self.free_abundances()
 
         abundances_key = " ".join(map(str, fixed_abundances['Abund']))
-        complete_key = "%.2f %.2f %.2f %.2f %.2f %.2f %.2f %i %.2f " % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()), self.continuum_correction())
+        complete_key = "%.2f %.2f %.2f %.2f %.2f %.2f %.2f %i " % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
         complete_key += abundances_key
+
         key = "%.2f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.vmic())
         key += abundances_key
-        if self.cache.has_key(key):
-            print "Cache:", complete_key
-            self.last_fluxes = self.cache[key].copy()
+
+        ##### [start] Check precomputed (solar abundance)
+        precomputed_file = str(self.precomputed_grid_dir) + "/unconvolved_steps/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}.fits".format(int(self.teff()), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff())
+        if self.precomputed_grid_dir is not None and abundances_key == "" and os.path.exists(precomputed_file):
+            print "Pre-computed:", complete_key
+            precomputed = read_spectrum(precomputed_file)
+            convolved_precomputed = convolve_spectrum(precomputed, self.R())
+
+            convolved_precomputed = resample_spectrum(convolved_precomputed, self.waveobs, method="bessel", zero_edges=True)
+            convolved_precomputed['flux'][self.waveobs_mask == 0] = 1.
+            self.last_final_fluxes = convolved_precomputed['flux'].copy()
         else:
-            print "Generating:", complete_key
+            if self.cache.has_key(key):
+                print "Cache:", complete_key
+                self.last_fluxes = self.cache[key].copy()
+            else:
+                print "Generating:", complete_key
 
+                # Atmosphere
+                atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH())
+                # Fundamental synthetic fluxes
+                self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.linelist, self.abundances, fixed_abundances, microturbulence_vel=self.vmic(), abundances_file=self.abundances_file, linelist_file=self.linelist_file, waveobs_mask=self.waveobs_mask, verbose=0)
 
-            # Atmosphere
-            atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH())
-            # Fundamental synthetic fluxes
-            self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.linelist, self.abundances, fixed_abundances, microturbulence_vel=self.vmic(), abundances_file=self.abundances_file, linelist_file=self.linelist_file, waveobs_mask=self.waveobs_mask, verbose=0)
+                # Optimization to avoid too small changes in parameters or repetition
+                self.cache[key] = self.last_fluxes.copy()
 
-            # Fit continuum
-            #if self.fit_continuum_func is not None:
-                #spectrum = create_spectrum_structure(self.waveobs)
-                #spectrum['flux'] = self.last_fluxes
-                ## Add noise
-                #if self.noise is not None:
-                    #spectrum['flux'] += self.noise
-                #continuum_model = self.fit_continuum_func(spectrum)
-                #self.last_continuum_correction = continuum_model(self.waveobs)
-                #inormalize = np.where(self.last_continuum_correction != 0)[0]
-                #self.last_fluxes[inormalize] /= self.last_continuum_correction[inormalize]
-            # Optimization to avoid too small changes in parameters or repetition
-            self.cache[key] = self.last_fluxes.copy()
-
-        self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), verbose=0)
-        self.last_final_fluxes *= self.continuum_correction()
-
-
-        #self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_final_fluxes, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), verbose=0)
+            self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), verbose=0)
 
         return self.last_final_fluxes[self.comparing_mask]
 
-    def fitData(self, waveobs, waveobs_mask, comparing_mask, fluxes, weights=None, parinfo=None, max_iterations=20, quiet=True, fit_continuum_func=None, noise=None):
-        self.noise = noise
-        self.fit_continuum_func = fit_continuum_func
-        base = 9
+    def fitData(self, waveobs, waveobs_mask, comparing_mask, fluxes, weights=None, parinfo=None, use_errors=False, max_iterations=20, quiet=True):
+        self.use_errors = use_errors
+        base = 8
         if len(parinfo) < base:
             raise Exception("Wrong number of parameters!")
 
@@ -534,24 +555,30 @@ class SynthModel(MPFitModel):
         ftol = 1.e-4 # Terminate when the improvement in chisq between iterations is ftol > -(new_chisq/chisq)**2 +1
         xtol = 1.e-4
         gtol = 1.e-4
-        damp = 1.0   # Residuals are limited between -1.0 and 1.0 (np.tanh(residuals/1.0)) minimizing the influence of bad fluxes
-                     # * Spectrum must be a normalized one
+        damp = 0.0   # Do not limit residuals between -1.0 and 1.0 (np.tanh(residuals/1.0))
         _t0 = default_timer()
 
         # Write abundances and linelist to avoid writing the same info in each iteration
         self.abundances_file = write_solar_abundances(self.abundances)
         self.linelist_file = write_atomic_linelist(self.linelist)
 
-        super(SynthModel, self).fitData(waveobs[self.comparing_mask], fluxes[self.comparing_mask], weights=weights[self.comparing_mask], parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet)
+        if self.use_errors:
+            super(SynthModel, self).fitData(waveobs[self.comparing_mask], fluxes[self.comparing_mask], weights=weights[self.comparing_mask], parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet)
+        else:
+            # Do not consider errors for minimization (all weights set to one)
+            ones = np.ones(len(fluxes))
+            super(SynthModel, self).fitData(waveobs[self.comparing_mask], fluxes[self.comparing_mask], weights=ones[self.comparing_mask], parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet)
 
         residuals = self.last_final_fluxes[self.comparing_mask] - fluxes[self.comparing_mask]
         self.rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
-        # Chisq using tanh
-        self.chisq = np.sum(np.tanh(weights[self.comparing_mask] * residuals)**2)
+
+        #### Unweighted (no errors considered):
+        self.chisq = np.sum((residuals)**2)
         self.reduced_chisq = self.chisq / self.m.dof
-        # Chisq without using tanh for minimizing outliers
-        self.basic_chisq = np.sum((weights[self.comparing_mask] * residuals)**2)
-        self.reduced_basic_chisq = self.basic_chisq / self.m.dof
+
+        #### Weighted (errors considered):
+        self.wchisq = np.sum((weights[self.comparing_mask] * residuals)**2)
+        self.reduced_wchisq = self.wchisq / self.m.dof
 
         self.cache = {}
 
@@ -572,9 +599,8 @@ class SynthModel(MPFitModel):
     def vsini(self): return self._parinfo[5]['value']
     def limb_darkening_coeff(self): return self._parinfo[6]['value']
     def R(self): return self._parinfo[7]['value']
-    def continuum_correction(self): return self._parinfo[8]['value']
     def free_abundances(self):
-        base = 9
+        base = 8
         fixed_abundances = np.recarray((len(self._parinfo)-base, ), dtype=[('code', int),('Abund', float), ('element', '|S30')])
         for i in xrange(len(self._parinfo)-base):
             fixed_abundances['code'] = int(self._parinfo[base+i]['parname'])
@@ -590,9 +616,8 @@ class SynthModel(MPFitModel):
     def evsini(self): return self.m.perror[5]
     def elimb_darkening_coeff(self): return self.m.perror[6]
     def eR(self): return self.m.perror[7]
-    def econtinuum_correction(self): return self.m.perror[8]
     def efree_abundances(self):
-        base = 9
+        base = 8
         eabundances = []
         for i in xrange(len(self._parinfo)-base):
             eabundances.append(self.m.perror[base+i])
@@ -638,9 +663,18 @@ class SynthModel(MPFitModel):
         return transformed_abund
 
     def print_solution(self):
-        header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("teff","logg","MH","vmic","vmac","vsini","limb","R","Cont")
-        solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i\t%8.3f" % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()), self.continuum_correction())
-        errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i\t%8.3f" % (self.eteff(), self.elogg(), self.eMH(), self.evmic(), self.evmac(), self.evsini(), self.elimb_darkening_coeff(), int(self.eR()), self.econtinuum_correction())
+        if self.use_errors:
+            #error_scale_factor = self.reduced_wchisq
+            #error_scale_factor = self.wchisq
+            error_scale_factor = 1.
+            # https://www.gnu.org/software/gsl/manual/html_node/Example-programs-for-Nonlinear-Least_002dSquares-Fitting.html
+            # https://www.gnu.org/software/gsl/manual/gsl-ref_38.html
+            #error_scale_factor = np.max((1., self.wchisq/np.sqrt(self.m.dof)))
+        else:
+            error_scale_factor = 1.
+        header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("teff","logg","MH","vmic","vmac","vsini","limb","R")
+        solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i" % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
+        errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i" % (self.eteff()*error_scale_factor, self.elogg()*error_scale_factor, self.eMH()*error_scale_factor, self.evmic()*error_scale_factor, self.evmac()*error_scale_factor, self.evsini()*error_scale_factor, self.elimb_darkening_coeff()*error_scale_factor, int(self.eR()*error_scale_factor))
 
         # Append free individual abundances
         abundances_header = ""
@@ -657,10 +691,10 @@ class SynthModel(MPFitModel):
             x_absolute = transformed_abund['A(X)'][i]
             x_over_h = transformed_abund['[X/H]'][i]
             x_over_fe = transformed_abund['[X/Fe]'][i]
-            ex = transformed_abund['eAbund'][i]
-            ex_absolute = transformed_abund['eA(X)'][i]
-            ex_over_h = transformed_abund['e[X/H]'][i]
-            ex_over_fe = transformed_abund['e[X/Fe]'][i]
+            ex = transformed_abund['eAbund'][i]*error_scale_factor
+            ex_absolute = transformed_abund['eA(X)'][i]*error_scale_factor
+            ex_over_h = transformed_abund['e[X/H]'][i]*error_scale_factor
+            ex_over_fe = transformed_abund['e[X/Fe]'][i]*error_scale_factor
             abundances_header += "%8s\t%8s\t%8s\t%8s" % (element, x_absolute_name, x_over_h_name, x_over_fe_name)
             abundances_solution += "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (x, x_absolute, x_over_h, x_over_fe)
             abundances_errors += "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (ex, ex_absolute, ex_over_h, ex_over_fe)
@@ -676,32 +710,35 @@ class SynthModel(MPFitModel):
             print ""
 
         print "Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second)
-        header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","chisq(tanh)","rchisq(tanh)","chisq","rchisq","rms")
-        stats = "%8i\t%8i\t%8i\t%8.2f\t%8.4f\t%8.2f\t%8.4f\t%8.4f" % (self.m.dof, self.m.niter, self.m.nfev, self.chisq, self.reduced_chisq, self.basic_chisq, self.reduced_basic_chisq, self.rms)
+        header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","wchisq","rwchisq","chisq","rchisq","rms")
+        stats = "%8i\t%8i\t%8i\t%8.2f\t%8.4f\t%8.2f\t%8.4f\t%8.4f" % (self.m.dof, self.m.niter, self.m.nfev, self.wchisq, self.reduced_wchisq, self.chisq, self.reduced_chisq, self.rms)
         print ""
         print "         ", header
         print "Stats:   ", stats
         print "Return code:", self.m.status
 
-def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_continuum_correction, free_params, free_abundances, teff_range, logg_range, MH_range):
+
+
+
+def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, free_abundances, teff_range, logg_range, MH_range):
     """
     Creates the structure needed for the mpfitmodel
     """
-    base = 9
+    base = 8
     free_params = [param.lower() for param in free_params]
     parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base+len(free_abundances))]
     #
     parinfo[0]['parname'] = "teff"
     parinfo[0]['value'] = initial_teff
     parinfo[0]['fixed'] = not parinfo[0]['parname'].lower() in free_params
-    parinfo[0]['step'] = 100.0 # For auto-derivatives
+    parinfo[0]['step'] = Constants.SYNTH_STEP_TEFF # For auto-derivatives
     parinfo[0]['limited'] = [True, True]
     parinfo[0]['limits'] = [np.min(teff_range)+100.0, np.max(teff_range)-100.0]
     #
     parinfo[1]['parname'] = "logg"
     parinfo[1]['value'] = initial_logg
     parinfo[1]['fixed'] = not parinfo[1]['parname'].lower() in free_params
-    parinfo[1]['step'] = 0.10 # For auto-derivatives
+    parinfo[1]['step'] = Constants.SYNTH_STEP_LOGG # For auto-derivatives
     #parinfo[1]['mpmaxstep'] = 0.50 # Maximum change to be made in the parameter
     parinfo[1]['limited'] = [True, True]
     parinfo[1]['limits'] = [np.min(logg_range)+0.10, np.max(logg_range)-0.10]
@@ -709,53 +746,46 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[2]['parname'] = "MH"
     parinfo[2]['value'] = initial_MH
     parinfo[2]['fixed'] = not parinfo[2]['parname'].lower() in free_params
-    parinfo[2]['step'] = 0.05 # For auto-derivatives
+    parinfo[2]['step'] = Constants.SYNTH_STEP_MH # For auto-derivatives
     parinfo[2]['limited'] = [True, True]
     parinfo[2]['limits'] = [np.min(MH_range)+0.05, np.max(MH_range)-0.05]
     #
     parinfo[3]['parname'] = "Vmic"
     parinfo[3]['value'] = initial_vmic
     parinfo[3]['fixed'] = not parinfo[3]['parname'].lower() in free_params
-    parinfo[3]['step'] = 0.5 # For auto-derivatives
+    parinfo[3]['step'] = Constants.SYNTH_STEP_VMIC # For auto-derivatives
     parinfo[3]['limited'] = [True, True]
     parinfo[3]['limits'] = [0.0, 50.0]
     #
     parinfo[4]['parname'] = "Vmac"
     parinfo[4]['value'] = initial_vmac
     parinfo[4]['fixed'] = not parinfo[4]['parname'].lower() in free_params
-    parinfo[4]['step'] = 2.00 # For auto-derivatives
+    parinfo[4]['step'] = Constants.SYNTH_STEP_VMAC # For auto-derivatives
     parinfo[4]['limited'] = [True, True]
     parinfo[4]['limits'] = [0.0, 50.0]
     #
     parinfo[5]['parname'] = "Vsini"
     parinfo[5]['value'] = initial_vsini
     parinfo[5]['fixed'] = not parinfo[5]['parname'].lower() in free_params
-    parinfo[5]['step'] = 0.1 # For auto-derivatives
+    parinfo[5]['step'] = Constants.SYNTH_STEP_VSINI # For auto-derivatives
     parinfo[5]['limited'] = [True, True]
     parinfo[5]['limits'] = [0.0, 50.0]
     #
     parinfo[6]['parname'] = "limb_darkening_coeff"
     parinfo[6]['value'] = initial_limb_darkening_coeff
     parinfo[6]['fixed'] = not parinfo[6]['parname'].lower() in free_params
-    parinfo[6]['step'] = 0.20 # For auto-derivatives
+    parinfo[6]['step'] = Constants.SYNTH_STEP_LIMB_DARKENING_COEFF # For auto-derivatives
     parinfo[6]['limited'] = [True, True]
     parinfo[6]['limits'] = [0.0, 1.0]
     #
     parinfo[7]['parname'] = "R"
     parinfo[7]['value'] = initial_R
     parinfo[7]['fixed'] = not parinfo[7]['parname'].lower() in free_params
-    parinfo[7]['step'] = 100.0 # For auto-derivatives
+    parinfo[7]['step'] = Constants.SYNTH_STEP_R # For auto-derivatives
     parinfo[7]['limited'] = [True, True]
     parinfo[7]['limits'] = [500.0, 300000.0]
     #
-    parinfo[8]['parname'] = "continuum_correction"
-    parinfo[8]['value'] = initial_continuum_correction
-    parinfo[8]['fixed'] = not parinfo[8]['parname'].lower() in free_params
-    parinfo[8]['step'] = 0.001 # For auto-derivatives
-    parinfo[8]['limited'] = [True, True]
-    parinfo[8]['limits'] = [0.98, 1.02]
-    #
-    base = 9
+    base = 8
     for i in xrange(len(free_abundances)):
         parinfo[base+i]['parname'] = str(free_abundances['code'][i])
         parinfo[base+i]['value'] = free_abundances['Abund'][i]
@@ -781,7 +811,7 @@ def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_
     parinfo[0]['parname'] = "teff"
     parinfo[0]['value'] = initial_teff
     parinfo[0]['fixed'] = not parinfo[0]['parname'].lower() in free_params
-    parinfo[0]['step'] = 500.0 # For auto-derivatives
+    parinfo[0]['step'] = Constants.EW_STEP_TEFF # For auto-derivatives
     #parinfo[0]['mpside'] = 2
     #parinfo[0]['mpmaxstep'] = parinfo[0]['step'] * 1.5
     parinfo[0]['limited'] = [True, True]
@@ -790,7 +820,7 @@ def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_
     parinfo[1]['parname'] = "logg"
     parinfo[1]['value'] = initial_logg
     parinfo[1]['fixed'] = not parinfo[1]['parname'].lower() in free_params
-    parinfo[1]['step'] = 0.5 # For auto-derivatives
+    parinfo[1]['step'] = Constants.EW_STEP_LOGG # For auto-derivatives
     #parinfo[1]['mpside'] = 2
     #parinfo[1]['mpmaxstep'] = 0.50 # Maximum change to be made in the parameter
     #parinfo[1]['mpmaxstep'] = parinfo[1]['step'] * 1.5
@@ -800,7 +830,7 @@ def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_
     parinfo[2]['parname'] = "Vmic"
     parinfo[2]['value'] = initial_vmic
     parinfo[2]['fixed'] = not parinfo[2]['parname'].lower() in free_params
-    parinfo[2]['step'] = 0.50 # For auto-derivatives
+    parinfo[2]['step'] = Constants.EW_STEP_VMIC # For auto-derivatives
     #parinfo[2]['mpside'] = 2
     #parinfo[2]['mpmaxstep'] = parinfo[2]['step'] * 2.0
     parinfo[2]['limited'] = [True, True]
@@ -809,7 +839,7 @@ def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_
     parinfo[3]['parname'] = "MH"
     parinfo[3]['value'] = initial_MH
     parinfo[3]['fixed'] = not parinfo[3]['parname'].lower() in free_params
-    parinfo[3]['step'] = 0.05 # For auto-derivatives
+    parinfo[3]['step'] = Constants.EW_STEP_MH # For auto-derivatives
     #parinfo[3]['mpside'] = 2
     #if not parinfo[3]['fixed']:
         #parinfo[3]['mpmaxstep'] = parinfo[3]['step'] * 1.5
@@ -898,7 +928,7 @@ def __create_comparing_mask(waveobs, linemasks, segments):
 
 def __get_stats_per_linemask(waveobs, fluxes, synthetic_fluxes, weights, free_params, linemasks, verbose=False):
 
-    results = np.recarray((len(linemasks), ), dtype=[('wave_peak', float),('wave_base', float),('wave_top', float),('chisq(tanh)', float),('rchisq(tanh)', float),('chisq', float),('rchisq', float),('rms', float)])
+    results = np.recarray((len(linemasks), ), dtype=[('wave_peak', float),('wave_base', float),('wave_top', float),('chisq', float),('rchisq', float),('wchisq', float),('rwchisq', float),('rms', float)])
     results['wave_peak'] = linemasks['wave_peak']
     results['wave_base'] = linemasks['wave_base']
     results['wave_top'] = linemasks['wave_top']
@@ -918,27 +948,31 @@ def __get_stats_per_linemask(waveobs, fluxes, synthetic_fluxes, weights, free_pa
         if dof > 0:
             residuals = synthetic_fluxes[wfilter] - fluxes[wfilter]
             rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
-            # Chisq without using tanh
-            chisq = np.sum(np.tanh(weights[wfilter] * residuals)**2)
+
+            # Unweighted
+            chisq = np.sum((residuals)**2)
             reduced_chisq = chisq / dof
-            # Chisq without using tanh for minimizing outliers
-            basic_chisq = np.sum((weights[wfilter] * residuals)**2)
-            reduced_basic_chisq = basic_chisq / dof
+
+            # Weighted
+            wchisq = np.sum((weights[wfilter] * residuals)**2)
+            reduced_wchisq = wchisq / dof
         else:
             rms = -9999
             chisq = -9999
             reduced_chisq = -9999
-            basic_chisq = -9999
-            reduced_basic_chisq = -9999
+            wchisq = -9999
+            reduced_wchisq = -9999
 
         results['rms'][i] = rms
-        results['chisq(tanh)'][i] = chisq
-        results['rchisq(tanh)'][i] = reduced_chisq
-        results['chisq'][i] = basic_chisq
-        results['rchisq'][i] = reduced_basic_chisq
+        # Unweighted
+        results['chisq'][i] = chisq
+        results['rchisq'][i] = reduced_chisq
+        # Weighted
+        results['wchisq'][i] = wchisq
+        results['rwchisq'][i] = reduced_wchisq
         if verbose:
-            header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("wave_peak","wave_base","wave_top","chisq(tanh)","rchisq(tanh)","chisq","rchisq","rms")
-            stats = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.4f\t%8.2f\t%8.4f\t%8.4f" % (wave_peak, wave_base, wave_top, chisq, reduced_chisq, basic_chisq, reduced_basic_chisq, rms)
+            header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("wave_peak","wave_base","wave_top","wchisq","rwchisq","chisq","rchisq","rms")
+            stats = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.4f\t%8.2f\t%8.4f\t%8.4f" % (wave_peak, wave_base, wave_top, wchisq, reduced_wchisq, chisq, reduced_chisq, rms)
             if i == 0:
                 print "         ", header
             print "Line     ", stats
@@ -946,7 +980,7 @@ def __get_stats_per_linemask(waveobs, fluxes, synthetic_fluxes, weights, free_pa
 
     return results
 
-def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=None, linemasks=None, max_iterations=20):
+def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=None, linemasks=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20):
     """
     It matches synthetic spectrum to observed spectrum by applying a least
     square algorithm.
@@ -959,28 +993,18 @@ def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, 
     - If linemasks are specified, only those regions will be used for comparison.
     - It does not compare negative or zero fluxes
     """
-    # Normalize
-    spectrum_orig = spectrum
-    if segments is not None:
-        # Build wavelength points from regions
-        wfilter = None
-        for region in segments:
-            wave_base = region["wave_base"]
-            wave_top = region["wave_top"]
 
-            if wfilter is None:
-                wfilter = np.logical_and(spectrum_orig['waveobs'] >= wave_base, spectrum_orig['waveobs'] <= wave_top)
-            else:
-                wfilter = np.logical_or(wfilter, np.logical_and(spectrum_orig['waveobs'] >= wave_base, spectrum_orig['waveobs'] <= wave_top))
-        spectrum = create_spectrum_structure(spectrum_orig['waveobs'][wfilter], spectrum_orig['flux'][wfilter], spectrum_orig['err'][wfilter])
+    # Duplicate
+    if segments is not None:
+        # Wavelengths to be computed: segments
+        wfilter = create_wavelength_filter(spectrum, regions=segments)
+        spectrum = create_spectrum_structure(spectrum['waveobs'][wfilter], spectrum['flux'][wfilter], spectrum['err'][wfilter])
     else:
-        spectrum = create_spectrum_structure(spectrum_orig['waveobs'], spectrum_orig['flux'], spectrum_orig['err'])
+        # Wavelengths to be computed: all
+        spectrum = spectrum.copy()
 
     # Normalization
-    continuum = continuum_model(spectrum['waveobs'])
-    inormalize = np.where(continuum != 0)[0]
-    spectrum['flux'][inormalize] /= continuum[inormalize]
-    spectrum['err'][inormalize] /= continuum[inormalize]
+    spectrum = normalize_spectrum(spectrum, continuum_model)
 
     waveobs = spectrum['waveobs']
     flux = spectrum['flux']
@@ -1013,73 +1037,48 @@ def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, 
         linemasks = __filter_linemasks_not_in_segments(linemasks, segments)
         # Compare fluxes inside line masks that belong to a segment
         comparing_mask = __create_comparing_mask(waveobs, linemasks, segments)
+
+
+    ## Fluxes
+    negative_zero_flux = flux <= 0.0
+    bad_fluxes = np.logical_and(comparing_mask == 1, negative_zero_flux)
+    num_bad_fluxes = len(np.where(bad_fluxes)[0])
     # Do not compare negative or zero fluxes
-    negative_zero = flux <= 0.0
-    comparing_mask[negative_zero] = 0.0
+    if num_bad_fluxes > 0:
+        logging.warn("%i fluxes have been discarded because they are negative or zero" % num_bad_fluxes)
+        comparing_mask[negative_zero_flux] = 0.0
 
-    weights = np.ones(len(waveobs))
 
-    ### Use errors:
+    ## Errors
+    negative_zero_err = err <= 0.0
+    bad_errors = np.logical_and(comparing_mask == 1, negative_zero_err)
+    num_bad_errors = len(np.where(bad_errors)[0])
     ## Do not compare negative or zero errors
-    #negative_zero = err <= 0.0
-    #comparing_mask[negative_zero] = 0.0
-    #weights[comparing_mask == 1.0] = 1. / spectrum['err'][comparing_mask == 1.0]
+    if use_errors and num_bad_errors > 0:
+        logging.warn("%i fluxes have been discarded because their ERRORS are negative or zero" % num_bad_errors)
+        comparing_mask[negative_zero_err] = 0.0
 
-    ### Estimate from SNR
-    #snr = 100
-    #weights[comparing_mask == 1.0] = 1. / (flux[comparing_mask == 1.0] / snr)
-
-    ### Prioritize peaks
-    # In the following situation, we want to prioritize synthetic spectra that better reproduce the lines' peaks
-    # than the upper part (more uncertainties due to continuum normalization or blending). So we would like to
-    # have a lower chisq in the case 35 than in case 34:
-    #
-    #In [32]: flux = np.asarray([1., 0.8, 0.5, 0.8, 1.0])]
-    #
-    #In [33]: np.sum(np.tanh((1. / (flux * 0.10)) * (flux - np.asarray([0.9, 0.7, 0.5, 0.7, 0.9])))**2)
-    #Out[33]: 2.5992215844110831
-    #
-    #In [34]: np.sum(np.tanh((1. / (flux * 0.10)) * (flux - np.asarray([0.9, 0.7, 0.51, 0.7, 0.9])))**2)
-    #Out[34]: 2.6381786014449662
-    #
-    #In [35]: np.sum(np.tanh((1. / (flux * 0.10)) * (flux - np.asarray([0.91, 0.7, 0.5, 0.7, 0.9])))**2)
-    #Out[35]: 2.5322785648767674
-    #weights[comparing_mask == 1.0] = 1. / (flux[comparing_mask == 1.0] * 0.10)
-    #weights[comparing_mask == 1.0] = 1. / (flux[comparing_mask == 1.0] * 0.01)
-    #weights[comparing_mask == 1.0] = 1. / (flux[comparing_mask == 1.0] * 0.0025)
+    accept_weights = np.logical_and(comparing_mask == 1., np.logical_not(negative_zero_err))
+    weights = np.ones(len(waveobs))
+    weights[accept_weights] = 1. / err[accept_weights]
+    weights[~accept_weights] = 0.
+    #weights /= np.sum(weights) # Normalize
+    #weights /= np.max(weights) # Normalize
+    #weights *= len(np.where(accept_weights)[0]) # Scale to number of points
+    #weights *= 10000
+    weights = np.sqrt(weights)  # There is no mathematical reason but when squaring the flux errors, we get more reasonable parameter's errors
+                                # this could be due to an optimistic original estimation of flux errors (?).
 
 
     teff_range = modeled_layers_pack[3]
     logg_range = modeled_layers_pack[4]
     MH_range = modeled_layers_pack[5]
 
-    initial_continuum_correction = 1.0 # TODO: Remove everywhere the continuum_correction parameters because it is not useful
-    parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_continuum_correction, free_params, free_abundances, teff_range, logg_range, MH_range)
+    parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, free_abundances, teff_range, logg_range, MH_range)
 
-    synth_model = SynthModel(modeled_layers_pack, linelist, abundances)
+    synth_model = SynthModel(modeled_layers_pack, linelist, abundances, precomputed_grid_dir=precomputed_grid_dir)
 
-    #wave_step = 0.001
-    #xaxis = np.arange(np.min(spectrum_orig["waveobs"]), np.max(spectrum_orig["waveobs"]), wave_step)
-    #resampled_spectrum = resample_spectrum(spectrum_orig, xaxis)
-    #snr = estimate_snr(resampled_spectrum['flux'], num_points=10)
-    ##snr = 100
-    #sigma = flux/snr
-    ## Control sigma zero or negative due to zero or negative fluxes
-    #noise = np.zeros(len(flux))
-    #fnoise = np.where(sigma > 0.0)[0]
-    #noise[fnoise] = np.random.normal(0, sigma[fnoise], len(flux[fnoise]))
-    noise = None
-    #nknots = 1
-    ##median_wave_range = 0.05
-    #median_wave_range = 0.
-    #max_wave_range = 0.1
-    #fixed_value = None
-    #model = "Polynomy"
-    ##fixed_value = 1.0
-    ##model = 'Fixed value'
-    #fit_continuum_func = lambda x: fit_continuum(x, independent_regions=segments, nknots=nknots, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model)
-    fit_continuum_func = None
-    synth_model.fitData(waveobs, waveobs_mask, comparing_mask, flux, weights=weights, parinfo=parinfo, max_iterations=max_iterations, quiet=False, fit_continuum_func=fit_continuum_func, noise=noise)
+    synth_model.fitData(waveobs, waveobs_mask, comparing_mask, flux, weights=weights, parinfo=parinfo, use_errors=use_errors, max_iterations=max_iterations, quiet=False)
     print "\n"
     stats_linemasks = __get_stats_per_linemask(waveobs, flux, synth_model.last_final_fluxes, weights, free_params, linemasks, verbose=True)
     print "\n"
@@ -1095,7 +1094,6 @@ def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, 
     params['vsini'] = synth_model.vsini()
     params['limb_darkening_coeff'] = synth_model.limb_darkening_coeff()
     params['R'] = synth_model.R()
-    params['continuum_correction'] = synth_model.continuum_correction()
 
     errors = {}
     errors['teff'] = synth_model.eteff()
@@ -1106,10 +1104,38 @@ def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, 
     errors['vsini'] = synth_model.evsini()
     errors['limb_darkening_coeff'] = synth_model.elimb_darkening_coeff()
     errors['R'] = synth_model.eR()
-    errors['continuum_correction'] = synth_model.econtinuum_correction()
 
     # Free abundances (original, transformed [X/H] [X/Fe] and errors)
     free_abundances = synth_model.transformed_free_abundances()
+
+    ### Scale errors using the reduced weigthed chisq (tanh)
+    #   * It requires that spectrum errors are well estimated (weights are derived from them)
+    # - Better fits and better SNR produce:
+    #      - rwchisq(tanh) closer to 1
+    #      - smaller scale factor (below 1, so the original error is divided by 1/x)
+    #      - smaller errors
+    if use_errors:
+        #error_scale_factor = synth_model.reduced_wchisq
+        #error_scale_factor = synth_model.wchisq
+        error_scale_factor = 1.
+        # https://www.gnu.org/software/gsl/manual/html_node/Example-programs-for-Nonlinear-Least_002dSquares-Fitting.html
+        # https://www.gnu.org/software/gsl/manual/gsl-ref_38.html
+        #error_scale_factor = np.max((1., synth_model.wchisq/np.sqrt(synth_model.m.dof)))
+    else:
+        error_scale_factor = 1.
+    errors['teff'] *= error_scale_factor
+    errors['logg'] *= error_scale_factor
+    errors['MH'] *= error_scale_factor
+    errors['vmic'] *= error_scale_factor
+    errors['vmac'] *= error_scale_factor
+    errors['vsini'] *= error_scale_factor
+    errors['limb_darkening_coeff'] *= error_scale_factor
+    errors['R'] *= error_scale_factor
+    for i in xrange(len(free_abundances)):
+        free_abundances['eAbund'][i] *= error_scale_factor
+        free_abundances['e[X/H]'][i] *= error_scale_factor
+        free_abundances['e[X/Fe]'][i] *= error_scale_factor
+        free_abundances['eA(X)'][i] *= error_scale_factor
 
     status = {}
     status['days'] = synth_model.calculation_time.day-1
@@ -1118,22 +1144,21 @@ def modelize_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, 
     status['seconds'] = synth_model.calculation_time.second
     status['dof'] = synth_model.m.dof
     status['error'] = synth_model.m.errmsg
-    status['chisq(tanh)'] = synth_model.chisq
-    status['rchisq(tanh)'] = synth_model.reduced_chisq
-    status['chisq'] = synth_model.basic_chisq
-    status['rchisq'] = synth_model.reduced_basic_chisq
+    status['rms'] = synth_model.rms
+
+    # Unweighted
+    status['chisq'] = synth_model.chisq
+    status['rchisq'] = synth_model.reduced_chisq
+
+    # Weighted
+    status['wchisq'] = synth_model.wchisq
+    status['rwchisq'] = synth_model.reduced_wchisq
+
     status['niter'] = synth_model.m.niter
     status['nsynthesis'] = synth_model.m.nfev
     status['status'] = synth_model.m.status
 
     synth_spectrum = create_spectrum_structure(waveobs, synth_model.last_final_fluxes)
-    if synth_model.last_continuum_correction is not None:
-        # Uncorrect synthetic spectrum to recover the real theoretical spectrum
-        synth_spectrum['flux'] *= synth_model.last_continuum_correction
-        synth_spectrum['err'] *= synth_model.last_continuum_correction
-        # Correct the observed spectrum
-        spectrum['flux'] *= synth_model.last_continuum_correction
-        spectrum['err'] *= synth_model.last_continuum_correction
 
     return spectrum, synth_spectrum, params, errors, free_abundances, status, stats_linemasks
 
@@ -1286,7 +1311,7 @@ class EquivalentWidthModel(MPFitModel):
             hit_cache = True
             print "Cache:", key
             self.last_final_values = self.cache[key]
-            spec_abund, normal_abund, x_over_h, x_over_fe = self.cache[key]
+            spec_abund, absolute_abund, x_over_h, x_over_fe = self.cache[key]
         else:
             hit_cache = False
             print "Generating:", key
@@ -1297,10 +1322,19 @@ class EquivalentWidthModel(MPFitModel):
             else:
                 ignore = np.zeros(len(self.linemasks))
                 ignore[np.where(np.logical_or(self.fe1_filter, self.fe2_filter))[0]] = 1.0 # Do not ignore selected fe1/2 lines
-            spec_abund, normal_abund, x_over_h, x_over_fe = determine_abundances(atmosphere_layers, \
+            spec_abund, absolute_abund, x_over_h, x_over_fe = determine_abundances(atmosphere_layers, \
                     self.teff(), self.logg(), self.MH(), self.linemasks, self.abundances, microturbulence_vel = self.vmic(), \
                     ignore=ignore, verbose=0)
-            self.cache[key] = (spec_abund, normal_abund, x_over_h, x_over_fe)
+
+            if 'EW_absolute_abund_median' in self.linemasks.dtype.names:
+                # Instead of the literature solar abundance, use the solar abundance determined by iSpec (differencial analysis)
+                differential_x_over_h = absolute_abund - self.linemasks['EW_absolute_abund_median']
+                differential_feh = np.median(differential_x_over_h[self.linemasks['element'] == "Fe 1"])
+                differential_x_over_fe = differential_x_over_h - differential_feh
+                x_over_h = differential_x_over_h
+                x_over_fe = differential_x_over_fe
+
+            self.cache[key] = (spec_abund, absolute_abund, x_over_h, x_over_fe)
 
         # First iteration
         if self.fe1_filter is None or self.fe2_filter is None:
@@ -1379,7 +1413,6 @@ class EquivalentWidthModel(MPFitModel):
             print "   Abundances diff with model:  %.6f" % abundance_diff2
             print "   Abundances stdev:            %.6f %.6f" % (np.std(x_over_h[self.fe1_filter]), np.std(x_over_h[self.fe2_filter]))
             print "   Abundances median:           %.6f %.6f" % (np.median(self.fe1), np.median(self.fe2))
-            #print "Eval:", np.sum(np.tanh(self.weights*residuals)**2)
             print " - Chisq:                       %.10g" % np.sum((self.weights*residuals)**2)
 
         fitted_lines_params.append(self.m1)
@@ -1557,12 +1590,7 @@ class EquivalentWidthModel(MPFitModel):
         ftol = 1.e-4 # Terminate when the improvement in chisq between iterations is ftol > -(new_chisq/chisq)**2 +1
         xtol = 1.e-4
         gtol = 1.e-4
-        damp = 0.0   # Not active: Residuals are limited between -1.0 and 1.0 (np.tanh(residuals/1.0)) minimizing the influence of bad fluxes
-        #chisq_limit = 0.0002 # np.sum(np.asarray([0.00, 0.00, 0.01, 0.01])**2))
-        #chisq_limit = 1.0e-5 # 0.00001
-        #chisq_limit = 1.0e-2 # 0.01
-        #chisq_limit = 1.5e-4 # 0.00015 = np.sum(np.asarray([0.005, 0.005, 0.01])**2))
-        #chisq_limit = 3.0e-4 # 0.0003 = np.sum(np.asarray([0.01, 0.01, 0.01])**2))
+        damp = 0.0   # Not active: Residuals are limited between -1.0 and 1.0 (np.tanh(residuals/1.0))
         chisq_limit = 4.0e-4 # 0.0004 = np.sum(np.asarray([0.01, 0.01, 0.01, 0.01])**2))
 
         _t0 = default_timer()
@@ -1574,7 +1602,7 @@ class EquivalentWidthModel(MPFitModel):
         else:
             index = np.arange(3) # 3 values: zero slopes and zero difference between element1 and element2
         target_values = np.zeros(len(index))
-        weights = np.ones(len(index))
+        weights = np.ones(len(index)) * 100
         #weights = np.asarray([3,1,2])
         #weights = np.asarray([100,100,1])
         #weights = np.asarray([1000,1,100])
@@ -1585,12 +1613,12 @@ class EquivalentWidthModel(MPFitModel):
         values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
         residuals = values_to_evaluate - target_values
         self.rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
-        # Chisq using tanh
-        self.chisq = np.sum(np.tanh(weights * residuals)**2)
+        # Unweighted
+        self.chisq = np.sum((residuals)**2)
         self.reduced_chisq = self.chisq / self.m.dof
-        # Chisq without using tanh for minimizing outliers
-        self.basic_chisq = np.sum((weights * residuals)**2)
-        self.reduced_basic_chisq = self.basic_chisq / self.m.dof
+        # Weighted
+        self.wchisq = np.sum((weights * residuals)**2)
+        self.reduced_wchisq = self.wchisq / self.m.dof
 
         #self.cache = {}
 
@@ -1632,15 +1660,15 @@ class EquivalentWidthModel(MPFitModel):
         print ""
 
         print "Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second)
-        header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","chisq(tanh)","rchisq(tanh)","chisq","rchisq","rms")
-        stats = "%8i\t%8i\t%8i\t%8.6f\t%8.6f\t%8.6f\t%8.6f\t%8.6f" % (self.m.dof, self.m.niter, self.m.nfev, self.chisq, self.reduced_chisq, self.basic_chisq, self.reduced_basic_chisq, self.rms)
+        header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","wchisq","rwchisq","chisq","rchisq","rms")
+        stats = "%8i\t%8i\t%8i\t%8.6f\t%8.6f\t%8.6f\t%8.6f\t%8.6f" % (self.m.dof, self.m.niter, self.m.nfev, self.wchisq, self.reduced_wchisq, self.chisq, self.reduced_chisq, self.rms)
         print ""
         print "         ", header
         print "Stats:   ", stats
         print "Return code:", self.m.status
 
 
-def modelize_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, adjust_model_metalicity=False, max_iterations=20):
+def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, adjust_model_metalicity=False, max_iterations=20):
     """
     """
     teff_range = modeled_layers_pack[3]
@@ -1692,13 +1720,253 @@ def modelize_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundanc
     status['seconds'] = EW_model.calculation_time.second
     status['dof'] = EW_model.m.dof
     status['error'] = EW_model.m.errmsg
-    status['chisq(tanh)'] = EW_model.chisq
-    status['rchisq(tanh)'] = EW_model.reduced_chisq
-    status['chisq'] = EW_model.basic_chisq
-    status['rchisq'] = EW_model.reduced_basic_chisq
+    status['rms'] = EW_model.rms
+    status['chisq'] = EW_model.chisq
+    status['rchisq'] = EW_model.reduced_chisq
     status['niter'] = EW_model.m.niter
     status['nsynthesis'] = EW_model.m.nfev
     status['status'] = EW_model.m.status
 
     return params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params
+
+
+
+
+def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, solar_abundances):
+    multiprocessing.current_process().daemon=False
+
+    if valid_atmosphere_target(modeled_layers_pack, teff, logg, MH):
+        print "[started]", teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution
+        # Prepare atmosphere model
+        atmosphere_layers = interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH)
+        # Synthesis
+        synth_spectrum = create_spectrum_structure(wavelengths)
+        synth_spectrum['flux'] = generate_spectrum(synth_spectrum['waveobs'], \
+                atmosphere_layers, teff, logg, MH, linelist=atomic_linelist, abundances=solar_abundances, \
+                fixed_abundances=None, microturbulence_vel = vmic, \
+                macroturbulence=vmac, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, \
+                R=resolution, regions=segments, verbose=0)
+        # FITS
+        write_spectrum(synth_spectrum, filename_out)
+        print "[finished]", teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution
+    else:
+        raise Exception("Not valid: %i %.2f %.2f" % (teff, logg, MH))
+
+
+
+def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution, modeled_layers_pack, atomic_linelist, solar_abundances, segments=None, number_of_processes=1):
+    """
+    Pre-compute a synthetic grid with some reference ranges (Teff, log(g) and
+    MH combinations) and all the steps that iSpec will perform in the
+    astrophysical parameter determination process.
+
+    All the non-convolved spectra will be saved in a subdir and a complete
+    grid file with the reference points already convolved will be saved in a
+    FITS file for fast comparison.
+
+    The output directory can be used by the routines 'model_spectrum' and
+    'estimate_initial_ap'.
+    """
+    reference_list_filename = output_dirname + "/reference.txt"
+    reference_grid_filename = output_dirname + "/reference_grid_%i.fits" % to_resolution
+    fits_dir = output_dirname + "unconvolved_steps/"
+    mkdir_p(fits_dir)
+
+    # Parallelization pool
+    if number_of_processes == 1:
+        pool = None
+    else:
+        pool = Pool(number_of_processes)
+
+    # Create grid binary file
+    elapsed = 0 # seconds
+
+    num_ref_spec = len(ranges)
+    num_spec = num_ref_spec * 8 # Reference + 7 variations in Teff, logg, MH, vmic, vmac, vsini, limb darkening coeff
+
+    i = 0
+    for teff, logg, MH in ranges:
+        vmic = estimate_vmic(teff, logg, MH)
+        vmac = estimate_vmac(teff, logg, MH)
+        vsini = 2.0
+        limb_darkening_coeff = 0.0
+        resolution = 0
+        # For each reference point, calculate also the variations that iSpec will perform in the first iteration
+        steps =   ((teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff),
+                    (teff+Constants.SYNTH_STEP_TEFF, logg, MH, vmic, vmac, vsini, limb_darkening_coeff),
+                    (teff, logg+Constants.SYNTH_STEP_LOGG, MH, vmic, vmac, vsini, limb_darkening_coeff),
+                    (teff, logg, MH+Constants.SYNTH_STEP_MH, vmic, vmac, vsini, limb_darkening_coeff),
+                    (teff, logg, MH, vmic+Constants.SYNTH_STEP_VMIC, vmac, vsini, limb_darkening_coeff),
+                    (teff, logg, MH, vmic, vmac+Constants.SYNTH_STEP_VMAC, vsini, limb_darkening_coeff),
+                    (teff, logg, MH, vmic, vmac, vsini+Constants.SYNTH_STEP_VSINI, limb_darkening_coeff),
+                    (teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff+Constants.SYNTH_STEP_LIMB_DARKENING_COEFF))
+
+        for j, (teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff) in enumerate(steps):
+            filename_out = fits_dir + "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}".format(int(teff), logg, MH, vmic, vmac, vsini, limb_darkening_coeff) + ".fits"
+
+            if os.path.exists(filename_out):
+                print "Skipping", teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, "already computed"
+                continue
+
+            if pool is None:
+                if sys.platform == "win32":
+                    # On Windows, the best timer is time.clock()
+                    default_timer = time.clock
+                else:
+                    # On most other platforms the best timer is time.time()
+                    default_timer = time.time
+                tcheck = default_timer()
+                # Validate parameters
+                __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, solar_abundances)
+                elapsed = default_timer() - tcheck
+
+                print "-----------------------------------------------------"
+                print "Remaining time:"
+                print "\t", (num_spec-i)*elapsed, "seconds"
+                print "\t", (num_spec-i)*(elapsed/60), "minutes"
+                print "\t", (num_spec-i)*(elapsed/(60*60)), "hours"
+                print "\t", (num_spec-i)*(elapsed/(60*60*24)), "days"
+                print "-----------------------------------------------------"
+            else:
+                pool.apply_async(__generate_synthetic_fits, [filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, solar_abundances])
+            i += 1
+
+    if pool is not None:
+        pool.close()
+        pool.join()
+
+
+    reference_grid = None
+    reference_list = Table()
+    reference_list.add_column(Column(name='filename', dtype='|S50'))
+    reference_list.add_column(Column(name='teff', dtype=int))
+    reference_list.add_column(Column(name='logg', dtype=float))
+    reference_list.add_column(Column(name='MH', dtype=float))
+    reference_list.add_column(Column(name='vmic', dtype=float))
+    reference_list.add_column(Column(name='vmac', dtype=float))
+    reference_list.add_column(Column(name='vsini', dtype=float))
+    reference_list.add_column(Column(name='limb_darkening_coeff', dtype=float))
+    for teff, logg, MH in ranges:
+        vmic = estimate_vmic(teff, logg, MH)
+        vmac = estimate_vmac(teff, logg, MH)
+        vsini = 2.0
+        limb_darkening_coeff = 0.0
+        resolution = 0
+        reference_filename_out = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}".format(int(teff), logg, MH, vmic, vmac, vsini, limb_darkening_coeff) + ".fits"
+        reference_list.add_row((reference_filename_out, int(teff), logg, MH, vmic, vmac, vsini, limb_darkening_coeff))
+
+        # Spectra in the grid is convolved to the specified resolution for fast comparison
+        print "Quick grid:", reference_filename_out
+        spectrum = read_spectrum(fits_dir + reference_filename_out)
+        convolved_spectrum = convolve_spectrum(spectrum, to_resolution)
+
+        if reference_grid is None:
+            reference_grid = spectrum['flux']
+        else:
+            reference_grid = np.vstack((reference_grid, spectrum['flux']))
+
+    ascii.write(reference_list, reference_list_filename, delimiter='\t')
+    # Generate FITS file with grid for fast comparison
+    primary_hdu = fits.PrimaryHDU(reference_grid)
+    wavelengths_hdu = fits.ImageHDU(wavelengths, name="WAVELENGTHS")
+    params_bintable_hdu = fits.BinTableHDU(reference_list._data, name="PARAMS")
+    fits_format = fits.HDUList([primary_hdu, wavelengths_hdu, params_bintable_hdu])
+    fits_format.writeto(reference_grid_filename, clobber=True)
+
+
+def estimate_vmic(teff, logg, feh):
+    """
+    Estimate Microturbulence velocity (Vmic) by using an empirical relation
+    considering the effective temperature, surface gravity and metallicity.
+
+    The relation was constructed based on the UVES Gaia ESO Survey iDR1 data,
+    results for the benchmark stars (Jofre et al. 2013),
+    and globular cluster data from external literature sources.
+
+    Source: http://great.ast.cam.ac.uk/GESwiki/GesWg/GesWg11/Microturbulence
+    """
+    t0 = 5500
+    g0 = 4.0
+
+    if logg >= 3.5:
+        if teff >= 5000:
+            # main sequence and subgiants (RGB)
+            vmic = 1.05 + 2.51e-4*(teff-t0) + 1.5e-7*(teff-t0)**2 - 0.14*(logg-g0) - 0.05e-1*(logg-g0)**2 + 0.05*feh + 0.01*feh**2
+        else:
+            # main sequence
+            vmic = 1.05 + 2.51e-4*(5000-t0) + 1.5e-7*(5000-t0)**2 - 0.14*(logg-g0) - 0.05e-1*(logg-g0)**2 + 0.05*feh + 0.01*feh**2
+    else:
+        # giants (RGB/AGB)
+        vmic = 1.25 + 4.01e-4*(teff-t0) + 3.1e-7*(teff-t0)**2 - 0.14*(logg-g0) - 0.05*(logg-g0)**2 + 0.05*feh + 0.01*feh**2
+    vmic = float("%.2f" % vmic)
+    return vmic
+
+
+
+def estimate_vmac(teff, logg, feh):
+    """
+    Estimate Microturbulence velocity (Vmic) by using an empirical relation
+    considering the effective temperature, surface gravity and metallicity.
+
+    The relation was constructed by Maria Bergemann for the Gaia ESO Survey.
+    """
+    t0 = 5500
+    g0 = 4.0
+
+    if logg >= 3.5:
+        if teff >= 5000:
+            # main sequence and subgiants (RGB)
+            vmac = 3*(1.15 + 7e-4*(teff-t0) + 1.2e-6*(teff-t0)**2 - 0.13*(logg-g0) + 0.13*(logg-g0)**2 - 0.37*feh - 0.07*feh**2)
+        else:
+            # main sequence
+            vmac = 3*(1.15 + 2e-4*(teff-t0) + 3.95e-7*(teff-t0)**2 - 0.13*(logg-g0) + 0.13*(logg-g0)**2)
+    else:
+        # giants (RGB/AGB)
+        vmac = 3*(1.15 + 2.2e-5*(teff-t0) - 0.5e-7*(teff-t0)**2 - 0.1*(logg-g0) + 0.04*(logg-g0)**2 - 0.37*feh - 0.07*feh**2)
+
+    vmac = float("%.2f" % vmac)
+    return vmac
+
+
+def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks):
+    """
+    Estimate the initial atmospheric parameters by using a pre-computed grid
+    at a given resolution. The comparison will be based on the linemasks.
+    """
+    initial_teff = 5000.
+    initial_logg = 2.5
+    initial_MH = 0.0
+    initial_vmic = 1.0
+    initial_vmac = 0.0
+    initial_vsini = 2.0
+    initial_limb_darkening_coeff = 0.0
+
+    reference_grid_filename = precomputed_dir + "/reference_grid_%i.fits" % resolution
+    if not os.path.exists(reference_grid_filename):
+        logging.warn("Pre-computed grid does not exists for R = %i" % resolution)
+    else:
+        try:
+            grid = fits.open(reference_grid_filename)
+            grid_waveobs = np.asarray(grid['WAVELENGTHS'].data, dtype=float)
+            resampled_spectrum = resample_spectrum(spectrum, grid_waveobs, method="bessel")
+
+            fsegment = create_wavelength_filter(resampled_spectrum, regions=linemasks)
+            fsegment = np.logical_and(fsegment, resampled_spectrum['flux'] > 0.0)
+            isegment = np.where(fsegment == True)[0]
+
+            # http://en.wikipedia.org/wiki/Goodness_of_fit#Example
+            residuals = grid['PRIMARY'].data[:,isegment] - resampled_spectrum['flux'][isegment]
+            chisq = np.sum((residuals)**2, axis=1)
+            min_j = np.argmin(chisq)
+            filename, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff = grid['PARAMS'].data[min_j]
+
+        except Exception, e:
+            print "Initial parameters could not be estimated"
+            print type(e), e.message
+            pass
+        finally:
+            grid.close()
+
+    return initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff
+
 

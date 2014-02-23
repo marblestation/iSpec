@@ -20,8 +20,8 @@ import sampy
 import tempfile
 import signal
 import sys
-from astropy.io.vo.table import parse
-from astropy.io.vo.tree import VOTableFile, Resource, Table, Field, Group
+from astropy.io.votable import parse
+from astropy.io.votable.tree import VOTableFile, Resource, Table, Field, Group
 import urllib2
 import numpy as np
 from astropy.io import fits as pyfits

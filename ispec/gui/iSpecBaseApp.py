@@ -74,7 +74,8 @@ from StatusBar import StatusBar
 
 try:
     from SAMPManager import SAMPManager
-except: pass
+except:
+    pass
 
 def resource_path(relative):
     if getattr(sys, 'frozen', None):
@@ -1845,6 +1846,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             ignore_lines = self.active_spectrum.dialog[key].results["Ignore line regions"] == 1
             each_segment = self.active_spectrum.dialog[key].results["Treat each segment independently"] == 1
             order = self.active_spectrum.dialog[key].results["Filtering order"]
+            use_errors_for_fitting = self.active_spectrum.dialog[key].results["Use spectrum's errors as weights for the fitting process"]
             automatic_strong_line_detection = self.active_spectrum.dialog[key].results["Automatically find and ignore strong lines"]
             strong_line_probability = self.active_spectrum.dialog[key].results["Strong line probability threshold"]
             if nknots is None or median_wave_range < 0 or max_wave_range < 0:
@@ -1899,11 +1901,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.operation_in_progress = True
         self.status_message("Fitting continuum...")
         self.update_progress(10)
-        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'ignore_lines':ignore_lines, 'in_continuum':in_continuum, 'each_segment': each_segment, 'median_wave_range':median_wave_range, 'max_wave_range':max_wave_range, 'fixed_value':fixed_value, 'model':model, 'degree':degree, 'R':R, 'order':order, 'automatic_strong_line_detection':automatic_strong_line_detection, 'strong_line_probability': strong_line_probability})
+        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'ignore_lines':ignore_lines, 'in_continuum':in_continuum, 'each_segment': each_segment, 'median_wave_range':median_wave_range, 'max_wave_range':max_wave_range, 'fixed_value':fixed_value, 'model':model, 'degree':degree, 'R':R, 'order':order, 'use_errors_for_fitting': use_errors_for_fitting, 'automatic_strong_line_detection':automatic_strong_line_detection, 'strong_line_probability': strong_line_probability})
         thread.setDaemon(True)
         thread.start()
 
-    def on_fit_continuum_thread(self, nknots, ignore_lines=False, in_continuum=False, each_segment=False, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model="Polynomy", degree=3, R=None, order='median+max', automatic_strong_line_detection=True, strong_line_probability=0.50):
+    def on_fit_continuum_thread(self, nknots, ignore_lines=False, in_continuum=False, each_segment=False, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model="Polynomy", degree=3, R=None, order='median+max', use_errors_for_fitting=True, automatic_strong_line_detection=True, strong_line_probability=0.50):
         try:
             if each_segment:
                 self.__update_numpy_arrays_from_widgets("segments")
@@ -1923,7 +1925,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             else:
                 ignore_lines = None
 
-            self.active_spectrum.continuum_model = ispec.fit_continuum(self.active_spectrum.data, from_resolution=None, independent_regions=independent_regions, continuum_regions=continuum_regions, ignore=ignore_lines, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection, strong_line_probability=strong_line_probability)
+            self.active_spectrum.continuum_model = ispec.fit_continuum(self.active_spectrum.data, from_resolution=None, independent_regions=independent_regions, continuum_regions=continuum_regions, ignore=ignore_lines, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection, strong_line_probability=strong_line_probability, use_errors_for_fitting=use_errors_for_fitting)
             waveobs = self.active_spectrum.data['waveobs']
             self.active_spectrum.continuum_data = ispec.create_spectrum_structure(waveobs, self.active_spectrum.continuum_model(waveobs))
 
@@ -1931,6 +1933,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         except Exception:
             self.operation_in_progress = False
             self.queue.put((self.flash_status_message, ["Not possible to fit continuum with the selected parameters."], {}))
+            raise
 
 
     def on_fit_continuum_finish(self, nknots):
@@ -1959,7 +1962,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             velocity_upper_limit = self.velocity_atomic_upper_limit
             velocity_step = self.velocity_atomic_step
             templates = []
-            masks = ["Narval.Sun.370_1048nm", "Atlas.Sun.372_926nm", "Atlas.Arcturus.372_926nm", "HARPS_SOPHIE.G2.375_679nm", "HARPS_SOPHIE.K0.378_679nm", "Synthetic.Sun.300_1100nm", "VALD.Sun.300_1100nm"]
+            masks = ["Narval.Sun.370_1048nm", "Atlas.Sun.372_926nm", "Atlas.Arcturus.372_926nm", "HARPS_SOPHIE.A0.350_1095nm", "HARPS_SOPHIE.F0.360_698nm", "HARPS_SOPHIE.G2.375_679nm", "HARPS_SOPHIE.K0.378_679nm", "HARPS_SOPHIE.K5.378_680nm", "HARPS_SOPHIE.M5.400_687nm", "Synthetic.Sun.350_1100nm", "VALD.Sun.300_1100nm"]
             mask_size = 2.0
             mask_depth = 0.1
         elif relative_to_telluric_data:
@@ -1968,7 +1971,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             velocity_upper_limit = self.velocity_telluric_upper_limit
             velocity_step = self.velocity_telluric_step
             templates = []
-            masks = ["Tellurics.standard.atm_air_model"]
+            masks = ["Synth.Tellurics.500_1100nm"]
             mask_size = 2.0
             mask_depth = 0.01
         elif relative_to_template:
@@ -2085,7 +2088,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             if template == "[Internal template]":
                 # Internal template (solar type)
                 if self.active_spectrum.velocity_profile_internal_template is None:
-                    self.active_spectrum.velocity_profile_internal_template = ispec.read_spectrum(resource_path("input/spectra/synthetic/Synth_ATLAS9.APOGEE_VALD_5777.0_4.44_0.0_1.0.txt.gz"))
+                    self.active_spectrum.velocity_profile_internal_template = ispec.read_spectrum(resource_path("input/spectra/templates/Synth.Sun.350_1100nm.txt.gz"))
                 template_spectrum = self.active_spectrum.velocity_profile_internal_template
             else:
                 # Search template to be used by its name
@@ -2208,7 +2211,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         max_atomic_wave_diff = self.active_spectrum.dialog[key].results["Maximum atomic wavelength difference"]
         self.active_spectrum.dialog[key].destroy()
 
-        telluric_linelist_file = resource_path("input/linelists/CCF/Tellurics.standard.atm_air_model.txt")
+        telluric_linelist_file = resource_path("input/linelists/CCF/Synth.Tellurics.500_1100nm.txt")
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
         molecules_file = resource_path("input/abundances/molecular_symbols.dat")
 
@@ -2611,7 +2614,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         max_atomic_wave_diff = self.active_spectrum.dialog[key].results["Maximum atomic wavelength difference"]
         self.active_spectrum.dialog[key].destroy()
 
-        telluric_linelist_file = resource_path("input/linelists/CCF/Tellurics.standard.atm_air_model.txt")
+        telluric_linelist_file = resource_path("input/linelists/CCF/Synth.Tellurics.500_1100nm.txt")
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
         molecules_file = resource_path("input/abundances/molecular_symbols.dat")
 
@@ -3268,7 +3271,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.active_spectrum.velocity_telluric = vel_telluric
 
         if self.telluric_linelist is None:
-            telluric_linelist_file = resource_path("input/linelists/CCF/Tellurics.standard.atm_air_model.txt")
+            telluric_linelist_file = resource_path("input/linelists/CCF/Synth.Tellurics.500_1100nm.txt")
             self.telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
 
         # - Filter regions that may be affected by telluric lines
@@ -3690,8 +3693,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.remove_fitted_lines()
 
         self.status_message("Continuum normalization...")
-        self.active_spectrum.data['flux'] /= self.active_spectrum.continuum_model(self.active_spectrum.data['waveobs'])
-        self.active_spectrum.data['err'] /= self.active_spectrum.continuum_model(self.active_spectrum.data['waveobs'])
+        #self.active_spectrum.data['flux'] /= self.active_spectrum.continuum_model(self.active_spectrum.data['waveobs'])
+        #self.active_spectrum.data['err'] /= self.active_spectrum.continuum_model(self.active_spectrum.data['waveobs'])
+        self.active_spectrum.data = ispec.normalize_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model)
         self.active_spectrum.not_saved = True
 
         # Remove current continuum from plot if exists

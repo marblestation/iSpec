@@ -288,9 +288,14 @@ def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None, baseli
         weights = f + -1*(min_flux) + 0.01 # Above zero
         weights = np.min(weights) / weights
     else:
-        weights = min_flux / f
+        weights = np.zeros(len(f))
+        zeros = f == 0
+        weights[~zeros] = min_flux / f[~zeros]
+        weights[zeros] = np.min(weights[~zeros]) # They will be ignored
     weights -= np.min(weights)
-    weights = weights /np.max(weights)
+    max_weight = np.max(weights)
+    if max_weight != 0:
+        weights = weights / max_weight
     model.fitData(x, y, parinfo=parinfo, weights=weights)
     #model.fitData(x, y, parinfo=parinfo)
 
@@ -975,7 +980,9 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                     spectrum_window = spectrum[wave_filter]
                 else:
                     spectrum_window = spectrum[new_base:new_top+1]
+
                 line_model, rms = __fit_line(spectrum_window, continuum_model, regions['wave_peak'][i], discard_gaussian = discard_gaussian, discard_voigt = discard_voigt, baseline_margin=continuum_adjustment_margin, free_mu=free_mu)
+
                 if free_mu and (line_model.mu() <= spectrum_window['waveobs'][0] or line_model.mu() >= spectrum_window['waveobs'][-1]):
                     raise Exception("Fitted wave peak (mu) outside the limits!")
 
@@ -999,9 +1006,19 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                 if second_derivative_peak == 0:
                     second_derivative_peak = 1e-10
                 sharpness = second_derivative_peak / inverted_fluxes_peak
-                line_snr = np.power(inverted_fluxes_peak, 2) / (1 - np.power(inverted_fluxes_peak, 2))
-                # Use abs instead of a simple '-1*' because sometime the result is negative and the sqrt cannot be calculated
-                error = np.sqrt(np.abs(1 / (nbins * sharpness * line_snr)))
+
+                denominator = (1 - np.power(inverted_fluxes_peak, 2))
+                if denominator != 0:
+                    line_snr = np.power(inverted_fluxes_peak, 2) / denominator
+                else:
+                    line_snr = 0.
+
+                denominator = (nbins * sharpness * line_snr)
+                if denominator != 0:
+                    # Use abs instead of a simple '-1*' because sometime the result is negative and the sqrt cannot be calculated
+                    error = np.sqrt(np.abs(1 / denominator))
+                else:
+                    error = 0
                 #print line_model.mu(), error, "=", nbins, sharpness, line_snr
                 line_model.set_emu(error)
 
@@ -1930,8 +1947,6 @@ def __modelize_velocity_profile(ccf, nbins, only_one_peak=False, peak_probabilit
             x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
             huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
             linear_model = huber_t.fit()
-            #import pudb
-            #pudb.set_trace()
             selected_peaks_indices = np.where(linear_model.weights[peaks] < 1. - peak_probability)[0]
 
         if len(selected_peaks_indices) == 0:
@@ -2191,6 +2206,4 @@ def select_good_velocity_profile_models(models, ccf):
         ##print original_ew - line_region['ew'], "=", original_ew, "-", line_region['ew'], "::", linemasks['ew'][i]
         #diff.append(original_ew - line_region['ew'][0])
 
-    ##import pudb
-    ##pudb.set_trace()
     #return linemasks

@@ -28,7 +28,7 @@ import time
 import log
 import logging
 
-def __read_fits_spectrum(spectrum_filename, fluxhdu="PRIMARY", errorhdu=None):
+def __read_fits_spectrum(spectrum_filename):
     """
     Reads the 'PRIMARY' HDU of the FITS file, considering that it contains the fluxes.
 
@@ -41,73 +41,78 @@ def __read_fits_spectrum(spectrum_filename, fluxhdu="PRIMARY", errorhdu=None):
 
     Inspired by pyspeckit:
         https://bitbucket.org/pyspeckit/pyspeckit.bitbucket.org/src/ae1e0714410b58905466740b04b54318d5f318f8/pyspeckit/spectrum/readers/fits_reader.py?at=default
+
+    Finally, if nothing has worked, it searches for a binary table with 3 columns
+    'AWAV', 'FLUXES' and 'SIGMA'.
     """
     hdulist = pyfits.open(spectrum_filename)
 
-    data = hdulist[fluxhdu].data
-    hdr = hdulist[fluxhdu].header
+    data = hdulist['PRIMARY'].data
+    hdr = hdulist['PRIMARY'].header
 
-    axis = 1
-    specaxis = str(axis)
-    # Try to determine if wavelength is in Angstrom (by default) or nm
-    ctype = hdr.get('CTYPE%i' % axis)
-    cunit = hdr.get('CUNIT%i' % axis)
-    if str(cunit).upper() in ['NM']:
-        unit = "nm"
-    else:
-        #if str(ctype).upper() in ['AWAV', 'ANGSTROM', '0.1 NM'] or str(cunit).upper() in ['AWAV', 'ANGSTROM', '0.1 NM']:
-        unit = "Angstrom"
+    if data is not None and (type(hdulist['PRIMARY']) is pyfits.hdu.image.PrimaryHDU or \
+                                type(hdulist['PRIMARY']) is pyfits.hdu.image.ImageHDU):
+        axis = 1
+        specaxis = str(axis)
+        # Try to determine if wavelength is in Angstrom (by default) or nm
+        ctype = hdr.get('CTYPE%i' % axis)
+        cunit = hdr.get('CUNIT%i' % axis)
+        if str(cunit).upper() in ['NM']:
+            unit = "nm"
+        else:
+            #if str(ctype).upper() in ['AWAV', 'ANGSTROM', '0.1 NM'] or str(cunit).upper() in ['AWAV', 'ANGSTROM', '0.1 NM']:
+            unit = "Angstrom"
 
-    flux = data.flatten()
-    waveobs = None
-    # NOTE: One can use hdr.get('ORIGIN') for special treatments
-    if hdr.get(str('CD%s_%s' % (specaxis,specaxis))) is not None:
-        wave_step = hdr['CD%s_%s' % (specaxis,specaxis)]
-        wave_base = hdr['CRVAL%s' % (specaxis)]
-        reference_pixel = hdr['CRPIX%s' % (specaxis)]
-        logging.info("Using the FITS CD matrix.  PIX=%f VAL=%f DELT=%f UNIT=%s" % (reference_pixel,wave_base,wave_step,unit))
-    elif hdr.get(str('CDELT%s' % (specaxis))) is not None:
-        wave_step = hdr['CDELT%s' % (specaxis)]
-        wave_base = hdr['CRVAL%s' % (specaxis)]
-        reference_pixel = hdr['CRPIX%s' % (specaxis)]
-        logging.info("Using the FITS CDELT value.  PIX=%f VAL=%f DELT=%f UNIT=%s" % (reference_pixel,wave_base,wave_step,unit))
-    elif len(data.shape) > 1:
-        logging.info("No CDELT or CD in header.  Assuming 2D input with 1st line representing the spectral axis.")
-        # try assuming first axis is X axis
-        if hdr.get('CUNIT%s' % (specaxis)) is not None:
-            waveobs = data[0,:]
-            flux = data[1,:]
-            if data.shape[0] > 2:
-                errspec = data[2,:]
+        flux = data.flatten()
+        waveobs = None
+
+        # Try to read World Coordinate System (WCS) that defines the wavelength grid
+        if hdr.get(str('CD%s_%s' % (specaxis,specaxis))) is not None:
+            wave_step = hdr['CD%s_%s' % (specaxis,specaxis)]
+            wave_base = hdr['CRVAL%s' % (specaxis)]
+            reference_pixel = hdr['CRPIX%s' % (specaxis)]
+            logging.info("Using the FITS CD matrix.  PIX=%f VAL=%f DELT=%f UNIT=%s" % (reference_pixel,wave_base,wave_step,unit))
+        elif hdr.get(str('CDELT%s' % (specaxis))) is not None:
+            wave_step = hdr['CDELT%s' % (specaxis)]
+            wave_base = hdr['CRVAL%s' % (specaxis)]
+            reference_pixel = hdr['CRPIX%s' % (specaxis)]
+            logging.info("Using the FITS CDELT value.  PIX=%f VAL=%f DELT=%f UNIT=%s" % (reference_pixel,wave_base,wave_step,unit))
+        elif len(data.shape) > 1:
+            logging.info("No CDELT or CD in header.  Assuming 2D input with 1st line representing the spectral axis.")
+            # No valid WCS, try assuming first axis is the wavelength axis
+            if hdr.get('CUNIT%s' % (specaxis)) is not None:
+                waveobs = data[0,:]
+                flux = data[1,:]
+                if data.shape[0] > 2:
+                    errspec = data[2,:]
+            else:
+                raise Exception("Unknown FITS file format")
         else:
             raise Exception("Unknown FITS file format")
-    else:
-        raise Exception("Unknown FITS file format")
 
-    # Angstrom to nm
-    if unit != "nm":
-        wave_base /= 10
-        wave_step /= 10
+        # Angstrom to nm
+        if unit != "nm":
+            wave_base /= 10
+            wave_step /= 10
 
-    # Deal with logarithmic wavelength binning if necessary
-    if waveobs is None:
-        if hdr.get('WFITTYPE') == 'LOG-LINEAR':
-            xconv = lambda v: 10**((v-reference_pixel+1)*wave_step+wave_base)
-            waveobs = xconv(np.arange(len(flux)))
-            print "Log scale"
-        else:
-            xconv = lambda v: ((v-reference_pixel+1)*wave_step+wave_base)
-            waveobs = xconv(np.arange(len(flux)))
+        # Deal with logarithmic wavelength binning if necessary
+        if waveobs is None:
+            if hdr.get('WFITTYPE') == 'LOG-LINEAR':
+                xconv = lambda v: 10**((v-reference_pixel+1)*wave_step+wave_base)
+                waveobs = xconv(np.arange(len(flux)))
+                print "Log scale"
+            else:
+                xconv = lambda v: ((v-reference_pixel+1)*wave_step+wave_base)
+                waveobs = xconv(np.arange(len(flux)))
 
-    num_measures = len(flux)
-    spectrum = create_spectrum_structure(waveobs, flux)
+        num_measures = len(flux)
+        spectrum = create_spectrum_structure(waveobs, flux)
 
-    if errorhdu is None:
-        spectrum['err'] = np.zeros(len(flux))
         # Try to find the errors in the extensions (HDU different than the PRIMARY):
+        spectrum['err'] = np.zeros(len(flux))
         for i in xrange(len(hdulist)):
             name = hdulist[i].name.upper()
-            if name == str(fluxhdu) or len(hdulist[i].data.flatten()) != len(flux):
+            if name == str('PRIMARY') or len(hdulist[i].data.flatten()) != len(flux) or type(hdulist[i]) is pyfits.hdu.table.BinTableHDU:
                 continue
             if 'IVAR' in name or 'VARIANCE' in name:
                 spectrum['err'] = 1. / hdulist[i].data.flatten()
@@ -115,8 +120,22 @@ def __read_fits_spectrum(spectrum_filename, fluxhdu="PRIMARY", errorhdu=None):
             if 'NOISE' in name or 'ERR' in name or 'SIGMA' in name:
                 spectrum['err'] = hdulist[i].data.flatten()
                 break
+
+    elif data is None:
+        # Try to find a binary table with an irregular spectra and 3 columns
+        spectrum = None
+        for i in xrange(len(hdulist)):
+            if type(hdulist[i]) is pyfits.hdu.table.BinTableHDU:
+                data = hdulist[i].data
+                # iSpec binary table for irregular spectra
+                try:
+                    spectrum = create_spectrum_structure(data['AWAV'], data['FLUX'], data['SIGMA'])
+                except:
+                    continue
+        if spectrum is None:
+            raise Exception("Unknown FITS file format")
     else:
-        spectrum['err'] = hdulist[errorhdu].data.flatten()
+        raise Exception("Unknown FITS file format")
 
     hdulist.close()
 
@@ -139,7 +158,7 @@ def __read_spectrum(spectrum_filename):
         raise Exception("Empty spectrum or incompatible format")
     return spectrum
 
-def read_spectrum(spectrum_filename, fits_options={"fluxhdu": "PRIMARY", "errorhdu": None}):
+def read_spectrum(spectrum_filename, apply_filters=True, sort=True):
     """
     Return spectrum recarray structure from a filename.
     The file format shouldd be plain text files with **tab** character as column delimiter.
@@ -161,16 +180,12 @@ def read_spectrum(spectrum_filename, fits_options={"fluxhdu": "PRIMARY", "errorh
 
     ** It can recognise FITS files by the filename (extensions .FITS or .FIT), if this is
     the case, then it tries to load the PRIMARY spectra by default and tries to search the errors
-    in the extensions of the FITS file (this behaviour can be modified by specifying
-    the HDU for the flux and the errors via "fits_options").
+    in the extensions of the FITS file. In case the PRIMARY is empty, it searches for binary tables
+    with wavelengths, fluxes and errors.
     """
     # If it is not compressed
     if os.path.exists(spectrum_filename) and (spectrum_filename[-4:].lower() == ".fit" or spectrum_filename[-5:].lower() == ".fits") :
-        # Make sure that "fluxhdu" and "errorhdu" exist:
-        default = {"fluxhdu": "PRIMARY", "errorhdu": None}
-        default.update(fits_options) # Overwrite with user input values
-        fits_options = default
-        spectrum = __read_fits_spectrum(spectrum_filename, fluxhdu = fits_options["fluxhdu"], errorhdu = fits_options["errorhdu"])
+        spectrum = __read_fits_spectrum(spectrum_filename)
     elif os.path.exists(spectrum_filename) and spectrum_filename[-3:].lower() != ".gz":
         spectrum = __read_spectrum(spectrum_filename)
     elif (os.path.exists(spectrum_filename) and spectrum_filename[-3:].lower() == ".gz") or (os.path.exists(spectrum_filename.lower() + ".gz")):
@@ -190,30 +205,32 @@ def read_spectrum(spectrum_filename, fits_options={"fluxhdu": "PRIMARY", "errorh
     else:
         raise Exception("Spectrum file does not exists!")
 
-    # Filtering...
-    valid = ~np.isnan(spectrum['flux'])
+    if apply_filters:
+        # Filtering...
+        valid = ~np.isnan(spectrum['flux'])
 
-    if len(spectrum[valid]) > 2:
-        # Find duplicate wavelengths
-        dups, dups_index = find_duplicates(spectrum, 'waveobs')
+        if len(spectrum[valid]) > 2:
+            # Find duplicate wavelengths
+            dups, dups_index = find_duplicates(spectrum, 'waveobs')
 
-        # Filter all duplicates except the first one
-        last_wave = None
-        for i in np.arange(len(dups)):
-            if last_wave is None:
-                last_wave = dups[i]['waveobs']
-                continue
-            if last_wave == dups[i]['waveobs']:
-                pos = dups_index[i]
-                valid[pos] = False
-            else:
-                # Do not filter the first duplicated value
-                last_wave = dups[i]['waveobs']
+            # Filter all duplicates except the first one
+            last_wave = None
+            for i in np.arange(len(dups)):
+                if last_wave is None:
+                    last_wave = dups[i]['waveobs']
+                    continue
+                if last_wave == dups[i]['waveobs']:
+                    pos = dups_index[i]
+                    valid[pos] = False
+                else:
+                    # Do not filter the first duplicated value
+                    last_wave = dups[i]['waveobs']
 
-    # Filter invalid and duplicated values
-    spectrum = spectrum[valid]
+        # Filter invalid and duplicated values
+        spectrum = spectrum[valid]
 
-    spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
+    if sort:
+        spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
 
     return spectrum
 
@@ -234,55 +251,67 @@ def write_spectrum(spectrum, spectrum_filename):
     are different from zero, they will be saved as an extension.
     """
     if spectrum_filename[-4:].lower() == ".fit" or spectrum_filename[-5:].lower() == ".fits":
-        wave_diff = spectrum['waveobs'][1:] - spectrum['waveobs'][:-1]
-        if np.all(np.abs(wave_diff - np.median(wave_diff)) < 0.0000001):
-            # Regularly sampled spectrum
-            data = spectrum['flux']
-            header = pyfits.Header()
-            header.set('TTYPE1', "FLUX")
-            header.set('TUNIT1', "COUNTS")
-            header.set('CD1_1', spectrum['waveobs'][1] - spectrum['waveobs'][0])
-            header.set('CDELT1', spectrum['waveobs'][1] - spectrum['waveobs'][0]) # For old software
-            header.set('CRVAL1', spectrum['waveobs'][0])
-            header.set('CRPIX1', 1)
-
-            header.set('NAXIS', 1)
-            header.set('NAXIS1', len(spectrum['flux']))
-        else:
-            # Since it is not regularly sampled, add the wavelength and flux together
-            # in a matrix
-            data = np.vstack([spectrum['waveobs'], spectrum['flux']])
-            header = pyfits.Header()
-            header.set('TTYPE1', "WAVELENGTH")
-            header.set('TUNIT1', "NM")
-            header.set('TTYPE2', "FLUX")
-            header.set('TUNIT2', "COUNTS")
-            header.set('NAXIS', 2)
-            header.set('NAXIS1', len(spectrum['waveobs']))
-            header.set('NAXIS2', 2) # waveobs and flux
-        header.set('CUNIT1', "NM")
-        header.set('CTYPE1', "WAVELENGTH")
+        header = pyfits.Header()
         header.set('ORIGIN', "iSpec")
         #header.set('VERSION', "iSpec")
         header.set('UTCSAVED', time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
-        primary_hdu = pyfits.PrimaryHDU(data=data, header=header)
 
-        # Add an HDU extension with errors if they exist
-        if np.any(spectrum['err'] != 0):
-            # Error extension
-            data = spectrum['err']
-            header = pyfits.Header()
+        wave_diff = spectrum['waveobs'][1:] - spectrum['waveobs'][:-1]
+        median_wave_step = np.median(wave_diff)
+        if np.all(np.abs(wave_diff - median_wave_step) < 0.0000001):
+            ### Regularly sampled spectrum
+            primary_data = np.asarray(spectrum['flux'], dtype='float32')
+
+            # Coordinates
+            header.set('CUNIT1', "NM")
+            header.set('CTYPE1', "AWAV") # Air wavelength
+            #header.set('CD1_1', spectrum['waveobs'][1] - spectrum['waveobs'][0])
+            header.set('CDELT1', spectrum['waveobs'][1] - spectrum['waveobs'][0])
+            header.set('CRVAL1', spectrum['waveobs'][0])
+            header.set('CRPIX1', 1)
+            #
+            header.set('NAXIS', 1)
+            header.set('NAXIS1', len(spectrum['flux']))
             header.set('TTYPE1', "FLUX")
             header.set('TUNIT1', "COUNTS")
-            header.set('NAXIS', 1)
-            header.set('NAXIS1', len(spectrum['err']))
 
-            sigma_hdu = pyfits.ImageHDU(data=data, header=header, name="SIGMA")
-            fits = pyfits.HDUList([primary_hdu, sigma_hdu])
+            primary_hdu = pyfits.PrimaryHDU(data=primary_data, header=header)
+
+            # Add an HDU extension (image) with errors if they exist
+            if np.any(spectrum['err'] != 0):
+                # Error extension
+                ext_data = np.asarray(spectrum['err'], dtype='float32')
+                extheader = header.copy()
+                extheader.set('TTYPE1', "FLUX")
+                extheader.set('TUNIT1', "COUNTS")
+                extheader.set('NAXIS', 1)
+                extheader.set('NAXIS1', len(spectrum['err']))
+                extension_hdu = pyfits.ImageHDU(data=ext_data, header=extheader, name="SIGMA")
+                fits_format = pyfits.HDUList([primary_hdu, extension_hdu])
+            else:
+                fits_format = pyfits.HDUList(primary_hdu)
         else:
-            fits = pyfits.HDUList(primary_hdu)
+            # Since it is not regularly sampled, we use a BinTable extension with an empty primary
+            primary_hdu = pyfits.PrimaryHDU(data=None, header=header)
+            bintable_hdu = pyfits.BinTableHDU(spectrum)
 
-        fits.writeto(spectrum_filename, clobber=True)
+            #bintable_hdu.columns.change_name('waveobs', 'AWAV')
+            bintable_hdu.data.columns[0].name = "AWAV"
+            bintable_hdu.header.set('TTYPE1', "AWAV")
+            bintable_hdu.header.set('TUNIT1', "NM")
+            #bintable_hdu.columns.change_name('flux', 'FLUX')
+            bintable_hdu.data.columns[1].name = "FLUX"
+            bintable_hdu.header.set('TTYPE2', "FLUX")
+            bintable_hdu.header.set('TUNIT2', "COUNTS")
+            #bintable_hdu.columns.change_name('err', 'SIGMA')
+            bintable_hdu.data.columns[2].name = "SIGMA"
+            bintable_hdu.header.set('TTYPE3', "SIGMA")
+            bintable_hdu.header.set('TUNIT3', "COUNTS")
+
+            fits_format = pyfits.HDUList([primary_hdu, bintable_hdu])
+
+
+        fits_format.writeto(spectrum_filename, clobber=True)
     elif spectrum_filename[-3:].lower() == ".gz":
         tmp_spec = tempfile.mktemp() + str(int(random.random() * 100000000))
         out = open(tmp_spec, "w")
@@ -303,13 +332,35 @@ def write_spectrum(spectrum, spectrum_filename):
         out.write("\n".join(["\t".join(map(str, (line['waveobs'], line['flux'], line['err']))) for line in spectrum]))
         out.close()
 
-def normalize_spectrum(spectrum, continuum_model):
+def normalize_spectrum(spectrum, continuum_model, consider_continuum_errors=True):
     """
     Normalizes a spectrum given a continuum fit
     """
+    continuum_flux = continuum_model(spectrum['waveobs'])
+    continuum_errors = continuum_model.placement_errors(spectrum['waveobs'])
+    if np.all(continuum_flux == 1) and (not consider_continuum_errors or np.all(continuum_errors == 0)):
+        return spectrum.copy()
+
     normalized_spectrum = create_spectrum_structure(spectrum['waveobs'])
-    normalized_spectrum['flux'] = spectrum['flux'] / continuum_model(spectrum['waveobs'])
-    normalized_spectrum['err'] = spectrum['err'] / continuum_model(spectrum['waveobs'])
+    zeros = continuum_flux == 0
+    normalized_spectrum['flux'][zeros] = 1.
+    normalized_spectrum['err'][zeros] = 0.
+    normalized_spectrum['flux'][~zeros] = spectrum['flux'][~zeros] / continuum_flux[~zeros]
+
+    # Error propagation considering errors in continuum (most conservative operation)
+    if (consider_continuum_errors and np.all(continuum_errors == 0)) or np.all(spectrum['err'] == 0):
+        normalized_spectrum['err'] = 0.
+    else:
+        if consider_continuum_errors:
+            zeros = np.logical_or(spectrum['flux'] == 0, continuum_flux == 0)
+            normalized_spectrum['err'][~zeros] = normalized_spectrum['flux'][~zeros] * ((spectrum['err'][~zeros] / spectrum['flux'][~zeros]) + (continuum_errors[~zeros] / continuum_flux[~zeros]))
+            # Non-correlated errors:
+            #normalized_spectrum['err'][~zeros] = normalized_spectrum['flux'][~zeros] * np.sqrt(np.power(spectrum['err'][~zeros] / spectrum['flux'][~zeros], 2) + np.power(continuum_errors[~zeros] / continuum_flux[~zeros], 2))
+            normalized_spectrum['err'][zeros] = 0.
+        else:
+            normalized_spectrum['err'][~zeros] = spectrum['err'][~zeros] / continuum_flux[~zeros]
+
+
     return normalized_spectrum
 
 def estimate_snr(flux, num_points=10, frame=None):
@@ -371,13 +422,13 @@ try:
     import numpy as np
     pyximport.install(setup_args={'include_dirs':[np.get_include()]})
     from spectrum_c import convolve_spectrum as __convolve_spectrum
-    from spectrum_c import bessel_interpolation as __bessel_interpolation
+    from spectrum_c import interpolation as __interpolation
 except:
     print "*********************************************************************"
     print "Not optimized version loaded!"
     print "*********************************************************************"
 
-    def __bessel_interpolation(waveobs, fluxes, err, resampled_waveobs, frame=None):
+    def __interpolation(waveobs, fluxes, err, resampled_waveobs, bessel=False, zero_edges=True, frame=None):
         """
         Interpolate flux for a given wavelength by using Bessel's Central-Difference Interpolation.
         It considers:
@@ -407,30 +458,26 @@ except:
             if index == total_points:
                 # DISCARD: Linear extrapolation using index-1 and index-2
                 # flux = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index-1]-fluxes[index-2])/(waveobs[index-1]-waveobs[index-2]))
-                # JUST DUPLICATE:
-                #resampled_flux[i] = fluxes[index-1]
-                # JUST ZERO:
-                resampled_flux[i] = 0.0
-                resampled_err[i] = 0.0
-            elif index == 1 or index == total_points-1:
-                # Do not interpolate if any of the fluxes is zero or negative
-                if fluxes[index-1] <= 1e-10 or fluxes[index] <= 1e-10:
+                if zero_edges:
+                    # JUST ZERO:
                     resampled_flux[i] = 0.0
                     resampled_err[i] = 0.0
                 else:
-                    # Linear interpolation between index and index-1
-                    # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
-                    resampled_flux[i] = fluxes[index-1] + (objective_wavelength - waveobs[index-1]) * ((fluxes[index]-fluxes[index-1])/(waveobs[index]-waveobs[index-1]))
-                    resampled_err[i] = err[index-1] + (objective_wavelength - waveobs[index-1]) * ((err[index]-err[index-1])/(waveobs[index]-waveobs[index-1]))
+                    # JUST DUPLICATE:
+                    resampled_flux[i] = fluxes[index-1]
+                    resampled_err[i] = err[index-1]
             #elif index == 0 and waveobs[index] != objective_wavelength:
             elif index == 0:
                 # DISCARD: Linear extrapolation using index+1 and index
                 # flux = fluxes[index] + (objective_wavelength - waveobs[index]) * ((fluxes[index+1]-fluxes[index])/(waveobs[index+1]-waveobs[index]))
-                # JUST DUPLICATE:
-                #resampled_flux[i] = fluxes[index]
-                # JUST ZERO:
-                resampled_flux[i] = 0.0
-                resampled_err[i] = 0.0
+                if zero_edges:
+                    # JUST ZERO:
+                    resampled_flux[i] = 0.0
+                    resampled_err[i] = 0.0
+                else:
+                    # JUST DUPLICATE:
+                    resampled_flux[i] = fluxes[index]
+                    resampled_err[i] = err[index]
             # Do not do this optimization because it can produce a value surounded
             # by zeros because of the condition "Do not interpolate if any of the
             # fluxes is zero or negative" implemented in the rest of the cases
@@ -438,39 +485,69 @@ except:
                 #resampled_flux[i] = fluxes[index]
                 #resampled_err[i] = err[index]
             else:
-                # Bessel's Central-Difference Interpolation with 4 points
-                #   p = [(x - x0) / (x1 - x0)]
-                #   f(x) = f(x0) + p ( f(x1) - f(x0) ) + [ p ( p - 1 ) / 4 ] ( f(x2) - f(x1) - f(x0) + f(x-1) )
-                # where x-1 < x0 < objective_wavelength = x < x1 < x2 and f() is the flux
-                #   http://physics.gmu.edu/~amin/phys251/Topics/NumAnalysis/Approximation/polynomialInterp.html
-
-                #  x-1= index - 2
-                #  x0 = index - 1
-                #  x  = objective_wavelength
-                #  x1 = index
-                #  x2 = index + 1
-
-                ## Array access optimization
-                flux_x_1 = fluxes[index - 2]
-                wave_x0 = waveobs[index-1]
-                flux_x0 = fluxes[index - 1]
-                wave_x1 = waveobs[index]
-                flux_x1 = fluxes[index]
-                flux_x2 = fluxes[index + 1]
-
-                err_x_1 = err[index - 2]
-                err_x0 = err[index - 1]
-                err_x1 = err[index]
-                err_x2 = err[index + 1]
-
-                # Do not interpolate if any of the fluxes is zero or negative
-                if flux_x_1 <= 1e-10 or flux_x0 <= 1e-10 or flux_x1 <= 1e-10 or flux_x2 <= 1e-10:
-                    resampled_flux[i] = 0.0
-                    resampled_err[i] = 0.0
+                if not bessel or index == 1 or index == total_points-1:
+                    # Do not interpolate if any of the fluxes is zero or negative
+                    if fluxes[index-1] <= 1e-10 or fluxes[index] <= 1e-10:
+                        resampled_flux[i] = 0.0
+                        resampled_err[i] = 0.0
+                    else:
+                        # Linear interpolation between index and index-1
+                        # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
+                        d1 = (objective_wavelength - waveobs[index-1])
+                        d2 = (waveobs[index]-waveobs[index-1])
+                        resampled_flux[i] = fluxes[index-1] + d1 * ((fluxes[index]-fluxes[index-1])/d2)
+                        # Same formula as for interpolation but I have re-arranged the terms to make
+                        # clear that it is valid for error propagation (sum of errors multiplied by constant values)
+                        resampled_err[i] = (err[index-1] * (d2 - d1)  + (err[index] * d1)) / d2
+                        # Do not allow negative fluxes or errors
+                        if resampled_err[i] < 0:
+                            resampled_err[i] = 1e-10
+                        if resampled_flux[i] < 0:
+                            resampled_flux[i] = 0
+                            resampled_err[i] = 0
                 else:
-                    p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
-                    resampled_flux[i] = flux_x0 + p * (flux_x1 - flux_x0) + (p * (p - 1) / 4) * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
-                    resampled_err[i] = err_x0 + p * (err_x1 - err_x0) + (p * (p - 1) / 4) * (err_x2 - err_x1 - err_x0 + err_x_1)
+                    # Bessel's Central-Difference Interpolation with 4 points
+                    #   p = [(x - x0) / (x1 - x0)]
+                    #   f(x) = f(x0) + p ( f(x1) - f(x0) ) + [ p ( p - 1 ) / 4 ] ( f(x2) - f(x1) - f(x0) + f(x-1) )
+                    # where x-1 < x0 < objective_wavelength = x < x1 < x2 and f() is the flux
+                    #   http://physics.gmu.edu/~amin/phys251/Topics/NumAnalysis/Approximation/polynomialInterp.html
+
+                    #  x-1= index - 2
+                    #  x0 = index - 1
+                    #  x  = objective_wavelength
+                    #  x1 = index
+                    #  x2 = index + 1
+
+                    ## Array access optimization
+                    flux_x_1 = fluxes[index - 2]
+                    wave_x0 = waveobs[index-1]
+                    flux_x0 = fluxes[index - 1]
+                    wave_x1 = waveobs[index]
+                    flux_x1 = fluxes[index]
+                    flux_x2 = fluxes[index + 1]
+
+                    err_x_1 = err[index - 2]
+                    err_x0 = err[index - 1]
+                    err_x1 = err[index]
+                    err_x2 = err[index + 1]
+
+                    # Do not interpolate if any of the fluxes is zero or negative
+                    if flux_x_1 <= 1e-10 or flux_x0 <= 1e-10 or flux_x1 <= 1e-10 or flux_x2 <= 1e-10:
+                        resampled_flux[i] = 0.0
+                        resampled_err[i] = 0.0
+                    else:
+                        p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
+                        factor = (p * (p - 1) / 4)
+                        resampled_flux[i] = flux_x0 + p * (flux_x1 - flux_x0) + factor * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
+                        # Same formula as for interpolation but I have re-arranged the terms to make
+                        # clear that it is valid for error propagation (sum of errors multiplied by constant values)
+                        resampled_err[i] = err_x_1 * factor + err_x0 * (1 - p - factor) + err_x1 * (p - factor) + err_x2 * factor
+                        # Do not allow negative fluxes or errors
+                        if resampled_err[i] < 0:
+                            resampled_err[i] = 1e-10
+                        if resampled_flux[i] < 0:
+                            resampled_flux[i] = 0
+                            resampled_err[i] = 0
 
             if index > 4:
                 from_index = index - 4
@@ -689,7 +766,7 @@ def create_spectrum_structure(waveobs, flux=None, err=None):
     return spectrum
 
 
-def resample_spectrum(spectrum, xaxis, method="bessel", frame=None):
+def resample_spectrum(spectrum, xaxis, method="bessel", zero_edges=True, frame=None):
     """
     Returns a new spectrum with measures at the given xaxis wavelength
     Interpolation method can be:
@@ -708,6 +785,12 @@ def resample_spectrum(spectrum, xaxis, method="bessel", frame=None):
         - Once the spectrum is uniformly sampled, apply the spline interpolation
           with a wave step smaller than the current wave step.
 
+        WARNING: spline method does not propagate correctly the errors
+    - zero_edges = False, the first and last value in the edge will be propagated
+      if the xaxis is bigger than spectrum['waveobs']. If it is set to True, then
+      zero values will be assigned instead.
+
+
     """
     total_points = len(xaxis)
     last_reported_progress = -1
@@ -722,13 +805,17 @@ def resample_spectrum(spectrum, xaxis, method="bessel", frame=None):
         #f = interpolate.interp1d(spectrum['waveobs'], spectrum['flux'], kind='linear', bounds_error=False, fill_value=0.0)
         #flux = f(xaxis)
         ## Numpy linear interpolation:
-        flux = np.interp(xaxis, spectrum['waveobs'], spectrum['flux'], left=0.0, right=0.0) # No extrapolation, just returns zeros
-        err = np.interp(xaxis, spectrum['waveobs'], spectrum['err'], left=0.0, right=0.0) # No extrapolation, just returns zeros
-        current_work_progress = 90.0
-        logging.info("%.2f%%" % current_work_progress)
-        if frame is not None:
-            frame.update_progress(current_work_progress)
+        #flux = np.interp(xaxis, spectrum['waveobs'], spectrum['flux'], left=0.0, right=0.0) # No extrapolation, just returns zeros
+        #err = np.interp(xaxis, spectrum['waveobs'], spectrum['err'], left=0.0, right=0.0) # No extrapolation, just returns zeros
+        #current_work_progress = 90.0
+        #logging.info("%.2f%%" % current_work_progress)
+        #if frame is not None:
+            #frame.update_progress(current_work_progress)
+
+        # iSpec linear interpolation:
+        waveobs, flux, err = __interpolation(spectrum['waveobs'], spectrum['flux'], spectrum['err'], xaxis, bessel=False, zero_edges=zero_edges, frame=frame)
     elif method.lower() == "spline":
+        logging.warn("Spline interpolation not recommended.")
         f = interpolate.InterpolatedUnivariateSpline(spectrum['waveobs'], spectrum['flux'], k=3)
         e = interpolate.InterpolatedUnivariateSpline(spectrum['waveobs'], spectrum['err'], k=3)
         flux = f(xaxis)
@@ -738,7 +825,7 @@ def resample_spectrum(spectrum, xaxis, method="bessel", frame=None):
         if frame is not None:
             frame.update_progress(current_work_progress)
     elif method.lower() == "bessel":
-        waveobs, flux, err = __bessel_interpolation(spectrum['waveobs'], spectrum['flux'], spectrum['err'], xaxis, frame=frame)
+        waveobs, flux, err = __interpolation(spectrum['waveobs'], spectrum['flux'], spectrum['err'], xaxis, bessel=True, zero_edges=zero_edges, frame=frame)
     else:
         raise Exception("Unknown method")
 
@@ -796,6 +883,31 @@ def add_noise(spectrum, snr, distribution="poisson"):
         noisy_spectrum['flux'] *= sigma*sigma
         noisy_spectrum['err'] += noisy_spectrum['flux'] / np.sqrt(lamb)
     return noisy_spectrum
+
+def random_realizations(spectrum, number, distribution="poisson"):
+    """
+    Derive a group of spectra from a single spectrum by considering fluxes as
+    mean (mu), errors as standard deviations (sigma) and a distribution.
+    The distribution can be "poisson" or "gaussian"
+    """
+    realizations = []
+    for i in xrange(number):
+        new_derived_spectrum = create_spectrum_structure(spectrum['waveobs'], spectrum['flux'], spectrum['err'])
+        if distribution.lower() == "gaussian":
+            sigma = spectrum['err']
+            sigma[sigma <= 0.0] = 1.0e-10
+            new_derived_spectrum['flux'] += np.random.normal(0, sigma, len(spectrum))
+            #new_derived_spectrum['err'] += sigma
+        else:
+            # poison
+            sigma = spectrum['err']
+            lamb = spectrum['flux'] / np.power(sigma, 2)
+            lamb[lamb < 0.0] = 0.0
+            new_derived_spectrum['flux'] = np.random.poisson(lamb)
+            new_derived_spectrum['flux'] *= sigma*sigma
+            #new_derived_spectrum['err'] += new_derived_spectrum['flux'] / np.sqrt(lamb)
+        realizations.append(new_derived_spectrum)
+    return realizations
 
 def create_wavelength_filter(spectrum, wave_base=None, wave_top=None, regions=None):
     """
