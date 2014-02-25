@@ -441,7 +441,7 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
             #metallicity = atmospheres_params[metal_num][i][3]
         params_atm.append((atm_teff, atm_logg))
 
-        # For each layer, group and modelize the different atmospheres (teff, logg)
+        # For each layer, group and model the different atmospheres (teff, logg)
         for layer_num in np.arange(nlayers):
             print layer_num,
             sys.stdout.flush()
@@ -597,7 +597,10 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
 
                     ############################################################
                     # Build a spline model to be able to estimate a value for a given teff/logg combination
-                    single_model = interpolate.RectBivariateSpline(teff_range, logg_range, processed_values.data, s=0) # Smooth factor
+                    # http://www.derivative.ca/wiki088/index.php?title=Spline
+                    single_model = interpolate.RectBivariateSpline(teff_range, logg_range, processed_values.data, kx=1, ky=1, s=0) # Linear
+                    #single_model = interpolate.RectBivariateSpline(teff_range, logg_range, processed_values.data, kx=2, ky=2, s=0) # Quadratic
+                    #single_model = interpolate.RectBivariateSpline(teff_range, logg_range, processed_values.data, kx=3, ky=3, s=0) # Cubic (Default)
 
                     # Proximity calculation:
                     # Build a spline model to be able to estimate how close we are from a real atmosphere
@@ -605,8 +608,11 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
                         # Normalize making 1.0 mean very close to a real atmosphere:
                         #max_iterations = np.max(real_atmospheres)
                         #real_atmospheres = (max_iterations + -1.0 * real_atmospheres) / max_iterations
-                        # Modelize
-                        proximity_atmospheres_model = interpolate.RectBivariateSpline(teff_range, logg_range, real_atmospheres, s=0) # Smooth factor
+                        # Model
+                        # http://www.derivative.ca/wiki088/index.php?title=Spline
+                        proximity_atmospheres_model = interpolate.RectBivariateSpline(teff_range, logg_range, real_atmospheres, kx=1, ky=1, s=0) # Linear
+                        #proximity_atmospheres_model = interpolate.RectBivariateSpline(teff_range, logg_range, real_atmospheres, kx=2, ky=2, s=0) # Quadratic
+                        #proximity_atmospheres_model = interpolate.RectBivariateSpline(teff_range, logg_range, real_atmospheres, kx=3, ky=3, s=0) # Cubic (Default)
                 # Add to current model and used values
                 models_single_layer.append(single_model)
                 values_single_layer.append(single_values)
@@ -733,7 +739,10 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
                 val = model_val(teff_target, logg_target)
                 structured_single_values[metal_num][layer_num] = val
         # Fit Bivariate Spline to consider not only variation in metallicity but also in layers
-        model_val = interpolate.RectBivariateSpline(MH_range, np.arange(nlayers), structured_single_values.data)
+        # http://www.derivative.ca/wiki088/index.php?title=Spline
+        model_val = interpolate.RectBivariateSpline(MH_range, np.arange(nlayers), structured_single_values.data, kx=1, ky=1, s=0) # Linear
+        #model_val = interpolate.RectBivariateSpline(MH_range, np.arange(nlayers), structured_single_values.data, kx=2, ky=2, s=0) # Quadratic
+        #model_val = interpolate.RectBivariateSpline(MH_range, np.arange(nlayers), structured_single_values.data, kx=3, ky=3, s=0) # Cubic (Default)
         # Interpolate the current value for all layers
         values.append(model_val(MH_target, np.arange(nlayers))[0])
     # Transpose to have a layer in each position instead than value (easier to write to disk later)

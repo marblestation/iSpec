@@ -1816,7 +1816,7 @@ def __cross_correlate(spectrum, linelist=None, template=None, lower_velocity_lim
             mask_size=mask_size, mask_depth=mask_depth, \
             fourier=fourier, frame=frame)
 
-    models = __modelize_velocity_profile(ccf, nbins, only_one_peak=only_one_peak, \
+    models = __model_velocity_profile(ccf, nbins, only_one_peak=only_one_peak, \
                                             peak_probability=peak_probability, model=model)
     # We have improved the peak probability detection using RLM, a priori it is not needed
     # this best selection:
@@ -1860,7 +1860,7 @@ def __build_velocity_profile(spectrum, linelist=None, template=None, lower_veloc
     return ccf_struct, nbins
 
 
-def __modelize_velocity_profile(ccf, nbins, only_one_peak=False, peak_probability=0.75, model='2nd order polynomial + gaussian fit'):
+def __model_velocity_profile(ccf, nbins, only_one_peak=False, peak_probability=0.75, model='2nd order polynomial + gaussian fit'):
     """
     Fits a model ('Gaussian' or 'Voigt') to the deepest peaks in the velocity
     profile. If it is 'Auto', a gaussian and a voigt will be fitted and the best
