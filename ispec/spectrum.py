@@ -152,8 +152,18 @@ def __read_spectrum(spectrum_filename):
         # - ignores last line (empty)
         # - lines separated by \r
         # - columns separated by space
-        narval = open(spectrum_filename,).readlines()[0].split('\r')
-        spectrum = np.array([tuple(line.rstrip('\r').split()) for line in narval[2:-1]], dtype=[('waveobs', float),('flux', float),('err', float)])
+        try:
+            narval = open(spectrum_filename,).readlines()[0].split('\r')
+            spectrum = np.array([tuple(line.rstrip('\r').split()) for line in narval[2:-1]], dtype=[('waveobs', float),('flux', float),('err', float)])
+            if len(spectrum) == 0:
+                raise Exception("Empty spectrum or incompatible format")
+        except:
+            # try espadons plain text format:
+            # - ignores 2 first lines (header)
+            # - columns separated by space
+            espadons = open(spectrum_filename,).readlines()
+            spectrum = np.array([tuple(line.rstrip('\r').split()) for line in espadons[2:]], dtype=[('waveobs', float),('flux', float),('err', float)])
+
     if len(spectrum) == 0:
         raise Exception("Empty spectrum or incompatible format")
     return spectrum

@@ -22,7 +22,8 @@ from datetime import datetime, timedelta
 import numpy as np
 from mpfitmodels import MPFitModel
 #from continuum import fit_continuum
-from abundances import write_solar_abundances, write_fixed_abundances, determine_abundances
+from abundances import write_solar_abundances, write_fixed_abundances, determine_abundances, create_free_abundances_structure
+from segments import create_segments_around_lines
 from atmospheres import write_atmosphere, interpolate_atmosphere_layers, valid_atmosphere_target
 from lines import write_atomic_linelist
 from common import mkdir_p
@@ -509,7 +510,8 @@ class SynthModel(MPFitModel):
         ##### [start] Check precomputed (solar abundance)
         precomputed_file = str(self.precomputed_grid_dir) + "/unconvolved_steps/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}.fits".format(int(self.teff()), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff())
         if self.precomputed_grid_dir is not None and abundances_key == "" and os.path.exists(precomputed_file):
-            print "Pre-computed:", complete_key
+            if not self.quiet:
+                print "Pre-computed:", complete_key
             precomputed = read_spectrum(precomputed_file)
             convolved_precomputed = convolve_spectrum(precomputed, self.R())
 
@@ -518,10 +520,12 @@ class SynthModel(MPFitModel):
             self.last_final_fluxes = convolved_precomputed['flux'].copy()
         else:
             if self.cache.has_key(key):
-                print "Cache:", complete_key
+                if not self.quiet:
+                    print "Cache:", complete_key
                 self.last_fluxes = self.cache[key].copy()
             else:
-                print "Generating:", complete_key
+                if not self.quiet:
+                    print "Generating:", complete_key
 
                 # Atmosphere
                 atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH())
@@ -727,13 +731,33 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     base = 8
     free_params = [param.lower() for param in free_params]
     parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base+len(free_abundances))]
+    ##
+    # Establish limits one step further away from the real limit
+    min_teff = np.min(teff_range)
+    max_teff = np.max(teff_range)
+    if initial_teff == min_teff:
+        initial_teff += Constants.SYNTH_STEP_TEFF
+    elif initial_teff == min_teff:
+        initial_teff -= Constants.SYNTH_STEP_TEFF
+    min_teff += Constants.SYNTH_STEP_TEFF
+    max_teff -= Constants.SYNTH_STEP_TEFF
     #
     parinfo[0]['parname'] = "teff"
     parinfo[0]['value'] = initial_teff
     parinfo[0]['fixed'] = not parinfo[0]['parname'].lower() in free_params
     parinfo[0]['step'] = Constants.SYNTH_STEP_TEFF # For auto-derivatives
     parinfo[0]['limited'] = [True, True]
-    parinfo[0]['limits'] = [np.min(teff_range)+100.0, np.max(teff_range)-100.0]
+    parinfo[0]['limits'] = [min_teff, max_teff]
+    ##
+    # Establish limits one step further away from the real limit
+    min_logg = np.min(logg_range)
+    max_logg = np.max(logg_range)
+    if initial_logg == min_logg:
+        initial_logg += Constants.SYNTH_STEP_LOGG
+    elif initial_logg == min_logg:
+        initial_logg -= Constants.SYNTH_STEP_LOGG
+    min_logg += Constants.SYNTH_STEP_LOGG
+    max_logg -= Constants.SYNTH_STEP_LOGG
     #
     parinfo[1]['parname'] = "logg"
     parinfo[1]['value'] = initial_logg
@@ -741,14 +765,24 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[1]['step'] = Constants.SYNTH_STEP_LOGG # For auto-derivatives
     #parinfo[1]['mpmaxstep'] = 0.50 # Maximum change to be made in the parameter
     parinfo[1]['limited'] = [True, True]
-    parinfo[1]['limits'] = [np.min(logg_range)+0.10, np.max(logg_range)-0.10]
+    parinfo[1]['limits'] = [min_logg, max_logg]
+    ##
+    # Establish limits one step further away from the real limit
+    min_MH = np.min(MH_range)
+    max_MH = np.max(MH_range)
+    if initial_MH == min_MH:
+        initial_MH += Constants.SYNTH_STEP_MH
+    elif initial_MH == min_MH:
+        initial_MH -= Constants.SYNTH_STEP_MH
+    min_MH += Constants.SYNTH_STEP_MH
+    max_MH -= Constants.SYNTH_STEP_MH
     #
     parinfo[2]['parname'] = "MH"
     parinfo[2]['value'] = initial_MH
     parinfo[2]['fixed'] = not parinfo[2]['parname'].lower() in free_params
     parinfo[2]['step'] = Constants.SYNTH_STEP_MH # For auto-derivatives
     parinfo[2]['limited'] = [True, True]
-    parinfo[2]['limits'] = [np.min(MH_range)+0.05, np.max(MH_range)-0.05]
+    parinfo[2]['limits'] = [min_MH, max_MH]
     #
     parinfo[3]['parname'] = "Vmic"
     parinfo[3]['value'] = initial_vmic
@@ -980,7 +1014,7 @@ def __get_stats_per_linemask(waveobs, fluxes, synthetic_fluxes, weights, free_pa
 
     return results
 
-def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=None, linemasks=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20):
+def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=None, linemasks=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1):
     """
     It matches synthetic spectrum to observed spectrum by applying a least
     square algorithm.
@@ -993,6 +1027,13 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, abu
     - If linemasks are specified, only those regions will be used for comparison.
     - It does not compare negative or zero fluxes
     """
+
+    if verbose or verbose == 1:
+        verbose = True
+        quiet = False
+    else:
+        verbose = False
+        quiet = True
 
     # Duplicate
     if segments is not None:
@@ -1048,8 +1089,11 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, abu
         logging.warn("%i fluxes have been discarded because they are negative or zero" % num_bad_fluxes)
         comparing_mask[negative_zero_flux] = 0.0
 
-
     ## Errors
+    if use_errors and np.all(err[comparing_mask == 1] <= 0):
+        logging.warn("Use of errors has been desactivated because all of them are set to zero.")
+        use_errors = False
+
     negative_zero_err = err <= 0.0
     bad_errors = np.logical_and(comparing_mask == 1, negative_zero_err)
     num_bad_errors = len(np.where(bad_errors)[0])
@@ -1057,6 +1101,11 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, abu
     if use_errors and num_bad_errors > 0:
         logging.warn("%i fluxes have been discarded because their ERRORS are negative or zero" % num_bad_errors)
         comparing_mask[negative_zero_err] = 0.0
+
+
+    if np.all(comparing_mask == 0):
+        logging.err("No fluxes left to be compared!")
+        raise Exception("No fluxes left to be compared!")
 
     accept_weights = np.logical_and(comparing_mask == 1., np.logical_not(negative_zero_err))
     weights = np.ones(len(waveobs))
@@ -1078,11 +1127,16 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, abu
 
     synth_model = SynthModel(modeled_layers_pack, linelist, abundances, precomputed_grid_dir=precomputed_grid_dir)
 
-    synth_model.fitData(waveobs, waveobs_mask, comparing_mask, flux, weights=weights, parinfo=parinfo, use_errors=use_errors, max_iterations=max_iterations, quiet=False)
-    print "\n"
-    stats_linemasks = __get_stats_per_linemask(waveobs, flux, synth_model.last_final_fluxes, weights, free_params, linemasks, verbose=True)
-    print "\n"
-    synth_model.print_solution()
+    synth_model.fitData(waveobs, waveobs_mask, comparing_mask, flux, weights=weights, parinfo=parinfo, use_errors=use_errors, max_iterations=max_iterations, quiet=quiet)
+
+    if verbose:
+        print "\n"
+
+    stats_linemasks = __get_stats_per_linemask(waveobs, flux, synth_model.last_final_fluxes, weights, free_params, linemasks, verbose=verbose)
+
+    if verbose:
+        print "\n"
+        synth_model.print_solution()
 
     # Collect information to be returned
     params = {}
@@ -1297,7 +1351,19 @@ class EquivalentWidthModel(MPFitModel):
         self.min_MH = np.min(modeled_layers_pack[5])
         self.max_MH = np.max(modeled_layers_pack[5])
         #
+        self.spectrum = None
+        self.continuum_model = None
+        self.R = None
+        self.chemical_elements = None
+        #
         super(EquivalentWidthModel, self).__init__(p)
+
+    def set_synth_mode(self, spectrum, continuum_model, R, chemical_elements):
+        self.spectrum = spectrum
+        self.continuum_model = continuum_model
+        self.R = R
+        self.chemical_elements = chemical_elements
+
 
     def _model_function(self, x, p=None):
         # The model function with parameters p required by mpfit library
@@ -1309,12 +1375,14 @@ class EquivalentWidthModel(MPFitModel):
         key = "%.2f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.vmic())
         if self.cache.has_key(key):
             hit_cache = True
-            print "Cache:", key
+            if not self.quiet:
+                print "Cache:", key
             self.last_final_values = self.cache[key]
             spec_abund, absolute_abund, x_over_h, x_over_fe = self.cache[key]
         else:
             hit_cache = False
-            print "Generating:", key
+            if not self.quiet:
+                print "Generating:", key
             # Optimization to avoid too small changes in parameters or repetition
             atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH())
             if self.fe1_filter is None or self.fe2_filter is None:
@@ -1322,9 +1390,16 @@ class EquivalentWidthModel(MPFitModel):
             else:
                 ignore = np.zeros(len(self.linemasks))
                 ignore[np.where(np.logical_or(self.fe1_filter, self.fe2_filter))[0]] = 1.0 # Do not ignore selected fe1/2 lines
-            spec_abund, absolute_abund, x_over_h, x_over_fe = determine_abundances(atmosphere_layers, \
-                    self.teff(), self.logg(), self.MH(), self.linemasks, self.abundances, microturbulence_vel = self.vmic(), \
-                    ignore=ignore, verbose=0)
+
+            if self.spectrum is None:
+                spec_abund, absolute_abund, x_over_h, x_over_fe = determine_abundances(atmosphere_layers, \
+                        self.teff(), self.logg(), self.MH(), self.linemasks, self.abundances, microturbulence_vel = self.vmic(), \
+                        ignore=ignore, verbose=0)
+            else:
+                spec_abund, absolute_abund, x_over_h, x_over_fe = determine_abundances_synth(self.spectrum, self.continuum_model, \
+                        self.teff(), self.logg(), self.MH(), self.vmic(), \
+                        self.R, self.linemasks, self.modeled_layers_pack, self.linelist, self.chemical_elements, self.abundances, \
+                        verbose=0)
 
             if 'EW_absolute_abund_median' in self.linemasks.dtype.names:
                 # Instead of the literature solar abundance, use the solar abundance determined by iSpec (differencial analysis)
@@ -1591,7 +1666,8 @@ class EquivalentWidthModel(MPFitModel):
         xtol = 1.e-4
         gtol = 1.e-4
         damp = 0.0   # Not active: Residuals are limited between -1.0 and 1.0 (np.tanh(residuals/1.0))
-        chisq_limit = 4.0e-4 # 0.0004 = np.sum(np.asarray([0.01, 0.01, 0.01, 0.01])**2))
+        #chisq_limit = 4.0e-4 # 0.0004 = np.sum(np.asarray([0.01, 0.01, 0.01, 0.01])**2))
+        chisq_limit = 3 # = np.sum((np.asarray([0.01, 0.01, 0.01])*100)**2) # weight 100)
 
         _t0 = default_timer()
 
@@ -1668,7 +1744,7 @@ class EquivalentWidthModel(MPFitModel):
         print "Return code:", self.m.status
 
 
-def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, adjust_model_metalicity=False, max_iterations=20):
+def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, adjust_model_metalicity=False, max_iterations=20, spectrum=None, continuum_model=None, R=None, chemical_elements=None):
     """
     """
     teff_range = modeled_layers_pack[3]
@@ -1678,6 +1754,10 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances,
     parinfo = __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range, adjust_model_metalicity=adjust_model_metalicity)
 
     EW_model = EquivalentWidthModel(modeled_layers_pack, linelist, abundances, MH=initial_MH, adjust_model_metalicity=adjust_model_metalicity)
+
+    if spectrum is not None:
+        EW_model.set_synth_mode(spectrum, continuum_model, R, chemical_elements)
+
 
     lfilter = linemasks['element'] == "Fe 1"
     lfilter = np.logical_or(lfilter, linemasks['element'] == "Fe 2")
@@ -1970,3 +2050,70 @@ def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks):
     return initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff
 
 
+def determine_abundances_synth(spectrum, continuum_model, teff, logg, MH, vmic, R, linemasks, modeled_layers_pack, atomic_linelist, chemical_elements, solar_abundances, verbose=0):
+    """
+    Determine abundances from lines by synthesis instead of EW.
+
+    Returns:
+
+    - The abundance on the scale native to SPECTRUM
+    - The abundance in he normal scale, in which the logarithmic abundance of hydrogen is equal to 12.0.
+    - The abundance relative to the unscaled abundances (specified in "abundances").
+      If "abundances" contain solar abundances, these values represent
+      the quantity [X/H] where X is the species in question.
+    """
+
+    # Default values
+    num_measures = len(linemasks)
+    spec_abund = np.zeros(num_measures)
+    normal_abund = np.zeros(num_measures)
+    x_over_h = np.zeros(num_measures)
+    x_over_fe = np.zeros(num_measures)
+
+    # Parameters
+    initial_teff = teff
+    initial_logg = logg
+    initial_MH = MH
+    initial_vmic = vmic
+    initial_vmac = estimate_vmac(initial_teff, initial_logg, initial_MH)
+    initial_vsini = 2.0
+    initial_limb_darkening_coeff = 0.0
+    initial_R = R
+    #max_iterations = 4 # More iterations do not usually contribute to improve the results
+    max_iterations = 10 # More iterations do not usually contribute to improve the results
+    #max_iterations = 20
+
+    # Free parameters
+    #free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "limb_darkening_coeff"]
+    free_params = ["vmac"]
+
+    # Free individual element abundance (WARNING: it should be coherent with the selecte line regions!)
+    free_abundances = create_free_abundances_structure(["Fe"], chemical_elements, solar_abundances)
+
+    for i, line in enumerate(linemasks):
+        # Line by line
+        linemask = linemasks[i:i+1] # Keep recarray structure
+        # Segment
+        segment = create_segments_around_lines(linemask, margin=0.25)
+        #--- Model spectra ----------------------------------------------------------
+
+        obs_spec, modeled_synth_spectrum, params, errors, abundances_found, status, stats_linemasks = \
+                model_spectrum(spectrum, continuum_model, \
+                modeled_layers_pack, atomic_linelist, solar_abundances, free_abundances, initial_teff, \
+                initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
+                initial_limb_darkening_coeff, initial_R, free_params, segments=segment, \
+                linemasks=linemask, \
+                use_errors = True, \
+                max_iterations=max_iterations, verbose=verbose)
+        spec_abund[i] = abundances_found['Abund'][0]
+        normal_abund[i] = abundances_found['A(X)'][0]
+        x_over_h[i] = abundances_found['[X/H]'][0]
+        x_over_fe[i] = abundances_found['[X/Fe]'][0]
+
+        ##--- Save results -------------------------------------------------------------
+        #logging.info("Saving results...")
+        #save_results("example_results_synth_abundances.dump", (params, errors, abundances_found, status, stats_linemasks))
+        ## If we need to restore the results from another script:
+        #params, errors, abundances_found, status, stats_linemasks = restore_results("example_results_synth_abundances.dump")
+
+    return spec_abund, normal_abund, x_over_h, x_over_fe

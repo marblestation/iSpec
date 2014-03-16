@@ -1892,6 +1892,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             in_continuum = False
             ignore_lines = False
             each_segment = False
+            use_errors_for_fitting = False
             order='median+max'
             automatic_strong_line_detection = False
             strong_line_probability = 0

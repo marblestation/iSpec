@@ -280,3 +280,6 @@ def __determine_abundances(process_communication_queue, atmosphere_model_file, l
     abundances = synthesizer.abundances(atmosphere_model_file, linelist_file, num_measures, ignore, abundances_file, microturbulence_vel, nlayers, verbose, update_progress_func)
     process_communication_queue.put(abundances)
 
+
+
+

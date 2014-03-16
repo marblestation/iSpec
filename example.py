@@ -687,7 +687,7 @@ def clean_telluric_regions():
     tfilter = ispec.create_filter_for_regions_affected_by_tellurics(sun_spectrum['waveobs'], \
                                 telluric_linelist[dfilter], min_velocity=-rv+min_vel, \
                                 max_velocity=-rv+max_vel)
-    clean_sun_spectrum = sun_spectrum[tfilter]
+    clean_sun_spectrum = sun_spectrum[~tfilter]
     return clean_sun_spectrum
 
 
@@ -1573,6 +1573,188 @@ def determine_astrophysical_parameters_from_ew():
 
     return params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params
 
+def determine_astrophysical_parameters_from_ew_v2():
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    #--- Read lines and adjust them ------------------------------------------------
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines_biglist.txt")
+    line_regions = ispec.adjust_linemasks(sun_spectrum, line_regions, max_margin=0.5)
+    #--- Continuum fit -------------------------------------------------------------
+    model = "Splines" # "Polynomy"
+    degree = 2
+    nknots = None # Automatic: 1 spline every 1 nm
+    from_resolution = 80000
+
+    # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
+    order='median+max'
+    median_wave_range=0.01
+    max_wave_range=1.0
+
+    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+                                nknots=nknots, degree=degree, \
+                                median_wave_range=median_wave_range, \
+                                max_wave_range=max_wave_range, \
+                                model=model, order=order, \
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5, \
+                                use_errors_for_fitting=True)
+    #--- Fit lines -----------------------------------------------------------------
+    logging.info("Fitting lines...")
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv3/475_685nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv3_noABO/475_685nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv3_atom/475_685nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv3_atom_noABO/475_685nm.lst"
+    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom/475_685nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_noABO/475_685nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs/475_685nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_noABO/475_685nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom/845_895nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_noABO/845_895nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs/845_895nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_noABO/845_895nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1/655_1020nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1_noABO/655_1020nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom/300_1100nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom/300_1100nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM/300_1000nm.lst"
+    chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
+    molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
+    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm.txt"
+
+    # Read
+    molecules = ispec.read_molecular_symbols(molecules_file)
+    chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
+    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements, molecules)
+    telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
+
+
+    vel_telluric = 17.79 # km/s
+    #continuum_adjustment_margin = 0.05 # Allow +/-5% free baseline fit around continuum
+    continuum_adjustment_margin = 0.0
+    # Spectrum should be already radial velocity corrected
+    linemasks = ispec.fit_lines(line_regions, sun_spectrum, sun_continuum_model, \
+                                atomic_linelist = atomic_linelist, \
+                                max_atomic_wave_diff = 0.005, \
+                                telluric_linelist = telluric_linelist, \
+                                smoothed_spectrum = None, \
+                                check_derivatives = False, \
+                                vel_telluric = vel_telluric, discard_gaussian=False, \
+                                discard_voigt=True, \
+                                continuum_adjustment_margin=continuum_adjustment_margin, free_mu=True)
+    # Discard lines that are not cross matched with the same original element stored in the note
+    linemasks = linemasks[linemasks['element'] == line_regions['note']]
+
+    # Discard bad masks
+    flux_peak = sun_spectrum['flux'][linemasks['peak']]
+    flux_base = sun_spectrum['flux'][linemasks['base']]
+    flux_top = sun_spectrum['flux'][linemasks['top']]
+    bad_mask = np.logical_or(linemasks['wave_peak'] <= linemasks['wave_base'], linemasks['wave_peak'] >= linemasks['wave_top'])
+    bad_mask = np.logical_or(bad_mask, flux_peak >= flux_base)
+    bad_mask = np.logical_or(bad_mask, flux_peak >= flux_top)
+    linemasks = linemasks[~bad_mask]
+
+    # Exclude lines that have not been successfully cross matched with the atomic data
+    # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
+    rejected_by_atomic_line_not_found = (linemasks['wave (nm)'] == 0)
+    linemasks = linemasks[~rejected_by_atomic_line_not_found]
+
+    # Exclude lines that may be affected by tellurics
+    rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
+    linemasks = linemasks[~rejected_by_telluric_line]
+
+
+    #--- Model spectra from EW --------------------------------------------------
+    # Parameters
+    initial_teff = 5750.0
+    initial_logg = 4.5
+    initial_MH = 0.00
+    initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
+    max_iterations = 4 # More iterations do not usually contribute to improve the results
+    #max_iterations = 20
+
+    # Selected model amtosphere, linelist and solar abundances
+    #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
+    model = ispec_dir + "/input/atmospheres/MARCS.GES/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
+
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv3/475_685nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv3_noABO/475_685nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv3_atom/475_685nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv3_atom_noABO/475_685nm.lst"
+    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom/475_685nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_noABO/475_685nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs/475_685nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_noABO/475_685nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom/845_895nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_noABO/845_895nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs/845_895nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_noABO/845_895nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1/655_1020nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1_noABO/655_1020nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom/300_1100nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom/300_1100nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM/300_1000nm.lst"
+
+    chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
+    molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
+
+    solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
+    #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
+    #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2009/stdatom.dat"
+    #solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
+    #solar_abundances_file = ispec_dir + "/input/abundances/Anders.1989/stdatom.dat"
+
+    # Load chemical information and linelist
+    molecules = ispec.read_molecular_symbols(molecules_file)
+    chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
+    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements, molecules)
+
+    # Load model atmospheres
+    modeled_layers_pack = ispec.load_modeled_layers_pack(model)
+
+    # Load SPECTRUM abundances
+    solar_abundances = ispec.read_solar_abundances(solar_abundances_file)
+
+
+    # Validate parameters
+    if not ispec.valid_atmosphere_target(modeled_layers_pack, initial_teff, initial_logg, initial_MH):
+        msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
+                fall out of theatmospheric models."
+        print msg
+
+    # Reduced equivalent width
+    # Filter too weak/strong lines
+    # * Criteria presented in paper of GALA
+    #efilter = np.logical_and(linemasks['ewr'] >= -5.8, linemasks['ewr'] <= -4.65)
+    efilter = np.logical_and(linemasks['ewr'] >= -6.0, linemasks['ewr'] <= -4.3)
+    # Filter high excitation potential lines
+    # * Criteria from Eric J. Bubar "Equivalent Width Abundance Analysis In Moog"
+    efilter = np.logical_and(efilter, linemasks['lower state (eV)'] <= 5.0)
+    efilter = np.logical_and(efilter, linemasks['lower state (eV)'] >= 0.5)
+    ## Filter also bad fits
+    efilter = np.logical_and(efilter, linemasks['rms'] < 0.05)
+
+    results = ispec.model_spectrum_from_ew(linemasks[efilter], modeled_layers_pack, atomic_linelist,\
+                        solar_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, \
+                        max_iterations=max_iterations, \
+                        spectrum=sun_spectrum, continuum_model=sun_continuum_model, \
+                        R=80000, \
+                        chemical_elements=chemical_elements)
+    params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params = results
+
+    ##--- Save results -------------------------------------------------------------
+    logging.info("Saving results...")
+    ispec.save_results("example_results_ew.dump", (params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params))
+    # If we need to restore the results from another script:
+    params, errors, status, x_over_h, selected_x_over_h, fitted_lines_param = ispec.restore_results("example_results_ew.dump")
+
+    return params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params
+
 
 
 def determine_abundances_from_ew():
@@ -1873,6 +2055,7 @@ if __name__ == '__main__':
     ##determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid()
     #determine_abundances_using_synth_spectra()
     #determine_astrophysical_parameters_from_ew()
+    determine_astrophysical_parameters_from_ew_v2()
     #determine_abundances_from_ew()
     #calculate_theoretical_ew_and_depth()
     #paralelize_code()

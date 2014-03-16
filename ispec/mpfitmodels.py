@@ -71,6 +71,7 @@ class MPFitModel(object):
         self.x = x
         self.y = y
         self.weights = weights
+        self.quiet = quiet
 
         # Parameters' constraints
         if parinfo is not None:
