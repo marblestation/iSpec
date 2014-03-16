@@ -1351,18 +1351,8 @@ class EquivalentWidthModel(MPFitModel):
         self.min_MH = np.min(modeled_layers_pack[5])
         self.max_MH = np.max(modeled_layers_pack[5])
         #
-        self.spectrum = None
-        self.continuum_model = None
-        self.R = None
-        self.chemical_elements = None
-        #
         super(EquivalentWidthModel, self).__init__(p)
 
-    def set_synth_mode(self, spectrum, continuum_model, R, chemical_elements):
-        self.spectrum = spectrum
-        self.continuum_model = continuum_model
-        self.R = R
-        self.chemical_elements = chemical_elements
 
 
     def _model_function(self, x, p=None):
@@ -1391,15 +1381,9 @@ class EquivalentWidthModel(MPFitModel):
                 ignore = np.zeros(len(self.linemasks))
                 ignore[np.where(np.logical_or(self.fe1_filter, self.fe2_filter))[0]] = 1.0 # Do not ignore selected fe1/2 lines
 
-            if self.spectrum is None:
-                spec_abund, absolute_abund, x_over_h, x_over_fe = determine_abundances(atmosphere_layers, \
-                        self.teff(), self.logg(), self.MH(), self.linemasks, self.abundances, microturbulence_vel = self.vmic(), \
-                        ignore=ignore, verbose=0)
-            else:
-                spec_abund, absolute_abund, x_over_h, x_over_fe = determine_abundances_synth(self.spectrum, self.continuum_model, \
-                        self.teff(), self.logg(), self.MH(), self.vmic(), \
-                        self.R, self.linemasks, self.modeled_layers_pack, self.linelist, self.chemical_elements, self.abundances, \
-                        verbose=0)
+            spec_abund, absolute_abund, x_over_h, x_over_fe = determine_abundances(atmosphere_layers, \
+                    self.teff(), self.logg(), self.MH(), self.linemasks, self.abundances, microturbulence_vel = self.vmic(), \
+                    ignore=ignore, verbose=0)
 
             if 'EW_absolute_abund_median' in self.linemasks.dtype.names:
                 # Instead of the literature solar abundance, use the solar abundance determined by iSpec (differencial analysis)
@@ -1744,7 +1728,7 @@ class EquivalentWidthModel(MPFitModel):
         print "Return code:", self.m.status
 
 
-def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, adjust_model_metalicity=False, max_iterations=20, spectrum=None, continuum_model=None, R=None, chemical_elements=None):
+def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, adjust_model_metalicity=False, max_iterations=20):
     """
     """
     teff_range = modeled_layers_pack[3]
@@ -1754,10 +1738,6 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances,
     parinfo = __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range, adjust_model_metalicity=adjust_model_metalicity)
 
     EW_model = EquivalentWidthModel(modeled_layers_pack, linelist, abundances, MH=initial_MH, adjust_model_metalicity=adjust_model_metalicity)
-
-    if spectrum is not None:
-        EW_model.set_synth_mode(spectrum, continuum_model, R, chemical_elements)
-
 
     lfilter = linemasks['element'] == "Fe 1"
     lfilter = np.logical_or(lfilter, linemasks['element'] == "Fe 2")
@@ -2050,70 +2030,3 @@ def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks):
     return initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff
 
 
-def determine_abundances_synth(spectrum, continuum_model, teff, logg, MH, vmic, R, linemasks, modeled_layers_pack, atomic_linelist, chemical_elements, solar_abundances, verbose=0):
-    """
-    Determine abundances from lines by synthesis instead of EW.
-
-    Returns:
-
-    - The abundance on the scale native to SPECTRUM
-    - The abundance in he normal scale, in which the logarithmic abundance of hydrogen is equal to 12.0.
-    - The abundance relative to the unscaled abundances (specified in "abundances").
-      If "abundances" contain solar abundances, these values represent
-      the quantity [X/H] where X is the species in question.
-    """
-
-    # Default values
-    num_measures = len(linemasks)
-    spec_abund = np.zeros(num_measures)
-    normal_abund = np.zeros(num_measures)
-    x_over_h = np.zeros(num_measures)
-    x_over_fe = np.zeros(num_measures)
-
-    # Parameters
-    initial_teff = teff
-    initial_logg = logg
-    initial_MH = MH
-    initial_vmic = vmic
-    initial_vmac = estimate_vmac(initial_teff, initial_logg, initial_MH)
-    initial_vsini = 2.0
-    initial_limb_darkening_coeff = 0.0
-    initial_R = R
-    #max_iterations = 4 # More iterations do not usually contribute to improve the results
-    max_iterations = 10 # More iterations do not usually contribute to improve the results
-    #max_iterations = 20
-
-    # Free parameters
-    #free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "limb_darkening_coeff"]
-    free_params = ["vmac"]
-
-    # Free individual element abundance (WARNING: it should be coherent with the selecte line regions!)
-    free_abundances = create_free_abundances_structure(["Fe"], chemical_elements, solar_abundances)
-
-    for i, line in enumerate(linemasks):
-        # Line by line
-        linemask = linemasks[i:i+1] # Keep recarray structure
-        # Segment
-        segment = create_segments_around_lines(linemask, margin=0.25)
-        #--- Model spectra ----------------------------------------------------------
-
-        obs_spec, modeled_synth_spectrum, params, errors, abundances_found, status, stats_linemasks = \
-                model_spectrum(spectrum, continuum_model, \
-                modeled_layers_pack, atomic_linelist, solar_abundances, free_abundances, initial_teff, \
-                initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
-                initial_limb_darkening_coeff, initial_R, free_params, segments=segment, \
-                linemasks=linemask, \
-                use_errors = True, \
-                max_iterations=max_iterations, verbose=verbose)
-        spec_abund[i] = abundances_found['Abund'][0]
-        normal_abund[i] = abundances_found['A(X)'][0]
-        x_over_h[i] = abundances_found['[X/H]'][0]
-        x_over_fe[i] = abundances_found['[X/Fe]'][0]
-
-        ##--- Save results -------------------------------------------------------------
-        #logging.info("Saving results...")
-        #save_results("example_results_synth_abundances.dump", (params, errors, abundances_found, status, stats_linemasks))
-        ## If we need to restore the results from another script:
-        #params, errors, abundances_found, status, stats_linemasks = restore_results("example_results_synth_abundances.dump")
-
-    return spec_abund, normal_abund, x_over_h, x_over_fe
