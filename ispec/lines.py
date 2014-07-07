@@ -114,7 +114,7 @@ def __get_upper_state(lower_state, wavelength):
     * nm for wavelength
     """
     # Planck constant
-    h = 6.626068 * 10e-34 # m^2 kg / s
+    h = 6.62606957 * 10e-34 # m^2 kg / s
     # Light speed in vacuum
     c = 299792458.0 # m/s
 
@@ -132,13 +132,13 @@ def __inverse_cm_to_eV(value):
     """
     Units transformation from cm^-1 to eV
     """
-    return value / 8065.73 # eV
+    return value / 8065.544 # eV
 
 def __eV_to_inverse_cm(value):
     """
     Units transformation from eV to cm^-1.
     """
-    return value * 8065.73 # cm^-1
+    return value * 8065.544 # cm^-1
 
 
 
@@ -588,6 +588,7 @@ def __create_linemasks_structure(num_peaks):
             ('fwhm', float), ('fwhm_kms', float), ('R', float), \
             ('depth_fit', float), ('relative_depth_fit', float), \
             ('integrated_flux', float), ('ewr', float), ('ew', float), ('ew_err', float), \
+            ('snr', float), ('mean_flux', float), ('mean_flux_continuum', float), ('diff_wavelength', float), \
             ('rms', float), \
             ('telluric_wave_peak', float), ('telluric_fwhm', float), ('telluric_R', float), ('telluric_depth', float), \
             ('wave (nm)', '<f8'), ('wave (A)', '<f8'), \
@@ -639,6 +640,10 @@ def __create_linemasks_structure(num_peaks):
     linemasks['ewr'] = 0.0 # Reduced equivalent width
     linemasks['ew'] = 0.0 # Equivalent width
     linemasks['ew_err'] = 0.0
+    linemasks['snr'] = 0.0 # SNR of the region used for EW calculation
+    linemasks['mean_flux'] = 0.0
+    linemasks['mean_flux_continuum'] = 0.0
+    linemasks['diff_wavelength'] = 0.0
     linemasks['rms'] = 9999.0
     # Default values for line identification
     linemasks['wave (nm)'] = 0.0
@@ -884,7 +889,7 @@ def find_linemasks(spectrum, continuum_model, atomic_linelist=None, max_atomic_w
 
     return linemasks
 
-def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wave_diff=0.0005, telluric_linelist=None, vel_telluric=0.0, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, continuum_adjustment_margin=0.0, free_mu=False, frame=None):
+def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wave_diff=0.0005, telluric_linelist=None, vel_telluric=None, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, continuum_adjustment_margin=0.0, free_mu=False, frame=None):
     """
     Fits gaussians models in the specified line regions.
     * 'regions' should be an array with 'wave_base', 'wave_peak' and 'wave_top' columns.
@@ -946,7 +951,7 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                 regions['peak'][i] = where_peak[0][0]
 
     i = 0
-    wfilter = spectrum['err'] > 0.
+    wfilter = np.logical_and(spectrum['flux'] > 0., spectrum['err'] > 0.)
     if len(np.where(wfilter)[0]) > 0:
         snr = np.median(spectrum['flux'][wfilter] / spectrum['err'][wfilter])
     else:
@@ -1063,10 +1068,35 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                 # EW error from
                 # Vollmann & Eversberg, 2006: http://adsabs.harvard.edu/abs/2006AN....327..862V
                 if snr is not None:
-                    mean_flux = np.mean(spectrum['flux'][regions['base_fit'][i]:regions['top_fit'][i]+1])
-                    mean_flux_continuum = np.mean(continuum_model(spectrum['waveobs'][regions['base_fit'][i]:regions['top_fit'][i]+1]))
-                    diff_wavelength = spectrum['waveobs'][regions['top_fit'][i]] - spectrum['waveobs'][regions['base_fit'][i]]
-                    regions['ew_err'][i] = np.sqrt(1 + mean_flux_continuum / mean_flux) * ((diff_wavelength - (regions['ew'][i]/10000.))/snr)
+                    # Wavelength difference used in the fit
+                    diff_wavelength_fit = spectrum['waveobs'][regions['top_fit'][i]] - spectrum['waveobs'][regions['base_fit'][i]]
+                    # Wavelength difference covered by the 99.9999998% of the gaussian area
+                    diff_wavelength_gaussian = to_x - from_x
+                    if diff_wavelength_gaussian > diff_wavelength_fit:
+                        # The line mask was too narrow, it is more fair to consider the whole gaussian range
+                        diff_wavelength = 6*regions['sig'][i]
+                        wfilter = np.logical_and(spectrum['waveobs'] >= from_x, spectrum['waveobs'] <= to_x)
+                        local_err = spectrum['err'][wfilter]
+                        local_flux = spectrum['flux'][wfilter]
+                        local_waveobs = spectrum['waveobs'][wfilter]
+                    else:
+                        diff_wavelength = diff_wavelength_fit
+                        local_err = spectrum['err'][regions['base_fit'][i]:regions['top_fit'][i]]
+                        local_flux = spectrum['flux'][regions['base_fit'][i]:regions['top_fit'][i]]
+                        local_waveobs = spectrum['waveobs'][regions['base_fit'][i]:regions['top_fit'][i]+1]
+                    zeros = local_err == 0
+                    if not np.all(zeros):
+                        local_snr = np.median(local_flux[~zeros] / local_err[~zeros])
+                    else:
+                        local_snr = snr
+                    regions['snr'][i] = local_snr
+                    regions['diff_wavelength'][i] = diff_wavelength
+
+                    mean_flux = np.mean(local_flux)
+                    mean_flux_continuum = np.mean(continuum_model(local_waveobs))
+                    regions['mean_flux'][i] = mean_flux
+                    regions['mean_flux_continuum'][i] = mean_flux_continuum
+                    regions['ew_err'][i] = np.sqrt(1 + mean_flux_continuum / mean_flux) * ((diff_wavelength*10000 - (regions['ew'][i]))/local_snr)
                     #print "%.2f\t%.2f\t%.2f" % (regions['ew'][i], regions['ew_err'][i], regions['ew_err'][i] / regions['ew'][i])
                 # RMS
                 regions['rms'][i] = rms
@@ -1085,7 +1115,7 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
     if atomic_linelist is not None:
         logging.info("Cross matching with atomic data...")
         regions = __fill_linemasks_with_atomic_data(regions, atomic_linelist, diff_limit=max_atomic_wave_diff, vel_atomic=0.0)
-    if telluric_linelist is not None:
+    if telluric_linelist is not None and vel_telluric is not None:
         logging.info("Cross matching with telluric data...")
         regions = __fill_linemasks_with_telluric_info(regions, telluric_linelist, vel_telluric=vel_telluric)
 

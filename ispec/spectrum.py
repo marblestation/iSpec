@@ -114,10 +114,15 @@ def __read_fits_spectrum(spectrum_filename):
             name = hdulist[i].name.upper()
             if name == str('PRIMARY') or len(hdulist[i].data.flatten()) != len(flux) or type(hdulist[i]) is pyfits.hdu.table.BinTableHDU:
                 continue
-            if 'IVAR' in name or 'VARIANCE' in name:
-                spectrum['err'] = 1. / hdulist[i].data.flatten()
+            if 'IVAR' in name or 'IVARIANCE' in name:
+                spectrum['err'] = np.sqrt(1. / hdulist[i].data.flatten()) # Not sure
+                #spectrum['err'] = 1. / hdulist[i].data.flatten()
                 break
-            if 'NOISE' in name or 'ERR' in name or 'SIGMA' in name:
+            elif 'VAR' in name or 'VARIANCE' in name:
+                spectrum['err'] = np.sqrt(hdulist[i].data.flatten()) # Not sure
+                #spectrum['err'] = hdulist[i].data.flatten()
+                break
+            elif 'NOISE' in name or 'ERR' in name or 'SIGMA' in name:
                 spectrum['err'] = hdulist[i].data.flatten()
                 break
 

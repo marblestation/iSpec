@@ -48,30 +48,31 @@ logger.setLevel(logging.getLevelName(LOG_LEVEL.upper()))
 def read_write_spectrum():
     #--- Reading spectra -----------------------------------------------------------
     logging.info("Reading spectra")
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     ##--- Save spectrum ------------------------------------------------------------
     logging.info("Saving spectrum...")
     ispec.write_spectrum(sun_spectrum, "example_sun.s")
     return sun_spectrum
 
 
+
 def convert_air_to_vacuum():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Converting wavelengths from air to vacuum and viceversa -------------------
     sun_spectrum_vacuum = ispec.air_to_vacuum(sun_spectrum)
     sun_spectrum_air = ispec.vacuum_to_air(sun_spectrum_vacuum)
     return sun_spectrum_vacuum, sun_spectrum_air
 
 def plot():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
-    mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_mu_cas.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_muCas.txt.gz")
     #--- Plotting (requires graphical interface) -----------------------------------
     logging.info("Plotting...")
     ispec.plot_spectra([sun_spectrum, mu_cas_spectrum])
     ispec.show_histogram(sun_spectrum['flux'])
 
 def cut_spectrum_from_range():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Cut -----------------------------------------------------------------------
     logging.info("Cutting...")
 
@@ -81,7 +82,7 @@ def cut_spectrum_from_range():
     return cutted_sun_spectrum
 
 def cut_spectrum_from_segments():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Cut -----------------------------------------------------------------------
     logging.info("Cutting...")
     # Keep only points inside a list of segments
@@ -92,7 +93,7 @@ def cut_spectrum_from_segments():
 
 
 def determine_radial_velocity_with_mask():
-    mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_mu_cas.s.gz")
+    mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_muCas.txt.gz")
     #--- Radial Velocity determination with linelist mask --------------------------
     logging.info("Radial velocity determination with linelist mask...")
     # - Read atomic data
@@ -123,7 +124,7 @@ def determine_radial_velocity_with_mask():
 
 
 def determine_radial_velocity_with_template():
-    mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_mu_cas.s.gz")
+    mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_muCas.txt.gz")
     #--- Radial Velocity determination with template -------------------------------
     logging.info("Radial velocity determination with template...")
     # - Read synthetic template
@@ -144,7 +145,7 @@ def determine_radial_velocity_with_template():
     return rv, rv_err, components
 
 def correct_radial_velocity():
-    mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_mu_cas.s.gz")
+    mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_muCas.txt.gz")
     #--- Radial Velocity correction ------------------------------------------------
     logging.info("Radial velocity correction...")
     rv = -96.40 # km/s
@@ -152,7 +153,7 @@ def correct_radial_velocity():
 
 
 def determine_tellurics_shift_with_mask():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Telluric velocity shift determination from spectrum --------------------------
     logging.info("Telluric velocity shift determination...")
     # - Telluric
@@ -170,7 +171,7 @@ def determine_tellurics_shift_with_mask():
     return bv, bv_err
 
 def determine_tellurics_shift_with_template():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Telluric velocity shift determination from spectrum --------------------------
     logging.info("Telluric velocity shift determination...")
     # - Read synthetic template
@@ -188,7 +189,7 @@ def determine_tellurics_shift_with_template():
 
 
 def degrade_resolution():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Resolution degradation ----------------------------------------------------
     logging.info("Resolution degradation...")
     from_resolution = 80000
@@ -198,7 +199,7 @@ def degrade_resolution():
     return convolved_sun_spectrum
 
 def smooth_spectrum():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Smoothing spectrum (resolution will be affected) --------------------------
     logging.info("Smoothing spectrum...")
     resolution = 80000
@@ -207,7 +208,7 @@ def smooth_spectrum():
 
 
 def resample_spectrum():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Resampling  --------------------------------------------------------------
     logging.info("Resampling...")
     wavelengths = np.arange(480.0, 670.0, 0.001)
@@ -217,8 +218,8 @@ def resample_spectrum():
 
 
 def coadd_spectra():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
-    mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_mu_cas.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_muCas.txt.gz")
     #--- Resampling and combining --------------------------------------------------
     logging.info("Resampling and comibining...")
     wavelengths = np.arange(480.0, 670.0, 0.001)
@@ -235,8 +236,8 @@ def coadd_spectra():
 def merge_spectra():
     #--- Mergin spectra ------------------------------------------------------------
     logging.info("Mergin spectra...")
-    left_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
-    right_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_mu_cas.s.gz")
+    left_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    right_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_muCas.txt.gz")
     merged_spectrum = np.hstack((left_spectrum, right_spectrum))
     return merged_spectrum
 
@@ -245,7 +246,7 @@ def normalize_spectrum_using_continuum_regions():
     """
     Consider only continuum regions for the fit, strategy 'median+max'
     """
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
 
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -270,7 +271,7 @@ def normalize_spectrum_using_continuum_regions():
 
     #--- Continuum normalization ---------------------------------------------------
     logging.info("Continuum normalization...")
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=True)
+    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
     return normalized_sun_spectrum, sun_continuum_model
@@ -280,7 +281,7 @@ def normalize_spectrum_in_segments():
     """
     Fit continuum in each segment independently, strategy 'median+max'
     """
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
 
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -305,7 +306,7 @@ def normalize_spectrum_in_segments():
 
     #--- Continuum normalization ---------------------------------------------------
     logging.info("Continuum normalization...")
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=True)
+    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
     return normalized_sun_spectrum, sun_continuum_model
@@ -315,7 +316,7 @@ def normalize_whole_spectrum_strategy2():
     """
     Use the whole spectrum, strategy 'max+median'
     """
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
 
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -339,7 +340,7 @@ def normalize_whole_spectrum_strategy2():
 
     #--- Continuum normalization ---------------------------------------------------
     logging.info("Continuum normalization...")
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=True)
+    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
     return normalized_sun_spectrum, sun_continuum_model
@@ -349,7 +350,7 @@ def normalize_whole_spectrum_strategy1():
     """
     Use the whole spectrum, strategy 'median+max'
     """
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
 
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -373,7 +374,7 @@ def normalize_whole_spectrum_strategy1():
 
     #--- Continuum normalization ---------------------------------------------------
     logging.info("Continuum normalization...")
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=True)
+    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
     return normalized_sun_spectrum, sun_continuum_model
@@ -383,7 +384,7 @@ def normalize_whole_spectrum_strategy1_ignoring_prefixed_strong_lines():
     """
     Use the whole spectrum but ignoring some strong lines, strategy 'median+max'
     """
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
 
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -409,14 +410,14 @@ def normalize_whole_spectrum_strategy1_ignoring_prefixed_strong_lines():
 
     #--- Continuum normalization ---------------------------------------------------
     logging.info("Continuum normalization...")
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=True)
+    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
     return normalized_sun_spectrum, sun_continuum_model
 
 
 def filter_cosmic_rays():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
@@ -446,7 +447,7 @@ def filter_cosmic_rays():
 
 
 def find_continuum_regions():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
@@ -481,7 +482,7 @@ def find_continuum_regions():
 
 
 def find_continuum_regions_in_segments():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
@@ -519,7 +520,7 @@ def find_continuum_regions_in_segments():
 
 
 def find_linemasks():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
@@ -599,7 +600,7 @@ def find_linemasks():
 
 
 def calculate_barycentric_velocity():
-    mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_mu_cas.s.gz")
+    mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_muCas.txt.gz")
     #--- Barycentric velocity correction from observation date/coordinates ---------
     logging.info("Calculating barycentric velocity correction...")
     day = 15
@@ -624,7 +625,7 @@ def calculate_barycentric_velocity():
     return corrected_spectrum
 
 def estimate_snr_from_flux():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     ## WARNING: To compare SNR estimation between different spectra, they should
     ##          be homogeneously sampled (consider a uniform re-sampling)
     #--- Estimate SNR from flux ----------------------------------------------------
@@ -634,7 +635,7 @@ def estimate_snr_from_flux():
     return estimated_snr
 
 def estimate_snr_from_err():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Estimate SNR from errors --------------------------------------------------
     logging.info("Estimating SNR from errors...")
     efilter = sun_spectrum['err'] > 0
@@ -648,7 +649,7 @@ def estimate_snr_from_err():
 
 
 def estimate_errors_from_snr():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Calculate errors based on SNR ---------------------------------------------
     snr = 100
     sun_spectrum['err'] = sun_spectrum['flux'] / snr
@@ -656,7 +657,7 @@ def estimate_errors_from_snr():
 
 
 def clean_spectrum():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Clean fluxes and errors ---------------------------------------------------
     logging.info("Cleaning fluxes and errors...")
     flux_base = 0.0
@@ -671,7 +672,22 @@ def clean_spectrum():
 
 
 def clean_telluric_regions():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    #--- Telluric velocity shift determination from spectrum --------------------------
+    logging.info("Telluric velocity shift determination...")
+    # - Telluric
+    telluric_lines_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm.txt"
+    linelist_telluric = ispec.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
+
+    models, ccf = ispec.cross_correlate_with_mask(sun_spectrum, linelist_telluric, \
+                            lower_velocity_limit=-100, upper_velocity_limit=100, \
+                            velocity_step=0.5, mask_depth=0.01, \
+                            fourier = False,
+                            only_one_peak = True)
+
+    bv = np.round(models[0].mu(), 2) # km/s
+    bv_err = np.round(models[0].emu(), 2) # km/s
+
     #--- Clean regions that may be affected by tellurics ---------------------------
     logging.info("Cleaning tellurics...")
 
@@ -679,20 +695,20 @@ def clean_telluric_regions():
     telluric_linelist = ispec.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
 
     # - Filter regions that may be affected by telluric lines
-    rv = 0.0
+    #bv = 0.0
     min_vel = -30.0
     max_vel = +30.0
     # Only the 25% of the deepest ones:
     dfilter = telluric_linelist['depth'] > np.percentile(telluric_linelist['depth'], 75)
     tfilter = ispec.create_filter_for_regions_affected_by_tellurics(sun_spectrum['waveobs'], \
-                                telluric_linelist[dfilter], min_velocity=-rv+min_vel, \
-                                max_velocity=-rv+max_vel)
+                                telluric_linelist[dfilter], min_velocity=-bv+min_vel, \
+                                max_velocity=-bv+max_vel)
     clean_sun_spectrum = sun_spectrum[~tfilter]
     return clean_sun_spectrum
 
 
 def adjust_line_masks():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Adjust line masks ---------------------------------------------------------
     resolution = 80000
     smoothed_sun_spectrum = ispec.convolve_spectrum(sun_spectrum, resolution)
@@ -707,7 +723,7 @@ def create_segments_around_linemasks():
     return segments
 
 def fit_lines_and_determine_ew():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
@@ -877,7 +893,7 @@ def add_noise_to_spectrum():
     """
     Add noise to an spectrum (ideally to a synthetic one) based on a given SNR.
     """
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Adding poisson noise -----------------------------------------------------
     snr = 100
     distribution = "poisson" # "gaussian"
@@ -889,7 +905,7 @@ def generate_new_random_realizations_from_spectrum():
     Considering fluxes as mean values and errors as standard deviation, generate
     N new random spectra.
     """
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
 
     number = 10
     spectra = ispec.random_realizations(sun_spectrum, number, distribution="poisson")
@@ -974,7 +990,7 @@ def precompute_synthetic_grid():
 
 
 def determine_astrophysical_parameters_using_synth_spectra():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
@@ -995,7 +1011,7 @@ def determine_astrophysical_parameters_using_synth_spectra():
                                 strong_line_probability=0.5, \
                                 use_errors_for_fitting=True)
     #--- Normalize -------------------------------------------------------------
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=True)
+    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
     #--- Model spectra ----------------------------------------------------------
@@ -1008,8 +1024,7 @@ def determine_astrophysical_parameters_using_synth_spectra():
     initial_vsini = 2.0
     initial_limb_darkening_coeff = 0.0
     initial_R = 80000
-    max_iterations = 4 # More iterations do not usually contribute to improve the results
-    #max_iterations = 20
+    max_iterations = 20
 
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
@@ -1118,7 +1133,7 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     precomputed_grid_dir = "example_grid/"
 
 
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
 
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -1140,16 +1155,14 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
                                 strong_line_probability=0.5, \
                                 use_errors_for_fitting=True)
     #--- Normalize -------------------------------------------------------------
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=True)
+    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
 
     #--- Model spectra ----------------------------------------------------------
     # Parameters
     initial_R = 80000
-    max_iterations = 1 # Try first prediction
-    #max_iterations = 4 # More iterations do not usually contribute to improve the results
-    #max_iterations = 20
+    max_iterations = 20
 
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
@@ -1272,7 +1285,7 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
 
 
 def determine_abundances_using_synth_spectra():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
@@ -1293,7 +1306,7 @@ def determine_abundances_using_synth_spectra():
                                 strong_line_probability=0.5, \
                                 use_errors_for_fitting=True)
     #--- Normalize -------------------------------------------------------------
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=True)
+    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
     sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
     #--- Model spectra ----------------------------------------------------------
@@ -1306,8 +1319,7 @@ def determine_abundances_using_synth_spectra():
     initial_vsini = 2.0
     initial_limb_darkening_coeff = 0.0
     initial_R = 80000
-    max_iterations = 4 # More iterations do not usually contribute to improve the results
-    #max_iterations = 20
+    max_iterations = 20
 
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
@@ -1395,7 +1407,7 @@ def determine_abundances_using_synth_spectra():
 
 
 def determine_astrophysical_parameters_from_ew():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Read lines and adjust them ------------------------------------------------
     line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines_biglist.txt")
     line_regions = ispec.adjust_linemasks(sun_spectrum, line_regions, max_margin=0.5)
@@ -1490,8 +1502,7 @@ def determine_astrophysical_parameters_from_ew():
     initial_logg = 4.5
     initial_MH = 0.00
     initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
-    max_iterations = 4 # More iterations do not usually contribute to improve the results
-    #max_iterations = 20
+    max_iterations = 10
 
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
@@ -1562,7 +1573,9 @@ def determine_astrophysical_parameters_from_ew():
 
     results = ispec.model_spectrum_from_ew(linemasks[efilter], modeled_layers_pack, atomic_linelist,\
                         solar_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, \
-                        max_iterations=max_iterations)
+                        free_params=["teff", "logg", "vmic"], \
+                        max_iterations=max_iterations, \
+                        outliers_weight_limit = 0.90)
     params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params = results
 
     ##--- Save results -------------------------------------------------------------
@@ -1575,7 +1588,7 @@ def determine_astrophysical_parameters_from_ew():
 
 
 def determine_abundances_from_ew():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/narval_sun.s.gz")
+    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Read lines and adjust them ------------------------------------------------
     line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines_biglist.txt")
     line_regions = ispec.adjust_linemasks(sun_spectrum, line_regions, max_margin=0.5)
@@ -1831,51 +1844,51 @@ def generate_and_plot_YY_isochrone():
 
 
 if __name__ == '__main__':
-    #read_write_spectrum()
-    #convert_air_to_vacuum()
-    ##plot()
-    #cut_spectrum_from_range()
-    #cut_spectrum_from_segments()
-    #determine_radial_velocity_with_mask()
-    #determine_radial_velocity_with_template()
-    #correct_radial_velocity()
-    #determine_tellurics_shift_with_mask()
-    #determine_tellurics_shift_with_template()
-    #degrade_resolution()
-    #smooth_spectrum()
-    #resample_spectrum()
-    #coadd_spectra()
-    #merge_spectra()
-    #normalize_spectrum_using_continuum_regions()
-    #normalize_spectrum_in_segments()
-    #normalize_whole_spectrum_strategy2()
-    #normalize_whole_spectrum_strategy1()
-    #normalize_whole_spectrum_strategy1_ignoring_prefixed_strong_lines()
-    #filter_cosmic_rays()
-    #find_continuum_regions()
-    #find_continuum_regions_in_segments()
-    #find_linemasks()
-    #fit_lines_and_determine_ew()
-    #calculate_barycentric_velocity()
-    #estimate_snr_from_flux()
-    #estimate_snr_from_err()
-    #estimate_errors_from_snr()
-    #clean_spectrum()
-    #clean_telluric_regions()
-    #adjust_line_masks()
-    #create_segments_around_linemasks()
-    #synthesize_spectrum()
-    #add_noise_to_spectrum()
-    #generate_new_random_realizations_from_spectrum()
-    ##precompute_synthetic_grid()
-    #determine_astrophysical_parameters_using_synth_spectra()
-    ##determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid()
-    #determine_abundances_using_synth_spectra()
+    read_write_spectrum()
+    convert_air_to_vacuum()
+    #plot()
+    cut_spectrum_from_range()
+    cut_spectrum_from_segments()
+    determine_radial_velocity_with_mask()
+    determine_radial_velocity_with_template()
+    correct_radial_velocity()
+    determine_tellurics_shift_with_mask()
+    determine_tellurics_shift_with_template()
+    degrade_resolution()
+    smooth_spectrum()
+    resample_spectrum()
+    coadd_spectra()
+    merge_spectra()
+    normalize_spectrum_using_continuum_regions()
+    normalize_spectrum_in_segments()
+    normalize_whole_spectrum_strategy2()
+    normalize_whole_spectrum_strategy1()
+    normalize_whole_spectrum_strategy1_ignoring_prefixed_strong_lines()
+    filter_cosmic_rays()
+    find_continuum_regions()
+    find_continuum_regions_in_segments()
+    find_linemasks()
+    fit_lines_and_determine_ew()
+    calculate_barycentric_velocity()
+    estimate_snr_from_flux()
+    estimate_snr_from_err()
+    estimate_errors_from_snr()
+    clean_spectrum()
+    clean_telluric_regions()
+    adjust_line_masks()
+    create_segments_around_linemasks()
+    synthesize_spectrum()
+    add_noise_to_spectrum()
+    generate_new_random_realizations_from_spectrum()
+    #precompute_synthetic_grid()
+    determine_astrophysical_parameters_using_synth_spectra()
+    #determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid()
+    determine_abundances_using_synth_spectra()
     determine_astrophysical_parameters_from_ew()
-    #determine_abundances_from_ew()
-    #calculate_theoretical_ew_and_depth()
-    #paralelize_code()
-    #estimate_vmic_from_empirical_relation()
-    #estimate_vmac_from_empirical_relation()
-    ##generate_and_plot_YY_isochrone()
+    determine_abundances_from_ew()
+    calculate_theoretical_ew_and_depth()
+    paralelize_code()
+    estimate_vmic_from_empirical_relation()
+    estimate_vmac_from_empirical_relation()
+    #generate_and_plot_YY_isochrone()
     pass

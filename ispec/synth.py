@@ -280,7 +280,11 @@ def __generate_spectrum(process_communication_queue, waveobs, waveobs_mask, atmo
 
     #update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
     update_progress_func = lambda v: __enqueue_progress(process_communication_queue, v)
-    fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, 0, nlayers, verbose, update_progress_func)
+    ## The convolution (R), rotation broadening (vsini) and macroturbulence broadening (vmac),
+    ## do not seem to work as expected in the SPECTRUM code, thus we set them to zero and
+    ## we use a python implementation
+    #fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, 0, nlayers, verbose, update_progress_func)
+    fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel, 0, 0, limb_darkening_coeff, 0, nlayers, verbose, update_progress_func)
     # Avoid zero fluxes, set a minimum value so that when it is convolved it
     # changes. This way we reduce the impact of the following problem:
     # SPECTRUM + MARCS makes some strong lines to have zero fluxes (i.e. 854.21nm)
@@ -290,6 +294,11 @@ def __generate_spectrum(process_communication_queue, waveobs, waveobs_mask, atmo
         # Use iSpec convolution routine instead of SPECTRUM one, since iSpec is more reliable
         spectrum = create_spectrum_structure(waveobs, fluxes)
         fluxes = convolve_spectrum(spectrum, R, from_resolution=None, frame=None)['flux']
+    if macroturbulence > 0:
+        fluxes = __broadening_macroturbulent(waveobs, fluxes, macroturbulence, return_kernel=False)
+    if vsini > 0:
+        fluxes = __broadening_rotational(waveobs, fluxes, vsini)
+
     process_communication_queue.put(fluxes)
 
 def __calculate_ew_and_depth(process_communication_queue, atmosphere_model_file, linelist_file, abundances_file, num_lines, microturbulence_vel = 2.0, nlayers=56, start=3000, end=11000, verbose=0):
@@ -355,7 +364,11 @@ def __apply_post_fundamental_effects(process_communication_queue, waveobs, fluxe
     import synthesizer
     #update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
     update_progress_func = lambda v: __enqueue_progress(process_communication_queue, v)
-    fluxes = synthesizer.apply_post_fundamental_effects(waveobs*10., fluxes, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, 0, verbose, update_progress_func)
+    ## The convolution (R), rotation broadening (vsini) and macroturbulence broadening (vmac),
+    ## do not seem to work as expected in the SPECTRUM code, thus we set them to zero and
+    ## we use a python implementation
+    #fluxes = synthesizer.apply_post_fundamental_effects(waveobs*10., fluxes, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, 0, verbose, update_progress_func)
+    fluxes = synthesizer.apply_post_fundamental_effects(waveobs*10., fluxes, microturbulence_vel, 0., 0., limb_darkening_coeff, 0, verbose, update_progress_func)
     # Avoid zero fluxes, set a minimum value so that when it is convolved it
     # changes. This way we reduce the impact of the following problem:
     # SPECTRUM + MARCS makes some strong lines to have zero fluxes (i.e. 854.21nm)
@@ -365,6 +378,10 @@ def __apply_post_fundamental_effects(process_communication_queue, waveobs, fluxe
         # Use iSpec convolution routine instead of SPECTRUM one, since iSpec is more reliable
         spectrum = create_spectrum_structure(waveobs, fluxes)
         fluxes = convolve_spectrum(spectrum, R, from_resolution=None, frame=None)['flux']
+    if macroturbulence > 0:
+        fluxes = __broadening_macroturbulent(waveobs, fluxes, macroturbulence, return_kernel=False)
+    if vsini > 0:
+        fluxes = __broadening_rotational(waveobs, fluxes, vsini)
     process_communication_queue.put(fluxes)
 
 
@@ -830,15 +847,12 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
 
     return parinfo
 
-def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range, adjust_model_metalicity=False):
+def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range, free_params, adjust_model_metalicity=False):
     """
     Creates the structure needed for the mpfitmodel
     """
     base = 4
-    if adjust_model_metalicity:
-        free_params = ["teff", "logg", "vmic", "mh"]
-    else:
-        free_params = ["teff", "logg", "vmic"]
+    free_params = [param.lower() for param in free_params]
     #parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base)]
     parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for i in np.arange(base)]
     #
@@ -1115,8 +1129,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, abu
     #weights /= np.max(weights) # Normalize
     #weights *= len(np.where(accept_weights)[0]) # Scale to number of points
     #weights *= 10000
-    weights = np.sqrt(weights)  # There is no mathematical reason but when squaring the flux errors, we get more reasonable parameter's errors
-                                # this could be due to an optimistic original estimation of flux errors (?).
+    weights = np.sqrt(weights)  # When squaring the flux errors, we get more reasonable parameter's errors (empirically validated)
 
 
     teff_range = modeled_layers_pack[3]
@@ -1398,6 +1411,7 @@ class EquivalentWidthModel(MPFitModel):
         # First iteration
         if self.fe1_filter is None or self.fe2_filter is None:
             self.select_good_lines(x_over_h, strict=True)
+            #self.select_good_lines(x_over_h, strict=False) # Don't identify and filter outliers
 
         values_to_evaluate = []
         fitted_lines_params = []
@@ -1439,19 +1453,23 @@ class EquivalentWidthModel(MPFitModel):
         ### Fe2
         ## y = mx + c
         x = self.linemasks['ewr'][self.fe2_filter]
-        y = x_over_h[self.fe2_filter]
-        x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
-        linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
-        self.fe2 = np.median(x_over_h[self.fe2_filter])
-        self.fe2_std = np.std(x_over_h[self.fe2_filter])
-        ##self.fe2 = np.median(linear_model.fittedvalues)
-        ##self.fe2_std = np.std(linear_model.fittedvalues)
-        #print "Fe 2", np.median(linear_model.fittedvalues), np.median(x_over_h[self.fe2_filter])
-        #print "    ", np.std(linear_model.fittedvalues), np.std(x_over_h[self.fe2_filter])
-        #import matplotlib.pyplot as plt
-        #plt.scatter(x, y)
-        #plt.plot(x, m2*x + c2)
-        #plt.show()
+        if len(x) > 1:
+            y = x_over_h[self.fe2_filter]
+            x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
+            linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
+            self.fe2 = np.median(x_over_h[self.fe2_filter])
+            self.fe2_std = np.std(x_over_h[self.fe2_filter])
+            ##self.fe2 = np.median(linear_model.fittedvalues)
+            ##self.fe2_std = np.std(linear_model.fittedvalues)
+            #print "Fe 2", np.median(linear_model.fittedvalues), np.median(x_over_h[self.fe2_filter])
+            #print "    ", np.std(linear_model.fittedvalues), np.std(x_over_h[self.fe2_filter])
+            #import matplotlib.pyplot as plt
+            #plt.scatter(x, y)
+            #plt.plot(x, m2*x + c2)
+            #plt.show()
+        else:
+            self.fe2 = np.median(x_over_h[self.fe2_filter])
+            self.fe2_std = np.std(x_over_h[self.fe2_filter])
 
         ## Gravity
         abundance_diff = self.fe1 - self.fe2
@@ -1559,11 +1577,20 @@ class EquivalentWidthModel(MPFitModel):
             x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
             huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
             linear_model = huber_t.fit()
-            reject_filter1 = linear_model.weights < 0.90
+            reject_filter1 = linear_model.weights < self.outliers_weight_limit
             reject_filter1 = np.logical_or(reject_filter1, bad)
             #import matplotlib.pyplot as plt
             #plt.scatter(self.linemasks['lower state (eV)'], x_over_h)
             #plt.scatter(self.linemasks['lower state (eV)'][reject_filter1], x_over_h[reject_filter1], color="red")
+            #m1 = linear_model.params[0]
+            #c1 = linear_model.params[1]
+            #plt.plot(x, m1*x + c1, color="green")
+            #plt.xlabel("Lower excitation energies (eV)")
+            #plt.ylabel("[Fe 1/H] (dex)")
+            #plt.grid()
+            #plt.savefig("excitation_equilibrium.png")
+            #plt.savefig("excitation_equilibrium.eps")
+            #plt.savefig("excitation_equilibrium.pdf")
             #plt.show()
 
             # Outliers
@@ -1577,7 +1604,7 @@ class EquivalentWidthModel(MPFitModel):
             x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
             huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
             linear_model = huber_t.fit()
-            reject_filter2 = linear_model.weights < 0.90
+            reject_filter2 = linear_model.weights < self.outliers_weight_limit
             reject_filter2 = np.logical_or(reject_filter2, bad)
             #import matplotlib.pyplot as plt
             #plt.scatter(self.linemasks['ewr'], x_over_h)
@@ -1633,10 +1660,12 @@ class EquivalentWidthModel(MPFitModel):
 
 
 
-    def fitData(self, linemasks, parinfo=None, max_iterations=20, quiet=True):
+    def fitData(self, linemasks, self.outliers_weight_limit=0.90, parinfo=None, max_iterations=20, quiet=True):
         base = 3
         if len(parinfo) < base:
             raise Exception("Wrong number of parameters!")
+
+        self.outliers_weight_limit = outliers_weight_limit
 
 
         if sys.platform == "win32":
@@ -1728,21 +1757,32 @@ class EquivalentWidthModel(MPFitModel):
         print "Return code:", self.m.status
 
 
-def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, adjust_model_metalicity=False, max_iterations=20):
+def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, free_params=["teff", "logg", "vmic"], adjust_model_metalicity=False, max_iterations=20, outliers_weight_limit=0.90):
     """
+    The parameter 'outliers_weight_limit' limits the outlier detection done in the first iteration,
+    if it is set to 0. then no outliers are filtered. The recommended value is 0.90.
     """
     teff_range = modeled_layers_pack[3]
     logg_range = modeled_layers_pack[4]
     MH_range = modeled_layers_pack[5]
 
-    parinfo = __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range, adjust_model_metalicity=adjust_model_metalicity)
+    # Do not allow users to set free MH in free_params to avoid confusions
+    # because metallicity is always free in this method, what we make by including MH in free_params
+    # is turning on the adjustment in the metallicity models
+    if "MH" in free_params or "mh" in free_params:
+        raise Exception("Metallicity cannot be a free parameter!")
+
+    if adjust_model_metalicity:
+        free_params.append("MH")
+
+    parinfo = __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range, free_params, adjust_model_metalicity=adjust_model_metalicity)
 
     EW_model = EquivalentWidthModel(modeled_layers_pack, linelist, abundances, MH=initial_MH, adjust_model_metalicity=adjust_model_metalicity)
 
     lfilter = linemasks['element'] == "Fe 1"
     lfilter = np.logical_or(lfilter, linemasks['element'] == "Fe 2")
     linemasks = linemasks[lfilter]
-    EW_model.fitData(linemasks, parinfo=parinfo, max_iterations=max_iterations, quiet=False)
+    EW_model.fitData(linemasks, parinfo=parinfo, max_iterations=max_iterations, quiet=False, outliers_weight_limit=outliers_weight_limit)
     print "\n"
     EW_model.print_solution()
 
@@ -2029,4 +2069,416 @@ def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks):
 
     return initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff
 
+
+################################################################################
+# Code from:
+#   http://www.phoebe-project.org/2.0/
+################################################################################
+
+from scipy.signal import fftconvolve
+from scipy.integrate import quad
+
+#cc     = 299792458.        # speed of light              m/s
+
+
+def __broadening_rotational(wave, flux, vrot, epsilon=0.6, return_kernel=False):
+    r"""
+    Apply rotational broadening to a spectrum assuming a linear limb darkening
+    law.
+
+    The adopted limb darkening law is the linear one, parameterize by the linear
+    limb darkening parameter :envvar:`epsilon`. The default value is
+    :math:`\varepsilon = 0.6`.
+
+    The rotational kernel is defined in velocity space :math:`v` and is given by
+
+    .. math::
+
+        y = 1 - \left(\frac{v}{v_\mathrm{rot}}\right)^2 \\
+
+        K_\mathrm{rot} = 2 (1-\varepsilon)\sqrt{y} + \frac{\pi}{2} \left(\frac{\varepsilon y}{\pi v_\mathrm{rot}(1-\varepsilon/3)}\right)
+
+    **Construct a simple Gaussian line profile and convolve with vsini=65 km/s**
+
+
+    >>> sigma = 0.5
+    >>> wave = np.linspace(3995, 4005, 1001)
+    >>> flux = 1.0 - 0.5*np.exp( - (wave-4000)**2/(2*sigma**2))
+
+    Convolve it with a rotational velocity of :math:`v_\mathrm{rot}=65 \mathrm{km}\,\mathrm{s}^{-1}`:
+
+    >>> vrot = 65.
+    >>> flux_broad = tools.broadening_rotational(wave, flux, vrot)
+    >>> flux_broad, (wave_kernel, kernel) = tools.broadening_rotational(wave, flux, vrot, return_kernel=True)
+
+    ::
+
+        plt.figure()
+        plt.plot(wave, flux, 'k-')
+        plt.plot(wave, flux_broad, 'r-', lw=2)
+        plt.xlabel("Wavelength [$\AA$]")
+        plt.ylabel("Normalised flux")
+
+        plt.figure()
+        plt.plot(wave_kernel, kernel, 'r-', lw=2)
+        plt.xlabel("Wavelength [$\AA$]")
+        plt.ylabel("Normalised flux")
+
+
+    .. +----------------------------------------------------------------------+----------------------------------------------------------------------+
+    .. | .. image:: ../../images/api/spectra/tools/broaden_rotational01.png   | .. image:: ../../images/api/spectra/tools/broaden_rotational02.png   |
+    .. |   :scale: 50 %                                                       |   :scale: 50 %                                                       |
+    .. +----------------------------------------------------------------------+----------------------------------------------------------------------+
+
+
+    :parameter wave: Wavelength of the spectrum
+    :type wave: array
+    :parameter flux: Flux of the spectrum
+    :type flux: array
+    :parameter vrot: Rotational broadening
+    :type vrot: float
+    :parameter epsilon: linear limbdarkening parameter
+    :type epsilon: float
+    :parameter return_kernel: return kernel
+    :type return_kernel: bool
+    :return: broadened flux [, (wavelength, kernel)]
+    :rtype: array [,(array, array)]
+    """
+
+    # if there is no rotational velocity, don't bother
+    if vrot == 0:
+        return flux
+
+    # convert wavelength array into velocity space, this is easier. We also
+    # need to make it equidistant
+    velo = np.log(wave)
+    delta_velo = np.diff(velo).min()
+    range_velo = velo.ptp()
+    n_velo = int(range_velo/delta_velo) + 1
+    velo_ = np.linspace(velo[0], velo[-1], n_velo)
+    flux_ = np.interp(velo_, velo, flux)
+    dvelo = velo_[1]-velo_[0]
+    vrot = vrot / (299792458.*1e-3)
+    n_kernel = int(2*vrot/dvelo) + 1
+
+    # The kernel might be of too low resolution, or the the wavelength range
+    # might be too narrow. In both cases, raise an appropriate error
+    if n_kernel == 0:
+        raise ValueError(("Spectrum resolution too low for "
+                          "rotational broadening"))
+    elif n_kernel > n_velo:
+        raise ValueError(("Spectrum range too narrow for "
+                          "rotational broadening"))
+
+    # Construct the domain of the kernel
+    velo_k = np.arange(n_kernel)*dvelo
+    velo_k -= velo_k[-1]/2.
+
+    # transform the velocity array, construct and normalise the broadening
+    # kernel
+    y = 1 - (velo_k/vrot)**2
+    kernel = (2*(1-epsilon)*np.sqrt(y) + \
+                       np.pi*epsilon/2.*y) / (np.pi*vrot*(1-epsilon/3.0))
+    kernel /= kernel.sum()
+
+    # Convolve the flux with the kernel
+    flux_conv = fftconvolve(1-flux_, kernel, mode='same')
+
+    # And interpolate the results back on to the original wavelength array,
+    # taking care of even vs. odd-length kernels
+    if n_kernel % 2 == 1:
+        offset = 0.0
+    else:
+        offset = dvelo / 2.0
+
+    flux = np.interp(velo+offset, velo_, 1-flux_conv, left=1, right=1)
+
+    # Return the results
+    if return_kernel:
+        lambda0 = (wave[-1]+wave[0]) / 2.0
+        return flux, (velo_k*lambda0, kernel)
+    else:
+        return flux
+
+
+
+def __vmacro_kernel(dlam, Ar, At, Zr, Zt):
+    r"""
+    Macroturbulent velocity kernel.
+
+    See :py:func:`broadening_macroturbulent` for more information.
+    """
+    dlam[dlam == 0] = 1e-8
+    if Zr != Zt:
+        return np.array([(2*Ar*idlam/(np.sqrt(np.pi)*Zr**2) * quad(lambda u: np.exp(-1/u**2),0,Zr/idlam)[0] + \
+                          2*At*idlam/(np.sqrt(np.pi)*Zt**2) * quad(lambda u: np.exp(-1/u**2),0,Zt/idlam)[0])
+                             for idlam in dlam])
+    else:
+        return np.array([(2*Ar*idlam/(np.sqrt(np.pi)*Zr**2) + 2*At*idlam/(np.sqrt(np.pi)*Zt**2))\
+                           * quad(lambda u: np.exp(-1/u**2),0,Zr/idlam)[0]\
+                             for idlam in dlam])
+
+
+def __broadening_macroturbulent(wave, flux, vmacro_rad, vmacro_tan=None,
+                              return_kernel=False):
+    r"""
+    Apply macroturbulent broadening.
+
+    The macroturbulent kernel is defined as in [Gray2005]_:
+
+    .. math::
+
+        K_\mathrm{macro}(\Delta\lambda) = \frac{2A_R\Delta\lambda}{\sqrt{\pi}\zeta_R^2}\int_0^{\zeta_R/\Delta\lambda}e^{-1/u^2}du
+
+         & + \frac{2A_T\Delta\lambda}{\sqrt{\pi}\zeta_T^2}\int_0^{\zeta_T/\Delta\lambda}e^{-1/u^2}du
+
+    If :envvar:`vmacro_tan` is :envvar:`None`, then the value will be put equal
+    to the radial component :envvar:`vmacro_rad`.
+
+    **Example usage**: Construct a simple Gaussian line profile and convolve with vmacro=65km/s
+
+    Construct a simple Gaussian line profile:
+
+    >>> sigma = 0.5
+    >>> wave = np.linspace(3995, 4005, 1001)
+    >>> flux = 1.0 - 0.5*np.exp( - (wave-4000)**2/(2*sigma**2))
+
+    Convolve it with a macroturbulent velocity of :math:`v_\mathrm{macro}=65 \mathrm{km}\,\mathrm{s}^{-1}`:
+
+    >>> vmac = 65.
+    >>> flux_broad = tools.broadening_macroturbulent(wave, flux, vmac)
+    >>> flux_broad, (wave_kernel, kernel) = tools.broadening_macroturbulent(wave, flux, vmac, return_kernel=True)
+
+    ::
+
+        plt.figure()
+        plt.plot(wave, flux, 'k-')
+        plt.plot(wave, flux_broad, 'r-', lw=2)
+        plt.xlabel("Wavelength [$\AA$]")
+        plt.ylabel("Normalised flux")
+
+        plt.figure()
+        plt.plot(wave_kernel, kernel, 'r-', lw=2)
+        plt.xlabel("Wavelength [$\AA$]")
+        plt.ylabel("Normalised flux")
+
+
+    .. +--------------------------------------------------------------------------+-------------------------------------------------------------------------+
+    .. | .. image:: ../../images/api/spectra/tools/broaden_macroturbulent01.png   | .. image:: ../../images/api/spectra/tools/broaden_macroturbulent02.png  |
+    .. |   :scale: 50 %                                                           |   :scale: 50 %                                                          |
+    .. +--------------------------------------------------------------------------+-------------------------------------------------------------------------+
+
+    :parameter wave: Wavelength of the spectrum
+    :type wave: array
+    :parameter flux: Flux of the spectrum
+    :type flux: array
+    :parameter vmacro_rad: macroturbulent broadening, radial component
+    :type vmacro_rad: float
+    :parameter vmacro_tan: macroturbulent broadening, tangential component
+    :type vmacro_tan: float
+    :parameter return_kernel: return kernel
+    :type return_kernel: bool
+    :return: broadened flux [, (wavelength, kernel)]
+    :rtype: array [,(array, array)]
+    """
+    if vmacro_tan is None:
+        vmacro_tan = vmacro_rad
+
+    if vmacro_rad == vmacro_tan == 0:
+        return flux
+
+    # Define central wavelength
+    lambda0 = (wave[0] + wave[-1]) / 2.0
+
+    vmac_rad = vmacro_rad/(299792458.*1e-3)*lambda0
+    vmac_tan = vmacro_tan/(299792458.*1e-3)*lambda0
+
+    # Make sure the wavelength range is equidistant before applying the
+    # convolution
+    delta_wave = np.diff(wave).min()
+    range_wave = wave.ptp()
+    n_wave = int(range_wave/delta_wave)+1
+    wave_ = np.linspace(wave[0], wave[-1], n_wave)
+    flux_ = np.interp(wave_, wave, flux)
+    dwave = wave_[1]-wave_[0]
+    n_kernel = int(5*max(vmac_rad, vmac_tan)/dwave)
+    if n_kernel % 2 == 0:
+        n_kernel += 1
+
+    # The kernel might be of too low resolution, or the the wavelength range
+    # might be too narrow. In both cases, raise an appropriate error
+    if n_kernel == 0:
+        raise ValueError(("Spectrum resolution too low for "
+                          "macroturbulent broadening"))
+    elif n_kernel > n_wave:
+        raise ValueError(("Spectrum range too narrow for "
+                          "macroturbulent broadening"))
+
+    # Construct the broadening kernel
+    wave_k = np.arange(n_kernel)*dwave
+    wave_k -= wave_k[-1]/2.
+    kernel = __vmacro_kernel(wave_k, 1.0, 1.0, vmac_rad, vmac_tan)
+    kernel /= sum(kernel)
+
+    flux_conv = fftconvolve(1-flux_, kernel, mode='same')
+
+    # And interpolate the results back on to the original wavelength array,
+    # taking care of even vs. odd-length kernels
+    if n_kernel % 2 == 1:
+        offset = 0.0
+    else:
+        offset = dwave / 2.0
+    flux = np.interp(wave+offset, wave_, 1-flux_conv)
+
+    # Return the results.
+    if return_kernel:
+        return flux, (wave_k, kernel)
+    else:
+        return flux
+
+
+
+
+
+def __rotational_broadening(wave_spec,flux_spec,vrot,vmac=0.,fwhm=0.25,epsilon=0.6,
+                         chard=None,stepr=0,stepi=0,alam0=None,alam1=None,
+                         irel=0,cont=None,method='fortran'):
+    """
+    Apply rotational broadening to a spectrum assuming a linear limb darkening
+    law.
+
+    Limb darkening law is linear, default value is epsilon=0.6
+
+    Possibility to normalize as well by giving continuum in 'cont' parameter.
+
+    **Parameters for rotational convolution**
+
+    C{VROT}: v sin i (in km/s):
+
+        -  if ``VROT=0`` - rotational convolution is
+
+                 - either not calculated,
+                 - or, if simultaneously FWHM is rather large
+                   (:math:`v_\mathrm{rot}\lambda/c < \mathrm{FWHM}/20.`),
+                   :math:`v_\mathrm{rot}` is set to  :math:`\mathrm{FWHM}/20\cdot c/\lambda`;
+
+        -  if ``VROT >0`` but the previous condition b) applies, the
+           value of VROT is changed as  in the previous case
+
+        -  if ``VROT<0`` - the value of abs(VROT) is used regardless of
+           how small compared to FWHM it is
+
+    C{CHARD}: characteristic scale of the variations of unconvolved stellar
+    spectrum (basically, characteristic distance between two neighbouring
+    wavelength points) - in A:
+
+        - if =0 - program sets up default (0.01 A)
+
+    C{STEPR}: wavelength step for evaluation rotational convolution;
+
+        - if =0, the program sets up default (the wavelength
+          interval corresponding to the rotational velocity
+          devided by 3.)
+
+        - if <0, convolved spectrum calculated on the original
+          (detailed) SYNSPEC wavelength mesh
+
+
+    **Parameters for instrumental convolution**
+
+    C{FWHM}: WARNING: this is not the full width at half maximum for Gaussian
+    instrumental profile, but the sigma (FWHM = 2.3548 sigma).
+
+    C{STEPI}: wavelength step for evaluating instrumental convolution
+
+          - if STEPI=0, the program sets up default (FWHM/10.)
+
+          - if STEPI<0, convolved spectrum calculated with the previous
+            wavelength mesh:
+            either the original (SYNSPEC) one if vrot=0,
+            or the one used in rotational convolution (vrot > 0)
+
+    **Parameters for macroturbulent convolution**
+
+    C{vmac}: macroturbulent velocity.
+
+    **Wavelength interval and normalization of spectra**
+
+    C{ALAM0}: initial wavelength
+    C{ALAM1}: final wavelength
+    C{IREL}: for =1 relative spectrum, =0 absolute spectrum
+
+    @return: wavelength,flux
+    @rtype: array, array
+    """
+    logger.info("Rot.broad with vrot={:.3f}km/s (epsilon={:.2f}), sigma={:.2f}AA, vmacro={:.3f}km/s".format(vrot,epsilon,fwhm,vmac))
+    #-- first a wavelength Gaussian convolution:
+    if fwhm>0:
+        fwhm /= 2.3548
+        #-- make sure it's equidistant
+        wave_ = np.linspace(wave_spec[0],wave_spec[-1],len(wave_spec))
+        flux_ = np.interp(wave_,wave_spec,flux_spec)
+        dwave = wave_[1]-wave_[0]
+        n = int(2*4*fwhm/dwave)
+        if n==0:
+            logger.info("Resolution too large, cannot broaden with instrumental profile")
+        else:
+            wave_k = np.arange(n)*dwave
+            wave_k-= wave_k[-1]/2.
+            kernel = np.exp(- (wave_k)**2/(2*fwhm**2))
+            kernel /= sum(kernel)
+            flux_conv = fftconvolve(1-flux_,kernel,mode='same')
+            #-- this little tweak is necessary to keep the profiles at the right
+            #   location
+            if n%2==1:
+                flux_spec = np.interp(wave_spec,wave_,1-flux_conv)
+            else:
+                flux_spec = np.interp(wave_spec+dwave/2,wave_,1-flux_conv)
+    #-- macroturbulent profile
+    if vmac>0:
+        vmac = vmac/(299792458.*1e-3)*(wave_spec[0]+wave_spec[-1])/2.0
+        #-- make sure it's equidistant
+        wave_ = np.linspace(wave_spec[0],wave_spec[-1],len(wave_spec))
+        flux_ = np.interp(wave_,wave_spec,flux_spec)
+        dwave = wave_[1]-wave_[0]
+        n = int(6*vmac/dwave/5)
+        if n==0:
+            logger.error("Resolution too large, cannot broaden with instrumental profile")
+        else:
+            wave_k = np.arange(n)*dwave
+            wave_k-= wave_k[-1]/2.
+            kernel = __vmacro_kernel(wave_k,1.,1.,vmac,vmac)
+            kernel /= sum(kernel)
+            flux_conv = fftconvolve(1-flux_,kernel,mode='same')
+            if n%2==1:
+                flux_spec = np.interp(wave_spec,wave_,1-flux_conv)
+            else:
+                flux_spec = np.interp(wave_spec+dwave/2,wave_,1-flux_conv)
+    if vrot>0:
+        #-- convert wavelength array into velocity space, this is easier
+        #   we also need to make it equidistant!
+        wave_ = np.log(wave_spec)
+        velo_ = np.linspace(wave_[0],wave_[-1],len(wave_))
+        flux_ = np.interp(velo_,wave_,flux_spec)
+        dvelo = velo_[1]-velo_[0]
+        vrot = vrot/(299792458.*1e-3)
+        #-- compute the convolution kernel and normalise it
+        n = int(2*vrot/dvelo)
+        velo_k = np.arange(n)*dvelo
+        velo_k -= velo_k[-1]/2.
+        y = 1 - (velo_k/vrot)**2 # transformation of velocity
+        G = (2*(1-epsilon)*np.sqrt(y)+np.pi*epsilon/2.*y)/(np.pi*vrot*(1-epsilon/3.0))  # the kernel
+        G /= G.sum()
+        #-- convolve the flux with the kernel
+        flux_conv = fftconvolve(1-flux_,G,mode='same')
+        if n%2==1:
+            velo_ = np.arange(len(flux_conv))*dvelo+velo_[0]
+        else:
+            velo_ = np.arange(len(flux_conv))*dvelo+velo_[0]-dvelo/2.
+        wave_conv = np.exp(velo_)
+        return wave_conv,1-flux_conv
+
+
+    return wave_spec,flux_spec
+################################################################################
 

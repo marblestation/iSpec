@@ -380,13 +380,24 @@ def __clean_outliers(spectrum, min_wave, max_wave, wave_step, ignored_regions, p
     #sfilter2[-1] = True
     #sfilter1[0] = True
 
-    sfilter = np.logical_and(sfilter1, sfilter2)
+    #sfilter = np.logical_and(sfilter1, sfilter2)
     sfilter = np.logical_and(sfilter1a, sfilter2a)
 
-    ignore1 = create_wavelength_filter(smooth1, regions=ignored_regions)
-    sfilter = np.logical_and(sfilter, np.logical_not(ignore1))
+    ### Bad idea to filter again by gaps, the filtering and interpolation of gaps
+    ### is already done at the beginning. If we do it again at this point, we lose
+    ### a lot of point and the fit is not realistic at all.
+    #ignore1 = create_wavelength_filter(smooth1, regions=ignored_regions)
+    #sfilter = np.logical_and(sfilter, np.logical_not(ignore1))
+
     #sfilter[np.where(~ignore1)[0][np.where(np.hstack((np.abs(np.where(~ignore1)[0][:-1] - np.where(~ignore1)[0][1:]), 1)) != 1)[0]]] = False
     #sfilter[np.where(~ignore1)[0][np.where(np.hstack((np.abs(np.where(~ignore1)[0][:-1] - np.where(~ignore1)[0][1:]), 1)) != 1)[0] + 1]] = False
+
+    #plt.scatter(smooth1['waveobs'], smooth1['flux'])
+    #plt.scatter(smooth1['waveobs'][sfilter1a], smooth1['flux'][sfilter1a]*0.99, color="red")
+    #plt.scatter(smooth1['waveobs'][sfilter2a], smooth1['flux'][sfilter2a]*1.01, color="green")
+    #plt.scatter(smooth1['waveobs'][sfilter], smooth1['flux'][sfilter]*1.02, color="black")
+    #plt.scatter(smooth1['waveobs'][~ignore1], smooth1['flux'][~ignore1]*1.03, color="orange")
+    #plt.show()
 
     # Original spectra with filtered outliers
     sfilter = np.interp(spectrum['waveobs'], smooth1['waveobs'], sfilter)
@@ -494,6 +505,18 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
         ignore2 = np.logical_not(create_wavelength_filter(spectrum, regions=continuum_regions))
         spectrum['flux'][ignore2] = 0.0
         spectrum['err'][ignore2] = 0.0
+
+    # Make sure there is no NaN or inf in fluxes or errors
+    spectrum['flux'][np.isnan(spectrum['flux'])] = 0
+    spectrum['flux'][np.isinf(spectrum['flux'])] = 0
+    if use_errors_for_fitting:
+        nan_filter = np.isnan(spectrum['err'])
+        spectrum['flux'][nan_filter] = 0
+        spectrum['err'][nan_filter] = 0
+        inf_filter = np.isinf(spectrum['err'])
+        spectrum['flux'][inf_filter] = 0
+        spectrum['err'][inf_filter] = 0
+
     # Create a global ignore region list with: original zeros + regions to be ignored + non-continuum regions
     ignored_regions =  __create_gap_regions(spectrum)
 
@@ -570,6 +593,7 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
     else:
         raise Exception("Unknown order (the only valid ones are max+median or median+max)")
 
+
     # Select the maximum errors (conservative approach) using the biggest window size
     # used in this process
     last_step = np.max((med_filter_step, max_filter_step))
@@ -585,6 +609,7 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
     ##### Fit the continuum
     # Resample avoiding zeros and repating the last good value in the borders (not zeros!)
     continuum = resample_spectrum(smooth3, spectrum['waveobs'], method="bessel", zero_edges=False)
+    ignore1 = create_wavelength_filter(continuum, regions=ignored_regions)
     if model == "Splines":
         if nknots is None:
             # One each 5 nm
@@ -594,7 +619,6 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
         #continuum_model = UniformKnotSplineModel(nknots=nknots, degree=degree)
         #continuum_model.fitData(continuum['waveobs'], continuum['flux'])
         continuum_model = UniformCDFKnotSplineModel(nknots=nknots, degree=degree)
-        ignore1 = create_wavelength_filter(continuum, regions=ignored_regions)
 
         smooth_err = gaussian_filter(continuum['err'], last_step)
         if use_errors_for_fitting and np.any(smooth_err[~ignore1] > 0):
@@ -606,9 +630,9 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
         smooth_err = gaussian_filter(continuum['err'], last_step)
         if use_errors_for_fitting and np.any(smooth_err[~ignore1] > 0):
             smooth_weights = 1. / smooth_err[~ignore1]
-            continuum_model = PolyContinuum(np.poly1d(np.polyfit(continuum['waveobs'], continuum['flux'], degree, w=smooth_weights)))
+            continuum_model = PolyContinuum(np.poly1d(np.polyfit(continuum['waveobs'][~ignore1], continuum['flux'][~ignore1], degree, w=smooth_weights)))
         else:
-            continuum_model = PolyContinuum(np.poly1d(np.polyfit(continuum['waveobs'], continuum['flux'], degree)))
+            continuum_model = PolyContinuum(np.poly1d(np.polyfit(continuum['waveobs'][~ignore1], continuum['flux'][~ignore1], degree)))
 
 
     # Add continuum errors derived from the model fitting
