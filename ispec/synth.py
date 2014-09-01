@@ -1660,7 +1660,7 @@ class EquivalentWidthModel(MPFitModel):
 
 
 
-    def fitData(self, linemasks, self.outliers_weight_limit=0.90, parinfo=None, max_iterations=20, quiet=True):
+    def fitData(self, linemasks, outliers_weight_limit=0.90, parinfo=None, max_iterations=20, quiet=True):
         base = 3
         if len(parinfo) < base:
             raise Exception("Wrong number of parameters!")

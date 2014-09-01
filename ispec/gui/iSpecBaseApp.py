@@ -4105,7 +4105,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if not self.check_continuum_model_exists():
             return
 
-        if "modelize_spectrum" in dir(ispec):
+        if "model_spectrum" in dir(ispec):
             teff = 5777.0
             logg = 4.44
             MH = 0.00
@@ -4260,7 +4260,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.__update_numpy_arrays_from_widgets("lines")
         self.__update_numpy_arrays_from_widgets("segments")
 
-        obs_spectrum, synth_spectrum, params, errors, free_abundances, status, stats_linemasks = ispec.modelize_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations)
+        obs_spectrum, synth_spectrum, params, errors, free_abundances, status, stats_linemasks = ispec.model_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations)
         self.queue.put((self.on_determine_parameters_finnish, [obs_spectrum, synth_spectrum, params, errors, status, stats_linemasks], {}))
 
     def on_determine_parameters_finnish(self, obs_spectrum, synth_spectrum, params, errors, status, stats_linemasks):
