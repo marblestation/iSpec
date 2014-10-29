@@ -68,8 +68,8 @@ cdef extern from "spectrum276e/spectrum.h":
 
 cdef extern from "synthesizer_func.h":
     ctypedef void (*progressfunc)(double num, void *user_data)
-    int ew_and_depth(char *atmosphere_model_file, char *linelist_file, char *abundances_file, double microturbulence_vel, double start, double end, int verbose, int num_measures, double *output_wave, double *output_code, double *output_ew, double *output_depth, progressfunc user_func, void *user_data)
-    int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, char *fixed_abundances_file, double microturbulence_vel, int verbose, int num_measures, double* waveobs, double* waveobs_mask, double *fluxes, progressfunc user_func, void *user_data)
+    int ew_and_depth(char *atmosphere_model_file, char *linelist_file, char *isotope_file, char *abundances_file, double microturbulence_vel, double start, double end, int verbose, int num_measures, double *output_wave, double *output_code, double *output_ew, double *output_depth, progressfunc user_func, void *user_data)
+    int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *isotope_file, char *abundances_file, char *fixed_abundances_file, double microturbulence_vel, int verbose, int num_measures, double* waveobs, double* waveobs_mask, double *fluxes, progressfunc user_func, void *user_data)
     int macroturbulence_spectrum(double *waveobs, double *fluxes, int num_measures, double macroturbulence, int verbose, progressfunc user_func, void *user_data)
     int rotation_spectrum(double *waveobs, double *fluxes, int num_measures, double vsini, double limb_darkening_coeff, int verbose, progressfunc user_func, void *user_data)
     int resolution_spectrum(double *waveobs, double *fluxes, int num_measures, int R, int verbose, progressfunc user_func, void *user_data)
@@ -85,7 +85,7 @@ cdef void callback(double num, void *f):
 
 # waveobs in armstrong
 # microtturbulence velocity in km/s
-def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.double_t,ndim=1] waveobs_mask, char* atmosphere_model_file, char* linelist_file = "input/linelists/default.300_1100nm.lst", char* abundances_file = "input/abundances/default.stdatom.dat", char* fixed_abundances_file="none", double microturbulence_vel = 2.0, double macroturbulence = 3.0, double vsini = 2.0, double limb_darkening_coeff = 0.0, int R=500000, int nlayers = 56, int verbose = 0, update_progress_func=None):
+def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.double_t,ndim=1] waveobs_mask, char* atmosphere_model_file, char* linelist_file = "input/linelists/default.300_1100nm.lst", char *isotope_file = "input/abundances/isotope.iso", char* abundances_file = "input/abundances/default.stdatom.dat", char* fixed_abundances_file="none", double microturbulence_vel = 2.0, double macroturbulence = 3.0, double vsini = 2.0, double limb_darkening_coeff = 0.0, int R=500000, int nlayers = 56, int verbose = 0, update_progress_func=None):
     if not os.path.exists(atmosphere_model_file):
         raise Exception("Atmosphere model file '%s' does not exists!" % atmosphere_model_file)
     if not os.path.exists(linelist_file):
@@ -115,7 +115,7 @@ def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.double_t,ndim
     flagk = 0
     flagg = 0
     flagmgh = 0
-    flagI = 0   # Isotopes (1: True, 0: False) If 1 it produces segmentation fault (original SPECTRUM problem)
+    flagI = 1   # Isotopes (1: True, 0: False) If 1 it produces segmentation fault (original SPECTRUM problem)
     flagt = 0
     flagp = 0
     flagP = 0
@@ -136,7 +136,7 @@ def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.double_t,ndim
     if update_progress_func==None:
         update_progress_func = dummy_func
 
-    synthesize_spectrum(atmosphere_model_file, linelist_file, abundances_file,
+    synthesize_spectrum(atmosphere_model_file, linelist_file, isotope_file, abundances_file,
             fixed_abundances_file,
             microturbulence_vel, verbose, num_measures, <double*> waveobs.data,
             <double*> waveobs_mask.data,
@@ -202,7 +202,7 @@ def abundances(char* atmosphere_model_file, char* linelist_file, int num_measure
     flagk = 0
     flagg = 0
     flagmgh = 0
-    flagI = 0   # Isotopes (1: True, 0: False) If 1 it produces segmentation fault (original SPECTRUM problem)
+    flagI = 1   # Isotopes (1: True, 0: False) If 1 it produces segmentation fault (original SPECTRUM problem)
     flagt = 0
     flagp = 0
     flagP = 0
@@ -235,7 +235,7 @@ def abundances(char* atmosphere_model_file, char* linelist_file, int num_measure
     return abundances, normal_abundances, relative_abundances
 
 
-def calculate_ew_and_depth(char* atmosphere_model_file, char* linelist_file, char* abundances_file, int num_lines, double microturbulence_vel = 2.0, int nlayers = 56, double start=3000, double end=11000, int verbose = 0, update_progress_func=None):
+def calculate_ew_and_depth(char* atmosphere_model_file, char* linelist_file, char *isotope_file, char* abundances_file, int num_lines, double microturbulence_vel = 2.0, int nlayers = 56, double start=3000, double end=11000, int verbose = 0, update_progress_func=None):
     if not os.path.exists(atmosphere_model_file):
         raise Exception("Atmosphere model file '%s' does not exists!" % atmosphere_model_file)
     if not os.path.exists(linelist_file):
@@ -265,7 +265,7 @@ def calculate_ew_and_depth(char* atmosphere_model_file, char* linelist_file, cha
     flagk = 0
     flagg = 0
     flagmgh = 0
-    flagI = 0   # Isotopes (1: True, 0: False) If 1 it produces segmentation fault (original SPECTRUM problem)
+    flagI = 1   # Isotopes (1: True, 0: False) If 1 it produces segmentation fault (original SPECTRUM problem)
     flagt = 0
     flagp = 0
     flagP = 0
@@ -288,7 +288,7 @@ def calculate_ew_and_depth(char* atmosphere_model_file, char* linelist_file, cha
     if update_progress_func==None:
         update_progress_func = dummy_func
 
-    ew_and_depth(atmosphere_model_file, linelist_file, abundances_file, \
+    ew_and_depth(atmosphere_model_file, linelist_file, isotope_file, abundances_file, \
             microturbulence_vel, start, end, verbose, num_lines, \
             <double*> output_wave.data, <double*> output_code.data, <double*> output_ew.data, <double*> output_depth.data, \
            callback, <void*>update_progress_func)

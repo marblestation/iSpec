@@ -35,6 +35,8 @@ def resource_path(relative):
 try:
     from abundances import determine_abundances
     from abundances import read_solar_abundances
+    from abundances import scale_solar_abundances
+    from abundances import determine_abundance_enchancements
     from abundances import write_abundance_lines
     from abundances import create_free_abundances_structure
     from atmospheres import interpolate_atmosphere_layers

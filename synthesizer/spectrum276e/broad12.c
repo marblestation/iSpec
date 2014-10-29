@@ -185,10 +185,20 @@ void broad(atmosphere * model, linedata * line, int N, double Sig, double Alp, d
         neffh5 = pow(neffh, 5.0);
 
         /* Radiation broadening */
-        if (flago == 4 || flago == 5 || flago == 6)
+        /*if (flago == 4 || flago == 5 || flago == 6)*/
+        if (flago == 4 || flago == 5 || flago == 6 || (flago == 1 && line[N].gammar != 0)) // SBC
             gammar = line[N].gammar;
         else
             gammar = 2.223e+15 / (line[N].wave * line[N].wave);
+
+        // SBC
+        /*if (flago == 1){*/
+            /*if (line[N].gammar == 0) {*/
+                /*printf("line[N].gammar == 0\n");*/
+            /*}*/
+            /*printf("With parameter :: %f :: gammar = %f\n", line[N].wave, line[N].gammar);*/
+            /*printf("With formula   :: %f :: gammar = %f\n", line[N].wave, 2.223e+15 / (line[N].wave * line[N].wave));*/
+        /*}*/
 
         for (i = 0; i < Ntau; i++) {
             vturb = model->mtv[i];
@@ -200,10 +210,18 @@ void broad(atmosphere * model, linedata * line, int N, double Sig, double Alp, d
             else {
                 v = sqrt(2.1175e+08 * model->T[i] * (1.0 / line[N].atomass + 0.9921));
                 if (flago == 1) {
-                    lnwN = OMara + log(v) + (1.0 - alp) * log(v / 1.0e+06);
+                    /*lnwN = OMara + log(v) + (1.0 - alp) * log(v / 1.0e+06);*/
+                    lnwN = OMara + log(1.0e6) + (1.0 - alp) * log(v / 1.0e+06); // SBC: v0 = 1.0e6
                     gammaw = 2.0 * fac * 2.8003e-17 * exp(lnwN) * model->NHI[i] * (1.0 + 0.4133 * model->NHeI[i] / model->NHI[i] + 0.85 * model->NH2[i] / model->NHI[i]);
                 } else
                     gammaw = 8.08 * fac * C64 * pow(v, 0.6) * model->NHI[i] * (1.0 + 0.4133 * model->NHeI[i] / model->NHI[i] + 0.85 * model->NH2[i] / model->NHI[i]);
+
+                // SBC
+                /*if (flago == 1 && i == 0){*/
+                    /*printf("AO :: %f :: gammaw = %f\n", line[N].wave, gammaw);*/
+                    /*printf("GA :: %f :: gammaw = %f\n", line[N].wave, pow(10.0, -7.675) * model->NHI[i] * pow(model->T[i] / 10000.0, 0.3) * (1.0 + 0.4133 * model->NHeI[i] / model->NHI[i] + 0.85 * model->NH2[i] / model->NHI[i]));*/
+                /*}*/
+
                 /* The multiplicative term (1 + ...) in the above equation
                    takes into account the broadening by helium and H2.  In the 
                    following equation dlg is calculated in order to apply a
@@ -217,10 +235,20 @@ void broad(atmosphere * model, linedata * line, int N, double Sig, double Alp, d
             }
 
             /* Quadratic Stark Broadening */
-            if (flago == 4 || flago == 5)
+            /*if (flago == 4 || flago == 5)*/
+            if (flago == 4 || flago == 5 || (flago == 1 && line[N].gammas != 0)) // SBC
                 gammas = line[N].gammas * model->Ne[i];
             else
                 gammas = 1.0e-08 * neffh5 * model->Ne[i];
+            
+            // SBC
+            /*if (flago == 1 && i == 0){*/
+                /*if (line[N].gammas == 0) {*/
+                    /*printf("line[N].gammas == 0\n");*/
+                /*}*/
+                /*printf("With parameter :: %f :: gammas = %f\n", line[N].wave, line[N].gammas * model->Ne[i]);*/
+                /*printf("With formula   :: %f :: gammas = %f\n", line[N].wave, 1.0e-08 * neffh5 * model->Ne[i]);*/
+            /*}*/
 
             line[N].a[i] = (gammar + gammaw + gammas) * line[N].wave * 1.0e-08 / (12.5636 * line[N].dopp[i]);
         }

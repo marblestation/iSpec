@@ -164,6 +164,73 @@ def read_solar_abundances(abundances_filename):
                             ('I4', '<f8'), ('maxcharge', int)])
     return abundances
 
+
+def determine_abundance_enchancements(MH, scale=None):
+    """
+    Calculates alpha_enhancement, c_enhancement, n_enhancement, o_enhancement
+    from the metallicity (MH). By default the standard composition of MARCS
+    model atmospheres is used, which is the most logical for most analysis.
+    """
+    if scale is None:
+        # MARCS standard scale
+        # - http://marcs.astro.uu.se/
+        scale = [(+1.00,   0.00,    0.00,    0.00,    0.00,  ),
+                 (+0.75,   0.00,    0.00,    0.00,    0.00,  ),
+                 (+0.50,   0.00,    0.00,    0.00,    0.00,  ),
+                 (+0.25,   0.00,    0.00,    0.00,    0.00,  ),
+                 (+0.00,   0.00,    0.00,    0.00,    0.00,  ),
+                 (-0.25,   +0.10,   0.00,    0.00,    +0.10, ),
+                 (-0.50,   +0.20,   0.00,    0.00,    +0.20, ),
+                 (-0.75,   +0.30,   0.00,    0.00,    +0.30, ),
+                 (-1.00,   +0.40,   0.00,    0.00,    +0.40, ),
+                 (-1.50,   +0.40,   0.00,    0.00,    +0.40, ),
+                 (-2.00,   +0.40,   0.00,    0.00,    +0.40, ),
+                 (-2.50,   +0.40,   0.00,    0.00,    +0.40, ),
+                 (-3.00,   +0.40,   0.00,    0.00,    +0.40, ),
+                 (-4.00,   +0.40,   0.00,    0.00,    +0.40, ),
+                 (-5.00,   +0.40,   0.00,    0.00,    +0.40, )]
+        scale = np.array(scale, dtype=[('[Fe/H]', float), ('[a/Fe]', float), ('[C/Fe]', float), ('[N/Fe]', float), ('[O/Fe]', float)])
+    alpha_enhancement = np.interp(MH, scale['[Fe/H]'], scale['[a/Fe]'])
+    c_enhancement = np.interp(MH, scale['[Fe/H]'], scale['[C/Fe]'])
+    n_enhancement = np.interp(MH, scale['[Fe/H]'], scale['[N/Fe]'])
+    o_enhancement = np.interp(MH, scale['[Fe/H]'], scale['[O/Fe]'])
+    return alpha_enhancement, c_enhancement, n_enhancement, o_enhancement
+
+
+
+def scale_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement):
+    """
+    Scales alpha elements and CNO abundances.
+    """
+    #  6|C|Carbon|14|2|6|4|4
+    c = abundances['code'] == 6
+    #  7|N|Nitrogen|15|2|7|6|8
+    n = abundances['code'] == 7
+    #  8|O|Oxygen|16|2|8|3|3
+    o = abundances['code'] == 8
+
+    # 10|Ne|Neon|18|2|10|5|5
+    # 12|Mg|Magnesium|2|3|12|7|6
+    alpha = np.logical_and(abundances['code'] == 10, abundances['code'] == 12)
+    # 14|Si|Silicon|14|3|14|8|7
+    alpha = np.logical_and(alpha, abundances['code'] == 14)
+    # 16|S|Sulfur|16|3|16|10|9
+    alpha = np.logical_and(alpha, abundances['code'] == 16)
+    # 18|Ar|Argon|18|3|18|14|11
+    alpha = np.logical_and(alpha, abundances['code'] == 18)
+    # 20|Ca|Calcium|2|4|20|12|12
+    alpha = np.logical_and(alpha, abundances['code'] == 20)
+    # 22|Ti|Titanium|4|4|22|22|19
+    alpha = np.logical_and(alpha, abundances['code'] == 22)
+
+    abundances['Abund'][c] += c_enhancement
+    abundances['Abund'][n] += n_enhancement
+    abundances['Abund'][o] += o_enhancement
+    abundances['Abund'][alpha] += alpha_enhancement
+
+    return abundances
+
+
 def write_solar_abundances(abundances, abundances_filename=None):
     """
     Saves a SPECTRUM abundances file for spectral synthesis
@@ -184,7 +251,7 @@ def write_solar_abundances(abundances, abundances_filename=None):
     return out.name
 
 
-def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, gui_queue=None, timeout=900):
+def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, gui_queue=None, timeout=1800):
     """
     Determine abundances from equivalent widths (linemasks previously fitted and
     cross-matched with an atomic linelist).

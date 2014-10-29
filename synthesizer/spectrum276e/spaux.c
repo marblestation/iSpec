@@ -121,6 +121,7 @@ int n;
                             return ans;
                         }
                     }
+                    printf("expint: %f %i\n", x, n); // SBC
                     nrerror("continued fraction failed in expint");
                 } else {
                     ans = (nm1 != 0 ? 1.0 / nm1 : -log(x) - EULER);

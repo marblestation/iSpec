@@ -157,7 +157,7 @@ int flagcd = 0;
 int flagSq = 0;
 char buf2[100];
 int lline ();
-int ew_and_depth(char *atmosphere_model_file, char *linelist_file, char *abundances_file, double microturbulence_vel, double start, double end, int verbose, int num_lines, double output_wave[], double output_code[], double output_ew[], double output_depth[], progressfunc user_func, void *user_data) {
+int ew_and_depth(char *atmosphere_model_file, char *linelist_file, char *isotope_file, char *abundances_file, double microturbulence_vel, double start, double end, int verbose, int num_lines, double output_wave[], double output_code[], double output_ew[], double output_depth[], progressfunc user_func, void *user_data) {
     /*char oname[60];*/
     /*strcpy(oname, "/tmp/output.txt");*/
     double eqmin = 0.0; // Minimum EW
@@ -180,7 +180,7 @@ int ew_and_depth(char *atmosphere_model_file, char *linelist_file, char *abundan
     pfunc *V;
     population *POP;
     char *file, *ofile, name[60], lines[60], *flines, c, atmdat[60];
-    char tmp[10], isofile[80]; 
+    /*char tmp[10], isofile[80]; */
     FILE *qf, *fp, *sel;
     int nq = 0;
     int ni;
@@ -206,7 +206,7 @@ int ew_and_depth(char *atmosphere_model_file, char *linelist_file, char *abundan
     }
 
 	flagv = 0; // Verbose mode
-	flagI = 0; // Isotope mode
+	flagI = 1; // Isotope mode
 	flagt = 0; // Stellar atmosphere model is in the ATLAS9/ATLAS12 format 
 	flagC = 0; //  print out a file cd.out which contains the `contribution function''`
 	flags = 1;  // output a linelist file (in exactly the format of the input 
@@ -223,6 +223,11 @@ int ew_and_depth(char *atmosphere_model_file, char *linelist_file, char *abundan
     // Output file
     fp = fopen (ofile, "w");
 
+    if(flagI == 1) {
+        // Enter name of isotope data file (default = isotope.iso)
+        inisotope(isotope_file, isotope);
+        isorelabun(isotope);
+    }
 
     /*if (flags == 1) {*/
         /*if ((sel = fopen (select, "w")) == NULL) {*/
@@ -346,7 +351,7 @@ double eqwidth_lines (model, line, wave, V, POP, Depth)
     }
 }
 
-int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *abundances_file, char* fixed_abundances_file, double microturbulence_vel, int verbose, int num_measures, const double waveobs[], const double waveobs_mask[], double fluxes[], progressfunc user_func, void *user_data) {
+int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *isotope_file, char *abundances_file, char* fixed_abundances_file, double microturbulence_vel, int verbose, int num_measures, const double waveobs[], const double waveobs_mask[], double fluxes[], progressfunc user_func, void *user_data) {
     int i;
     int nline = 0;
     int nlist = 0;
@@ -369,18 +374,18 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
     population *POP;
     Helium *He;
     char fixfile[80];
-    char vgrad[80],isofile[80];
+    char vgrad[80];
     FILE *qf;
     double opwave;
 
     setreset(0);
     /////////////////////////
-    strcpy(isofile, "isotope.iso"); // only used if global flagI == 1 but then it produces segmentation fault (original SPECTRUM problem)
     vturb = microturbulence_vel; // km/s, if flagu == 0
     strcpy(vgrad,"velgrad.dat"); // velocity gradient file only used if flagg == 1
     /////////////////////////
 
 
+	flagI = 1; // Isotope mode
     if(flagG == 1) flagg = 1;
     if(flagP == 1) flagp = 1;
     if(flagN == 1) flagw = 0;
@@ -439,7 +444,7 @@ int synthesize_spectrum(char *atmosphere_model_file, char *linelist_file, char *
     }
     if(flagI == 1) {
         // Enter name of isotope data file (default = isotope.iso)
-        inisotope(isofile,isotope);
+        inisotope(isotope_file, isotope);
         isorelabun(isotope);
     }
     

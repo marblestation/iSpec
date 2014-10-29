@@ -2266,7 +2266,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                             telluric_linelist=self.telluric_linelist, vel_telluric=vel_telluric, \
                             discard_gaussian=False, discard_voigt=True, \
                             check_derivatives=check_derivatives, smoothed_spectrum=smoothed_spectrum, \
-                            free_mu=free_mu, frame=self)
+                            free_mu=free_mu, crossmatch_with_mu=free_mu, closest_match=False)
         # Exclude lines that have not been successfully cross matched with the atomic data
         # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
         rejected_by_atomic_line_not_found = (linemasks['wave (nm)'] == 0)
@@ -3863,6 +3863,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             atomic_linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
             abundances_file = resource_path("input/abundances/" + selected_abundances + "/stdatom.dat")
+            isotope_file = resource_path("input/isotopes/SPECTRUM.lst")
 
             if in_segments:
                 elements_type = "segments"
@@ -3894,6 +3895,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
             if not selected_linelist in self.atomic_linelist.keys():
                 self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file, self.chemical_elements, self.molecules)
+            isotopes = ispec.read_isotope_data(isotope_file)
             linelist = self.atomic_linelist[selected_linelist]
 
             # Load SPECTRUM abundances
@@ -3945,11 +3947,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             self.operation_in_progress = True
             self.status_message("Synthesizing spectrum...")
-            thread = threading.Thread(target=self.on_synthesize_thread, args=(waveobs, regions, linelist, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, ))
+            thread = threading.Thread(target=self.on_synthesize_thread, args=(waveobs, regions, linelist, isotopes, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, ))
             thread.setDaemon(True)
             thread.start()
 
-    def on_synthesize_thread(self, waveobs, regions, linelist, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
+    def on_synthesize_thread(self, waveobs, regions, linelist, isotopes, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
 
         synth_spectrum = ispec.create_spectrum_structure(waveobs)
 
@@ -3957,7 +3959,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
 
         # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
-        synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], atmosphere_layers, teff, logg, MH, linelist=linelist, abundances=abundances, fixed_abundances=fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, regions=regions, verbose=1, gui_queue=self.queue)
+        synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, regions=regions, verbose=1, gui_queue=self.queue)
 
 
         synth_spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
@@ -4184,6 +4186,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             atomic_linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
             abundances_file = resource_path("input/abundances/" + selected_abundances + "/stdatom.dat")
+            isotope_file = resource_path("input/isotopes/SPECTRUM.lst")
 
             if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
                 logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
@@ -4207,6 +4210,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             if not selected_linelist in self.atomic_linelist.keys():
                 self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file, self.chemical_elements, self.molecules)
             linelist = self.atomic_linelist[selected_linelist]
+            isotopes = ispec.read_isotope_data(isotope_file)
 
             # Load SPECTRUM abundances
             if not abundances_file in self.solar_abundances.keys():
@@ -4252,15 +4256,15 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.operation_in_progress = True
             self.status_message("Determining parameters...")
             self.update_progress(10)
-            thread = threading.Thread(target=self.on_determine_parameters_thread, args=(selected_atmosphere_models, linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, max_iterations))
+            thread = threading.Thread(target=self.on_determine_parameters_thread, args=(selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, max_iterations))
             thread.setDaemon(True)
             thread.start()
 
-    def on_determine_parameters_thread(self, selected_atmosphere_models, linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, max_iterations):
+    def on_determine_parameters_thread(self, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, max_iterations):
         self.__update_numpy_arrays_from_widgets("lines")
         self.__update_numpy_arrays_from_widgets("segments")
 
-        obs_spectrum, synth_spectrum, params, errors, free_abundances, status, stats_linemasks = ispec.model_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations)
+        obs_spectrum, synth_spectrum, params, errors, free_abundances, status, stats_linemasks = ispec.model_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations)
         self.queue.put((self.on_determine_parameters_finnish, [obs_spectrum, synth_spectrum, params, errors, status, stats_linemasks], {}))
 
     def on_determine_parameters_finnish(self, obs_spectrum, synth_spectrum, params, errors, status, stats_linemasks):

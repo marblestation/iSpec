@@ -1,5 +1,5 @@
 #!/bin/bash
-rm -f synthesizer.so
+rm -f ispec/synthesizer.so
 cd synthesizer/
 rm -f synthesizer.so
 rm -f synthesizer.c

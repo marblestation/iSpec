@@ -23,9 +23,10 @@ import numpy as np
 from mpfitmodels import MPFitModel
 #from continuum import fit_continuum
 from abundances import write_solar_abundances, write_fixed_abundances, determine_abundances, create_free_abundances_structure
+from abundances import determine_abundance_enchancements, scale_solar_abundances
 from segments import create_segments_around_lines
 from atmospheres import write_atmosphere, interpolate_atmosphere_layers, valid_atmosphere_target
-from lines import write_atomic_linelist
+from lines import write_atomic_linelist, write_isotope_data
 from common import mkdir_p
 from spectrum import create_spectrum_structure, convolve_spectrum, correct_velocity, resample_spectrum, read_spectrum, normalize_spectrum, create_wavelength_filter, read_spectrum, write_spectrum
 from multiprocessing import Process
@@ -63,7 +64,7 @@ class Constants:
     EW_STEP_VMIC = 0.5
 
 
-def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=900, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, regions=None, waveobs_mask=None):
+def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None):
     """
     Generates a synthetic spectrum for the wavelength specified in waveobs.
     In case regions is specified (recarray with 'wave_base' and 'wave_top'),
@@ -79,10 +80,10 @@ def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, li
 
     Fixed abundances can be set to 'None'.
     """
-    return generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence = 0.0, vsini = 0.0, limb_darkening_coeff = 0.0, R=0, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, regions=regions)
+    return generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence = 0.0, vsini = 0.0, limb_darkening_coeff = 0.0, R=0, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions)
 
 
-def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, gui_queue=None, timeout=900, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, regions=None, waveobs_mask=None):
+def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None):
     """
     Generates a synthetic spectrum for the wavelength specified in waveobs.
     In case regions is specified (recarray with 'wave_base' and 'wave_top'),
@@ -126,6 +127,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abun
     remove_tmp_abund_file = False
     remove_tmp_fixed_abund_file = False
     remove_tmp_linelist_file = False
+    remove_tmp_isotope_file = False
     if atmosphere_layers_file is None:
         atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH)
         remove_tmp_atm_file = True
@@ -138,6 +140,9 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abun
     if linelist_file is None:
         linelist_file = write_atomic_linelist(linelist)
         remove_tmp_linelist_file = True
+    if isotope_file is None:
+        isotope_file = write_isotope_data(isotopes)
+        remove_tmp_isotope_file = True
     nlayers = len(atmosphere_layers)
 
     # Generate spectrum should be run in a separate process in order
@@ -149,7 +154,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abun
     #process_communication_queue = Queue()
     process_communication_queue = JoinableQueue()
 
-    p = Process(target=__generate_spectrum, args=(process_communication_queue, waveobs, waveobs_mask, atmosphere_layers_file, linelist_file, abundances_file, fixed_abundances_file), kwargs={'microturbulence_vel': microturbulence_vel, 'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'nlayers': nlayers, 'verbose': verbose})
+    p = Process(target=__generate_spectrum, args=(process_communication_queue, waveobs, waveobs_mask, atmosphere_layers_file, linelist_file, isotope_file, abundances_file, fixed_abundances_file), kwargs={'microturbulence_vel': microturbulence_vel, 'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'nlayers': nlayers, 'verbose': verbose})
     p.start()
     fluxes = np.zeros(len(waveobs))
     num_seconds = 0
@@ -188,11 +193,13 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, abun
         os.remove(fixed_abundances_file)
     if remove_tmp_linelist_file:
         os.remove(linelist_file)
+    if remove_tmp_isotope_file:
+        os.remove(isotope_file)
 
     return fluxes
 
 
-def calculate_theoretical_ew_and_depth(atmosphere_layers, teff, logg, MH, linelist, abundances, microturbulence_vel = 2.0, atmosphere_layers_file=None, abundances_file=None, linelist_file=None, verbose=0, gui_queue=None, timeout=900):
+def calculate_theoretical_ew_and_depth(atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, microturbulence_vel = 2.0, atmosphere_layers_file=None, abundances_file=None, linelist_file=None, isotope_file=None, verbose=0, gui_queue=None, timeout=1800):
     """
     """
 
@@ -200,6 +207,7 @@ def calculate_theoretical_ew_and_depth(atmosphere_layers, teff, logg, MH, lineli
     remove_tmp_atm_file = False
     remove_tmp_abund_file = False
     remove_tmp_linelist_file = False
+    remove_tmp_isotope_file = False
     if atmosphere_layers_file is None:
         atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH)
         remove_tmp_atm_file = True
@@ -209,6 +217,9 @@ def calculate_theoretical_ew_and_depth(atmosphere_layers, teff, logg, MH, lineli
     if linelist_file is None:
         linelist_file = write_atomic_linelist(linelist)
         remove_tmp_linelist_file = True
+    if isotope_file is None:
+        isotope_file = write_isotope_data(isotopes)
+        remove_tmp_isotope_file = True
     nlayers = len(atmosphere_layers)
     start = np.min(linelist['wave (A)']) - 0.1
     end = np.max(linelist['wave (A)']) + 0.1
@@ -223,7 +234,7 @@ def calculate_theoretical_ew_and_depth(atmosphere_layers, teff, logg, MH, lineli
     #process_communication_queue = Queue()
     process_communication_queue = JoinableQueue()
 
-    p = Process(target=__calculate_ew_and_depth, args=(process_communication_queue, atmosphere_layers_file, linelist_file, abundances_file, num_lines), kwargs={'microturbulence_vel': microturbulence_vel, 'nlayers': nlayers, 'start': start, 'end':end, 'verbose': verbose})
+    p = Process(target=__calculate_ew_and_depth, args=(process_communication_queue, atmosphere_layers_file, linelist_file, isotope_file, abundances_file, num_lines), kwargs={'microturbulence_vel': microturbulence_vel, 'nlayers': nlayers, 'start': start, 'end':end, 'verbose': verbose})
     p.start()
     output_wave = np.zeros(len(linelist))
     output_code = np.zeros(len(linelist))
@@ -260,6 +271,8 @@ def calculate_theoretical_ew_and_depth(atmosphere_layers, teff, logg, MH, lineli
         os.remove(abundances_file)
     if remove_tmp_linelist_file:
         os.remove(linelist_file)
+    if remove_tmp_isotope_file:
+        os.remove(isotope_file)
 
     resulting_linelist = linelist.copy()
     resulting_linelist["valid_theoretical_ew_depth"] = np.abs(output_wave - linelist['wave (A)']) < 1e-5
@@ -271,7 +284,7 @@ def __enqueue_progress(process_communication_queue, v):
     process_communication_queue.put(("self.update_progress(%i)" % v))
     process_communication_queue.join()
 
-def __generate_spectrum(process_communication_queue, waveobs, waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, nlayers=56, verbose=0):
+def __generate_spectrum(process_communication_queue, waveobs, waveobs_mask, atmosphere_model_file, linelist_file, isotope_file, abundances_file, fixed_abundances_file, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, nlayers=56, verbose=0):
     """
     Generate synthetic spectrum and apply macroturbulence, rotation (visini), limb darkening coeff and resolution except
     if all those parameters are set to zero, in that case the fundamental synthetic spectrum is returned.
@@ -284,7 +297,7 @@ def __generate_spectrum(process_communication_queue, waveobs, waveobs_mask, atmo
     ## do not seem to work as expected in the SPECTRUM code, thus we set them to zero and
     ## we use a python implementation
     #fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, 0, nlayers, verbose, update_progress_func)
-    fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel, 0, 0, limb_darkening_coeff, 0, nlayers, verbose, update_progress_func)
+    fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, isotope_file, abundances_file, fixed_abundances_file, microturbulence_vel, 0, 0, limb_darkening_coeff, 0, nlayers, verbose, update_progress_func)
     # Avoid zero fluxes, set a minimum value so that when it is convolved it
     # changes. This way we reduce the impact of the following problem:
     # SPECTRUM + MARCS makes some strong lines to have zero fluxes (i.e. 854.21nm)
@@ -301,7 +314,7 @@ def __generate_spectrum(process_communication_queue, waveobs, waveobs_mask, atmo
 
     process_communication_queue.put(fluxes)
 
-def __calculate_ew_and_depth(process_communication_queue, atmosphere_model_file, linelist_file, abundances_file, num_lines, microturbulence_vel = 2.0, nlayers=56, start=3000, end=11000, verbose=0):
+def __calculate_ew_and_depth(process_communication_queue, atmosphere_model_file, linelist_file, isotope_file, abundances_file, num_lines, microturbulence_vel = 2.0, nlayers=56, start=3000, end=11000, verbose=0):
     """
     start and end in Amstrom
     """
@@ -309,11 +322,11 @@ def __calculate_ew_and_depth(process_communication_queue, atmosphere_model_file,
 
     #update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
     update_progress_func = lambda v: __enqueue_progress(process_communication_queue, v)
-    output_wave, output_code, output_ew, output_depth = synthesizer.calculate_ew_and_depth(atmosphere_model_file, linelist_file, abundances_file, num_lines, microturbulence_vel, nlayers, start, end, verbose, update_progress_func)
+    output_wave, output_code, output_ew, output_depth = synthesizer.calculate_ew_and_depth(atmosphere_model_file, linelist_file, isotope_file, abundances_file, num_lines, microturbulence_vel, nlayers, start, end, verbose, update_progress_func)
     process_communication_queue.put((output_wave, output_code, output_ew, output_depth))
 
 
-def apply_post_fundamental_effects(waveobs, fluxes, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, gui_queue=None, timeout=900):
+def apply_post_fundamental_effects(waveobs, fluxes, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.0, R=500000, verbose=0, gui_queue=None, timeout=1800):
     """
     Apply macroturbulence, rotation (vsini), limb darkening coefficient and/or resolution
     """
@@ -390,7 +403,7 @@ class SynthModel(MPFitModel):
     Match synthetic spectrum to observed spectrum
     * Requires the synthetic spectrum generation functionality on
     """
-    def __init__(self, modeled_layers_pack, linelist, abundances, teff=5000, logg=3.0, MH=0.0, vmic=2.0, vmac=0.0, vsini=2.0, limb_darkening_coeff=0.0, R=0, precomputed_grid_dir=None):
+    def __init__(self, modeled_layers_pack, linelist, isotopes, abundances, scale_abundances=True, scale=None, teff=5000, logg=3.0, MH=0.0, vmic=2.0, vmac=0.0, vsini=2.0, limb_darkening_coeff=0.0, R=0, precomputed_grid_dir=None):
         self.precomputed_grid_dir = precomputed_grid_dir
         self.elements = {}
         #self.elements["1"] = "H"
@@ -495,7 +508,10 @@ class SynthModel(MPFitModel):
 
         self.modeled_layers_pack = modeled_layers_pack
         self.linelist = linelist
+        self.isotopes = isotopes
         self.abundances = abundances
+        self.scale_abundances = scale_abundances
+        self.scale = scale
         #
         self.calculation_time = 0
         self.waveobs = None
@@ -505,6 +521,7 @@ class SynthModel(MPFitModel):
         #
         self.abundances_file = None
         self.linelist_file = None
+        self.isotope_file = None
         super(SynthModel, self).__init__(p)
 
     def _model_function(self, x, p=None):
@@ -513,6 +530,11 @@ class SynthModel(MPFitModel):
             # Update internal structure for fitting:
             for i in xrange(len(p)):
                 self._parinfo[i]['value'] = p[i]
+
+
+        if self.scale_abundances:
+            alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(self.MH(), scale=self.scale)
+            self.abundances = scale_solar_abundances(self.abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
 
         # Consider new abundances as fixed
         fixed_abundances = self.free_abundances()
@@ -547,7 +569,7 @@ class SynthModel(MPFitModel):
                 # Atmosphere
                 atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH())
                 # Fundamental synthetic fluxes
-                self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.linelist, self.abundances, fixed_abundances, microturbulence_vel=self.vmic(), abundances_file=self.abundances_file, linelist_file=self.linelist_file, waveobs_mask=self.waveobs_mask, verbose=0)
+                self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.linelist, self.isotopes, self.abundances, fixed_abundances, microturbulence_vel=self.vmic(), abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, waveobs_mask=self.waveobs_mask, verbose=0)
 
                 # Optimization to avoid too small changes in parameters or repetition
                 self.cache[key] = self.last_fluxes.copy()
@@ -582,6 +604,7 @@ class SynthModel(MPFitModel):
         # Write abundances and linelist to avoid writing the same info in each iteration
         self.abundances_file = write_solar_abundances(self.abundances)
         self.linelist_file = write_atomic_linelist(self.linelist)
+        self.isotope_file = write_isotope_data(self.isotopes)
 
         if self.use_errors:
             super(SynthModel, self).fitData(waveobs[self.comparing_mask], fluxes[self.comparing_mask], weights=weights[self.comparing_mask], parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet)
@@ -605,8 +628,10 @@ class SynthModel(MPFitModel):
 
         os.remove(self.abundances_file)
         os.remove(self.linelist_file)
+        os.remove(self.isotope_file)
         self.abundances_file = None
         self.linelist_file = None
+        self.isotope_file = None
 
         _t1 = default_timer()
         sec = timedelta(seconds=int(_t1 - _t0))
@@ -1028,7 +1053,7 @@ def __get_stats_per_linemask(waveobs, fluxes, synthetic_fluxes, weights, free_pa
 
     return results
 
-def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=None, linemasks=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1):
+def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=None, linemasks=None, scale_abundances=True, scale=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1):
     """
     It matches synthetic spectrum to observed spectrum by applying a least
     square algorithm.
@@ -1040,6 +1065,9 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, abu
       those regions.
     - If linemasks are specified, only those regions will be used for comparison.
     - It does not compare negative or zero fluxes
+    - If scale_abundances is True, alpha elements and CNO abundances will be scaled
+      depending on the metallicity. If scale is None, by default the standard
+      MARCS composition will be used (recommended).
     """
 
     if verbose or verbose == 1:
@@ -1118,7 +1146,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, abu
 
 
     if np.all(comparing_mask == 0):
-        logging.err("No fluxes left to be compared!")
+        logging.error("No fluxes left to be compared!")
         raise Exception("No fluxes left to be compared!")
 
     accept_weights = np.logical_and(comparing_mask == 1., np.logical_not(negative_zero_err))
@@ -1138,7 +1166,10 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, abu
 
     parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, free_abundances, teff_range, logg_range, MH_range)
 
-    synth_model = SynthModel(modeled_layers_pack, linelist, abundances, precomputed_grid_dir=precomputed_grid_dir)
+    if scale_abundances:
+        alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(initial_MH, scale=scale)
+        abundances = scale_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
+    synth_model = SynthModel(modeled_layers_pack, linelist, isotopes, abundances, scale_abundances=scale_abundances, scale=scale, precomputed_grid_dir=precomputed_grid_dir)
 
     synth_model.fitData(waveobs, waveobs_mask, comparing_mask, flux, weights=weights, parinfo=parinfo, use_errors=use_errors, max_iterations=max_iterations, quiet=quiet)
 
@@ -1236,7 +1267,7 @@ class EquivalentWidthModel(MPFitModel):
     Match synthetic spectrum to observed spectrum
     * Requires the synthetic spectrum generation functionality on
     """
-    def __init__(self, modeled_layers_pack, linelist, abundances, teff=5000, logg=3.0, MH=0.0, vmic=2.0, adjust_model_metalicity=False):
+    def __init__(self, modeled_layers_pack, linelist, abundances, teff=5000, logg=3.0, MH=0.0, vmic=2.0, adjust_model_metalicity=False, scale_abundances=True, scale=None):
         self.elements = {}
         #self.elements["1"] = "H"
         #self.elements["2"] = "He"
@@ -1341,6 +1372,8 @@ class EquivalentWidthModel(MPFitModel):
         self.modeled_layers_pack = modeled_layers_pack
         self.linelist = linelist
         self.abundances = abundances
+        self.scale_abundances = scale_abundances
+        self.scale = scale
         self.adjust_model_metalicity = adjust_model_metalicity
         self.lines_for_teff = None
         self.lines_for_vmic = None
@@ -1374,6 +1407,10 @@ class EquivalentWidthModel(MPFitModel):
             # Update internal structure for fitting:
             for i in xrange(len(p)):
                 self._parinfo[i]['value'] = p[i]
+
+        if self.scale_abundances:
+            alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(self.MH(), scale=self.scale)
+            self.abundances = scale_solar_abundances(self.abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
 
         key = "%.2f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.vmic())
         if self.cache.has_key(key):
@@ -1757,10 +1794,13 @@ class EquivalentWidthModel(MPFitModel):
         print "Return code:", self.m.status
 
 
-def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, free_params=["teff", "logg", "vmic"], adjust_model_metalicity=False, max_iterations=20, outliers_weight_limit=0.90):
+def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, free_params=["teff", "logg", "vmic"], adjust_model_metalicity=False, scale_abundances=True, scale=None, max_iterations=20, outliers_weight_limit=0.90):
     """
     The parameter 'outliers_weight_limit' limits the outlier detection done in the first iteration,
     if it is set to 0. then no outliers are filtered. The recommended value is 0.90.
+    - If scale_abundances is True, alpha elements and CNO abundances will be scaled
+      depending on the metallicity. If scale is None, by default the standard
+      MARCS composition will be used (recommended).
     """
     teff_range = modeled_layers_pack[3]
     logg_range = modeled_layers_pack[4]
@@ -1777,7 +1817,12 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances,
 
     parinfo = __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range, free_params, adjust_model_metalicity=adjust_model_metalicity)
 
-    EW_model = EquivalentWidthModel(modeled_layers_pack, linelist, abundances, MH=initial_MH, adjust_model_metalicity=adjust_model_metalicity)
+    if scale_abundances:
+        alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(initial_MH, scale=scale)
+        abundances = scale_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
+
+    EW_model = EquivalentWidthModel(modeled_layers_pack, linelist, abundances, MH=initial_MH, adjust_model_metalicity=adjust_model_metalicity, \
+                                        scale_abundances=scale_abundances, scale=scale)
 
     lfilter = linemasks['element'] == "Fe 1"
     lfilter = np.logical_or(lfilter, linemasks['element'] == "Fe 2")
@@ -1854,7 +1899,7 @@ def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, M
 
 
 
-def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution, modeled_layers_pack, atomic_linelist, solar_abundances, segments=None, number_of_processes=1):
+def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, segments=None, number_of_processes=1):
     """
     Pre-compute a synthetic grid with some reference ranges (Teff, log(g) and
     MH combinations) and all the steps that iSpec will perform in the
@@ -1917,7 +1962,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                     default_timer = time.time
                 tcheck = default_timer()
                 # Validate parameters
-                __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, solar_abundances)
+                __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances)
                 elapsed = default_timer() - tcheck
 
                 print "-----------------------------------------------------"
@@ -1928,7 +1973,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                 print "\t", (num_spec-i)*(elapsed/(60*60*24)), "days"
                 print "-----------------------------------------------------"
             else:
-                pool.apply_async(__generate_synthetic_fits, [filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, solar_abundances])
+                pool.apply_async(__generate_synthetic_fits, [filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances])
             i += 1
 
     if pool is not None:

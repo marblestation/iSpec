@@ -40,7 +40,7 @@ class ConstantValue:
     def __call__(self, x, y):
         return self.value
 
-def read_kurucz_atmospheres(atmosphere_models, required_layers=56):
+def read_kurucz_atmospheres(atmosphere_models, required_layers=56, max_teff = 9000., min_teff = 2500., max_logg = 5., min_logg = 0):
     """
     Read castelli and kurucz atmospheres.
 
@@ -108,7 +108,8 @@ def read_kurucz_atmospheres(atmosphere_models, required_layers=56):
                     # Only consider atmospheres with the required number of layers
                     if num_layers == required_layers:
                         # Limit the range of temperatures and gravity
-                        if teff <= 9000. and teff >= 2500. and logg <= 5. and logg >= 0.:
+                        #if teff <= 9000. and teff >= 2500. and logg <= 5. and logg >= 0.:
+                        if teff <= max_teff and teff >= min_teff and logg <= max_logg and logg >= min_logg:
                             temperatures.append(teff)
                             gravities.append(logg)
                             atmospheres_params_with_same_metallicity.append([teff, logg, metallicity])

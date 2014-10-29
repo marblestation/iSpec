@@ -97,8 +97,9 @@ FILE *qf;
             code = fabs(code);
         }
         iso = 0;
-        if (flagI == 1)
+        if (flagI == 1) {
             iso = atoi(strtok(NULL, " "));
+        }
         El = atof(strtok(NULL, " "));
         Eu = atof(strtok(NULL, " "));
         loggf = atof(strtok(NULL, " "));
@@ -110,11 +111,19 @@ FILE *qf;
             flagai = 0;
         /* If transition type is AO, read in alp and sig parameters */
         if (strcmp(tr, "AO") == 0) {
+            gammar = pow(10.0, atof(strtok(NULL, " "))); // SBC
+            gammas = pow(10.0, atof(strtok(NULL, " "))); // SBC
+            gammaw = 0.;                                 // SBC
             SA = atof(strtok(NULL, " "));
             sig = floor(SA);
             alp = SA - floor(SA);
-        } else
+
+        } else {
+            gammar = 0.0; // SBC
+            gammas = 0.0; // SBC
+            gammaw = 0.0; // SBC
             alp = sig = 0.0;
+        }
         /* If transition type is GA, read in individual gammas, where Gamma
            stark is per electron number, Gamma van der Waals per neutral
            hydrogen number.  Logarithms of these Gammas should appear in the
@@ -137,8 +146,9 @@ FILE *qf;
             } else
                 gammas = pow(10.0, gam);
             gammaw = pow(10.0, atof(strtok(NULL, " ")));
-        } else
-            gammar = gammas = gammaw = 0.0;
+        } 
+        /*else*/ // SBC
+            /*gammar = gammas = gammaw = 0.0;*/
         err = atoi(strtok(NULL, " "));
         if (err == 99)
             printf("You may need to use the i switch\n");

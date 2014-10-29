@@ -22,10 +22,10 @@ class SolverDialog(CustomDialog):
         component["type"] = "OptionMenu"
         component["text"] = "Line list"
         component["options"] = ["VALD_atom.300_1100nm", \
-                "GESv3.475_685nm", "GESv3_noABO.475_685nm", "GESv3_atom.475_685nm", "GESv3_atom_noABO.475_685nm", \
-                "GESv4_atom.475_685nm", "GESv4_atom_noABO.475_685nm", "GESv4_atom_hfs.475_685nm", "GESv4_atom_hfs_noABO.475_685nm", \
-                "GESv4_atom.845_895nm", "GESv4_atom_noABO.845_895nm", "GESv4_atom_hfs.845_895nm", "GESv4_atom_hfs_noABO.845_895nm", \
-                "SEPv1.655_1020nm", "SEPv1_noABO.655_1020nm", \
+                "GESv4_atom_hfs_iso.475_685nm", "GESv4_atom_nohfs_noiso.475_685nm",  \
+                "GESv4_atom_hfs_iso.845_895nm", "GESv4_atom_nohfs_noiso.845_895nm",  \
+                "GESv5_atom_hfs_iso.420_920nm", "GESv5_atom_nohfs_noiso.420_920nm",  \
+                "SEPv1.655_1020nm",  \
                 "Kurucz_atom.300_1100nm", "NIST_atom.300_1100nm", "SPECTRUM.300_1000nm"]
         component["default"] = component["options"][0]
         self.__components.append(component)
@@ -35,7 +35,7 @@ class SolverDialog(CustomDialog):
         component["text-type"] = "float" # float, int or str
         component["default"] = teff
         component["minvalue"] = 2500
-        component["maxvalue"] = 8000
+        component["maxvalue"] = 50000
         self.__components.append(component)
         component = {}
         component["type"] = "Checkbutton"
