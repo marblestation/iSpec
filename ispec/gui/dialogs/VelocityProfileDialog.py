@@ -112,11 +112,19 @@ class VelocityProfileDialog(CustomDialog):
         component["default"] = component["options"][1]
         self.__components.append(component)
         component = {}
+        component["type"] = "Entry"
+        component["text"] = "Peak probability"
+        component["text-type"] = "float" # float, int or str
+        component["default"] = 0.75
+        component["minvalue"] = 0.0
+        component["maxvalue"] = 1.0
+        self.__components.append(component)
+        component = {}
         component["type"] = "Checkbutton"
         component["text"] = "CCF in Fourier space"
         component["default"] = False
         self.__components.append(component)
-        if len(templates) > 1:
+        if len(templates) > 0:
             component = {}
             component["type"] = "OptionMenu"
             component["text"] = "Cross-correlate with"

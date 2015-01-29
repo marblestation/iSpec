@@ -97,17 +97,17 @@ def determine_radial_velocity_with_mask():
     #--- Radial Velocity determination with linelist mask --------------------------
     logging.info("Radial velocity determination with linelist mask...")
     # - Read atomic data
-    mask_file = ispec_dir + "input/linelists/CCF/Narval.Sun.370_1048nm.txt"
-    #mask_file = ispec_dir + "input/linelists/CCF/Atlas.Arcturus.372_926nm.txt"
-    #mask_file = ispec_dir + "input/linelists/CCF/Atlas.Sun.372_926nm.txt"
-    #mask_file = ispec_dir + "input/linelists/CCF/HARPS_SOPHIE.A0.350_1095nm.txt"
-    #mask_file = ispec_dir + "input/linelists/CCF/HARPS_SOPHIE.F0.360_698nm.txt"
-    #mask_file = ispec_dir + "input/linelists/CCF/HARPS_SOPHIE.G2.375_679nm.txt"
-    #mask_file = ispec_dir + "input/linelists/CCF/HARPS_SOPHIE.K0.378_679nm.txt"
-    #mask_file = ispec_dir + "input/linelists/CCF/HARPS_SOPHIE.K5.378_680nm.txt"
-    #mask_file = ispec_dir + "input/linelists/CCF/HARPS_SOPHIE.M5.400_687nm.txt"
-    #mask_file = ispec_dir + "input/linelists/CCF/Synthetic.Sun.350_1100nm.txt"
-    #mask_file = ispec_dir + "input/linelists/CCF/VALD.Sun.300_1100nm.txt"
+    mask_file = ispec_dir + "input/linelists/CCF/Narval.Sun.370_1048nm/mask.lst"
+    #mask_file = ispec_dir + "input/linelists/CCF/Atlas.Arcturus.372_926nm/mask.lst""
+    #mask_file = ispec_dir + "input/linelists/CCF/Atlas.Sun.372_926nm/mask.lst"
+    #mask_file = ispec_dir + "input/linelists/CCF/HARPS_SOPHIE.A0.350_1095nm/mask.lst"
+    #mask_file = ispec_dir + "input/linelists/CCF/HARPS_SOPHIE.F0.360_698nm/mask.lst"
+    #mask_file = ispec_dir + "input/linelists/CCF/HARPS_SOPHIE.G2.375_679nm/mask.lst"
+    #mask_file = ispec_dir + "input/linelists/CCF/HARPS_SOPHIE.K0.378_679nm/mask.lst"
+    #mask_file = ispec_dir + "input/linelists/CCF/HARPS_SOPHIE.K5.378_680nm/mask.lst"
+    #mask_file = ispec_dir + "input/linelists/CCF/HARPS_SOPHIE.M5.400_687nm/mask.lst"
+    #mask_file = ispec_dir + "input/linelists/CCF/Synthetic.Sun.350_1100nm/mask.lst"
+    #mask_file = ispec_dir + "input/linelists/CCF/VALD.Sun.300_1100nm/mask.lst"
     ccf_mask = ispec.read_linelist_mask(mask_file)
 
     models, ccf = ispec.cross_correlate_with_mask(mu_cas_spectrum, ccf_mask, \
@@ -128,10 +128,10 @@ def determine_radial_velocity_with_template():
     #--- Radial Velocity determination with template -------------------------------
     logging.info("Radial velocity determination with template...")
     # - Read synthetic template
-    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm.txt.gz")
-    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm.txt.gz")
-    template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm.txt.gz")
-    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
+    template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
 
     models, ccf = ispec.cross_correlate_with_template(mu_cas_spectrum, template, \
                             lower_velocity_limit=-200, upper_velocity_limit=200, \
@@ -157,7 +157,7 @@ def determine_tellurics_shift_with_mask():
     #--- Telluric velocity shift determination from spectrum --------------------------
     logging.info("Telluric velocity shift determination...")
     # - Telluric
-    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm.txt"
+    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
     linelist_telluric = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
 
     models, ccf = ispec.cross_correlate_with_mask(sun_spectrum, linelist_telluric, \
@@ -175,7 +175,7 @@ def determine_tellurics_shift_with_template():
     #--- Telluric velocity shift determination from spectrum --------------------------
     logging.info("Telluric velocity shift determination...")
     # - Read synthetic template
-    template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Tellurics.350_1100nm.txt.gz")
+    template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Tellurics.350_1100nm/template.txt.gz")
 
     models, ccf = ispec.cross_correlate_with_template(sun_spectrum, template, \
                             lower_velocity_limit=-100, upper_velocity_limit=100, \
@@ -542,21 +542,19 @@ def find_linemasks():
                                 use_errors_for_fitting=True)
     #--- Find linemasks ------------------------------------------------------------
     logging.info("Finding line masks...")
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
-    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1/655_1020nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM/300_1000nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom.300_1100nm/atomic_lines.lst"
+    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1.655_1020nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM.300_1000nm/atomic_lines.lst"
 
     chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
     molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
-    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm.txt"
+    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
 
     # Read
     molecules = ispec.read_molecular_symbols(molecules_file)
@@ -669,8 +667,8 @@ def clean_telluric_regions():
     #--- Telluric velocity shift determination from spectrum --------------------------
     logging.info("Telluric velocity shift determination...")
     # - Telluric
-    telluric_lines_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm.txt"
-    linelist_telluric = ispec.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
+    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
+    linelist_telluric = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
 
     models, ccf = ispec.cross_correlate_with_mask(sun_spectrum, linelist_telluric, \
                             lower_velocity_limit=-100, upper_velocity_limit=100, \
@@ -684,8 +682,8 @@ def clean_telluric_regions():
     #--- Clean regions that may be affected by tellurics ---------------------------
     logging.info("Cleaning tellurics...")
 
-    telluric_lines_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm.txt"
-    telluric_linelist = ispec.read_telluric_linelist(telluric_lines_file, minimum_depth=0.0)
+    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
+    telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
 
     # - Filter regions that may be affected by telluric lines
     #bv = 0.0
@@ -738,21 +736,19 @@ def fit_lines_and_determine_ew():
                                 use_errors_for_fitting=True)
     #--- Fit lines -----------------------------------------------------------------
     logging.info("Fitting lines...")
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
-    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1/655_1020nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM/300_1000nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom.300_1100nm/atomic_lines.lst"
+    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1.655_1020nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM.300_1000nm/atomic_lines.lst"
 
     chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
     molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
-    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm.txt"
+    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
 
     # Read
     molecules = ispec.read_molecular_symbols(molecules_file)
@@ -820,19 +816,16 @@ def synthesize_spectrum():
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
 
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
-    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1/655_1020nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM/300_1000nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom.300_1100nm/atomic_lines.lst"
+    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1.655_1020nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM.300_1000nm/atomic_lines.lst"
 
-    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso/420_920nm.lst"
     chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
     molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
     isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
@@ -862,6 +855,9 @@ def synthesize_spectrum():
                 fall out of theatmospheric models."
         print msg
 
+    # Enhance alpha elements + CNO abundances following MARCS standard composition
+    alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = ispec.determine_abundance_enchancements(MH)
+    abundances = ispec.enhance_solar_abundances(solar_abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
 
     # Prepare atmosphere model
     atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH)
@@ -869,7 +865,7 @@ def synthesize_spectrum():
     # Synthesis
     synth_spectrum = ispec.create_spectrum_structure(np.arange(wave_base, wave_top, wave_step))
     synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], \
-            atmosphere_layers, teff, logg, MH, atomic_linelist, isotopes, solar_abundances, \
+            atmosphere_layers, teff, logg, MH, atomic_linelist, isotopes, abundances, \
             fixed_abundances, microturbulence_vel = microturbulence_vel, \
             macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, \
             R=resolution, regions=regions, verbose=1)
@@ -935,17 +931,15 @@ def precompute_synthetic_grid():
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
 
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
-    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1/655_1020nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM/300_1000nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom.300_1100nm/atomic_lines.lst"
+    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1.655_1020nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM.300_1000nm/atomic_lines.lst"
 
     chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
     molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
@@ -1021,17 +1015,15 @@ def determine_astrophysical_parameters_using_synth_spectra():
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
 
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
-    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1/655_1020nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM/300_1000nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom.300_1100nm/atomic_lines.lst"
+    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1.655_1020nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM.300_1000nm/atomic_lines.lst"
 
     chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
     molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
@@ -1095,7 +1087,7 @@ def determine_astrophysical_parameters_using_synth_spectra():
             initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
             initial_limb_darkening_coeff, initial_R, free_params, segments=segments, \
             linemasks=line_regions, \
-            scale_abundances=True, \
+            enhance_abundances=True, \
             use_errors = True, \
             max_iterations=max_iterations)
     ##--- Save results -------------------------------------------------------------
@@ -1157,17 +1149,15 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
 
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
-    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1/655_1020nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM/300_1000nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom.300_1100nm/atomic_lines.lst"
+    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1.655_1020nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM.300_1000nm/atomic_lines.lst"
 
     chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
     molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
@@ -1242,7 +1232,7 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
             initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
             initial_limb_darkening_coeff, initial_R, free_params, segments=segments, \
             linemasks=line_regions, \
-            scale_abundances=True, \
+            enhance_abundances=True, \
             precomputed_grid_dir = precomputed_grid_dir, \
             use_errors = True, \
             max_iterations=max_iterations)
@@ -1312,17 +1302,16 @@ def determine_abundances_using_synth_spectra():
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
 
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
-    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1/655_1020nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM/300_1000nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom.300_1100nm/atomic_lines.lst"
+    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1.655_1020nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM.300_1000nm/atomic_lines.lst"
+
     chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
     molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
 
@@ -1370,7 +1359,7 @@ def determine_abundances_using_synth_spectra():
             initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
             initial_limb_darkening_coeff, initial_R, free_params, segments=segments, \
             linemasks=line_regions, \
-            scale_abundances=True, \
+            enhance_abundances=True, \
             use_errors = True, \
             max_iterations=max_iterations)
 
@@ -1412,20 +1401,20 @@ def determine_astrophysical_parameters_from_ew():
                                 use_errors_for_fitting=True)
     #--- Fit lines -----------------------------------------------------------------
     logging.info("Fitting lines...")
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
-    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1/655_1020nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM/300_1000nm.lst"
+
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom.300_1100nm/atomic_lines.lst"
+    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1.655_1020nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM.300_1000nm/atomic_lines.lst"
+
     chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
     molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
-    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm.txt"
+    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
 
     # Read
     molecules = ispec.read_molecular_symbols(molecules_file)
@@ -1487,17 +1476,16 @@ def determine_astrophysical_parameters_from_ew():
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
 
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
-    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1/655_1020nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM/300_1000nm.lst"
+
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom.300_1100nm/atomic_lines.lst"
+    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1.655_1020nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM.300_1000nm/atomic_lines.lst"
 
     chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
     molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
@@ -1542,7 +1530,7 @@ def determine_astrophysical_parameters_from_ew():
                         solar_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, \
                         free_params=["teff", "logg", "vmic"], \
                         max_iterations=max_iterations, \
-                        scale_abundances=True, \
+                        enhance_abundances=True, \
                         outliers_weight_limit = 0.90)
     params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params = results
 
@@ -1581,21 +1569,20 @@ def determine_abundances_from_ew():
                                 use_errors_for_fitting=True)
     #--- Fit lines -----------------------------------------------------------------
     logging.info("Fitting lines...")
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
-    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1/655_1020nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM/300_1000nm.lst"
+
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom.300_1100nm/atomic_lines.lst"
+    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1.655_1020nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM.300_1000nm/atomic_lines.lst"
 
     chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
     molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
-    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm.txt"
+    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
 
     # Read
     molecules = ispec.read_molecular_symbols(molecules_file)
@@ -1688,17 +1675,15 @@ def calculate_theoretical_ew_and_depth():
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
 
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom/300_1100nm.lst"
-    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso/420_920nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/475_685nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso/845_895nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1/655_1020nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom/300_1100nm.lst"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM/300_1000nm.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom.300_1100nm/atomic_lines.lst"
+    atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_hfs_iso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_hfs_iso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/GESv4_atom_nohfs_noiso.475_685nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SEPv1.655_1020nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/Kurucz_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/NIST_atom.300_1100nm/atomic_lines.lst"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/SPECTRUM.300_1000nm/atomic_lines.lst"
 
     chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
     molecules_file = ispec_dir + "/input/abundances/molecular_symbols.dat"
@@ -1729,6 +1714,9 @@ def calculate_theoretical_ew_and_depth():
                 fall out of theatmospheric models."
         print msg
 
+    # Enhance alpha elements + CNO abundances following MARCS standard composition
+    alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = ispec.determine_abundance_enchancements(MH)
+    abundances = ispec.enhance_solar_abundances(solar_abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
 
     # Prepare atmosphere model
     atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH)
@@ -1737,7 +1725,7 @@ def calculate_theoretical_ew_and_depth():
     #output_wave, output_code, output_ew, output_depth = ispec.calculate_theoretical_ew_and_depth(atmosphere_layers, \
     new_atomic_linelist = ispec.calculate_theoretical_ew_and_depth(atmosphere_layers, \
             teff, logg, MH, \
-            atomic_linelist, isotopes, solar_abundances, microturbulence_vel=microturbulence_vel, \
+            atomic_linelist, isotopes, abundances, microturbulence_vel=microturbulence_vel, \
             verbose=1, gui_queue=None, timeout=900)
     ispec.write_atomic_linelist(new_atomic_linelist, linelist_filename="example_linelist.txt")
     return new_atomic_linelist

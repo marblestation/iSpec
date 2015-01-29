@@ -2,32 +2,27 @@ import numpy as np
 from CustomDialog import *
 
 class SolverDialog(CustomDialog):
-    def __init__(self, parent, title, resolution, teff, logg, feh, vmic, vmac, vsini, limb_darkening_coeff):
+    def __init__(self, parent, title, resolution, teff, logg, feh, vmic, vmac, vsini, limb_darkening_coeff, lists, defaults_lists):
         self.__parent = parent
         self.__title = title
         self.__components = []
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Model atmosphere"
-        component["options"] = ["MARCS", "MARCS.GES", "MARCS.APOGEE", "ATLAS9.APOGEE", "ATLAS9.Castelli", "ATLAS9.Kurucz", "ATLAS9.Kirby"]
-        component["default"] = component["options"][1]
+        component["options"] = lists['atmospheres']['name']
+        component["default"] = component["options"][defaults_lists['atmospheres']]
         self.__components.append(component)
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Solar abundances"
-        component["options"] = ["Asplund.2009", "Asplund.2005", "Grevesse.2007", "Grevesse.1998", "Anders.1989"]
-        component["default"] = component["options"][2]
+        component["options"] = lists['abundances']['name']
+        component["default"] = component["options"][defaults_lists['abundances']]
         self.__components.append(component)
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Line list"
-        component["options"] = ["VALD_atom.300_1100nm", \
-                "GESv4_atom_hfs_iso.475_685nm", "GESv4_atom_nohfs_noiso.475_685nm",  \
-                "GESv4_atom_hfs_iso.845_895nm", "GESv4_atom_nohfs_noiso.845_895nm",  \
-                "GESv5_atom_hfs_iso.420_920nm", "GESv5_atom_nohfs_noiso.420_920nm",  \
-                "SEPv1.655_1020nm",  \
-                "Kurucz_atom.300_1100nm", "NIST_atom.300_1100nm", "SPECTRUM.300_1000nm"]
-        component["default"] = component["options"][0]
+        component["options"] = lists['atomic_lines']['name']
+        component["default"] = component["options"][defaults_lists['atomic_lines']]
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"

@@ -35,7 +35,7 @@ def resource_path(relative):
 try:
     from abundances import determine_abundances
     from abundances import read_solar_abundances
-    from abundances import scale_solar_abundances
+    from abundances import enhance_solar_abundances
     from abundances import determine_abundance_enchancements
     from abundances import write_abundance_lines
     from abundances import create_free_abundances_structure
@@ -53,6 +53,7 @@ try:
     from synth import model_spectrum_from_ew
     from synth import calculate_theoretical_ew_and_depth
 except ImportError as e:
+    #raise
     pass
 from common import calculate_barycentric_velocity_correction, sigma_clipping, interquartile_range_filtering, save_results, restore_results, mkdir_p
 from spectrum import *

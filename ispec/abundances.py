@@ -190,6 +190,7 @@ def determine_abundance_enchancements(MH, scale=None):
                  (-4.00,   +0.40,   0.00,    0.00,    +0.40, ),
                  (-5.00,   +0.40,   0.00,    0.00,    +0.40, )]
         scale = np.array(scale, dtype=[('[Fe/H]', float), ('[a/Fe]', float), ('[C/Fe]', float), ('[N/Fe]', float), ('[O/Fe]', float)])
+    scale.sort(order='[Fe/H]') # It should be sorted or interpolation does not work properly
     alpha_enhancement = np.interp(MH, scale['[Fe/H]'], scale['[a/Fe]'])
     c_enhancement = np.interp(MH, scale['[Fe/H]'], scale['[C/Fe]'])
     n_enhancement = np.interp(MH, scale['[Fe/H]'], scale['[N/Fe]'])
@@ -198,10 +199,13 @@ def determine_abundance_enchancements(MH, scale=None):
 
 
 
-def scale_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement):
+
+def enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement):
     """
     Scales alpha elements and CNO abundances.
     """
+    abundances = abundances.copy()
+
     #  6|C|Carbon|14|2|6|4|4
     c = abundances['code'] == 6
     #  7|N|Nitrogen|15|2|7|6|8
@@ -211,17 +215,17 @@ def scale_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhan
 
     # 10|Ne|Neon|18|2|10|5|5
     # 12|Mg|Magnesium|2|3|12|7|6
-    alpha = np.logical_and(abundances['code'] == 10, abundances['code'] == 12)
+    alpha = np.logical_or(abundances['code'] == 10, abundances['code'] == 12)
     # 14|Si|Silicon|14|3|14|8|7
-    alpha = np.logical_and(alpha, abundances['code'] == 14)
+    alpha = np.logical_or(alpha, abundances['code'] == 14)
     # 16|S|Sulfur|16|3|16|10|9
-    alpha = np.logical_and(alpha, abundances['code'] == 16)
+    alpha = np.logical_or(alpha, abundances['code'] == 16)
     # 18|Ar|Argon|18|3|18|14|11
-    alpha = np.logical_and(alpha, abundances['code'] == 18)
+    alpha = np.logical_or(alpha, abundances['code'] == 18)
     # 20|Ca|Calcium|2|4|20|12|12
-    alpha = np.logical_and(alpha, abundances['code'] == 20)
+    alpha = np.logical_or(alpha, abundances['code'] == 20)
     # 22|Ti|Titanium|4|4|22|22|19
-    alpha = np.logical_and(alpha, abundances['code'] == 22)
+    alpha = np.logical_or(alpha, abundances['code'] == 22)
 
     abundances['Abund'][c] += c_enhancement
     abundances['Abund'][n] += n_enhancement

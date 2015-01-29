@@ -106,14 +106,16 @@ def read_kurucz_atmospheres(atmosphere_models, required_layers=56, max_teff = 90
             elif read_atmosphere_data:
                 if vline[0] == "PRADK":
                     # Only consider atmospheres with the required number of layers
-                    if num_layers == required_layers:
+                    if num_layers >= required_layers:
                         # Limit the range of temperatures and gravity
                         #if teff <= 9000. and teff >= 2500. and logg <= 5. and logg >= 0.:
                         if teff <= max_teff and teff >= min_teff and logg <= max_logg and logg >= min_logg:
                             temperatures.append(teff)
                             gravities.append(logg)
                             atmospheres_params_with_same_metallicity.append([teff, logg, metallicity])
-                            atmospheres_with_same_metallicity.append(current_atmosphere)
+                            atmospheres_with_same_metallicity.append(current_atmosphere[:required_layers])
+                    else:
+                        print "[WARNING] Ignored model", teff, logg, metallicity
                     read_atmosphere_data = False
                 else:
                     num_layers += 1

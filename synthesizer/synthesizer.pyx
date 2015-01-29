@@ -115,7 +115,7 @@ def spectrum(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.double_t,ndim
     flagk = 0
     flagg = 0
     flagmgh = 0
-    flagI = 1   # Isotopes (1: True, 0: False) If 1 it produces segmentation fault (original SPECTRUM problem)
+    flagI = 1   # Isotopes (1: True, 0: False)
     flagt = 0
     flagp = 0
     flagP = 0
@@ -202,7 +202,7 @@ def abundances(char* atmosphere_model_file, char* linelist_file, int num_measure
     flagk = 0
     flagg = 0
     flagmgh = 0
-    flagI = 1   # Isotopes (1: True, 0: False) If 1 it produces segmentation fault (original SPECTRUM problem)
+    flagI = 1   # Isotopes (1: True, 0: False)
     flagt = 0
     flagp = 0
     flagP = 0
@@ -265,7 +265,7 @@ def calculate_ew_and_depth(char* atmosphere_model_file, char* linelist_file, cha
     flagk = 0
     flagg = 0
     flagmgh = 0
-    flagI = 1   # Isotopes (1: True, 0: False) If 1 it produces segmentation fault (original SPECTRUM problem)
+    flagI = 1   # Isotopes (1: True, 0: False)
     flagt = 0
     flagp = 0
     flagP = 0

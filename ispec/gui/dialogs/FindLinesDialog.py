@@ -2,7 +2,7 @@ import numpy as np
 from CustomDialog import *
 
 class FindLinesDialog(CustomDialog):
-    def __init__(self, parent, title, min_depth=0.05, max_depth=1.0, vel_telluric=0.0, resolution=300000, elements="Fe 1, Fe 2"):
+    def __init__(self, parent, title, min_depth, max_depth, vel_telluric, resolution, elements, lists, defaults_lists):
         self.__parent = parent
         self.__title = title
         self.__components = []
@@ -59,13 +59,8 @@ class FindLinesDialog(CustomDialog):
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Line list"
-        component["options"] = ["VALD_atom.300_1100nm", \
-                "GESv4_atom_hfs_iso.475_685nm", "GESv4_atom_nohfs_noiso.475_685nm",  \
-                "GESv4_atom_hfs_iso.845_895nm", "GESv4_atom_nohfs_noiso.845_895nm",  \
-                "GESv5_atom_hfs_iso.420_920nm", "GESv5_atom_nohfs_noiso.420_920nm",  \
-                "SEPv1.655_1020nm",  \
-                "Kurucz_atom.300_1100nm", "NIST_atom.300_1100nm", "SPECTRUM.300_1000nm"]
-        component["default"] = component["options"][0]
+        component["options"] = lists['atomic_lines']['name']
+        component["default"] = component["options"][defaults_lists['atomic_lines']]
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"

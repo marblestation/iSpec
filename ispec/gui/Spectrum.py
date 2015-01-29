@@ -56,7 +56,6 @@ class Spectrum():
         self.velocity_profile_template_num_used_lines = None
         self.velocity_profile_template_rv_step = None
         self.velocity_profile_template = None
-        self.velocity_profile_internal_template = None
         self.snr = None
         self.linemasks = None # Linemasks that has been fitted and cross-matched with atomic & telluric data
         self.abundances = None

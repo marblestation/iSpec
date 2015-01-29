@@ -99,11 +99,46 @@ class iSpecBaseApp(Tkinter.Tk):
         self.velocity_atomic_step = 1.0 # km/s
 
         self.ccf_mask = {}
+        self.ccf_template = {}
         self.atomic_linelist = {}
         self.chemical_elements = None
         self.molecules = None
         self.telluric_linelist = None
         self.solar_abundances = {}
+
+        self.lists = {}
+        self.lists['atmospheres'] = self.__get_filelist('input/atmospheres/', 'modeled_layers_pack.dump')
+        self.lists['abundances'] = self.__get_filelist('input/abundances/', 'stdatom.dat')
+        self.lists['atomic_lines'] = self.__get_filelist('input/linelists/SPECTRUM/', 'atomic_lines.lst')
+        self.lists['masks'] = self.__get_filelist('input/linelists/CCF/', 'mask.lst')
+        self.lists['templates'] = self.__get_filelist('input/spectra/templates/', 'template.txt.gz')
+
+        self.defaults_lists = {}
+        self.defaults_lists['atmospheres'] = 0
+        self.defaults_lists['abundances'] = 0
+        self.defaults_lists['atomic_lines'] = 0
+
+        ######
+        # Prefered defaults:
+        found = np.where(self.lists['atmospheres']['name'] == 'MARCS.GES')[0]
+        if len(found) == 1:
+            self.defaults_lists['atmospheres'] = found[0]
+        found = np.where(self.lists['abundances']['name'] == 'Grevesse.2007')[0]
+        if len(found) == 1:
+            self.defaults_lists['abundances'] = found[0]
+        found = np.where(self.lists['atomic_lines']['name'] == 'GESv5_atom_hfs_iso.420_920nm')[0]
+        if len(found) == 1:
+            self.defaults_lists['atomic_lines'] = found[0]
+        ######
+
+        ######
+        # Different way of defining defaults for templates and masks since it is a more difficult case:
+        prefered = self.lists['masks']['name'] == 'Narval.Sun.370_1048nm'
+        self.lists['masks'] = np.hstack((self.lists['masks'][prefered], self.lists['masks'][~prefered]))
+        #
+        prefered = self.lists['templates']['name'] == 'Synth.Sun.350_1100nm'
+        self.lists['templates'] = np.hstack((self.lists['templates'][prefered], self.lists['templates'][~prefered]))
+        ######
 
         self.velocity_template_lower_limit = -200 # km/s
         self.velocity_template_upper_limit = 200 # km/s
@@ -307,6 +342,19 @@ class iSpecBaseApp(Tkinter.Tk):
             #self.focus_force()
 
 
+    def __get_filelist(self, dirname, match):
+        import fnmatch
+        import os
+
+        filelist = []
+        for root, dirnames, filenames in os.walk(resource_path(dirname)):
+            for filename in fnmatch.filter(filenames, match):
+                filelist.append((os.path.basename(root), resource_path(os.path.join(root, filename))))
+        filelist = np.array(filelist, dtype=[('name', '|S100'), ('path', '|S500')])
+        filelist.sort(order=['name'])
+        return filelist
+
+
     def create_main_window(self):
         self.create_window()
         self.create_menu()
@@ -344,8 +392,10 @@ class iSpecBaseApp(Tkinter.Tk):
         menu.add_cascade(label="Operations", menu=operationmenu)
         operationmenu.add_command(label="Fit continuum", command=self.on_fit_continuum)
         self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
-        operationmenu.add_command(label="Fit lines", command=self.on_fit_lines)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+
+        if len(self.lists['atomic_lines']) > 0:
+            operationmenu.add_command(label="Fit lines", command=self.on_fit_lines)
+            self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
         operationmenu.add_separator()
 
         clearmenu = Tkinter.Menu(operationmenu)
@@ -359,8 +409,9 @@ class iSpecBaseApp(Tkinter.Tk):
         operationmenu.add_separator()
         operationmenu.add_command(label="Find continuum regions", command=self.on_find_continuum)
         self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
-        operationmenu.add_command(label="Find line masks", command=self.on_find_lines)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        if len(self.lists['atomic_lines']) > 0:
+            operationmenu.add_command(label="Find line masks", command=self.on_find_lines)
+            self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
         operationmenu.add_command(label="Adjust line masks", command=self.on_adjust_lines)
         self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
         operationmenu.add_command(label="Create segments around line masks", command=self.on_create_segments_around_lines)
@@ -412,10 +463,11 @@ class iSpecBaseApp(Tkinter.Tk):
         parametersmenu.add_cascade(label="Determine velocity relative to...", menu=velocitymenu)
         self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
 
-        velocitymenu.add_command(label="Atomic line mask (radial velocity)", command=self.on_determine_velocity_atomic)
-        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
-        velocitymenu.add_command(label="Telluric line mask  (barycentric velocity)", command=self.on_determine_velocity_telluric)
-        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
+        if len(self.lists['masks']) > 1: # More than one because 1 for tellurics and 1 for stellar lines at least
+            velocitymenu.add_command(label="Atomic line mask (radial velocity)", command=self.on_determine_velocity_atomic)
+            self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
+            velocitymenu.add_command(label="Telluric line mask  (barycentric velocity)", command=self.on_determine_velocity_telluric)
+            self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
         velocitymenu.add_command(label="Template", command=self.on_determine_velocity_template)
         self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
         parametersmenu.add_command(label="Calculate barycentric velocity", command=self.on_determine_barycentric_vel)
@@ -423,7 +475,8 @@ class iSpecBaseApp(Tkinter.Tk):
         parametersmenu.add_command(label="Estimate SNR", command=self.on_estimate_snr)
         self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
         parametersmenu.add_separator()
-        if "determine_abundances" in dir(ispec):
+        if "determine_abundances" in dir(ispec) and "model_spectrum" in dir(ispec) and \
+                len(self.lists['atmospheres']) > 0 and len(self.lists['abundances']) > 0 and len(self.lists['atomic_lines']) > 0:
             parametersmenu.add_command(label="Determine astrophysical parameters", command=self.on_determine_parameters)
             self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
             parametersmenu.add_command(label="Determine abundances with fitted lines", command=self.on_determine_abundances)
@@ -445,7 +498,8 @@ class iSpecBaseApp(Tkinter.Tk):
         self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(Tkinter.END, "label")))
         self.menu_active_spectrum.add_separator()
 
-        if "generate_spectrum" in dir(ispec):
+        if "determine_abundances" in dir(ispec) and "model_spectrum" in dir(ispec) and \
+                len(self.lists['atmospheres']) > 0 and len(self.lists['abundances']) > 0 and len(self.lists['atomic_lines']) > 0:
                 self.menu_active_spectrum.add_command(label="Synthesize spectrum", command=self.on_synthesize)
 
         if self.samp_manager is not None:
@@ -1963,7 +2017,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             velocity_upper_limit = self.velocity_atomic_upper_limit
             velocity_step = self.velocity_atomic_step
             templates = []
-            masks = ["Narval.Sun.370_1048nm", "Atlas.Sun.372_926nm", "Atlas.Arcturus.372_926nm", "HARPS_SOPHIE.A0.350_1095nm", "HARPS_SOPHIE.F0.360_698nm", "HARPS_SOPHIE.G2.375_679nm", "HARPS_SOPHIE.K0.378_679nm", "HARPS_SOPHIE.K5.378_680nm", "HARPS_SOPHIE.M5.400_687nm", "Synthetic.Sun.350_1100nm", "VALD.Sun.300_1100nm"]
+            masks = self.lists['masks']['name'][self.lists['masks']['name'] != 'Synth.Tellurics.500_1100nm']
             mask_size = 2.0
             mask_depth = 0.1
         elif relative_to_telluric_data:
@@ -1972,7 +2026,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             velocity_upper_limit = self.velocity_telluric_upper_limit
             velocity_step = self.velocity_telluric_step
             templates = []
-            masks = ["Synth.Tellurics.500_1100nm"]
+            masks = self.lists['masks']['name'][self.lists['masks']['name'] == 'Synth.Tellurics.500_1100nm']
             mask_size = 2.0
             mask_depth = 0.01
         elif relative_to_template:
@@ -1983,7 +2037,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
             masks = []
             mask_size = None
             mask_depth = None
-            templates = ["[Internal template]"]
+            templates = self.lists['templates']['name'].tolist()
+            templates = ["i:"+t for t in templates]
             # Add as many options as spectra
             for i in np.arange(len(self.spectra)):
                 if self.spectra[i] is None:
@@ -2012,6 +2067,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         rv_step = self.active_spectrum.dialog[key].results["Velocity steps (km/s)"]
         fourier = self.active_spectrum.dialog[key].results["CCF in Fourier space"] == 1
         model = self.active_spectrum.dialog[key].results["Fitting model"]
+        peak_probability = self.active_spectrum.dialog[key].results["Peak probability"]
         if relative_to_template:
             template = self.active_spectrum.dialog[key].results["Cross-correlate with"]
             mask_name = None
@@ -2040,7 +2096,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             return
 
         self.operation_in_progress = True
-        thread = threading.Thread(target=self.on_determine_velocity_thread, args=(relative_to_atomic_data, relative_to_telluric_data, relative_to_template, rv_lower_limit, rv_upper_limit, rv_step, template, mask_name, mask_size, mask_depth, fourier, model))
+        thread = threading.Thread(target=self.on_determine_velocity_thread, args=(relative_to_atomic_data, relative_to_telluric_data, relative_to_template, rv_lower_limit, rv_upper_limit, rv_step, template, mask_name, mask_size, mask_depth, fourier, model, peak_probability))
         thread.setDaemon(True)
         thread.start()
 
@@ -2072,13 +2128,13 @@ SPECTRUM a Stellar Spectral Synthesis Program
         return linelist
 
 
-    def on_determine_velocity_thread(self, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, velocity_lower_limit, velocity_upper_limit, velocity_step, template, mask_name, mask_size, mask_depth, fourier, model):
+    def on_determine_velocity_thread(self, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, velocity_lower_limit, velocity_upper_limit, velocity_step, template, mask_name, mask_size, mask_depth, fourier, model, peak_probability):
         self.queue.put((self.status_message, ["Determining velocity..."], {}))
 
         if relative_to_atomic_data or relative_to_telluric_data:
             if not mask_name in self.ccf_mask.keys():
-                mask_file = resource_path("input/linelists/CCF/" + mask_name + ".txt")
-                self.ccf_mask[mask_name] = ispec.read_linelist_mask(mask_file)
+                i = np.where(self.lists['masks']['name'] == mask_name)[0][0]
+                self.ccf_mask[mask_name] = ispec.read_linelist_mask(self.lists['masks']['path'][i])
             mask_linelist = self.ccf_mask[mask_name]
         elif relative_to_template:
             mask_linelist = None
@@ -2086,11 +2142,12 @@ SPECTRUM a Stellar Spectral Synthesis Program
             raise Exception("Velocity should be determined relative to something!")
 
         if relative_to_template:
-            if template == "[Internal template]":
+            if template.startswith("i:"):
                 # Internal template (solar type)
-                if self.active_spectrum.velocity_profile_internal_template is None:
-                    self.active_spectrum.velocity_profile_internal_template = ispec.read_spectrum(resource_path("input/spectra/templates/Synth.Sun.350_1100nm.txt.gz"))
-                template_spectrum = self.active_spectrum.velocity_profile_internal_template
+                if not template in self.ccf_template.keys():
+                    i = np.where(self.lists['templates']['name'] == template[2:])[0][0]
+                    self.ccf_template[template] = ispec.read_spectrum(self.lists['templates']['path'][i])
+                template_spectrum = self.ccf_template[template]
             else:
                 # Search template to be used by its name
                 for i in np.arange(len(self.spectra)):
@@ -2099,22 +2156,22 @@ SPECTRUM a Stellar Spectral Synthesis Program
                     if self.spectra[i].name == template:
                         template_spectrum = self.spectra[i].data
                         break
-            #xcoord, fluxes, errors, nbins = ispec.build_velocity_profile(self.active_spectrum.data, template=template_spectrum, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, fourier=fourier, frame=self)
             models, ccf = ispec.cross_correlate_with_template(self.active_spectrum.data, template_spectrum, \
                                     lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, \
                                     velocity_step=velocity_step, \
                                     fourier = fourier, \
                                     model = model, \
-                                    only_one_peak = relative_to_telluric_data)
+                                    only_one_peak = relative_to_telluric_data,
+                                    peak_probability = peak_probability)
 
         else:
-            #xcoord, fluxes, errors, nbins = ispec.build_velocity_profile(self.active_spectrum.data, linelist=mask_linelist, lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, velocity_step=velocity_step, mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, frame=self)
             models, ccf = ispec.cross_correlate_with_mask(self.active_spectrum.data, mask_linelist, \
                                     lower_velocity_limit=velocity_lower_limit, upper_velocity_limit=velocity_upper_limit, \
                                     velocity_step=velocity_step, mask_size=mask_size, mask_depth=mask_depth, \
                                     fourier = fourier, \
                                     model = model, \
-                                    only_one_peak = relative_to_telluric_data)
+                                    only_one_peak = relative_to_telluric_data,
+                                    peak_probability = peak_probability)
 
         self.queue.put((self.on_determine_velocity_finish, [models, ccf, relative_to_atomic_data, relative_to_telluric_data, relative_to_template, mask_linelist, model], {}))
 
@@ -2195,7 +2252,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         key = "FitLinesDialog"
         vel_telluric = self.active_spectrum.velocity_telluric
         if not self.active_spectrum.dialog.has_key(key):
-            self.active_spectrum.dialog[key] = FitLinesDialog(self, "Fit lines", resolution, vel_telluric)
+            self.active_spectrum.dialog[key] = FitLinesDialog(self, "Fit lines", resolution, vel_telluric, self.lists, self.defaults_lists)
         self.active_spectrum.dialog[key].show(updated_vel_telluric=vel_telluric)
 
         if self.active_spectrum.dialog[key].results is None:
@@ -2204,15 +2261,17 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         resolution = self.active_spectrum.dialog[key].results["Resolution"]
         vel_telluric = self.active_spectrum.dialog[key].results["Velocity respect to telluric lines (km/s)"]
-        selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
-        selected_linelist += "/" + self.active_spectrum.dialog[key].results["Line list"].split(".")[1]
-        atomic_linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
+        selected_linelist = self.active_spectrum.dialog[key].results["Line list"]
+        ### Find filename
+        i = np.where(self.lists['atomic_lines']['name'] == selected_linelist)
+        atomic_linelist_file = self.lists['atomic_lines']['path'][i][0]
+        ####
         free_mu = self.active_spectrum.dialog[key].results["Allow peak position adjustment"] == 1
         check_derivatives = self.active_spectrum.dialog[key].results["Check derivatives before fitting"] == 1
         max_atomic_wave_diff = self.active_spectrum.dialog[key].results["Maximum atomic wavelength difference"]
         self.active_spectrum.dialog[key].destroy()
 
-        telluric_linelist_file = resource_path("input/linelists/CCF/Synth.Tellurics.500_1100nm.txt")
+        telluric_linelist_file = resource_path("input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst")
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
         molecules_file = resource_path("input/abundances/molecular_symbols.dat")
 
@@ -2594,7 +2653,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         key = "FindLinesDialog"
         if not self.active_spectrum.dialog.has_key(key):
-            self.active_spectrum.dialog[key] = FindLinesDialog(self, "Properties for finding line masks", self.find_lines_min_depth, self.find_lines_max_depth, vel_telluric=vel_telluric, resolution=R, elements="Fe 1, Fe 2")
+            self.active_spectrum.dialog[key] = FindLinesDialog(self, "Properties for finding line masks", self.find_lines_min_depth, self.find_lines_max_depth, vel_telluric, R, "Fe 1, Fe 2", self.lists, self.default_lists)
         self.active_spectrum.dialog[key].show(updated_vel_telluric=vel_telluric)
 
         if self.active_spectrum.dialog[key].results is None:
@@ -2609,13 +2668,16 @@ SPECTRUM a Stellar Spectral Synthesis Program
         discard_tellurics = self.active_spectrum.dialog[key].results["Discard affected by tellurics"] == 1
         check_derivatives = self.active_spectrum.dialog[key].results["Check derivatives before fitting"] == 1
         in_segments = self.active_spectrum.dialog[key].results["Look for line masks in"] == "Only inside segments"
-        selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
-        selected_linelist += "/" + self.active_spectrum.dialog[key].results["Line list"].split(".")[1]
+        selected_linelist = self.active_spectrum.dialog[key].results["Line list"]
+        ### Find filename
+        i = np.where(self.lists['atomic_lines']['name'] == selected_linelist)
+        atomic_linelist_file = self.lists['atomic_lines']['path'][i][0]
+        ####
         atomic_linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
         max_atomic_wave_diff = self.active_spectrum.dialog[key].results["Maximum atomic wavelength difference"]
         self.active_spectrum.dialog[key].destroy()
 
-        telluric_linelist_file = resource_path("input/linelists/CCF/Synth.Tellurics.500_1100nm.txt")
+        telluric_linelist_file = resource_path("input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst")
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
         molecules_file = resource_path("input/abundances/molecular_symbols.dat")
 
@@ -3272,7 +3334,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.active_spectrum.velocity_telluric = vel_telluric
 
         if self.telluric_linelist is None:
-            telluric_linelist_file = resource_path("input/linelists/CCF/Synth.Tellurics.500_1100nm.txt")
+            telluric_linelist_file = resource_path("input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst")
             self.telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
 
         # - Filter regions that may be affected by telluric lines
@@ -3833,7 +3895,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             key = "SyntheticSpectrumDialog"
             if not self.dialog.has_key(key):
-                self.dialog[key] = SyntheticSpectrumDialog(self, "Synthetic spectrum generator", wave_base, wave_top, wave_step, resolution, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff)
+                self.dialog[key] = SyntheticSpectrumDialog(self, "Synthetic spectrum generator", wave_base, wave_top, wave_step, resolution, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.defaults_lists)
             self.dialog[key].show()
 
             if self.dialog[key].results is None:
@@ -3854,15 +3916,23 @@ SPECTRUM a Stellar Spectral Synthesis Program
             wave_step = self.dialog[key].results["Wavelength step (nm)"]
             selected_atmosphere_models = self.dialog[key].results["Model atmosphere"]
             selected_abundances = self.dialog[key].results["Solar abundances"]
-            selected_linelist = self.dialog[key].results["Line list"].split(".")[0]
-            selected_linelist += "/" + self.dialog[key].results["Line list"].split(".")[1]
+            selected_linelist = self.dialog[key].results["Line list"]
             in_segments = self.dialog[key].results["Generate spectrum for"] == "Segments"
             in_lines = self.dialog[key].results["Generate spectrum for"] == "Line masks"
 
             self.dialog[key].destroy()
 
-            atomic_linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
-            abundances_file = resource_path("input/abundances/" + selected_abundances + "/stdatom.dat")
+            ### Find filenames
+            i = np.where(self.lists['atomic_lines']['name'] == selected_linelist)
+            atomic_linelist_file = self.lists['atomic_lines']['path'][i][0]
+
+            i = np.where(self.lists['abundances']['name'] == selected_abundances)
+            abundances_file = self.lists['abundances']['path'][i][0]
+
+            i = np.where(self.lists['atmospheres']['name'] == selected_atmosphere_models)
+            atmospheres_file = self.lists['atmospheres']['path'][i][0]
+            ####
+
             isotope_file = resource_path("input/isotopes/SPECTRUM.lst")
 
             if in_segments:
@@ -3877,7 +3947,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
                 logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
                 self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
-                self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/modeled_layers_pack.dump'))
+                self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(atmospheres_file)
 
             if not ispec.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
                 msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of theatmospheric models."
@@ -3957,6 +4027,10 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         # No fixed abundances
         fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
+
+        # Enhance alpha elements + CNO abundances following MARCS standard composition
+        alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = ispec.determine_abundance_enchancements(MH)
+        abundances = ispec.enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
 
         # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
         synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, regions=regions, verbose=1, gui_queue=self.queue)
@@ -4107,158 +4181,165 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if not self.check_continuum_model_exists():
             return
 
-        if "model_spectrum" in dir(ispec):
-            teff = 5777.0
-            logg = 4.44
-            MH = 0.00
-            macroturbulence = 0.0
-            vsini = 2.0
-            limb_darkening_coeff = 0.0
-            microturbulence_vel = 1.0
-            #resolution = 47000
-            #resolution = 300000
-            resolution = 100000
+        teff = 5777.0
+        logg = 4.44
+        MH = 0.00
+        macroturbulence = 0.0
+        vsini = 2.0
+        limb_darkening_coeff = 0.0
+        microturbulence_vel = 1.0
+        #resolution = 47000
+        #resolution = 300000
+        resolution = 100000
 
-            key = "SolverDialog"
-            if not self.active_spectrum.dialog.has_key(key):
-                self.active_spectrum.dialog[key] = SolverDialog(self, "Determine parameters", resolution, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff)
-            self.active_spectrum.dialog[key].show()
+        key = "SolverDialog"
+        if not self.active_spectrum.dialog.has_key(key):
+            self.active_spectrum.dialog[key] = SolverDialog(self, "Determine parameters", resolution, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.defaults_lists)
+        self.active_spectrum.dialog[key].show()
 
-            if self.active_spectrum.dialog[key].results is None:
-                # Cancel
-                self.active_spectrum.dialog[key].destroy()
-                return
-
-            initial_teff = self.active_spectrum.dialog[key].results["Effective temperature (K)"]
-            initial_logg = self.active_spectrum.dialog[key].results["Surface gravity (log g)"]
-            initial_MH = self.active_spectrum.dialog[key].results["Metallicity [Fe/H]"]
-            initial_vmic = self.active_spectrum.dialog[key].results["Microturbulence velocity (km/s)"]
-            initial_vmac = self.active_spectrum.dialog[key].results["Macroturbulence velocity (km/s)"]
-            initial_vsini = self.active_spectrum.dialog[key].results["Rotation (v sin(i)) (km/s)"]
-            initial_limb_darkening_coeff = self.active_spectrum.dialog[key].results["Limb darkening coefficient"]
-            initial_R = self.active_spectrum.dialog[key].results["Resolution"]
-            selected_atmosphere_models = self.active_spectrum.dialog[key].results["Model atmosphere"]
-            selected_abundances = self.active_spectrum.dialog[key].results["Solar abundances"]
-            selected_linelist = self.active_spectrum.dialog[key].results["Line list"].split(".")[0]
-            selected_linelist += "/" + self.active_spectrum.dialog[key].results["Line list"].split(".")[1]
-            element_abundance = int(self.active_spectrum.dialog[key].results["Individual abundance"].split()[0])
-            #element_abundance_name = self.active_spectrum.dialog[key].results["Individual abundance"].split()[2]
-            max_iterations = self.active_spectrum.dialog[key].results["Maximum number of iterations"]
-
-            free_teff = self.active_spectrum.dialog[key].results["Free Teff"] == 1
-            free_logg = self.active_spectrum.dialog[key].results["Free Log(g)"] == 1
-            free_MH = self.active_spectrum.dialog[key].results["Free [Fe/H]"] == 1
-            free_microturbulence = self.active_spectrum.dialog[key].results["Free Vmic"] == 1
-            free_macroturbulence = self.active_spectrum.dialog[key].results["Free Vmac"] == 1
-            free_vsini = self.active_spectrum.dialog[key].results["Free vsin(i)"] == 1
-            free_limb_darkening_coeff = self.active_spectrum.dialog[key].results["Free limb dark. coeff."] == 1
-            free_resolution = self.active_spectrum.dialog[key].results["Free resolution"] == 1
-            free_element_abundance = self.active_spectrum.dialog[key].results["Free individual abundance"] == 1
-
-            free_params = []
-            if free_teff:
-                free_params.append("teff")
-            if free_logg:
-                free_params.append("logg")
-            if free_MH:
-                free_params.append("MH")
-            if free_microturbulence:
-                free_params.append("vmic")
-            if free_macroturbulence:
-                free_params.append("vmac")
-            if free_vsini:
-                free_params.append("vsini")
-            if free_limb_darkening_coeff:
-                free_params.append("limb_darkening_coef")
-            if free_resolution:
-                free_params.append("R")
-            if free_element_abundance:
-                free_params.append(str(element_abundance))
-
-            if len(free_params) == 0:
-                msg = "At least one parameter should be let free"
-                title = 'No free parameters'
-                self.error(title, msg)
-                return
-
-
+        if self.active_spectrum.dialog[key].results is None:
+            # Cancel
             self.active_spectrum.dialog[key].destroy()
+            return
 
-            atomic_linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
-            abundances_file = resource_path("input/abundances/" + selected_abundances + "/stdatom.dat")
-            isotope_file = resource_path("input/isotopes/SPECTRUM.lst")
+        initial_teff = self.active_spectrum.dialog[key].results["Effective temperature (K)"]
+        initial_logg = self.active_spectrum.dialog[key].results["Surface gravity (log g)"]
+        initial_MH = self.active_spectrum.dialog[key].results["Metallicity [Fe/H]"]
+        initial_vmic = self.active_spectrum.dialog[key].results["Microturbulence velocity (km/s)"]
+        initial_vmac = self.active_spectrum.dialog[key].results["Macroturbulence velocity (km/s)"]
+        initial_vsini = self.active_spectrum.dialog[key].results["Rotation (v sin(i)) (km/s)"]
+        initial_limb_darkening_coeff = self.active_spectrum.dialog[key].results["Limb darkening coefficient"]
+        initial_R = self.active_spectrum.dialog[key].results["Resolution"]
+        selected_atmosphere_models = self.active_spectrum.dialog[key].results["Model atmosphere"]
+        selected_abundances = self.active_spectrum.dialog[key].results["Solar abundances"]
+        selected_linelist = self.active_spectrum.dialog[key].results["Line list"]
+        element_abundance = int(self.active_spectrum.dialog[key].results["Individual abundance"].split()[0])
+        #element_abundance_name = self.active_spectrum.dialog[key].results["Individual abundance"].split()[2]
+        max_iterations = self.active_spectrum.dialog[key].results["Maximum number of iterations"]
 
-            if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
-                logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
-                self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
-                self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/modeled_layers_pack.dump'))
+        free_teff = self.active_spectrum.dialog[key].results["Free Teff"] == 1
+        free_logg = self.active_spectrum.dialog[key].results["Free Log(g)"] == 1
+        free_MH = self.active_spectrum.dialog[key].results["Free [Fe/H]"] == 1
+        free_microturbulence = self.active_spectrum.dialog[key].results["Free Vmic"] == 1
+        free_macroturbulence = self.active_spectrum.dialog[key].results["Free Vmac"] == 1
+        free_vsini = self.active_spectrum.dialog[key].results["Free vsin(i)"] == 1
+        free_limb_darkening_coeff = self.active_spectrum.dialog[key].results["Free limb dark. coeff."] == 1
+        free_resolution = self.active_spectrum.dialog[key].results["Free resolution"] == 1
+        free_element_abundance = self.active_spectrum.dialog[key].results["Free individual abundance"] == 1
 
-            if not ispec.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
-                msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of theatmospheric models."
-                title = 'Out of the atmospheric models'
-                self.error(title, msg)
-                self.flash_status_message("Bad values.")
-                return
+        free_params = []
+        if free_teff:
+            free_params.append("teff")
+        if free_logg:
+            free_params.append("logg")
+        if free_MH:
+            free_params.append("MH")
+        if free_microturbulence:
+            free_params.append("vmic")
+        if free_macroturbulence:
+            free_params.append("vmac")
+        if free_vsini:
+            free_params.append("vsini")
+        if free_limb_darkening_coeff:
+            free_params.append("limb_darkening_coef")
+        if free_resolution:
+            free_params.append("R")
+        if free_element_abundance:
+            free_params.append(str(element_abundance))
 
-            # Load SPECTRUM linelist
-            chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
-            molecules_file = resource_path("input/abundances/molecular_symbols.dat")
-            if self.molecules is None:
-                self.molecules = ispec.read_molecular_symbols(molecules_file)
-            if self.chemical_elements is None:
-                self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
-            if not selected_linelist in self.atomic_linelist.keys():
-                self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file, self.chemical_elements, self.molecules)
-            linelist = self.atomic_linelist[selected_linelist]
-            isotopes = ispec.read_isotope_data(isotope_file)
-
-            # Load SPECTRUM abundances
-            if not abundances_file in self.solar_abundances.keys():
-                self.solar_abundances[abundances_file] = ispec.read_solar_abundances(abundances_file)
-            abundances = self.solar_abundances[abundances_file]
-
-            if not free_element_abundance:
-                # No fixed abundances
-                free_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
-            else:
-                free_abundances = np.recarray((1, ), dtype=[('code', int),('Abund', float)])
-                free_abundances['code'] = element_abundance
-                free_abundances['Abund'] = abundances['Abund'][abundances['code'] == int(element_abundance)] # Initial abundance
+        if len(free_params) == 0:
+            msg = "At least one parameter should be let free"
+            title = 'No free parameters'
+            self.error(title, msg)
+            return
 
 
-            # Consider only segments
-            elements_type = "segments"
-            if len(self.region_widgets[elements_type]) == 0:
-                msg = "No segments present for synthetic spectrum generation."
-                title = 'No segments'
-                self.error(title, msg)
-                return
+        self.active_spectrum.dialog[key].destroy()
 
-            waveobs = self.active_spectrum.data['waveobs']
-            # If wavelength out of the linelist file are used, SPECTRUM starts to generate flat spectrum
-            if np.min(waveobs) < 300.0 or np.max(waveobs) > 1100.0:
-                # luke.300_1000nm.lst
-                msg = "Wavelength range is outside line list for spectrum generation."
-                title = 'Wavelength range'
-                self.error(title, msg)
-                self.flash_status_message("Bad values.")
-                return
+        ### Find filenames
+        i = np.where(self.lists['atomic_lines']['name'] == selected_linelist)
+        atomic_linelist_file = self.lists['atomic_lines']['path'][i][0]
 
-            total_points = len(waveobs)
+        i = np.where(self.lists['abundances']['name'] == selected_abundances)
+        abundances_file = self.lists['abundances']['path'][i][0]
 
-            if total_points < 2:
-                msg = "Wavelength range too narrow."
-                title = 'Wavelength range'
-                self.error(title, msg)
-                self.flash_status_message("Bad values.")
-                return
+        i = np.where(self.lists['atmospheres']['name'] == selected_atmosphere_models)
+        atmospheres_file = self.lists['atmospheres']['path'][i][0]
+        ####
 
-            self.operation_in_progress = True
-            self.status_message("Determining parameters...")
-            self.update_progress(10)
-            thread = threading.Thread(target=self.on_determine_parameters_thread, args=(selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, max_iterations))
-            thread.setDaemon(True)
-            thread.start()
+        isotope_file = resource_path("input/isotopes/SPECTRUM.lst")
+
+        if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
+            logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
+            self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
+            self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(atmospheres_file)
+
+        if not ispec.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
+            msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of theatmospheric models."
+            title = 'Out of the atmospheric models'
+            self.error(title, msg)
+            self.flash_status_message("Bad values.")
+            return
+
+        # Load SPECTRUM linelist
+        chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
+        molecules_file = resource_path("input/abundances/molecular_symbols.dat")
+        if self.molecules is None:
+            self.molecules = ispec.read_molecular_symbols(molecules_file)
+        if self.chemical_elements is None:
+            self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
+        if not selected_linelist in self.atomic_linelist.keys():
+            self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file, self.chemical_elements, self.molecules)
+        linelist = self.atomic_linelist[selected_linelist]
+        isotopes = ispec.read_isotope_data(isotope_file)
+
+        # Load SPECTRUM abundances
+        if not abundances_file in self.solar_abundances.keys():
+            self.solar_abundances[abundances_file] = ispec.read_solar_abundances(abundances_file)
+        abundances = self.solar_abundances[abundances_file]
+
+        if not free_element_abundance:
+            # No fixed abundances
+            free_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
+        else:
+            free_abundances = np.recarray((1, ), dtype=[('code', int),('Abund', float)])
+            free_abundances['code'] = element_abundance
+            free_abundances['Abund'] = abundances['Abund'][abundances['code'] == int(element_abundance)] # Initial abundance
+
+
+        # Consider only segments
+        elements_type = "segments"
+        if len(self.region_widgets[elements_type]) == 0:
+            msg = "No segments present for synthetic spectrum generation."
+            title = 'No segments'
+            self.error(title, msg)
+            return
+
+        waveobs = self.active_spectrum.data['waveobs']
+        # If wavelength out of the linelist file are used, SPECTRUM starts to generate flat spectrum
+        if np.min(waveobs) < 300.0 or np.max(waveobs) > 1100.0:
+            # luke.300_1000nm.lst
+            msg = "Wavelength range is outside line list for spectrum generation."
+            title = 'Wavelength range'
+            self.error(title, msg)
+            self.flash_status_message("Bad values.")
+            return
+
+        total_points = len(waveobs)
+
+        if total_points < 2:
+            msg = "Wavelength range too narrow."
+            title = 'Wavelength range'
+            self.error(title, msg)
+            self.flash_status_message("Bad values.")
+            return
+
+        self.operation_in_progress = True
+        self.status_message("Determining parameters...")
+        self.update_progress(10)
+        thread = threading.Thread(target=self.on_determine_parameters_thread, args=(selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, max_iterations))
+        thread.setDaemon(True)
+        thread.start()
 
     def on_determine_parameters_thread(self, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, max_iterations):
         self.__update_numpy_arrays_from_widgets("lines")

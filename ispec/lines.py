@@ -82,9 +82,11 @@ def __get_element(chemical_elements, molecules, species):
         # Symbol not found, maybe it is a molecule
         mfilter = (molecules['atomic_num'] == int(atomic_num))
         if len(molecules["symbol"][mfilter]) == 0:
+            print "WARNING: Discarding lines with atomic number", int(atomic_num)
             return "Discard"
         else:
             symbol = str(molecules["symbol"][mfilter][0])
+            print symbol
     else:
         symbol = str(chemical_elements["symbol"][tfilter][0])
 
@@ -615,7 +617,7 @@ def __create_linemasks_structure(num_peaks):
             ('rms', float), \
             ('telluric_wave_peak', float), ('telluric_fwhm', float), ('telluric_R', float), ('telluric_depth', float), \
             ('wave (nm)', '<f8'), ('wave (A)', '<f8'), \
-            ('species', '|S10'), ('element', '|S4'), \
+            ('species', '|S10'), ('element', '|S4'), ('isotope', int), \
             ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), \
             ('lower state (eV)', float), ('upper state (eV)', float), \
             ('log(gf)', '<f8'), ('fudge factor', float), ('transition type', '|S10'), \
@@ -623,8 +625,11 @@ def __create_linemasks_structure(num_peaks):
             ('valid_theoretical_ew_depth', bool), ('theoretical_ew', float), ('theoretical_depth', float), \
             ('line_strength', float), \
             ('solar_abund_rank', int), \
+            ('grouped', bool), ('reference_for_group', bool),
             ('discarded', bool)])
     # Initialization
+    linemasks['grouped'] = False # Lines that share the same mask (i.e. HFS and isotopes)
+    linemasks['reference_for_group'] = False # It is a representant for its group
     linemasks['discarded'] = False
     # Line mask
     linemasks['wave_peak'] = 0.0
@@ -1146,7 +1151,10 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                     mean_flux_continuum = np.mean(continuum_model(local_waveobs))
                     regions['mean_flux'][i] = mean_flux
                     regions['mean_flux_continuum'][i] = mean_flux_continuum
-                    regions['ew_err'][i] = np.sqrt(1 + mean_flux_continuum / mean_flux) * ((diff_wavelength*10000 - (regions['ew'][i]))/local_snr)
+                    if mean_flux != 0  and local_snr != 0:
+                        regions['ew_err'][i] = np.sqrt(1 + mean_flux_continuum / mean_flux) * ((diff_wavelength*10000 - (regions['ew'][i]))/local_snr)
+                    else:
+                        regions['ew_err'][i] = 0.
                     #print "%.2f\t%.2f\t%.2f" % (regions['ew'][i], regions['ew_err'][i], regions['ew_err'][i] / regions['ew'][i])
                 # RMS
                 regions['rms'][i] = rms
@@ -1304,6 +1312,7 @@ def __fill_linemasks_with_atomic_data(linemasks, atomic_linelist, diff_limit=0.0
                 linemasks['wave (nm)'][j] = atomic_linelist['wave (nm)'][i]
                 linemasks['wave (A)'][j]= atomic_linelist['wave (A)'][i]
                 linemasks["species"][j] = atomic_linelist['species'][i]
+                linemasks["isotope"][j] = atomic_linelist['isotope'][i]
                 linemasks['element'][j] = atomic_linelist['element'][i]
                 linemasks['log(gf)'][j] = atomic_linelist['log(gf)'][i]
                 linemasks["lower state (cm^-1)"][j] = atomic_linelist['lower state (cm^-1)'][i]
@@ -1484,9 +1493,13 @@ def adjust_linemasks(spectrum, linemasks, max_margin=0.5, min_margin=0.0):
                 line['wave_top'] = np.max((line['wave_peak']+min_margin, line['wave_top']))
 
     # Correct potential overlapping between line masks
+    # except if their base and top wave are exactly the same, those cases could
+    # be isotopic lines that belong to the same absorption line
     linemasks.sort(order=['wave_peak'])
     for i, line in enumerate(linemasks[:-1]):
-        if line['wave_top'] > linemasks['wave_base'][i+1]:
+        if line['wave_top'] > linemasks['wave_base'][i+1] and \
+                not (np.abs(line['wave_base'] - linemasks['wave_base'][i+1]) < 1e-5 and\
+                    np.abs(line['wave_top'] - linemasks['wave_top'][i+1]) < 1e-5):
             mean_from_edges = (line['wave_top'] + linemasks['wave_base'][i+1]) / 2.0
             # Make sure that the new limit (wave_top/wave_base) is bigger/smaller
             # than the wave_peaks of the two lines
@@ -1858,7 +1871,7 @@ def __select_lines_for_mask(linemasks, minimum_depth=0.01, velocity_mask_size = 
 
 
 
-def cross_correlate_with_mask(spectrum, linelist, lower_velocity_limit=-200, upper_velocity_limit=200, velocity_step=1.0, mask_size=None, mask_depth=0.01, fourier=False, only_one_peak=False, model='2nd order polynomial + gaussian fit', frame=None):
+def cross_correlate_with_mask(spectrum, linelist, lower_velocity_limit=-200, upper_velocity_limit=200, velocity_step=1.0, mask_size=None, mask_depth=0.01, fourier=False, only_one_peak=False, model='2nd order polynomial + gaussian fit', peak_probability=0.75, frame=None):
     """
     Determines the velocity profile by cross-correlating the spectrum with
     a mask built from a line list mask.
@@ -1877,10 +1890,10 @@ def cross_correlate_with_mask(spectrum, linelist, lower_velocity_limit=-200, upp
                 lower_velocity_limit=lower_velocity_limit, upper_velocity_limit = upper_velocity_limit, \
                 velocity_step=velocity_step, \
                 mask_size=mask_size, mask_depth=mask_depth, fourier=fourier, \
-                only_one_peak=only_one_peak, peak_probability=0.75, model=model, \
+                only_one_peak=only_one_peak, peak_probability=peak_probability, model=model, \
                 frame=None)
 
-def cross_correlate_with_template(spectrum, template, lower_velocity_limit=-200, upper_velocity_limit=200, velocity_step=1.0, fourier=False, only_one_peak=False, model='2nd order polynomial + gaussian fit', frame=None):
+def cross_correlate_with_template(spectrum, template, lower_velocity_limit=-200, upper_velocity_limit=200, velocity_step=1.0, fourier=False, only_one_peak=False, model='2nd order polynomial + gaussian fit', peak_probability=0.75, frame=None):
     """
     Determines the velocity profile by cross-correlating the spectrum with
     a spectrum template.
@@ -1893,7 +1906,7 @@ def cross_correlate_with_template(spectrum, template, lower_velocity_limit=-200,
             lower_velocity_limit=lower_velocity_limit, upper_velocity_limit = upper_velocity_limit, \
             velocity_step=velocity_step, \
             mask_size=None, mask_depth=None, fourier=fourier, \
-            only_one_peak=only_one_peak, peak_probability=0.75, model=model, \
+            only_one_peak=only_one_peak, peak_probability=peak_probability, model=model, \
             frame=None)
 
 def __cross_correlate(spectrum, linelist=None, template=None, lower_velocity_limit = -200, upper_velocity_limit = 200, velocity_step=1.0, mask_size=2.0, mask_depth=0.01, fourier=False, only_one_peak=False, peak_probability=0.75, model='2nd order polynomial + gaussian fit', frame=None):
@@ -1948,7 +1961,7 @@ def __build_velocity_profile(spectrum, linelist=None, template=None, lower_veloc
     return ccf_struct, nbins
 
 
-def __model_velocity_profile(ccf, nbins, only_one_peak=False, peak_probability=0.75, model='2nd order polynomial + gaussian fit'):
+def __model_velocity_profile(ccf, nbins, only_one_peak=False, peak_probability=0.55, model='2nd order polynomial + gaussian fit'):
     """
     Fits a model ('Gaussian' or 'Voigt') to the deepest peaks in the velocity
     profile. If it is 'Auto', a gaussian and a voigt will be fitted and the best
