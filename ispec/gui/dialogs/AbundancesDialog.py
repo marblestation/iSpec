@@ -19,8 +19,11 @@ class AbundancesDialog(CustomDialog):
 
         axes.grid(True, which="both")
         axes.set_title("Abundances", fontsize="10")
-        axes.set_xlabel("wavelength (nm)", fontsize="10")
+        #axes.set_xlabel("wavelength (nm)", fontsize="10")
+        axes.set_xlabel("lower state (eV)", fontsize="10")
         axes.set_ylabel("abundance (dex)", fontsize="10")
+        fig = axes.get_figure()
+        fig.set_tight_layout(True)
 
     def register(self, linemasks, x_over_h, x_over_fe):
         self.__x_over_h = x_over_h

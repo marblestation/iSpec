@@ -17,17 +17,21 @@
 #
 import numpy as np
 from atmospheres import *
+from lines import write_atomic_linelist
 from multiprocessing import Process
 from multiprocessing import Queue
 from multiprocessing import JoinableQueue
 from Queue import Empty
+import subprocess
+import shutil
 
 import log
 import logging
+import re
 
 
 
-def write_abundance_lines(linemasks, filename=None):
+def write_abundance_lines(linemasks, filename=None, tmp_dir=None):
     """
     Write line regions file with the following format:
     ::
@@ -47,7 +51,7 @@ def write_abundance_lines(linemasks, filename=None):
         out = open(filename, "w")
     else:
         # Temporary file
-        out = tempfile.NamedTemporaryFile(delete=False)
+        out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
     #out.write("\n".join([" ".join(map(str, (line['wave (A)'], line['species'], line['lower state (cm^-1)'], line['upper state (cm^-1)'],line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['ew'], line['element']))) for line in linemasks]))
     for line in linemasks:
         # The format is different depending on the broadening parameters
@@ -125,7 +129,7 @@ def create_free_abundances_structure(free_abundance_elements, chemical_elements,
         free_abundances['element'] = element_name
     return free_abundances
 
-def write_fixed_abundances(fixed_abundances, filename=None):
+def write_fixed_abundances(fixed_abundances, filename=None, tmp_dir=None):
     """
     Write a fixed abundances file the following format:
     ::
@@ -144,7 +148,7 @@ def write_fixed_abundances(fixed_abundances, filename=None):
         out = open(filename, "w")
     else:
         # Temporary file
-        out = tempfile.NamedTemporaryFile(delete=False)
+        out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
     out.write("TOTAL\n")
     out.write("\n".join([" ".join(map(str, (line['code'], line['Abund']))) for line in fixed_abundances]))
     out.close()
@@ -235,7 +239,7 @@ def enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enh
     return abundances
 
 
-def write_solar_abundances(abundances, abundances_filename=None):
+def write_solar_abundances(abundances, abundances_filename=None, tmp_dir=None):
     """
     Saves a SPECTRUM abundances file for spectral synthesis
 
@@ -248,14 +252,20 @@ def write_solar_abundances(abundances, abundances_filename=None):
         out = open(abundances_filename, "w")
     else:
         # Temporary file
-        out = tempfile.NamedTemporaryFile(delete=False)
+        out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
     out.write("code   Abund   Amass   I1/D0   I2/rdmass     I3         I4     maxcharge\n")
     out.write("\n".join(["  ".join(map(str, (line['code'], line['Abund'], line['Amass'], line['I1/D0'], line['I2/rdmass'], line['I3'], line['I4'], line['maxcharge']))) for line in abundances]))
     out.close()
     return out.name
 
 
-def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, gui_queue=None, timeout=1800):
+def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, gui_queue=None, timeout=1800, isotopes=None, turbo=False, tmp_dir=None, enhance_abundances=True, scale=None):
+    if turbo:
+        return __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+    else:
+        return __spectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, gui_queue=gui_queue, timeout=timeout, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+
+def __spectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, gui_queue=None, timeout=1800, tmp_dir=None, enhance_abundances=True, scale=None):
     """
     Determine abundances from equivalent widths (linemasks previously fitted and
     cross-matched with an atomic linelist).
@@ -269,9 +279,14 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
       the quantity [X/H] where X is the species in question.
     """
 
+    # Enhance alpha elements + CNO abundances following MARCS standard composition
+    if enhance_abundances:
+        alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(MH, scale=scale)
+        abundances = enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
+
     linemasks_file = write_abundance_lines(linemasks)
-    atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH)
-    abundances_file = write_solar_abundances(abundances)
+    atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH, tmp_dir=tmp_dir)
+    abundances_file = write_solar_abundances(abundances, tmp_dir=tmp_dir)
     num_measures = len(linemasks)
     nlayers = len(atmosphere_layers)
     if ignore == None:
@@ -301,6 +316,10 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
             if type(data) == tuple:
                 # Results received!
                 spec_abund, normal_abund, x_over_h = data
+                # If the reference solar abundances given to SPECTRUM were
+                # enhanced, we should correct it to put in the correct solar scale
+                if enhance_abundances:
+                    x_over_h = __correct_enhance_solar_abundances(linemasks, x_over_h, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
                 #import pudb
                 #pudb.set_trace()
                 #sun_log_Nx_over_Ntotal = abundances['Abund'][abundances['code'] == 26]]
@@ -353,4 +372,234 @@ def __determine_abundances(process_communication_queue, atmosphere_model_file, l
 
 
 
+def __turbospectrum_read_abund_results(abundances_filename):
+    """
+    Read a turbospectrum resulting abundances file
+    """
+    # Fe  1      4802.880  3.64 -1.514   60.900   60.900 +-  1.000   0.60    8.023    8.054    8.085 strong? wings cut?
+    f = "(?:[+-]?\d+\.\d+|NaN|[+-]?Inf)" # Float
+    #
+    atomic_line_pattern = re.compile("^\s*(\w+)\s+(\d+)\s+("+f+")\s+("+f+")\s+("+f+")\s+((?:"+f+"|\*+))\s+("+f+")\s+\+-\s+("+f+")\s+("+f+")\s+("+f+")\s+("+f+")\s+("+f+")(.*)\n$")
+    nlines_read = 0
+    data = []
+    with open(abundances_filename, "ro") as f:
+        for line_number, line in enumerate(f):
+            if nlines_read >= 2:
+                atomic_line = atomic_line_pattern.match(line)
+                if atomic_line:
+                    element, ion, wave_a, lower_state_eV, loggf, ew0, ew, ew_err, x_over_h, lower_abund, absolute_abund, upper_abund, comment = atomic_line.groups()
+                    element = element + " " + ion
+                    wave_a, lower_state_eV, loggf, ew, ew_err, \
+                            x_over_h, lower_abund, absolute_abund, upper_abund = map(float, (wave_a, lower_state_eV, \
+                            loggf, ew, ew_err, x_over_h, lower_abund, absolute_abund, upper_abund))
+                    data.append((element, wave_a, wave_a/10., lower_state_eV, loggf, ew, ew_err, \
+                            x_over_h, lower_abund, absolute_abund, upper_abund, comment))
+                else:
+                    raise Exception("Wrong format (line %i): %s" % (line_number, line))
+            nlines_read += 1
+    abundances = np.rec.fromarrays(zip(*data), dtype=[ \
+            ('element', '|S4'), \
+            ('wave (A)', '<f8'), ('wave (nm)', '<f8'), \
+            ('lower state (eV)', float), \
+            ('log(gf)', '<f8'), \
+            ('ew', float), \
+            ('ew_err', float), \
+            ('x_over_h', float), \
+            ('lower absolute abundance', float), \
+            ('absolute abundance', float), \
+            ('upper absolute abundance', float), \
+            ('comment', '|S100') \
+            ])
+    return abundances
 
+
+def __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, tmp_dir=None, enhance_abundances=True, scale=None):
+    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
+    turbospectrum_dir = ispec_dir + "/synthesizer/turbospectrum/"
+    turbospectrum_data = turbospectrum_dir + "/DATA/"
+    turbospectrum_eqwidt_lu = turbospectrum_dir + "bin/eqwidt_lu"
+
+    radius = atmosphere_layers[0][-1]
+    if radius > 2.0: # Compare to 2.0 instead of 1.0 to avoid floating point imprecisions
+        spherical_model = True
+    else:
+        spherical_model = False
+
+    atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH, turbo=True, atmosphere_filename=None, tmp_dir=tmp_dir)
+    if ignore is not None:
+        # Turbospectrum does not calculate abundances for lines with equivalent width equal to zero
+        linemasks = linemasks.copy()
+        linemasks['ew'][ignore == 0] = 0
+        linemasks['ewr'][ignore == 0] = 0
+
+    wave_base = np.min(linemasks['wave (nm)'])
+    wave_top = np.max(linemasks['wave (nm)'])
+    wave_step = 0.001
+
+    # Enhance alpha elements + CNO abundances following MARCS standard composition
+    original_abundances = abundances.copy()
+    if enhance_abundances:
+        alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(MH, scale=scale)
+        abundances = enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
+
+    # Turbospectrum is not going to scale the abundances because we are indicating
+    # our abundances in the input and that overrides any other prescription, thus
+    # we have to manually scale (but do not change Hydrogen and Helium!)
+    atom_abundances = abundances[abundances['code'] <= 92]
+    if len(atom_abundances) != 92:
+        raise Exception("No abundances for all 92 elements!")
+    efilter = np.logical_and(atom_abundances['code'] != 1, atom_abundances['code'] != 2)
+    atom_abundances['Abund'][efilter] += MH
+
+    opacities_filename = calculate_opacities(atmosphere_layers_file, atom_abundances, MH, microturbulence_vel, wave_base, wave_top, wave_step, verbose=verbose, opacities_filename=None)
+
+    # For the determination of abundances, turbospectrum uses the atomic abundances
+    # only to calculate [X/H], thus we have to provide the original non-modified
+    # solar abundances
+    atom_abundances = original_abundances[abundances['code'] <= 92]
+
+    idx = []
+    absolute_abund = []
+    x_over_h = []
+    for element in np.unique(linemasks['element']):
+        efilter = linemasks['element'] == element
+        idx = np.hstack((idx, np.where(efilter)[0])) # To recover later the order
+        sublinemasks = linemasks[efilter]
+        linelist_filename = write_atomic_linelist(sublinemasks, linelist_filename=None, turbo=True, tmp_dir=tmp_dir)
+
+        # Temporary file
+        out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
+        out.close()
+        abundances_filename = out.name
+
+        # Temporary dir
+        tmp_execution_dir = tempfile.mkdtemp(dir=tmp_dir)
+        os.symlink(turbospectrum_data, tmp_execution_dir+"/DATA")
+        previous_cwd = os.getcwd()
+        os.chdir(tmp_execution_dir)
+
+        command = turbospectrum_eqwidt_lu
+        command_input = "'LAMBDA_MIN:'  '"+str(wave_base*10.)+"'\n"
+        command_input += "'LAMBDA_MAX:'  '"+str(wave_top*10.)+"'\n"
+        command_input += "'LAMBDA_STEP:' '"+str(wave_step*10.)+"'\n"
+        command_input += "'INTENSITY/FLUX:' 'Flux'\n"
+        command_input += "'COS(THETA)    :' '1.00'\n"
+        command_input += "'ABFIND        :' '.true.'\n"
+        command_input += "'MODELOPAC:' '"+opacities_filename+"'\n"
+        command_input += "'RESULTFILE :' '"+abundances_filename+"'\n"
+        #command_input += "'METALLICITY:'    '"+str(MH)+"'\n"
+        command_input += "'METALLICITY:'    '0.00'\n" # We have done the abundance changes already
+        command_input += "'ALPHA/Fe   :'    '0.00'\n"
+        command_input += "'HELIUM     :'    '0.00'\n"
+        command_input += "'R-PROCESS  :'    '0.00'\n"
+        command_input += "'S-PROCESS  :'    '0.00'\n"
+        #command_input += "'INDIVIDUAL ABUNDANCES:'   '1'\n"
+        #command_input += "3  1.05\n"
+        command_input += "'INDIVIDUAL ABUNDANCES:'   '"+str(len(atom_abundances))+"'\n"
+        for atom_abundance in atom_abundances:
+            abund = 12.04 + atom_abundance['Abund'] # From SPECTRUM format to Turbospectrum
+            command_input +=  "%i  %.2f\n" % (atom_abundance['code'], abund)
+        #command_input += "'ISOTOPES : ' '2'\n"
+        #command_input += "3.006  0.075\n"
+        #command_input += "3.007  0.925\n"
+        if isotopes is not None:
+            command_input += "'ISOTOPES : ' '"+str(len(isotopes))+"'\n"
+            for isotope in isotopes:
+                command_input += "%i.%03i  %.3f\n" % (isotope['atomic_code'], isotope['mass_number'], isotope['relative_abundance_in_the_solar_system'])
+        command_input += "'NFILES   :' '1'\n"
+        command_input += linelist_filename + "\n"
+        if spherical_model:
+            command_input += "'SPHERICAL:'  'T'\n"
+        else:
+            command_input += "'SPHERICAL:'  'F'\n"
+        command_input += "  30\n"
+        command_input += "  300.00\n"
+        command_input += "  15\n"
+        command_input += "  1.30\n"
+
+        if verbose == 1:
+            proc = subprocess.Popen(command.split(), stdin=subprocess.PIPE)
+        else:
+            proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+        # wait for the process to terminate
+        out, err = proc.communicate(input=command_input)
+        errcode = proc.returncode
+
+        os.chdir(previous_cwd)
+
+        resulting_abundances = __turbospectrum_read_abund_results(abundances_filename)
+
+        # Turbospectrum does not return abundance for some elements sometimes, we should search for them
+        # and add NaN for coherence
+        absolute_abund_tmp = []
+        x_over_h_tmp = []
+        i = 0
+        j = 0
+        while i < len(sublinemasks) and j < len(resulting_abundances):
+            equal_ew = np.abs(sublinemasks['ew'][i] - resulting_abundances['ew'][j]) < 0.1
+            equal_wave_nm = np.abs(sublinemasks['wave (nm)'][i] - resulting_abundances['wave (nm)'][j]) < 0.002
+            if equal_ew and equal_wave_nm:
+                absolute_abund_tmp.append(resulting_abundances['absolute abundance'][j])
+                x_over_h_tmp.append(resulting_abundances['x_over_h'][j])
+                i += 1
+                j += 1
+            else:
+                absolute_abund_tmp.append(np.nan)
+                x_over_h_tmp.append(np.nan)
+                i += 1
+        while i < len(sublinemasks):
+            absolute_abund_tmp.append(np.nan)
+            x_over_h_tmp.append(np.nan)
+            i += 1
+
+        absolute_abund = np.hstack((absolute_abund, np.asarray(absolute_abund_tmp)))
+        x_over_h = np.hstack((x_over_h, np.asarray(x_over_h_tmp)))
+
+        os.remove(abundances_filename)
+        os.remove(linelist_filename)
+        shutil.rmtree(tmp_execution_dir)
+    os.remove(atmosphere_layers_file)
+
+    # Return abundances with the same order that the input linemasks
+    sorted_idx_idx = np.argsort(idx)
+    absolute_abund = absolute_abund[sorted_idx_idx]
+    x_over_h = x_over_h[sorted_idx_idx]
+    spec_abund = absolute_abund - 12.04 # For compatibility with SPECTRUM
+    x_over_fe = x_over_h - MH
+
+    return spec_abund, absolute_abund, x_over_h, x_over_fe
+
+def __correct_enhance_solar_abundances(linemasks, abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement):
+    """
+    Descales alpha elements and CNO abundances.
+    """
+    abundances = abundances.copy()
+    code = map(int, map(float, linemasks['species'])) # Convert from '26.0' or '26.1' to 26
+
+    #  6|C|Carbon|14|2|6|4|4
+    c = code == 6
+    #  7|N|Nitrogen|15|2|7|6|8
+    n = code == 7
+    #  8|O|Oxygen|16|2|8|3|3
+    o = code == 8
+
+    # 10|Ne|Neon|18|2|10|5|5
+    # 12|Mg|Magnesium|2|3|12|7|6
+    alpha = np.logical_or(code == 10, code == 12)
+    # 14|Si|Silicon|14|3|14|8|7
+    alpha = np.logical_or(alpha, code == 14)
+    # 16|S|Sulfur|16|3|16|10|9
+    alpha = np.logical_or(alpha, code == 16)
+    # 18|Ar|Argon|18|3|18|14|11
+    alpha = np.logical_or(alpha, code == 18)
+    # 20|Ca|Calcium|2|4|20|12|12
+    alpha = np.logical_or(alpha, code == 20)
+    # 22|Ti|Titanium|4|4|22|22|19
+    alpha = np.logical_or(alpha, code == 22)
+
+    abundances[c] -= c_enhancement
+    abundances[n] -= n_enhancement
+    abundances[o] -= o_enhancement
+    abundances[alpha] -= alpha_enhancement
+
+    return abundances

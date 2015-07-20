@@ -2,7 +2,7 @@ import numpy as np
 from CustomDialog import *
 
 class SolverDialog(CustomDialog):
-    def __init__(self, parent, title, resolution, teff, logg, feh, vmic, vmac, vsini, limb_darkening_coeff, lists, defaults_lists):
+    def __init__(self, parent, title, resolution, teff, logg, feh, vmic, vmac, vsini, limb_darkening_coeff, lists, default_lists):
         self.__parent = parent
         self.__title = title
         self.__components = []
@@ -10,19 +10,19 @@ class SolverDialog(CustomDialog):
         component["type"] = "OptionMenu"
         component["text"] = "Model atmosphere"
         component["options"] = lists['atmospheres']['name']
-        component["default"] = component["options"][defaults_lists['atmospheres']]
+        component["default"] = component["options"][default_lists['atmospheres']]
         self.__components.append(component)
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Solar abundances"
         component["options"] = lists['abundances']['name']
-        component["default"] = component["options"][defaults_lists['abundances']]
+        component["default"] = component["options"][default_lists['abundances']]
         self.__components.append(component)
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Line list"
         component["options"] = lists['atomic_lines']['name']
-        component["default"] = component["options"][defaults_lists['atomic_lines']]
+        component["default"] = component["options"][default_lists['atomic_lines']]
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"

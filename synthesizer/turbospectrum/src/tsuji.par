@@ -1,0 +1,9 @@
+* include file for sosmarcs
+* containing :
+*  maxmol=maximum number of molecules to be stored from tsuji
+*         molecular equilibrium
+*  maxmet=same for metals
+*
+      integer maxmol,maxmet
+      parameter(maxmol=60,maxmet=40)
+*

@@ -1,0 +1,56 @@
+      FUNCTION QAS(H,XL,A,Z,PFISH,IFISH)
+*
+*-----------------------------------------------------------------------
+*
+* THIS ROUTINE COMPUTES THE ASYMPTOTIC PARTS OF THE PARTITION
+* FUNCTIONS FOLLOWING
+*  BASCHEK ET AL., ABH. HAMB. VIII, 26 (1966) IF IFISH = 0
+*  FISCHEL AND SPARKS, AP. J. 164, 359 (1971) IF IFISH = 1
+*         (APPROXIMATING THE ZETA FUNCTIONS BY INTEGRALS).
+*
+* Export version  1988-03-24  ********* Olof Morell *** Uppsala
+*
+* XL=QUANTUM NUMBER FOR THE FIRST LEVEL OF THE ASYMPTOTIC PART
+* H=QUANTUM NUMBER OF THE CUT (FOR IFISH=0)
+* A=DZ(FISCHEL AND SPARKS)=ALFA(BASCHEK ET AL.)
+* PFISH=P(FISCHEL AND SPARKS), ONLY NECESSARY IF IFISH = 1
+*
+*-----------------------------------------------------------------------
+*
+      COMMON/UTPUT/ IREAD,IWRIT
+*
+* WHICH TYPE
+*
+      IF(IFISH.GT.0) GOTO 1
+*
+* BASCHEK ET AL.
+*
+      QAS=0.333333*(H*(H+1.)*(H+0.5)-XL*(XL+1.)*(XL+0.5)) +
+     &                       A*(H-XL)+0.5*A*A*(H-XL)/(H*XL)
+*
+      RETURN
+*
+* FISCHEL AND SPARKS
+*
+    1 P=PFISH*Z
+      IF(P.LE.XL) GOTO 2
+*
+* FISCHEL AND SPARKS, EQ. (26)
+*
+      P2=P*P
+      P3=P2*P
+      XLM1=XL-1.
+      R2=XLM1*XLM1
+      R3=R2*XLM1
+      QAS=1.3333333*P3+0.5*P2+0.16666667*P+1.33333333*A*P-0.4*A*A/P-
+     &    0.33333333*R3-0.5*R2-0.16666667*XLM1-A*XLM1+0.5*A*A/XL
+*
+      RETURN
+*
+* FISCHEL AND SPARKS, EQ. (27)
+*
+    2 AXL2=A/(XL*XL)
+      QAS=P3*P/XL*(1.+AXL2*(0.33333333+0.1*AXL2))
+*
+      RETURN
+      END

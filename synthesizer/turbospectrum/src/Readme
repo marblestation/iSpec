@@ -1,0 +1,710 @@
+       LOG of SPECTRUM updates
+
+----------------------------
+---- ACKNOWLEDGEMENTS ------
+----------------------------
+The following collleagues have greatly contributed to the successive
+upgrades of Turbospectrum, through suggestions, coding, and testing:
+
+Carlos Abia, Carlos Allende Prieto, Paul Barklem, Dmitry Bizyaev, Sergi Blanco Cuaresma, 
+Eric Depagne, Ben Davies, Bengt Edvardsson, Kjell Eriksson, Bengt Gustafsson, 
+Vanessa Hill, Michael Ireland, Alain Jorissen, Eric Josselin, 
+Patrick de Laverny, Thomas Masseron, Pieter Neyskens, Aake Nordlund, 
+Pierre North, Nikolai Piskunov, Monique Spite, Sophie Van Eck, Olga Zamora, ...
+
+I hope I have not forgotten too many of them !!
+
+
+Starts------17/01-2005
+
+Implementation on Mac G5. Small changes to
+ensure compilation on IBM xlf fortran
+
+Added keywords:
+
+PURE_LTE (true or false) for babsma. PURE_LTE=.t.
+sets sigma=0. and adds up all continuous opacity 
+into kappa.
+
+SCATTFRAC (0.0 to 1.0) for bsyn. This splits
+the line opacity into kappa*(1.-scattfrac)
+and sigma*scattfrac
+
+added the option to read the ascii marcs models
+of the new uppsala grid. This is done with 
+MARCS=.true. and an automatic detection of 
+the binary/ascii format of the file.
+
+BPz--------17/01-2005
+Update eqwidt and bsyn
+
+B. Plez 08/02-2005
+
+implemented ionized lines collisional broadening
+following Barkleem. Replace old anstee.f with new one
+and old anstee data table with new one.
+
+Reminder:
+For those of you interested I have a working version
+on Powermac G5 with xlf fortran compiler from IBM.
+
+End of update
+
+BPz--------08/09-2005
+
+set all paths of data files in source files as
+DATA/name_of_file. This requires that all users
+copy the content of DATA in the directory from 
+which they run babsma/bsyn/eqwidt. This is best
+done through :
+ln -s /Volumes/RAID1/home/plez/SPECTRUM/DATA .
+It is also easier to port the code to another
+machine. After copying the content of the DATA/
+directory on the other machine, the code should
+compile and run without the need to edit
+the source code for file paths.
+
+BPz--------08/09-2005
+
+Now all paths are relative to local directory from which
+program are run. User must link the DATA directory
+(or copy it and its content) on his own directory.
+This ensures easy port and recompilation/running on another
+machine, without changing path to input data files.
+
+BPz--------30/08-2006
+
+changes between now and previous log in Readme ahve been
+made. I am not sure what exactly. I think a bug was corrected to allow
+reading spherical and plane-prallel ascii MARCS models.
+Some small changes also to improve the convergence of the molecula equilibrium.
+
+BPz--------05/12-2006
+
+I have corrected a slight bug in injon.f, so that the original composition
+of a binary MARCS model is printed out, for information only, and only
+for the 20 elements. It is replaced by the default composition of 
+makeabund.f anyway (or by the chemical composition input by the user).
+I found this while trying to compute opacity files for Hydrogen deficient 
+binary MARCS files. I got an error message as injon.f was trying to read
+the file 1167867904 instead of file 11. This seems to be because the content
+of common block UTPUT/iread,iwrit gets corrupted (it should be 11,7). 
+I have added a statement : " print *,iread,iwrit" that solves the problem ....
+
+BPz--------11/04-2007
+
+Inserted a new routine :partfBarberH2O.f and the possibility to use H2O 
+line lists from Barber et al.
+Also, bsynb was modified on 28/03-2007 to print out the intensity spectrum
+at mu=cos(theta)=1 when an Intensity spectrum is asked for in spherical
+geometry. It is added as a 4th column in the ascii spectrum output. The 
+intensity spectra at all angles are provided, as before, in a separate binary
+file.
+I have modified: 
+Makefile
+bsyn.f
+eqwidt.f
+partffordepth.f
+bsynb.f
+and added partfBarberH2O.f in source
+and added energy-levels-BarberH2O.txt in DATA
+
+BPz--------16/05-2007
+
+Corrected HI line opacity calculation (at the ionisation edges).
+There was also a real*4/real*8 conflicting declaration in the computation
+of the dissolved states contributing to the continuous opacity.
+A spurious spike that appeared at the ionisation edges has been (almost)
+removed. I have also reduced "eps" from 0.001 to 0.0001. Eps controls
+the minimum relative opacity that is accumulated.
+modified routines: 
+hydropac.f
+babsma.f
+bsyn.f
+eqwidt.f
+Starting from now, Turbospectrum, - consisting of babsma, bsyn and eqwidt -,
+has a version number. The present version is v7.2 (i.e. year 2007 revision 2)
+
+BPz--------17/09-2007
+
+~implemented an automatic detection of the format of the radius variable,
+i.e. RR(1:ntau), in babsma.f when reading MARCS binary files. 
+This is because some older models have RR in double precision while most 
+MARCS binaries have RR in single precision.
+This change does not induce a version number increase.
+
+BPz--------05/11-2007
+
+Version 7.3:
+Following updates in MARCS, implementation of consistent changes in 
+turbospectrum :
+1) includes new continuous opacities :
+ updates of FeI, MgI, SiI, CaI,  CIA, and OH and CH continuous, extension to 
+ 200microns of negative molecular ions, addition of MgIff, SiIff, and MEIff 
+ (all other metals). New routines for CIA, new jonabs.dat file for continuous,
+ and removal of oscontmol.f routine. The jonabs.dat file is exactly the same
+ as in the current MARCS version, and has all wavelengths in vacuum. They are
+ shifted ot air wavelengths by the program, above 2000A.
+ The changes in UV opacities are important.
+2) includes updates in IRWIN_atoms.dat and IRWIN_molec.dat atomic and molecular
+ data, following improvements by Vanessa Hill. They concern minor species
+ (Pr, Tb, Ho, Er, Nd, Dy) for partition function and IP changes (Y, Nb, Ho,
+ Hf, Ir, Th).
+ NH and NH+ dissociation energy D0 are changed as well (slightly decreased)
+3) H I line opacity (Hlinop.f) changed : cut of extrapolation of Allard et al.'s
+ red wings of Lyman alpha at 1750A, where Doyle's H+H CIA takes over. It is
+ now cut at 1750 in jonabs_vac.dat (read in detabs.f), whereas it had an extra 
+ point at 1540A and was extrapolated bluewards in previous versions.
+ Also, Rayleigh scattering is now cut at 1400A, which corresponds to the red cut
+ of the natural damping wing of Lyman alpha in hlinop.f, that was also changed from
+ 1240A to 1400A. 
+
+changed routines:
+----------------
+spectrum.inc
+absko.f
+babsma.f
+bsyn.f
+detabs.f
+die_pe_lu.f
+eqwidt.f
+hlinop.f
+inabs.f
+injon.f
+molecpartf.f
+partf.f
+rossop.f
+tabs.f
+
+Makefile (in exec/)
+
+added routines:
+--------------
+CIAhhe.f
+CIAh2he.f
+CIAh2h2.f
+CIAh2h.f
+
+changed data files:
+------------------
+IRWIN_molecules.dat -> IRWIN_molecules_v07.3.dat
+IRWIN_atoms.dat -> IRWIN_atoms_v07.3.dat
+continuous_opacities_air.babsma -> jonabs_vac_v07.3.dat (same as in MARCS_v07.3)
+
+added data files:
+----------------
+CIA.H-He.dat
+CIA.H2-He.dat
+CIA.H2-H2.Yi.dat
+CIA.H2-H.dat
+
+BPz--------10/12-2007
+
+BPL: constants CP and C2 changed from 1.191e27 and 1.438e8 to 1.191044e27 
+and 1.438769e8, as KE found a (small) impact in the calculation of
+MARCS models when T was low and lambda short
+
+Also changed eqmol_pe_lu.f, to provide correct Kp(H2+)
+
+BPz--------08/01-2008
+
+removed small bug, that changed  T(1) to T(k) at after each call to absko.f
+in babsma.f. This T(1) was only used to print out CONTROLE. It did not affect
+the results in opac files. This bug was introduced in V7.3 (commmon CA5).
+
+Also, corrected the way the tau scale is computed in "alva" models in babsma.f
+
+Version number stays v7.3.
+
+BPz--------21/01-2008
+
+1) slightly changed H I edge detection and continuum wavelength change 
+ at edges in babsma.f. Due to an issue signaled by A. Chiavassa in some
+ special case for an edge in the IR.
+ Edge positions taken from vacuum jonabs.dat file, identical to edges 
+ from hydropac.f (n=2 changed from 3647.98 to 3648.04, also in jonabs file.
+
+2) Clight changed from 2.9979258E18 to 2.99792458E18 in function stark1
+ in hlinop.f
+
+Version number stays v7.3.
+
+BPz--------21/01-2008
+
+1) Improved the way PP models are detected in bsyn.f
+2) added HeI scattering in detabs.f
+
+Version number is v7.3.
+
+The last changes are not yet distributed.
+
+BPz--------16/04-2008
+
+1) solved the problem with convergence of some T, Pe combinations
+ that had stopped working after v7.2
+ -> put back tem.le.2. instead of tem.le.2000 in die_pe_lu.f
+ -> increased tolerance on abs(pe-ppe)/pe from 0.7 to 1.0 for skipprelim  
+    in jon.f
+
+BPz--------11/04-2008
+
+1) added new anstee.f, and DATA/Anstee_newFe2_newCr2.dat
+version number becomes 8.1
+
+BPz--------06/05-2008
+
+1) corrected bugs in calls to CIAh2h and CIAhhe, that were called
+ with always the same T(1) temperature instead of T(ntp).
+2) corrected loop in tranfr (formal), that could go over ntau.
+
+BPz--------19/05-2008
+
+V08.1 created. Compiled for intel MAC.
+
+BPz--------19-20/05-2008
+
+1) makeabund.f changed to allow choice of solar abundance set.
+ this is exactly what is now in MARCS. the default abundance 
+ set is Asplund et al. 2007
+2) the H I edge spike problem has been mostly removed, by changing
+ the edge wavelengths to the nearest wavelength where the spectrum
+ is calculated, in hydropac.f (KE's trick). For the Balmer H I 
+ edge, that I tested, there remains a small dip at one wavelength
+ in the absolute continuum spectrum.
+3) A number of small and
+ unimportant changes where also made in bsyn.f (related to H I),
+ and in bsynbplatt.f (more print-out if debug), in babsma.f, and
+ inabs.f (initializing of variables) 
+
+BPz--------11/03-2009
+
+V09.1 created. Compiled for intel MAC.
+
+change of FeH and CrH D00 in IRWIN_molecules.dat
+inclusion of CrH in atomda (for ionisation potential)
+related routines modified accordingly
+
+modified routines:
+-----------------
+takemolec.f
+bsyn.f
+eqwidt.f
+bsyn_TiOscatt.f
+atomda.f
+molecpartf.f
+
+modified input data files:
+-------------------------
+atomdata-v09.1
+IRWIN_molecules_v09.1.dat
+
+BPz--------19/06-2009
+
+V09.2 created. Compiled for intel MAC.
+
+Included SiS line calculation.
+Modified IP of AlH from 3.0 to 8.4 in atomdata-v09.2, and introduced SiS, and LaO.
+
+Modified calculation for limb-darkening :
+To get limb-darkening, in PP or SPH case, just ask for I, instead of F
+with 'INTENSITY/FLUX:' in script.
+in PP case, the ioutput spectrum contains now, just as spherical case:
+lambda, F/Fc, F, I(COS(THETA))     [COS(THETA) is also provided in script.
+In spherical case cos(theta) is always 1 (i.e. intensity at center of disk).
+In addition a binary file is generated (file 66, called "sphlimb") that 
+contains first a header :
+        write(66) mcode
+        write(66) rr(1),radius      ! in PP case, this is 1.,1.
+        write(66) maxlam            ! number of lambdas
+and then one line for each lambda:
+         write(66) xlambda(j),mmu(1),fluxme,
+     &                (xmu(nlx,1),y1(nlx),nlx=1,mmu(1))
+lambda, number of mu-points, flux(normalised at radius in SPH case),
+   mu-point,I(mu), for all computed mu's (in SPH case, these are at R(1),
+i.e. at upper R (not at radius).
+
+modified routines:
+------------------
+bysn.f
+bsyn_TiOscatt.f
+eqwidt.f
+bsynb.f
+bsynbplatt.f
+input.f
+
+modified input data files:
+--------------------------
+atomdata-v09.2
+
+BPz--------05/01-2010
+
+V10.1 created. Compiled for intel MAC.
+
+inserted new r and s-fractions in makeabund.f, following a similar
+change in MARCS2008.
+Changed D00 for MgH in IRWIN_molecules_v10.1.dat  (v09.1 ->  v10.1)
+and molecpartf.f accordingly in order that it uses that file.
+
+modified routines:
+------------------
+makeabund.f
+molecpartf.f
+
+BPz--------02/01-2012 - 21/06-2012
+
+This version now computes the flux so that its integral over wavelengths yields 
+sigmaxTeff^4, instead of sigmaxTeff^4/pi. This is consistent with  what is done in MARCS.
+
+atomdata : this file has been removed. The data it contained was superfluous.
+A new routine has been added (getlele.f) to secure the identification of species.
+Note however that it is only possible to compute spectra for a subset of molecules.
+They are listed in the common block xxxx in takemolec.f.
+It is now straightforward to add a new molecule for calculation of its spectrum: 
+its name needs to be added in that common block. It must be spelled exactly the same
+way as in the IRWIN_molecules_v12.1.dat file.
+
+Masses of isotopomers are computed using masses of isotopes. A new data file was 
+created that includes isotopic masses, fractions (not used yet, as we still rely on
+the fractions stored in makeabund.f), and mass of standard laboratory mixes (not
+used either, as we rely on a mass table in makeabund.f).
+The data file is atomicweights.dat, and it is read by getisotopmass.f.
+
+In this version I have added in takemolec.f:
+- YO 
+- TiH 
+As the ionizaton energy of molecular species was provided in the atomda file, it
+cannot be accessed anymore. It was used for the Unsoeld approximation of collisional
+broadening. 
+This recipe has been banned for molecular lines.
+
+
+IRWIN_molecules_v12.1.dat :
+ TiH is added. 
+ the input line for CN- is modified, with a inserted space that should prevent 
+ reading errors on some picky compilers.
+
+The list of molecules to use : LISTE_molecules_all_v12.1.dat is augmented 
+with TiH, and a version number is appended.
+
+These files are declared as default files to use in input.f and in molecpartf.f
+
+bsyn.f bsyn_TiOscatt.f and eqwidt.f have been modified to use takemolec.f
+instead of an internal setup to secure the indentification of molecules.
+
+version number updated to 12.1 in bsyn.f, babsma.f, eqwidt.f, bsyn_TiOscatt.f
+NB: the version number was erroneous in v10.1 (was still v09.2)
+
+suppressed the need for the outdata directory.
+
+atomic species included in molecular equilibrium do not need to be defined on 
+input. The default full list is given in input.f.
+
+Hydropac.f : the Lyman series was skipped in previous versions. It is now included.
+hlinop.f : a possible divide by zero was fixed. In addition 2 variables were set to 
+real*8 instead of real*4. This should cure problems in the computation of Lyalpha, 
+where the red wing would have a hole short of 1278A.
+
+in depth.f, the default recipe for broadening of molecular lines is now radiative 
+(+thermal and microturbulent Doppler broadening). In previous versions there was 
+also a collisional broadening recipe with Gamma6 /(2c) =0.1cm-1 *sqrt(273/T) * Pg/1atm
+Most of the time it would lead to negligible broadening.
+
+a couple of tricks were added in pemake.f, babsma.f, and jon.f in order to 
+improve convergence of the molecular equilibrium in some difficult cases.
+
+A number of unimportant printouts were removed.
+
+The directory structure is simpler : all source files are in source-v12.1/, and all
+executable are in exec-v12.1/
+
+Makefile was modified
+
+The script file was stripped of the parts that ordinary users don't change.
+
+modified routines:
+------------------
+bsyn.f
+bsynb.f
+bsynbplatt.f
+eqwidt.f
+babsma.f
+eqwidt.f
+molecpartf.f
+input.f
+takemolec.f
+hydropac.f
+hlinop.f
+depth.f
+die_pe_lu.f
+eqmol_pe_lu.f
+injon.f
+jon.f
+pemake.f
+getlele.f (created)
+getisotopmass.f (created)
+bsyn_TiOscatt.f (removed)
+
+modified files:
+---------------
+IRWIN_molecules_v12.1.dat :
+atomdata (removed)
+LISTE_molecules_all_v12.1.dat
+atomicweights.dat (created)
+
+BPz--------08/08-2012
+
+v12.1.1 (Although it shows v12.1 in runtime printouts)
+a minor bug has been corrected, that prevented the identification of a few species (like Tc) in getlele.f
+
+modified routines:
+------------------
+getlele.f
+bsyn.f
+eqwidt.f
+
+BPz--------06/07-2012
+
+version v12.2 : able to handle models with velocity fields. (v12.2 never publicly released)
+********
+WARNING ! These features are offered as experimental tools. There is no 
+warranty that the results are of high enough scientific grade to be, e.g., 
+published. In some velocity gradient conditions with inadequate choices of 
+optical depth and wavelength sampling the numerical results are clearly wrong.
+
+One paper published using this setup:
+Zamora, O., Garcia-Hernandez, D.A., Plez, B., Manchado, A., 2014, A&A 564, L4
+arXiv:1403.2075
+Olga Zamora is thanked for extensive testing of this version.
+********
+
+Calculation of intensity at surface of model with radial velocity field, 
+in spherical symmetry. The source function is assumed to be the same as computed
+in the static case. The scattering part (sigma.J) is computed in the static case 
+using the Feautrier method, and then added to kappa.B to approximate the source
+function used in the dynamic case. 
+The surface intensities are computed through a direct quadrature of the 
+source function.
+
+Models must be in the "alva" format:
+e.g.:
+'alva'    81 5000. 0. 0. 0.
+   1100.363      3.9096874E-05  5.0000000E+13   2000000.    
+   1107.004      4.0291088E-05  4.9401850E+13   2000000.    
+   1113.768      4.1537001E-05  4.8803701E+13   2000000.    
+   1120.656      4.2837542E-05  4.8205547E+13   2000000.    
+   1127.674      4.4195800E-05  4.7607397E+13   2000000.    
+....
+where the first line says:
+ "alva" ; number of layers ; wavelength for the standard tau-scale ; followed
+by 3 scaling factors (to be set to 0).
+Then one line for each layer: 
+T[K] Pg[cgs] R[cm] v[cm/s]
+with v the radial velocity of the layer (positive outwards, i.e. from the 
+center of the star towards the observer). 
+When running babsma, the parameter "HYDRODYN_DEPTH" must be set to ".true.", 
+otherwise v will be taken as a microturbulence velocity.
+i.e.:
+../exec-v12.2/babsma_lu << EOF
+'HYDRODYN_DEPTH:' '.true.'
+...
+EOF
+When running bsyn, the same HYDRODYN_DEPTH parameter must be set to true.
+The geometry must be spherical. 
+It is recommended to use a tight optical depth sampling in the input model 
+to diminish the velocity difference along a cell, as the calculation method 
+is prone to errors (see Mihalas and Kunasz 1986, J. of Comp. Physics, 64, 1).
+Use also a very high sampling rate in wavelength, to ensure that the 
+interpolation of opacities, necessary because of the velocity shifts, 
+be as accurate as possible.
+
+The output spectrum file contains:
+lambda; (dynamical) flux divided by (static) continuum flux; dynamic flux; 
+dynamic intensity at disk center. 
+Note that the normalised flux may be >1 due to the different way of calculating
+the continuum (static) flux (with Feautrier's method), and the line (dynamical)
+flux (with direct quadrature).
+
+variable TLIM renamed DIFLOG to conform to common block in other routines.
+
+Variable rhokt, and a few statements modified to accomodate doubleprecision in 
+detabs.f, as in some peculiar models with very low pressure, Inf, and NaN would
+be encountered. (BPz 17/08-2012) A few things were also modified in absko.f,
+without any impact on calculations.
+
+path for atomicweights.dat modified from ../DATA/ to DATA/ in getisotopmass.f
+
+correction of a bug in pemake.f, that was introduced in version 12.1.
+It would give an erroneous estimate of the pressure derivative in the first
+iteration, when the electron pressure was changed due to lack of convergence.
+
+modified routines:
+------------------
+Iplus_calc.f (not used before in default user configuration)
+trrays.f
+bsyn.f
+bsynb.f
+babsma.f
+detabs.f
+absko.f
+getisotopmass.f
+pemake.f
+
+BPz--------14/02-2013
+
+This is now version 13.1 (version 13.1 was never publicly released)
+NaH added in the common block molinpresmo in takemolec.f
+
+modified routines:
+------------------
+takemolec.f
+
+BPz--------13/04-2013
+
+Added the possibility to include gamma_vanderWaals in line list, for atoms only. 
+The value is inserted in the form log10(gamma_vanderwaals at 10000K), in place
+of fdamp (the scaling factor for Unsoeld approximation). 
+This gamma is only used if the routine anstee.f does not find quantum mechanical
+data for the line, and adopts the Unsoeld approximation. In that case only, the 
+parameter fdamp of the line list is tested. If negative, it is assumed to be 
+log10(gamma_vanderWaals), and scaled to the proper temperature. A way to force
+this to work for every line is to replace the level designations (e.g. 's' 'p')
+by 'x' 'x'.
+
+This modified version was used by the APOGEE team.
+Carlos Allende Prieto and Olga Zamora are thanked for suggesting it, and for their
+help with the implementation.
+
+modified routines:
+------------------
+bsyn.f
+eqwidt.f
+depth.f
+babsma.f (only version number)
+
+BPz--------29/08-2013
+
+corrected bug in Makeabund.f, isotopic fraction of 65Cu was erroneously affected to 64Cu. 65Cu had zero.
+Thanks are due to Patrick de Laverny for discovering this.
+
+modified routines:
+------------------
+makeabund.f
+
+BPz--------11/03-2014 - 03/12-2014
+
+Version 14.1 created. Intended for release with cumulative improvements since v12.1.1 (last public release)
+
+one line commented in takemolec (obsolete output message)
+Obsolete comments concerning atomdata removed from bsyn.f and babsma.f
+
+New version : IRWIN_molecules_v14.1.dat. MnH appeared twice in previous versions.
+Dissociation energy changed. 
+
+Updated version of line broadening anstee.f and data. Only small changes and 
+one Fe I line from Ruffoni et al 2014 added at 6315.8115 A
+Credit: Paul Barklem.
+
+Also added the possibility to have quantum mechanical data for collisional
+broadening in line list, as it is now included in the VALD3 version of the VALD
+line data base. 
+We input the cross-section (at 10000 m/s) and alpha parameter (velocity exponent) 
+through a packed parameter INT(sigma)+alpha.
+Alternatively we use the routine anstee.f and the accompanying data (anstee.dat).
+If none of this gives a result, we use the gamma_6 at 10000K parameter that may be included
+in the line list. Finally if nothing works, we compute the Unsoeld approximation.
+
+In the line list the line parameter FDAMP is used as follows:
+ * fdamp < 0 is the log(FWHM) per unit perturber number density at 10000 K (rad/s cm^3) ie. log(2w/N). 
+   This is the format used by VALD and Kurucz line lists, and many others.
+ * 0 < fdamp < 20 gives an enhancement factor over classical van der Waals theory (Unsoeld 1955).
+     (in this case, one may still find alternative data in the special anstee.f routine, and use ABO)
+ * fdamp > 20 gives the ABO theory, sigma.alpha.
+For example, for the Ca II H and K lines our input 
+van der Waals parameter is 234.223 where sigma = 234 atomic units and alpha = 0.223 
+(Barklem & O'Mara 1998). 
+The program vald3line_BPz.f converts line lists from the VALD3 format to the Turbospectrum format.
+
+Eqwidt can now be used in intensity mode in the plane-parallel version. 
+
+Unified format for molecules and atoms in line lists.
+The utility vald3lines-BPz.f allows to translate line lists from VALD3 (with atomic and molecular lines)
+to the Turbospectrum format. It also includes the Barklem line broadening parameters.
+
+Eqwidt allows now to compute eqw for molecules as well as for atoms. It can be used in the mode
+"ABFIND=.false." where the output will be a copy of the line list with equivalent widths computed 
+for all the lines. In the "ABFIND=.true." mode it will return an estimate of the abundance correction
+for each line of the list. In that case the line list must include an eqw measurement as well as an
+eqw error. By default these columns contain 0.0 and 1.0.
+
+Molecular lines can be read either at the old or the new format. There is an automatic detection for each 
+species. So the line list can be mixed. A single format for each species though.
+
+Small changes in the output format of eqwidt, and no output when the lines are outside the wavelength
+range that is asked for.
+
+Finally, we have now an official gfortran version.
+The Makefile in the exec-gf-v14.1 directory takes care of it.
+
+modified routines:
+------------------
+takemolec.f
+bsyn.f
+babsma.f
+eqwidt.f
+anstee.f
+molecpartf.f
+eqwidt.f
+eqwidtbplatt.f
+
+added routine:
+--------------
+clock-gf.f
+
+modified files:
+---------------
+IRWIN_molecules_v14.1.dat
+Anstee-1802-2014.dat replaces Anstee_newFe2_newCr2.dat
+
+
+BPz--------06/05-2015
+
+version v15.1.
+Simplified and unified output format for eqwidt.
+Removed real*16 for molcode & molcod. This was not
+compiling with gfortran on some systems.
+It is now replaced by a character*20 variable. The format of the
+IRWIN_molecules file had to be modified, along with all the 
+routines using it.
+Dissociation energy of CN slightly changed.
+
+modified routines:
+------------------
+eqwidt.f
+die_pe_lu.f
+eqmol_pe_lu.f
+funcv.f
+getlele.f
+molecpartf.f
+partffordepth.f
+takemolec.f
+
+modified files:
+---------------
+IRWIN-molecules_v15.1
+
+----------------------------
+---- ACKNOWLEDGEMENTS ------
+----------------------------
+The following collleagues have greatly contributed to the successive
+upgrades of Turbospectrum, through suggestions, coding, and testing:
+
+Carlos Abia, Carlos Allende Prieto, Paul Barklem, Dmitry Bizyaev, Sergi Blanco Cuaresma, 
+Eric Depagne, Ben Davies, Bengt Edvardsson, Kjell Eriksson, Bengt Gustafsson, 
+Vanessa Hill, Michael Ireland, Alain Jorissen, Eric Josselin, 
+Patrick de Laverny, Thomas Masseron, Pieter Neyskens, Aake Nordlund, 
+Pierre North, Nikolai Piskunov, Monique Spite, Sophie Van Eck, Olga Zamora, ...
+
+I hope I have not forgotten too many of them !!
+
+----END-------
+

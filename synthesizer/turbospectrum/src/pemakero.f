@@ -1,0 +1,65 @@
+C
+      SUBROUTINE PEMAKEro(T,PE,ro,PEX)
+C
+C based on pemake but iterating on ro
+C YOU FEED IT WITH T AND ro AND A GUESS PE. YOU GET PEX
+C
+      DATA IT,N,EPS/0,20,1.E-3/
+C
+C START
+      A=ALOG(PE)
+      PEX=PE
+      CALL JON(T,PE,1,pg,fa,E,0,1)
+C******WRITE(7,40) T,ro,PE,FA
+40    FORMAT(' T,ro,PE,rop=',4E10.4)
+      IT=IT+1
+      FA=ALOG(FA/ro)
+      IF(ABS(FA).LT.EPS) GOTO 101
+      B=A-0.69*FA
+      PEX=EXP(B)
+C ONE PEMAKE ITERATION, CF. PEMAKE
+      CALL JON(T,PEX,1,pg,fb,E,0,1)
+C******WRITE(7,40) T,ro,PE,FB
+      IT=IT+1
+      FB=ALOG(FB/ro)
+      IF(ABS(FB).LT.EPS) GOTO 101
+      X=B
+C
+C LOOP
+      DO 100 I=1,N
+      XOLD=X
+C
+C INTERPOLATE TO FIND NEW X
+      X=A-(B-A)/(FB-FA)*FA
+      PEX=EXP(X)
+      IF(ABS(X-XOLD).LT.EPS) GOTO 101
+      CALL JON(T,PEX,1,pg,fx,E,0,1)
+C******WRITE(7,40) T,ro,PEX,FX
+      IT=IT+1
+      FX=ALOG(FX/ro)
+C
+C CHECK IF A OR B CLOSEST TO X
+      IF(ABS(A-X).LT.ABS(B-X)) GOTO 102
+      A=X
+      FA=FX
+      GOTO 100
+102   B=X
+      FB=FX
+C
+C END OF LOOP
+100   CONTINUE
+      WRITE(7,51) N,T,PE,ro,A,B,FA,FB,EPS
+51    FORMAT('0***PEMAKE, MAX ITER.: N,T,PE,ro,A,B,FA,FB,EPS=',
+     * /,1X,I2,8E11.4)
+      RETURN
+C
+C NORMAL END
+101   CONTINUE
+      RETURN
+C
+C COUNT ENTRY
+      ENTRY PECNTro
+      WRITE(7,52) IT
+52    FORMAT('0TOTAL NUMBER OF CALLS TO JON FROM PEMAKE-R =',I5)
+      RETURN
+      END

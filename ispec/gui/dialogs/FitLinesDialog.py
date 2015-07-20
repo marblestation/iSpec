@@ -2,7 +2,7 @@ import numpy as np
 from CustomDialog import *
 
 class FitLinesDialog(CustomDialog):
-    def __init__(self, parent, title, resolution, vel_telluric, lists, defaults_lists):
+    def __init__(self, parent, title, resolution, vel_telluric, lists, default_lists):
         self.__parent = parent
         self.__title = title
         self.__components = []
@@ -26,7 +26,7 @@ class FitLinesDialog(CustomDialog):
         component["type"] = "OptionMenu"
         component["text"] = "Line list"
         component["options"] = lists['atomic_lines']['name']
-        component["default"] = component["options"][defaults_lists['atomic_lines']]
+        component["default"] = component["options"][default_lists['atomic_lines']]
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"

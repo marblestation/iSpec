@@ -19,6 +19,8 @@ class VelocityProfileDialog(CustomDialog):
         axes.set_title("Profile", fontsize="10")
         axes.set_xlabel("velocity (km/s)", fontsize="10")
         axes.set_ylabel("relative intensity", fontsize="10")
+        fig = axes.get_figure()
+        fig.set_tight_layout(True)
 
     def register(self, ccf, models, telluric_fwhm=None):
         self.__xcoord = ccf['x']

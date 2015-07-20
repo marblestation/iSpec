@@ -113,22 +113,22 @@ class iSpecBaseApp(Tkinter.Tk):
         self.lists['masks'] = self.__get_filelist('input/linelists/CCF/', 'mask.lst')
         self.lists['templates'] = self.__get_filelist('input/spectra/templates/', 'template.txt.gz')
 
-        self.defaults_lists = {}
-        self.defaults_lists['atmospheres'] = 0
-        self.defaults_lists['abundances'] = 0
-        self.defaults_lists['atomic_lines'] = 0
+        self.default_lists = {}
+        self.default_lists['atmospheres'] = 0
+        self.default_lists['abundances'] = 0
+        self.default_lists['atomic_lines'] = 0
 
         ######
         # Prefered defaults:
         found = np.where(self.lists['atmospheres']['name'] == 'MARCS.GES')[0]
         if len(found) == 1:
-            self.defaults_lists['atmospheres'] = found[0]
+            self.default_lists['atmospheres'] = found[0]
         found = np.where(self.lists['abundances']['name'] == 'Grevesse.2007')[0]
         if len(found) == 1:
-            self.defaults_lists['abundances'] = found[0]
+            self.default_lists['abundances'] = found[0]
         found = np.where(self.lists['atomic_lines']['name'] == 'GESv5_atom_hfs_iso.420_920nm')[0]
         if len(found) == 1:
-            self.defaults_lists['atomic_lines'] = found[0]
+            self.default_lists['atomic_lines'] = found[0]
         ######
 
         ######
@@ -2252,7 +2252,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         key = "FitLinesDialog"
         vel_telluric = self.active_spectrum.velocity_telluric
         if not self.active_spectrum.dialog.has_key(key):
-            self.active_spectrum.dialog[key] = FitLinesDialog(self, "Fit lines", resolution, vel_telluric, self.lists, self.defaults_lists)
+            self.active_spectrum.dialog[key] = FitLinesDialog(self, "Fit lines", resolution, vel_telluric, self.lists, self.default_lists)
         self.active_spectrum.dialog[key].show(updated_vel_telluric=vel_telluric)
 
         if self.active_spectrum.dialog[key].results is None:
@@ -2673,7 +2673,6 @@ SPECTRUM a Stellar Spectral Synthesis Program
         i = np.where(self.lists['atomic_lines']['name'] == selected_linelist)
         atomic_linelist_file = self.lists['atomic_lines']['path'][i][0]
         ####
-        atomic_linelist_file = resource_path("input/linelists/SPECTRUM/" + selected_linelist + ".lst")
         max_atomic_wave_diff = self.active_spectrum.dialog[key].results["Maximum atomic wavelength difference"]
         self.active_spectrum.dialog[key].destroy()
 
@@ -3895,7 +3894,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             key = "SyntheticSpectrumDialog"
             if not self.dialog.has_key(key):
-                self.dialog[key] = SyntheticSpectrumDialog(self, "Synthetic spectrum generator", wave_base, wave_top, wave_step, resolution, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.defaults_lists)
+                self.dialog[key] = SyntheticSpectrumDialog(self, "Synthetic spectrum generator", wave_base, wave_top, wave_step, resolution, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.default_lists)
             self.dialog[key].show()
 
             if self.dialog[key].results is None:
@@ -4194,7 +4193,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         key = "SolverDialog"
         if not self.active_spectrum.dialog.has_key(key):
-            self.active_spectrum.dialog[key] = SolverDialog(self, "Determine parameters", resolution, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.defaults_lists)
+            self.active_spectrum.dialog[key] = SolverDialog(self, "Determine parameters", resolution, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.default_lists)
         self.active_spectrum.dialog[key].show()
 
         if self.active_spectrum.dialog[key].results is None:

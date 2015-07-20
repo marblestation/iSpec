@@ -1,0 +1,479 @@
+      SUBROUTINE INJON(IOUTS,MRXF)
+*
+*-----------------------------------------------------------------------
+*
+* THIS ROUTINE READS DATA NECESSARY FOR THE COMPUTATION OF IONIZATION
+* EQUILIBRIA ETC. (IN SUBR. JON).
+*
+* Export version  1988-03-24  ********* Olof Morell *** Uppsala
+*
+* 1. NEL= THE NUMBER OF CHEMICAL ELEMENTS CONSIDERED.
+*    A=   THE RATIO OF THE NUMBER OF HYDROGEN NUCLEI TO THE NUMBER OF
+*         NUCLEI OF METALLIC ELEMENTS.
+*    NMET=THE NUMBER OF METALLIC ELEMENTS IN THE LIST OF CHEMICAL
+*         ELEMENTS CONSIDERED. THE LAST NMET ELEMENTS OF THE LIST ARE
+*         CONSIDERED TO BE METALLIC, FOR THE CALCULATION OF THE
+*         QUANTITY A (DEFINED ABOVE).
+* 2. IEL  IS THE ARRAY WHICH WILL CONTAIN THE SYMBOLS FOR THE CHEMICAL
+*         ELEMENTS CONSIDERED.
+*    ABUND IS THE ARRAY WHICH WILL CONTAIN THE PREVAILING ABUNDANCES OF
+*         THE CHEMICAL ELEMENTS CONSIDERED AT INPUT. THESE ABUNDANCES
+*         ARE EXPRESSED ON A LOGARITHMIC SCALE (BASE 10) AND NEED NOT BE
+*         NORMALIZED. THE ABUNDANCES ARE MODIFIED IN THIS SUBROUTINE
+*         SO THAT THE RIGHT VALUE OF A (DEFINED ABOVE) IS OBTAINED.
+* 3. AI   IS THE ARRAY WHICH WILL CONTAIN THE ATOMIC WEIGHTS OF THE
+*         ELEMENTS CONSIDERED.
+* 4. DATA FOR THE COMPUTATION OF THE PARTITION FUNCTIONS IS READ NEXT.
+*    NJ(I)= THE NUMBER OF STAGES OF IONIZATION CONSIDERED FOR ELEMENT I.
+* FOR EACH STAGE OF IONIZATION JA THE FOLLOWING QUANTITIES ARE READ
+*    G0(JA)=THE STATISTICAL WEIGHT OF THE GROUND LEVEL,
+*    NK(JA)=THE NUMBER OF ELECTRON CONFIGURATIONS CONSIDERED.
+* FOR EACH ELECTRON CONFIGURATION JB THE FOLLOWING QUANTITIES ARE READ
+*    XION(JB)=THE IONIZATION ENERGY IN ELECTRON VOLTS,
+*    G2(JB)=THE STATISTICAL WEIGHT (2L+1)*(2J+1)
+*    XL(JB)=THE LOWEST QUANTUM NUMBER OF THE ASYMPTOTIC (HYDROGENIC) 
+*           PART OF THE PARTITION FUNCTION,
+*    NL(JB)=THE NUMBER OF TERMS IN THE (APPROXIMATE) EXPRESSION FOR THE
+*           'MIDDLE PART' OF THE PARTITION FUNCTION ('QPRIME').
+*    ALFA IS AN ARRAY WHICH WILL CONTAIN THE 'STATISTICAL WEIGHTS' OF
+*           THE (APPROXIMATE) EXPRESSIONS FOR THE 'MIDDLE PARTS' OF THE
+*           PARTITION FUNCTIONS.
+*    GAMMA IS AN ARRAY CONTAINING THE CORRESPONDING 'EXCITATION
+*           POTENTIALS' (EXPRESSED IN ELECTRON VOLTS).
+* FOR THE METHOD USED SEE TRAVING ET AL., ABH. HAMB. VIII, I (1966).
+* 5. ELEMENTS AND STAGES OF IONIZATION THAT SHOULD BE DISREGARDED ARE
+*     INDICATED BY IELEM(I)=0 FOR ELEMENT I AND BY ION(I,J)=0 FOR
+*     IONIZATION STAGE J. OTHERWISE INDICATORS SHOULD BE = 1.
+* 6. NQFIX IS THE NUMBER OF PARTITION FUNCTIONS THAT SHOULD BE CONSTANT.
+*     THE VALUES ARE READ INTO THE VECTOR PARCO AND AN INDICATION IS
+*     MADE IN IQFIX.  IQFIX(I,J)=0 MEANS THAT THE PARTITION FUNCTION
+*     FOR ELEMENT I, STAGE OF IONIZATION J, IS CONSIDERED TO BE
+*     CONSTANT.
+*    NQTEMP IS THE NUMBER OF PARTITION FUNCTIONS  THAT SHOULD BE
+*     PRESSURE-INDEPENDENT AND INTERPOLATED IN T. VALUES OF FOUR
+*     TEMPERATURES (TPARF, THE SAME FOR ALL ELEMENTS) AND
+*     CORRESPONDING PARTITION FUNCTIONS (PARF) ARE READ. IQFIX(I,J)=1
+*     MEANS THAT A PRESSURE-INDEPENDENT PARTITION FUNCTION FOR INTER-
+*     POLATION IN T IS GIVEN.
+* 7. IFISH IS A PARAMETER FOR THE CHOICE OF THE ASYMPTOTIC PARTITION
+*     FUNCTION. IFISH=0 MEANS THAT THE ASYMPTOTIC PART WILL BE EVALU-
+*     ATED FOLLOWING BASCHEK ET AL., ABH. HAMB. VIII,26 (1966). IFISH
+*     =1 MEANS THAT IT WILL BE EVALUATED FOLLOWING FISCHEL AND SPARKS
+*     ASTROPHYS. J. 164, 356 (1971).
+* 8. TMOLIM IS THE HIGHER TEMPERATURE LIMIT BEYOND WHICH MOLECULES WILL
+*     NOT BE CONSIDERED
+*
+* MOREOVER SOME INITIATING WORK IS DONE FOR SUBR. JON. UNLOGARITHMIC
+*  ABUNDANCES ARE NORMALIZED ON HYDROGEN, XMY AND SUMH (DEFINED BELOW)
+*  ARE COMPUTED AND SOME FURTHER QUANTITIES ARE EVALUATED AT THE END.
+*  A DETAILED PRINTOUT IS GIVEN IF IOUTS IS EQUAL TO ONE. AFTER INJON
+*  HAS BEEN CALLED ONCE, A NEW DETAILED PRINTOUT IS OBTAINED IF
+*  INJON IS CALLED WITH IOUTS GREATER THAN ONE.
+*
+* DIMENSIONS NECESSARY
+* ABUND(NEL),AI(NEL),ALFA(LMAX),ANJON(NEL,MAX(NJ)),FL2(5),F1Q(3),F2Q(2),
+* GAMMA(LMAX),G0(JMAX),G2(KMAX),H(5),IEL(NEL),IELEM(NEL),
+* ION(NEL,MAX(NJ)),IQFIX(NEL,MAX(NJ)),JAMEM(NEL,MAX(NJ)),JBBEG(JMAX),
+* JCBEG(JMAX),NJ(NEL),NK(JMAX),NL(KMAX),PARCO(JMAX),PARF(4*JMAX),
+* PARPP(4),PARPT(4),PARQ(4*JMAX),PART(NEL,MAX(NJ)),SHXIJ(5),TPARF(4),
+* XION(KMAX),XIONG(NEL,MAX(NJ)),XL(KMAX)
+* THE DIMENSIONS ARE LOWER LIMITS
+* JMAX IS THE TOTAL NUMBER OF STAGES OF IONIZATION, INCLUDING NEUTRAL
+* ATOMS.
+* KMAX IS THE TOTAL NUMBER OF ELECTRON CONFIGURATIONS.
+* LMAX IS THE TOTAL NUMBER OF TERMS IN THE (APPROXIMATE) EXPRESSIONS
+* FOR THE MIDDLE PART OF THE PARTITION FUNCTIONS ('QPRIME'),
+* ACCORDING TO TRAVING ET AL., CITED ABOVE.
+* NEL  IS THE NUMBER OF CHEMICAL ELEMENTS.
+* NJ(I) IS THE NUMBER OF STAGES OF IONIZATION, INCLUDING THE NEUTRAL
+*       STAGE, FOR ELEMENT I.
+*
+*-----------------------------------------------------------------------
+*
+      DIMENSION AI(16),F1Q(3),F2Q(2),PARF(180),PARPP(4),PARPT(4)
+      DIMENSION JAMEM(16,5)
+      LOGICAL MRXF,changeab
+      character*128 fileab
+      CHARACTER*1 CHARDUM
+*
+      COMMON/CI1/ FL2(5),PARCO(45),PARQ(180),SHXIJ(5),TPARF(4),
+     &            XIONG(16,5),EEV,ENAMN,SUMH,XKBOL,NJ(16),IEL(16),
+     &            NEL,SUMM
+      COMMON/CI9/ AI
+      COMMON/CI3/ ALFA(300),GAMMA(300),G0(45),G2(80),XION(80),XL(80),
+     &            JBBEG(45),JCBEG(45),NK(45),NL(80),IFISH
+      COMMON/CI4/ IELEM(16),ION(16,5),TMOLIM,MOLH
+      COMMON/CI5/ ABUND(16),ANJON(16,5),H(5),PART(16,5),DXI,F1,F2,F3,F4,
+     &            F5,XKHM,XMH,XMY
+      COMMON/CI6/ IQFIX(16,5),NQTEMP,TP
+      COMMON/UTPUT/ IREAD,IWRIT
+      real absc,abti,abv,abmn,abco
+      common /auxabund/ absc,abti,abv,abmn,abco
+      common /chabu/ changeab,fileab
+      common /zzzz/factmet
+      common/abundch/abch(100)
+
+      real amass(92,0:250),defabund(92),isotopfrac(92,0:250)
+      character*2 aname(92)
+      character*30 marcsformat
+
+      common/refabundances/ defabund,amass,aname,isotopfrac
+*
+      IF(IOUTS.GT.1) GOTO 25
+      IREAX=12
+*
+* READING OF THE ABUNDANCES AND THEIR ASSOCIATED QUANTITIES
+*        **** 1 ****
+*
+*
+*        **** 2 ****
+*
+      absc=-99.
+      abti=-99.
+      abv=-99.
+      abmn=-99.
+      abco=-99.
+      
+      inquire(unit=ireax,form=marcsformat)
+      print*,'injon; after inquire, model format (marcsformat) is: ',
+     &      marcsformat
+      print*,'UTPUT:', iread, iwrit
+ 
+      if ((mrxf.and.marcsformat.eq.'unformatted').or.
+     &    (mrxf.and.marcsformat.eq.'UNFORMATTED') ) then
+        REWIND IREAX
+        READ(IREAX) DUM
+        READ(IREAX) IDUM,DUM,DUM
+        READ(IREAX) DUM,DUM,DUM,DUM,DUM,DUM,DUM,JDUM,JDUM,JDUM,JDUM,
+     &              JDUM,JDUM,JDUM,JDUM,JDUM,JDUM,
+     &              NEL,(ABUND(I),I=1,NEL),abSc,abTi,abV,abMn,abCo
+        DO I=1,NEL
+          ABUND(I)=ALOG10(ABUND(I))
+        ENDDO
+        absc=alog10(absc)
+        abti=alog10(abti)
+        abv=alog10(abv)
+        abmn=alog10(abmn)
+        abco=alog10(abco)
+        print*,'original MARCS model abundances: '
+        print*, (abund(i)+12.,i=1,nel),absc+12.,abti+12.,abv+12.,
+     &           abmn+12.,abco+12.
+        nmet=0
+        a=0.0
+      else 
+         nel=16
+         a=0.
+         nmet=0
+C        READ(IREAX,100) NEL,A,NMET
+C        READ(IREAX,101) (ABUND(I),I=1,NEL)
+C        print*,'original model abundances: '
+C        print*, (abund(i),i=1,nel)
+      end if
+      print*, 'WARNING! we do not use the model abundances!!!'
+* apply abundance changes if appropriate:
+* 
+
+      abund(1) = defabund(1)
+      abund(2) = defabund(2)
+      abund(3) = defabund(6)
+      abund(4) = defabund(7)
+      abund(5) = defabund(8)
+      abund(6) = defabund(10)
+      abund(7) = defabund(11)
+      abund(8) = defabund(12)
+      abund(9) = defabund(13)
+      abund(10)= defabund(14)
+      abund(11)= defabund(16)
+      abund(12)= defabund(19)
+      abund(13)= defabund(20)
+      abund(14)= defabund(24)
+      abund(15)= defabund(26)
+      abund(16)= defabund(28)
+      absc     = defabund(21)
+      abti     = defabund(22)
+      abv      = defabund(23)
+      abmn     = defabund(25)
+      abco     = defabund(27)
+      if (mrxf) then
+        print*,'adopted abundances: '
+        print*, (abund(i),i=1,nel),absc,abti,abv,abmn,abco
+      else
+        print*,'adopted abundances: '
+        print*, (abund(i),i=1,nel)
+      endif
+*
+      do i=2,92
+        if (defabund(i).lt.-28.) then
+          defabund(i)=0.0
+        else
+          defabund(i)=10**(defabund(i)-defabund(1))
+        endif
+      enddo
+      defabund(1)=1.00
+*
+      absc=(10.**absc)/(10.**abund(1))
+      abti=(10.**abti)/(10.**abund(1))
+      abv =(10.**abv )/(10.**abund(1))
+      abmn=(10.**abmn)/(10.**abund(1))
+      abco=(10.**abco)/(10.**abund(1))
+*
+* first search beginning of useful data (skip data used in MARCS only)
+      chardum=' '
+      do while (chardum.ne.'H')
+        read (iread,'(a)') chardum
+      enddo
+      backspace(IREAD)
+        
+      READ(IREAD,110) (IEL(I),I=1,NEL)
+*
+*        **** 3 ****
+*
+      READ(IREAD,102) (AI(I),I=1,NEL)
+      NU=NEL
+      SUM=0.
+      SUMM=0.
+      FAKT=1.
+*
+* THE ABUNDANCES ARE CONVERTED FROM A LOGARITHMIC SCALE TO A DIRECT
+* SCALE, AND ARE THEN NORMALIZED ON HYDROGEN.
+* XMY=GRAMS OF STELLAR MATTER/GRAMS OF HYDROGEN.
+* SUMH=NUMBER OF OTHER NUCLEI/NUMBER OF HYDROGEN NUCLEI.
+* SUMM=NUMBER OF NUCLEI OTHER THAN H, C, N, O / NUMBER OF 
+*                                               HYDROGEN NUCLEI
+*
+      IF(NMET.LE.0) GOTO 22
+      NU=NEL-NMET+1
+      DO 1 I=NU,NEL
+        ABUND(I)=10.**ABUND(I)
+        SUM=ABUND(I)+SUM
+    1 CONTINUE
+*
+      FAKT=SUM*A/10.**ABUND(1)
+      NU=NU-1
+   22 DO 2 I=1,NU
+        ABUND(I)=10.**ABUND(I)*FAKT
+        SUM=SUM+ABUND(I)
+    2 CONTINUE
+      XMY=0.
+      AHA=ABUND(1)
+      DO 3 I=1,NEL
+        ABUND(I)=ABUND(I)/AHA
+        SUMM=SUMM+ABUND(I)
+        XMY=XMY+ABUND(I)*AI(I)
+    3 CONTINUE
+      XMY=XMY/AI(1)
+      SUMH=SUM/AHA-1.
+      SUMM=SUMM-ABUND(1)-ABUND(3)-ABUND(4)-ABUND(5)
+*
+*        **** 4 ****
+*
+* READING OF DATA FOR THE PARTITION FUNCTIONS.
+* FOR THE SYMBOLS, SEE ABOVE.
+*
+      READ(IREAD,103) (NJ(I),I=1,NEL)
+      JA=1
+      JB=1
+      JC1=1
+      DO 11 I=1,NEL
+        NJP=NJ(I)
+        DO 11 J=1,NJP
+          JAMEM(I,J)=JA
+          JBBEG(JA)=JB
+          JCBEG(JA)=JC1
+*
+* JBBEG AND JCBEG ARE INDICATORS USED BY FUNCTION QTRAV
+*
+          READ(IREAD,104) G0(JA),NK(JA)
+          NKP=NK(JA)
+          IQFIX(I,J)=2
+*
+* IQFIX(I,J)=2 MEANS THAT A 'FULL' PARTITION FUNCTION SHOULD BE
+* COMPUTED. THIS MAY BE CHANGED UNDER **** 7 ****.
+*
+          JA=JA+1
+          DO 11 K=1,NKP
+            READ(IREAD,105) XION(JB),G2(JB),XL(JB),NL(JB)
+*
+* XIONG IS THE IONIZATION ENERGY IN ELECTRON VOLTS FOR THE GROUND STATE,
+* USED IN THE COMPUTATION OF IONIZATION EQUILIBRIA IN SUBROUTINE JON.
+*
+            IF(K.LE.1) THEN
+              XIONG(I,J)=XION(JB)
+            END IF
+            JC2=NL(JB)+JC1-1
+            JBM=JB
+            JB=JB+1
+            IF(NL(JBM).GT.0) THEN
+              READ(IREAD,106) (GAMMA(L),ALFA(L),L=JC1,JC2)
+   10       END IF
+            JC1=JC2+1
+   11 CONTINUE
+*
+*        **** 5 ****
+*
+* READING OF THE INDICATORS OF THE ELEMENTS AND THE STAGES OF IONIZATION
+* TO BE DISREGARDED.
+*
+      DO 12 I=1,NEL
+        NJP=NJ(I)
+        READ(IREAD,107) IELEM(I),(ION(I,J),J=1,NJP)
+   12 CONTINUE
+*
+*        **** 6 ****
+*
+* SPECIFICATION OF THOSE PARTITION FUNCTIONS GIVEN AS CONSTANTS.
+* INDICATION IN IQFIX.
+*
+      READ(IREAD,103) NQFIX
+      IF(NQFIX.GT.0) THEN
+        DO 14 I=1,NQFIX
+          READ(IREAD,109)I1,J1,PARCOP
+          JA=JAMEM(I1,J1)
+          PARCO(JA)=PARCOP
+          IQFIX(I1,J1)=0
+   14   CONTINUE
+   15 END IF
+*
+* SPECIFICATION OF THOSE PARTITION FUNCTIONS TO BE INTERPOLATED IN T.
+* INDICATION IN IQFIX.
+*
+      READ(IREAD,103) NQTEMP
+      IF(NQTEMP.NE.0) THEN
+        READ(IREAD,101) TPARF
+        DO 17 I=1,NQTEMP
+          READ(IREAD,109) I1,J1,(PARPP(K),K=1,4)
+          IQFIX(I1,J1)=1
+*
+* PREPARATION FOR INTERPOLATION OF PARTITION FUNCTIONS IN T (CONCLUDED
+*        IN SUBROUTINE JON).
+*
+          DO 16 K=1,3
+            F1Q(K)=(PARPP(K+1)-PARPP(K))/(TPARF(K+1)-TPARF(K))
+   16     CONTINUE
+          DO 161 K=1,2
+            F2Q(K)=(F1Q(K+1)-F1Q(K))/(TPARF(K+2)-TPARF(K))
+  161     CONTINUE
+          F3Q=(F2Q(2)-F2Q(1))/(TPARF(4)-TPARF(1))
+          PARPT(1)=PARPP(1)
+          PARPT(2)=F1Q(1)
+          PARPT(3)=F2Q(1)
+          PARPT(4)=F3Q
+          JA=JAMEM(I1,J1)
+          DO 17 K=1,4
+            JK=(JA-1)*4+K
+            PARQ(JK)=PARPT(K)
+            PARF(JK)=PARPP(K)
+   17     CONTINUE
+*
+* PARQ IS IN COMMON/CI1/ AND IS USED IN SUBROUTINE JON. PARF IS JUST
+*        USED BELOW.
+*
+      END IF
+*
+*        **** 7, 8 ****
+*
+* THE PARAMETERS IFISH AND TMOLIM. INITIATING WORK FOR SUBROUTINE JON.
+* WHEN MOLH IS GREATER THAN ZERO THE MOLECULAR FORMATION WILL BE 
+* COMPUTED IN SUBR. MOLEQ (ONLY H2 AND H2+), ELSE MORE COMPLETE 
+* MOLECULAR FORMATION WILL BE EVALUATED IN SUBR. MOL.
+*
+      READ(IREAD,100) IFISH
+      READ(IREAD,4528) TMOLIM,MOLH
+      molh=0
+      DO 21 J=1,5
+        FLJ=J
+        FL2(J)=31.321*FLJ*FLJ
+        SHXIJ(J)=SQRT(13.595*FLJ)
+   21 CONTINUE
+*
+* EEV=THE ELECTRON VOLT (EXPRESSED IN TERMS OF ERGS)
+* XMH=THE MASS OF THE HYDROGEN ATOM (EXPRESSED IN GRAMS)
+* XKBOL=BOLTZMANN'S CONSTANT (EXPRESSED IN ERGS PER DEGREE KELVIN)
+*
+      EEV=1.602095E-12
+      XMH=1.67339E-24
+      XKBOL=1.38066E-16
+      ENAMN=EEV/(XMH*XMY)
+      TP=0.
+*
+*        TP IS THE TEMPERATURE AT THE 'PRECEDING' CALL OF JON.
+*
+*        **** PRINT-OUT ****
+*
+      IF(IOUTS.LE.0) GOTO 40
+*
+   25 CONTINUE
+*
+      WRITE(IWRIT,201)
+      WRITE(IWRIT,202)
+      WRITE(IWRIT,203)
+      DO 33 I=1,NEL
+        NJP=NJ(I)
+        WRITE(IWRIT,204) IEL(I),ABUND(I),IELEM(I),
+     &                   (ION(I,J),IQFIX(I,J),J=1,NJP)
+   33 CONTINUE
+      WRITE(IWRIT,207)
+      WRITE(IWRIT,208)
+      IF(IFISH.EQ.1) WRITE(IWRIT,211)
+      IF(IFISH.EQ.0) WRITE(IWRIT,210)
+      IF(NQTEMP.GT.0.OR.NQFIX.GT.0) WRITE(IWRIT,214)
+      IF(NQTEMP.GT.0) WRITE(IWRIT,209) TPARF
+      JA=1
+      DO 32 I=1,NEL
+        NJP=NJ(I)
+        DO 32 J=1,NJP
+          JP=J-1
+          IF(IQFIX(I,J).EQ.0) WRITE(IWRIT,205) IEL(I),JP,PARCO(JA)
+          JK1=(JA-1)*4+1
+          JK2=(JA-1)*4+4
+          IF(IQFIX(I,J).EQ.1) THEN
+            WRITE(IWRIT,206)IEL(I),JP,(PARF(JK),JK=JK1,JK2)
+          END IF
+          JA=JA+1
+   32 CONTINUE
+      IF(NQTEMP.GT.0) WRITE(IWRIT,215)
+      WRITE(IWRIT,213) XMY,SUMH
+*
+   40 CONTINUE
+*
+      RETURN
+*
+  100 FORMAT(I10,F10.4,I10)
+  101 FORMAT(6F10.4)
+  102 FORMAT(6F10.4)
+  103 FORMAT(12I5)
+  104 FORMAT(F5.0,I5)
+  105 FORMAT(F6.3,F4.0,F5.1,I5)
+  106 FORMAT(4(F10.3,F10.4))
+  107 FORMAT(I10,5I5)
+  108 FORMAT(2F10.4)
+  109 FORMAT(2I5,4F10.4)
+  110 FORMAT(16A3)
+  199 FORMAT(15X,F6.0,9X,F5.2,3X,A8,2X,I2,2X,I2,1X,4F6.2/7X,12F6.2)
+  201 FORMAT(1H1,'D A T A  F R O M  S U B R O U T I N E  I N J O N')
+  202 FORMAT(1H0,30X,1HI,14X,2HII,13X,3HIII,12X,2HIV)
+  203 FORMAT(1H ,'    ABUNDANCE   IELEM      ION   PF       ION   PF',
+     &       '   ION   PF       ION   PF')
+  204 FORMAT(1H ,A2,E12.4,I5,5X,5(I5,I5,5X))
+  205 FORMAT(1H ,A2,', STAGE OF IONIZATION=',I2,' PARTITION FUNCTION ',
+     &       '(CONSTANT)=',F10.3)
+  206 FORMAT(1H ,A2,', STAGE OF IONIZATION=',I2,' PART.FUNC. (T-DEP.) ='
+     &       ,4F10.3)
+  207 FORMAT(1H0,'IELEM AND ION = 1 OR 0 MEANS ELEMENT AND IONIZATION ',
+     &       'STAGE SHOULD BE CONSIDERED OR DISREGARDED RESP.')
+  208 FORMAT(1H0,'PF=2 FULL PART. FUNC., =1 PART. FUNC. TO BE ',
+     &       'INTERPOLATED IN T, =0 CONSTANT PART. FUNC.')
+  209 FORMAT(1H ,'T-DEPENDENT PARTITION FUNCTIONS GIVEN FOR T =  ',
+     &       4F10.0)
+  210 FORMAT(1H ,'ASYMPTOTIC PARTS OF PART. FUNC. FOLLOWING BASCHEK ',
+     &       'ET AL. 1966')
+  211 FORMAT(1H ,'ASYMPTOTIC PARTS OF PART. FUNC. FOLLOWING FISCHEL ',
+     &       'AND SPARKS 1971')
+  213 FORMAT(1H0,'XMY=GRAMS STELLAR MATTER/GRAMS OF HYDROGEN=',F7.4,5X,
+     &       'SUMH=NUMBER OF OTHER ATOMS/NUMBER OF H=',F8.5)
+  214 FORMAT(1H0,'PARTITION FUNCTIONS SUPPLIED BY THE USER')
+  215 FORMAT(1H ,'IF T OUTSIDE RANGE FOR INTERPOLATIONS DETAILED ',
+     &       'PART. FUNCTIONS ARE COMPUTED')
+ 4528 FORMAT(F10.0,I5)
+*
+      END

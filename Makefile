@@ -1,49 +1,41 @@
 
-all: sve/synthesizer.so
+all: synthesizer/turbospectrum/bin/babsma_lu synthesizer/turbospectrum/bin/bsyn_lu synthesizer/turbospectrum/bin/eqwidt_lu ispec/synthesizer.so isochrones/YYmix2
 
 
-sve/synthesizer.so: synthesizer/synthesizer.pyx synthesizer/synthesizer_func.c
+ispec/synthesizer.so: synthesizer/synthesizer.pyx synthesizer/synthesizer_func.c synthesizer/spectrum276e/*.c
 	rm -f synthesizer/synthesizer.c
 	rm -rf synthesizer/build/
 	cd synthesizer/ ; python setup.py build_ext --inplace
-	cp -f synthesizer/synthesizer.so sve/
+	mv -f synthesizer/synthesizer.so ispec/
+	rm -f synthesizer/synthesizer.c
+	rm -rf synthesizer/build/
 
-.PHONY: clean pyinstaller docs
+isochrones/YYmix2: isochrones/YYmix2.f
+	rm -f isochrones/YYmix2
+	gfortran -o isochrones/YYmix2 isochrones/YYmix2.f
+
+synthesizer/turbospectrum/bin/babsma_lu synthesizer/turbospectrum/bin/bsyn_lu synthesizer/turbospectrum/bin/eqwidt_lu: synthesizer/turbospectrum/src/*.f
+	rm -f synthesizer/turbospectrum/exec-gf-v15.1/*.o
+	rm -f synthesizer/turbospectrum/exec-gf-v15.1/babsma_lu
+	rm -f synthesizer/turbospectrum/exec-gf-v15.1/bsyn_lu
+	rm -f synthesizer/turbospectrum/exec-gf-v15.1/eqwidt_lu
+	$(MAKE) -C synthesizer/turbospectrum/exec-gf-v15.1/
+	mv synthesizer/turbospectrum/exec-gf-v15.1/babsma_lu synthesizer/turbospectrum/bin/
+	mv synthesizer/turbospectrum/exec-gf-v15.1/bsyn_lu synthesizer/turbospectrum/bin/
+	mv synthesizer/turbospectrum/exec-gf-v15.1/eqwidt_lu synthesizer/turbospectrum/bin/
+
+
+.PHONY: clean
 
 
 clean:
+	rm -f ispec.log
+	rm -f synthesizer/turbospectrum/exec-gf-v15.1/*.o
+	rm -f synthesizer/turbospectrum/bin/babsma_lu 
+	rm -f synthesizer/turbospectrum/bin/bsyn_lu 
+	rm -f synthesizer/turbospectrum/bin/eqwidt_lu
 	rm -f synthesizer/synthesizer.c
 	rm -rf synthesizer/build/
 	rm -f synthesizer/synthesizer.so
-	rm -f sve/synthesizer.so
-	# pyinstaller
-	rm -rf pyinstaller/sve/build/
-	rm -rf pyinstaller/sve/dist/
-	# docs
-	cd docs-sphinx/; make clean
-
-pyinstaller:
-	rm -rf pyinstaller/sve/build/
-	rm -rf pyinstaller/sve/dist/
-	cd pyinstaller/; python utils/Build.py sve/sve.spec
-	rm -rf pyinstaller/sve/dist/input/spectra/examples/
-	rm -rf pyinstaller/sve/dist/*.command
-	cp -rf *.command ./pyinstaller/sve/dist/
-	mkdir -p pyinstaller/sve/dist/input/spectra/examples/
-	cp -rf input/spectra/examples/*.s.gz pyinstaller/sve/dist/input/spectra/examples/
-	rm -f pyinstaller/sve/dist/input/spectra/examples/*_norm.s.gz
-	mkdir -p pyinstaller/sve/dist/input/regions/
-	cp -rf input/regions/*.txt pyinstaller/sve/dist/input/regions/
-	rm -rf pyinstaller/sve/dist/input/spectra/binaries/
-	mkdir -p pyinstaller/sve/dist/input/spectra/binaries/
-	cp -f input/spectra/binaries/*.s.gz pyinstaller/sve/dist/input/spectra/binaries/
-	echo "-----------------------------------------------"
-	echo " SVE distribution in './pyinstaller/sve/dist/'"
-	echo "-----------------------------------------------"
-
-docs:
-	cd docs-sphinx/; make latexpdf
-	echo "----------------------------------------------------------"
-	echo " SVE distribution in './docs-sphinx/_build/latex/SVE.pdf'"
-	echo "----------------------------------------------------------"
+	rm -f ispec/synthesizer.so
 

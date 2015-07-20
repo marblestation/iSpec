@@ -26,6 +26,8 @@ import tempfile
 import cPickle as pickle
 import log
 import logging
+import subprocess
+import shutil
 
 # SPECTRUM is compatible only with the plane-parallel atmospheres.
 # The first layer represents the surface.
@@ -40,7 +42,7 @@ class ConstantValue:
     def __call__(self, x, y):
         return self.value
 
-def read_kurucz_atmospheres(atmosphere_models, required_layers=56, max_teff = 9000., min_teff = 2500., max_logg = 5., min_logg = 0):
+def read_kurucz_atmospheres(atmosphere_models, required_layers=56, max_teff = 9000., min_teff = 2500., max_logg = 5., min_logg = 0, turbo=False):
     """
     Read castelli and kurucz atmospheres.
 
@@ -56,7 +58,10 @@ def read_kurucz_atmospheres(atmosphere_models, required_layers=56, max_teff = 90
         temperature, gravity and metallicity
 
     """
-    min_values_per_layer = 7
+    if turbo:
+        min_values_per_layer = 10 # 7 + 3 and later on another will be added to conserve radius for spherical models
+    else:
+        min_values_per_layer = 7
     read_atmosphere_data = False
     atmospheres_params = []
     atmospheres = []
@@ -98,6 +103,14 @@ def read_kurucz_atmospheres(atmosphere_models, required_layers=56, max_teff = 90
             if vline[0] == "TEFF":
                 teff = np.round(float(vline[1]), 2) # K
                 logg = np.round(float(vline[3]), 2)
+            elif vline[0] == "TITLE":
+                # New atmosphere
+                if "radius" in vline[1]:
+                    # Useful for spherical model atmospheres
+                    radius = float(vline[1].split("_")[3])
+                else:
+                    # Plane parallel have 1 cm radius
+                    radius = 1.0
             elif vline[0] == "READ":
                 # New atmosphere
                 current_atmosphere = []
@@ -112,10 +125,10 @@ def read_kurucz_atmospheres(atmosphere_models, required_layers=56, max_teff = 90
                         if teff <= max_teff and teff >= min_teff and logg <= max_logg and logg >= min_logg:
                             temperatures.append(teff)
                             gravities.append(logg)
-                            atmospheres_params_with_same_metallicity.append([teff, logg, metallicity])
+                            atmospheres_params_with_same_metallicity.append([teff, logg, metallicity, radius])
                             atmospheres_with_same_metallicity.append(current_atmosphere[:required_layers])
                     else:
-                        print "[WARNING] Ignored model", teff, logg, metallicity
+                        print "[WARNING] Ignored model", teff, logg, metallicity, radius
                     read_atmosphere_data = False
                 else:
                     num_layers += 1
@@ -130,8 +143,14 @@ def read_kurucz_atmospheres(atmosphere_models, required_layers=56, max_teff = 90
                     if len(layer) < min_values_per_layer:
                         raise Exception("FORMAT ERROR: Not enough values")
 
-                    # Only use the 7 first values
-                    current_atmosphere.append(map(float, layer[0:7]))
+                    # Only use the X first values
+                    values = map(float, layer[0:min_values_per_layer])
+                    if turbo:
+                        # Needed for spherical models
+                        #depth = values[8]
+                        #values.append(radius - depth)
+                        values.append(radius)
+                    current_atmosphere.append(values)
         atmospheres.append(atmospheres_with_same_metallicity)
         atmospheres_params.append(atmospheres_params_with_same_metallicity)
         f.close()
@@ -188,12 +207,24 @@ def __interpolate(initial_values, logg_range, teff_range, logg_index, teff_index
                 if len(logg_range[valid_logg]) >= 2:
                     # Interpolate
                     interp_logg_value = np.interp(logg_range[logg_index], logg_range[valid_logg], initial_values.data[teff_index][valid_logg], left=np.nan, right=np.nan)
+                    # If the radius is inferior to the minimum radius for spherical models
+                    # it means we are interpolatig between plane parallel models or
+                    # just in the border between a plane parallel and spherical one
+                    # thus we assign 1.0 cm and for it to be a plane parallel
+                    if value_num == 10 and interp_logg_value < min_value[value_num]:
+                        interp_logg_value = 1.0
 
                 # Interpolate by using teff values for a fixed logg
                 interp_teff_value = np.nan
                 if len(teff_range[valid_teff]) >= 2:
                     # Interpolate
                     interp_teff_value = np.interp(teff_range[teff_index], teff_range[valid_teff], initial_values.data.T[logg_index][valid_teff], left=np.nan, right=np.nan)
+                    # If the radius is inferior to the minimum radius for spherical models
+                    # it means we are interpolatig between plane parallel models or
+                    # just in the border between a plane parallel and spherical one
+                    # thus we assign 1.0 cm and for it to be a plane parallel
+                    if value_num == 10 and interp_teff_value < min_value[value_num]:
+                        interp_teff_value = 1.0
 
                 #  Weighted average if both interpolation have been possible
                 if not np.isnan(interp_logg_value) and not np.isnan(interp_teff_value):
@@ -247,14 +278,30 @@ def __extrapolate(initial_values, logg_range, teff_range, logg_index, teff_index
                     if logg_index < valid_logg[0][0]:
                         # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
                         extrap_logg_value = __extrap(logg_range[logg_index], logg_range[valid_logg][:2], initial_values.data[teff_index][valid_logg][:2])
-                        extrap_logg_value = np.min((max_value[value_num], extrap_logg_value))
-                        extrap_logg_value = np.max((min_value[value_num], extrap_logg_value))
+
+                        # If the radius is inferior to the minimum radius for spherical models
+                        # it means we are interpolatig between plane parallel models or
+                        # just in the border between a plane parallel and spherical one
+                        # thus we assign 1.0 cm and for it to be a plane parallel
+                        if value_num == 10 and extrap_logg_value < min_value[value_num]:
+                            extrap_logg_value = 1.0
+                        else:
+                            extrap_logg_value = np.min((max_value[value_num], extrap_logg_value))
+                            extrap_logg_value = np.max((min_value[value_num], extrap_logg_value))
                         logg_limit_index = valid_logg[0][0]
                     elif logg_index > valid_logg[0][-1]:
                         # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
                         extrap_logg_value = __extrap(logg_range[logg_index], logg_range[valid_logg][len(logg_range[valid_logg])-2:], initial_values.data[teff_index][valid_logg][len(logg_range[valid_logg])-2:])
-                        extrap_logg_value = np.min((max_value[value_num], extrap_logg_value))
-                        extrap_logg_value = np.max((min_value[value_num], extrap_logg_value))
+
+                        # If the radius is inferior to the minimum radius for spherical models
+                        # it means we are interpolatig between plane parallel models or
+                        # just in the border between a plane parallel and spherical one
+                        # thus we assign 1.0 cm and for it to be a plane parallel
+                        if value_num == 10 and extrap_logg_value < min_value[value_num]:
+                            extrap_logg_value = 1.0
+                        else:
+                            extrap_logg_value = np.min((max_value[value_num], extrap_logg_value))
+                            extrap_logg_value = np.max((min_value[value_num], extrap_logg_value))
                         logg_limit_index = valid_logg[0][-1]
                     else:
                         raise Exception("Only values that should be extrapolated are expected at this point")
@@ -265,14 +312,30 @@ def __extrapolate(initial_values, logg_range, teff_range, logg_index, teff_index
                     if teff_index < valid_teff[0][0]:
                         # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
                         extrap_teff_value = __extrap(teff_range[teff_index], teff_range[valid_teff][:2], initial_values.data.T[logg_index][valid_teff][:2])
-                        extrap_teff_value = np.min((max_value[value_num], extrap_teff_value))
-                        extrap_teff_value = np.max((min_value[value_num], extrap_teff_value))
+
+                        # If the radius is inferior to the minimum radius for spherical models
+                        # it means we are interpolatig between plane parallel models or
+                        # just in the border between a plane parallel and spherical one
+                        # thus we assign 1.0 cm and for it to be a plane parallel
+                        if value_num == 10 and extrap_teff_value < min_value[value_num]:
+                            extrap_teff_value = 1.0
+                        else:
+                            extrap_teff_value = np.min((max_value[value_num], extrap_teff_value))
+                            extrap_teff_value = np.max((min_value[value_num], extrap_teff_value))
                         teff_limit_index = valid_teff[0][0]
                     elif teff_index > valid_teff[0][-1]:
                         # Extrapolate and do not allow to go beyong the max/min values found in the real atmospheres
                         extrap_teff_value = __extrap(teff_range[teff_index], teff_range[valid_teff][len(teff_range[valid_teff])-2:], initial_values.data.T[logg_index][valid_teff][len(teff_range[valid_teff])-2:])
-                        extrap_teff_value = np.min((max_value[value_num], extrap_teff_value))
-                        extrap_teff_value = np.max((min_value[value_num], extrap_teff_value))
+
+                        # If the radius is inferior to the minimum radius for spherical models
+                        # it means we are interpolatig between plane parallel models or
+                        # just in the border between a plane parallel and spherical one
+                        # thus we assign 1.0 cm and for it to be a plane parallel
+                        if value_num == 10 and extrap_teff_value < min_value[value_num]:
+                            extrap_teff_value = 1.0
+                        else:
+                            extrap_teff_value = np.min((max_value[value_num], extrap_teff_value))
+                            extrap_teff_value = np.max((min_value[value_num], extrap_teff_value))
                         teff_limit_index = valid_teff[0][-1]
                     else:
                         raise Exception("Only values that should be extrapolated are expected at this point")
@@ -365,7 +428,7 @@ def __copy_closest(initial_values, logg_range, teff_range, logg_index, teff_inde
 
 
 
-def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, teff_range, logg_range, MH_range, required_layers=56):
+def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, teff_range, logg_range, MH_range, required_layers=56, turbo=False):
     """
     Builds an structure where each value of each layer has a RectBivariateSpline (based on the values
     read from atmospheric models) that can be used for interpolation.
@@ -399,7 +462,10 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
     nlogg = len(logg_range)
     nMH  = len(MH_range)
     nlayers = required_layers
-    nvalues = 7 # Only use the 7 first values
+    if turbo:
+        nvalues = 11 # Use the 7 first values + 3 extra values needed for turbospectrum + 1 extra needed for spherical models in turbospectrum
+    else:
+        nvalues = 7 # Only use the 7 first values
 
     proximity_atm_same_metallicity = [] # Useful to know how close it is a teff-logg combination to a real atmosphere
     models_atm_same_metallicity = []
@@ -420,8 +486,14 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
             for value_num in np.arange(nvalues):
                 for atm_num in xrange(len(atmospheres_params[metal_num])):
                     single_value = float(atmospheres[metal_num][atm_num][layer_num][value_num])
-                    max_value[value_num] = np.max([single_value, max_value[value_num]])
-                    min_value[value_num] = np.min([single_value, min_value[value_num]])
+                    # Consider value except if it corresponds to the radius (spherical models)
+                    # and the radius is equal to 1.0 cm (which means that it is plane parallel in reality)
+                    # This will help us to ignore intepolations in the border between
+                    # plane parallel and spherical models
+                    if value_num != 10 or (value_num == 10 and single_value != 1.0):
+                        max_value[value_num] = np.max([single_value, max_value[value_num]])
+                        min_value[value_num] = np.min([single_value, min_value[value_num]])
+
 
 
     print "\n\n2) Building models for interpolation/extrapolation"
@@ -437,11 +509,13 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
         params_atm = []
         atm_teff = []
         atm_logg = []
+        atm_radius = []
         # For this metalicity what teff-logg combinations do we have:
         for atm_num in xrange(len(atmospheres_params[metal_num])):
             atm_teff.append(atmospheres_params[metal_num][atm_num][0])
             atm_logg.append(atmospheres_params[metal_num][atm_num][1])
             #metallicity = atmospheres_params[metal_num][i][3]
+            atm_radius.append(atmospheres_params[metal_num][atm_num][3])
         params_atm.append((atm_teff, atm_logg))
 
         # For each layer, group and model the different atmospheres (teff, logg)
@@ -452,6 +526,7 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
             models_single_layer = []
             values_single_layer = [] # Useful only for plotting
             structured_values_single_layer = [] # Useful only for plotting
+
             for value_num in np.arange(nvalues):
                 # Prepare structure
                 total = nteff*nlogg
@@ -707,7 +782,7 @@ def estimate_proximity_to_real_atmospheres(modeled_layers_pack, teff_target, log
     return p
 
 
-def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target, MH_target):
+def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target, MH_target, turbo=False):
     """
     Generates an interpolated atmosphere for a given teff, logg and metallicity
 
@@ -721,7 +796,10 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
     modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
 
     nMH  = len(MH_range)
-    nvalues = 7
+    if turbo:
+        nvalues = 11 # Use the 7 first values + 3 extra values needed for turbospectrum + 1 extra needed for spherical models in turbospectrum
+    else:
+        nvalues = 7 # Only use the 7 first values
     MH_index = MH_range.searchsorted(MH_target)
     if MH_index == 0 and MH_target != MH_range[0]:
         raise Exception("Out of range: low MH value")
@@ -754,7 +832,7 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
     return layers
 
 
-def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None):
+def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None, turbo=False, tmp_dir=None):
     """
     Write a model atmosphere to file
     If filename is not specified, a temporary file is created and the name is returned.
@@ -770,11 +848,29 @@ def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None
         atm_file = open(atmosphere_filename, "w")
     else:
         # Temporary file
-        atm_file = tempfile.NamedTemporaryFile(delete=False)
-    atm_file.write("%.1f  %.5f  %.2f  %i\n" % (teff, logg, MH, len(atmosphere_layers)) )
-    atm_file.write("\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]))) for layer in atmosphere_layers]))
-    #for layer in layers:
-        #atm_file.write("%.8e   %.1f %.3e %.3e %.3e %.3e %.3e\n" % (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]) )
+        atm_file = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
+
+    if turbo:
+        radius = atmosphere_layers[0][-1]
+        if radius > 1.0:
+            atm_file.write("spherical model\n")
+            atm_file.write("  1.0        Mass [Msun]\n")
+            atm_file.write("  %.4E Radius [cm] at Tau(Rosseland)=1.0\n" % (radius))
+        else:
+            atm_file.write("plane-parallel model\n")
+            atm_file.write("  0.0        No mass for plane-parallel models\n")
+            atm_file.write("  1.0000E+00 1 cm radius for plane-parallel models\n")
+        atm_file.write("  %i Number of depth points\n" % (len(atmosphere_layers)))
+        atm_file.write("Model structure\n")
+        atm_file.write(" k lgTauR  lgTau5    Depth     T        Pe          Pg         Prad       Pturb\n")
+        #1 -5.00 -4.9174 -6.931E+07  4066.8  2.1166E-02  2.6699E+02  1.4884E+00  0.0000E+00
+        for i, layer in enumerate(atmosphere_layers):
+            atm_file.write("%i %.2f %.4f %.3E %.1f %.4E %.4E %.4E %.4E\n" % (i+1, 0., layer[7], layer[8], layer[1], layer[9], layer[2], layer[5], layer[6]))
+    else:
+        atm_file.write("%.1f  %.5f  %.2f  %i\n" % (teff, logg, MH, len(atmosphere_layers)) )
+        atm_file.write("\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]))) for layer in atmosphere_layers]))
+        #for layer in layers:
+            #atm_file.write("%.8e   %.1f %.3e %.3e %.3e %.3e %.3e\n" % (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]) )
     atm_file.close()
     return atm_file.name
 
@@ -812,3 +908,63 @@ def load_modeled_layers_pack(filename):
     modeled_layers_pack = pickle.load(open(filename))
     return modeled_layers_pack
 
+
+def calculate_opacities(atmosphere_layers_file, abundances, MH, microturbulence_vel, wave_base, wave_top, wave_step, verbose=0, opacities_filename=None, tmp_dir=None):
+    """
+    abundances should have been already modified acording to MH
+    """
+    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
+    turbospectrum_dir = ispec_dir + "/synthesizer/turbospectrum/"
+    turbospectrum_data = turbospectrum_dir + "/DATA/"
+    turbospectrum_babsma_lu = turbospectrum_dir + "bin/babsma_lu"
+
+    if opacities_filename is None:
+        # Temporary file
+        out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
+        out.close()
+        opacities_filename = out.name
+
+    command = turbospectrum_babsma_lu
+    command_input = "'LAMBDA_MIN:'  '"+str(wave_base*10.)+"'\n"
+    command_input += "'LAMBDA_MAX:'  '"+str(wave_top*10.)+"'\n"
+    command_input += "'LAMBDA_STEP:' '"+str(wave_step*10.)+"'\n"
+    command_input += "'MODELINPUT:' '"+atmosphere_layers_file+"'\n"
+    command_input += "'MARCS-FILE:' '.true.'\n"
+    command_input += "'MODELOPAC:' '"+opacities_filename+"'\n"
+    #command_input += "'METALLICITY:'    '"+str(MH)+"'\n"
+    command_input += "'METALLICITY:'    '0.00'\n" # We have done the abundance changes already
+    command_input += "'ALPHA/Fe   :'    '0.00'\n"
+    command_input += "'HELIUM     :'    '0.00'\n"
+    command_input += "'R-PROCESS  :'    '0.00'\n"
+    command_input += "'S-PROCESS  :'    '0.00'\n"
+    #command_input += "'INDIVIDUAL ABUNDANCES:'   '0'\n"
+    #command_input += "'INDIVIDUAL ABUNDANCES:'   '1'\n"
+    #command_input += "3  1.05\n"
+    atom_abundances = abundances[abundances['code'] <= 92]
+    if len(atom_abundances) != 92:
+        raise Exception("No abundances for all 92 elements!")
+    command_input += "'INDIVIDUAL ABUNDANCES:'   '"+str(len(atom_abundances))+"'\n"
+    for atom_abundance in atom_abundances:
+        abund = 12.04 + atom_abundance['Abund'] # From SPECTRUM format to Turbospectrum
+        command_input +=  "%i  %.2f\n" % (atom_abundance['code'], abund)
+    command_input += "'XIFIX:' 'T'\n"
+    command_input += str(microturbulence_vel)+"\n"
+
+    tmp_execution_dir = tempfile.mkdtemp(dir=tmp_dir)
+    os.symlink(turbospectrum_data, tmp_execution_dir+"/DATA")
+    previous_cwd = os.getcwd()
+    os.chdir(tmp_execution_dir)
+
+    if verbose == 1:
+        proc = subprocess.Popen(command.split(), stdin=subprocess.PIPE)
+    else:
+        proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    # wait for the process to terminate
+    out, err = proc.communicate(input=command_input)
+    errcode = proc.returncode
+
+    os.chdir(previous_cwd)
+
+    shutil.rmtree(tmp_execution_dir)
+
+    return opacities_filename
