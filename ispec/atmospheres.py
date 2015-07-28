@@ -28,6 +28,7 @@ import log
 import logging
 import subprocess
 import shutil
+from common import is_turbospectrum_support_enabled, is_spectrum_support_enabled
 
 # SPECTRUM is compatible only with the plane-parallel atmospheres.
 # The first layer represents the surface.
@@ -913,6 +914,9 @@ def calculate_opacities(atmosphere_layers_file, abundances, MH, microturbulence_
     """
     abundances should have been already modified acording to MH
     """
+    if not is_turbospectrum_support_enabled():
+        raise Exception("Turbospectrum support is not enabled")
+
     ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
     turbospectrum_dir = ispec_dir + "/synthesizer/turbospectrum/"
     turbospectrum_data = turbospectrum_dir + "/DATA/"

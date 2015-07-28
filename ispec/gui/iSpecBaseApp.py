@@ -498,7 +498,8 @@ class iSpecBaseApp(Tkinter.Tk):
         self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(Tkinter.END, "label")))
         self.menu_active_spectrum.add_separator()
 
-        if "determine_abundances" in dir(ispec) and "model_spectrum" in dir(ispec) and \
+
+        if ispec.is_spectrum_support_enabled() and \
                 len(self.lists['atmospheres']) > 0 and len(self.lists['abundances']) > 0 and len(self.lists['atomic_lines']) > 0:
                 self.menu_active_spectrum.add_command(label="Synthesize spectrum", command=self.on_synthesize)
 
@@ -705,7 +706,7 @@ www.gnu.org/licenses/"""
     def on_about(self):
         description = """the Integrated Spectroscopic Framework is a tool for the treatment of spectrum files in order to identify lines, continuum regions and determine radial velocities among other options.
 """
-        if "generate_spectrum" in dir(ispec):
+        if ispec.is_spectrum_support_enabled():
             description += """
 The generation of synthetic spectrum is done thanks to:
 
@@ -3872,7 +3873,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
     def on_synthesize(self):
         if self.check_operation_in_progress():
             return
-        if "generate_spectrum" in dir(ispec):
+
+        if ispec.is_spectrum_support_enabled():
             if self.active_spectrum is not None:
                 wave_base = np.round(np.min(self.active_spectrum.data['waveobs']), 2)
                 wave_top = np.round(np.max(self.active_spectrum.data['waveobs']), 2)

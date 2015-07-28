@@ -28,6 +28,7 @@ from segments import create_segments_around_lines
 from atmospheres import write_atmosphere, interpolate_atmosphere_layers, valid_atmosphere_target, calculate_opacities
 from lines import write_atomic_linelist, write_isotope_data
 from common import mkdir_p
+from common import is_turbospectrum_support_enabled, is_spectrum_support_enabled
 from spectrum import create_spectrum_structure, convolve_spectrum, correct_velocity, resample_spectrum, read_spectrum, normalize_spectrum, create_wavelength_filter, read_spectrum, write_spectrum
 from multiprocessing import Process
 from multiprocessing import Queue
@@ -316,6 +317,9 @@ def __spectrum_true_generate_spectrum(process_communication_queue, waveobs, wave
     Generate synthetic spectrum and apply macroturbulence, rotation (visini), limb darkening coeff and resolution except
     if all those parameters are set to zero, in that case the fundamental synthetic spectrum is returned.
     """
+    if not is_spectrum_support_enabled():
+        raise Exception("SPECTRUM support is not enabled")
+
     import synthesizer
 
     #update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
@@ -346,6 +350,9 @@ def __calculate_ew_and_depth(process_communication_queue, atmosphere_model_file,
     """
     start and end in Amstrom
     """
+    if not is_spectrum_support_enabled():
+        raise Exception("SPECTRUM support is not enabled")
+
     import synthesizer
 
     #update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
@@ -402,6 +409,9 @@ def __apply_post_fundamental_effects(process_communication_queue, waveobs, fluxe
     """
     Apply macroturbulence, rotation (visini), limb darkening coeff and resolution to already generated fundamental synthetic spectrum.
     """
+    if not is_spectrum_support_enabled():
+        raise Exception("SPECTRUM support is not enabled")
+
     import synthesizer
     #update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
     update_progress_func = lambda v: __enqueue_progress(process_communication_queue, v)
@@ -899,7 +909,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[5]['fixed'] = not parinfo[5]['parname'].lower() in free_params
     parinfo[5]['step'] = Constants.SYNTH_STEP_VSINI # For auto-derivatives
     parinfo[5]['limited'] = [True, True]
-    parinfo[5]['limits'] = [0.0, 50.0]
+    parinfo[5]['limits'] = [0.0, 300.0]
     #
     parinfo[6]['parname'] = "limb_darkening_coeff"
     parinfo[6]['value'] = initial_limb_darkening_coeff
@@ -2600,6 +2610,9 @@ def __turbospectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, te
     return __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, R=0, macroturbulence=0, vsini=0, use_molecules=use_molecules, tmp_dir=tmp_dir)
 
 def __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, regions=None, R=None, macroturbulence=None, vsini=None, use_molecules=False, tmp_dir=None):
+    if not is_turbospectrum_support_enabled():
+        raise Exception("Turbospectrum support is not enabled")
+
     ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
     turbospectrum_dir = ispec_dir + "/synthesizer/turbospectrum/"
     turbospectrum_data = turbospectrum_dir + "/DATA/"

@@ -18,6 +18,7 @@
 import numpy as np
 from atmospheres import *
 from lines import write_atomic_linelist
+from common import is_turbospectrum_support_enabled, is_spectrum_support_enabled
 from multiprocessing import Process
 from multiprocessing import Queue
 from multiprocessing import JoinableQueue
@@ -365,6 +366,9 @@ def __determine_abundances(process_communication_queue, atmosphere_model_file, l
       If "abundances" contain solar abundances, these values represent
       the quantity [X/H] where X is the species in question.
     """
+    if not is_spectrum_support_enabled():
+        raise Exception("SPECTRUM support is not enabled")
+
     import synthesizer
     update_progress_func = lambda v: __enqueue_progress(process_communication_queue, v)
     abundances = synthesizer.abundances(atmosphere_model_file, linelist_file, num_measures, ignore, abundances_file, microturbulence_vel, nlayers, verbose, update_progress_func)
@@ -414,6 +418,9 @@ def __turbospectrum_read_abund_results(abundances_filename):
 
 
 def __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, tmp_dir=None, enhance_abundances=True, scale=None):
+    if not is_turbospectrum_support_enabled():
+        raise Exception("Turbospectrum support is not enabled")
+
     ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
     turbospectrum_dir = ispec_dir + "/synthesizer/turbospectrum/"
     turbospectrum_data = turbospectrum_dir + "/DATA/"

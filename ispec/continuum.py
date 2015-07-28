@@ -22,11 +22,67 @@ from spectrum import *
 from scipy.ndimage.filters import maximum_filter
 from scipy.ndimage.filters import median_filter
 from scipy.ndimage.filters import gaussian_filter
-from pymodelfit import UniformKnotSplineModel
-from pymodelfit import UniformCDFKnotSplineModel # Old
 from scipy import interpolate
 import log
 import logging
+
+
+class KnotSplineModel(object):
+    """
+    This uses a B-spline of n degree. The knots parameter
+    specifies the number of INTERIOR knots to use for the fit.
+
+    * Inspired by PyModelFit UniformCDFKnotSplineModel:
+        https://pythonhosted.org/PyModelFit/
+    """
+
+    def __init__(self, nknots=3, degree=2, CDF=True):
+        self.nknots = nknots
+        self.degree = degree
+        self.CDF = CDF
+
+    def fitData(self, x, y, weights=None):
+        """
+        Fit a uniform knot spline model. There will be a uniform seperation
+        between the internal knots except if CDF is True.
+
+        When CDF is True, the seperation between the internal knots is set
+        uniformly on the CDF (i.e. knots at the locations that place them
+        unifomly on the histogram of x-values)
+        """
+        sorti = np.argsort(x)
+        x = x[sorti]
+        y = y[sorti]
+        if weights is not None:
+            weights = weights[sorti]
+
+        if self.CDF:
+            # 1) Builds an histogram: # points in 2*nknots bins
+            #    - cdf: Number of points in that bin
+            #    - xcdf[n], xcdf[n+1]: Limits of a bin in wavelength
+            # 2) Filter bins with no points
+            # 3) Calculate the cumulative sum of # points and normalize it
+            # 4) Interpolate the wavelength in an homogeneus grid of normalized cumulative sum of points
+            #    (from 0 to 1, divided in nknots)
+            #    - x=0.02 means wavelength where we reach the 2% of the total number of points
+            #    - x=0.98 means wavelength where we reach the 98% of the total number of points
+            # 5) Use those interpolated wavelengths for putting the knots, therefore we will have a knot
+            #    in those regions were there are an increment on the number of points (avoiding empty regions)
+            cdf,xcdf = np.histogram(x,bins=max(10,max(2*self.nknots,int(len(x)/10))))
+            mask = cdf!=0
+            cdf,xcdf = cdf[mask],xcdf[np.hstack((True,mask))]
+            cdf = np.hstack((0,(1.0*np.cumsum(cdf))/np.sum(cdf))) # Multiply by 1.0 to convert to float and have a good division result
+            self.iknots = np.interp(np.linspace(0,1,self.nknots+2)[1:-1],cdf,xcdf)
+        else:
+            self.iknots = np.linspace(x[0],x[-1],self.nknots+2)[1:-1]
+
+        from scipy.interpolate import LSQUnivariateSpline
+        self.spline = LSQUnivariateSpline(x,y,t=self.iknots,k=int(self.degree),w=weights)
+
+    def __call__(self, x):
+        return self.spline(x)
+
+
 
 def read_continuum_regions(continuum_regions_filename):
     """
@@ -359,8 +415,6 @@ def __clean_outliers(spectrum, min_wave, max_wave, wave_step, ignored_regions, p
             else:
                 wave_top = np.min((wave_top+chunk_size, max_wave))
 
-    #import pudb
-    #pudb.set_trace()
 
     #import matplotlib.pyplot as plt
     #plt.scatter(x, y)
@@ -616,9 +670,7 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
             nknots = np.max([1, int((np.max(spectrum['waveobs']) - np.min(spectrum['waveobs'])) / 5.)])
 
         # If no CDF is used, We cannot directly filter or there will be some knots without data
-        #continuum_model = UniformKnotSplineModel(nknots=nknots, degree=degree)
-        #continuum_model.fitData(continuum['waveobs'], continuum['flux'])
-        continuum_model = UniformCDFKnotSplineModel(nknots=nknots, degree=degree)
+        continuum_model = KnotSplineModel(nknots=nknots, degree=degree, CDF=True)
 
         smooth_err = gaussian_filter(continuum['err'], last_step)
         if use_errors_for_fitting and np.any(smooth_err[~ignore1] > 0):
@@ -715,23 +767,7 @@ def __fit_continuum_old(spectrum, continuum_regions=None, nknots=None, median_wa
     if len(spectrum['waveobs'][continuum_base_points]) == 0:
         raise Exception("Not enough points to fit")
 
-    # UniformCDFKnotSplineModel:
-    # 1) Builds an histogram: # points in 2*nknots bins
-    #    - cdf: Number of points in that bin
-    #    - xcdf[n], xcdf[n+1]: Limits of a bin in wavelength
-    # 2) Filter bins with no points
-    # 3) Calculate the cumulative sum of # points and normalize it
-    # 4) Interpolate the wavelength in an homogeneus grid of normalized cumulative sum of points
-    #    (from 0 to 1, divided in nknots)
-    #    - x=0.02 means wavelength where we reach the 2% of the total number of points
-    #    - x=0.98 means wavelength where we reach the 98% of the total number of points
-    # 5) Use those interpolated wavelengths for putting the knots, therefore we will have a knot
-    #    in those regions were there are an increment on the number of points (avoiding empty regions)
-
-
-    #from pymodelfit import UniformKnotSplineModel
-    continuum_model = UniformCDFKnotSplineModel(nknots)
-    #continuum_model = UniformKnotSplineModel(nknots)
+    continuum_model = KnotSplineModel(nknots=nknots, degree=2, CDF=True)
     fitting_error = False
     try:
         if model == "Splines":

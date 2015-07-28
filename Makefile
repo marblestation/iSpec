@@ -38,4 +38,5 @@ clean:
 	rm -rf synthesizer/build/
 	rm -f synthesizer/synthesizer.so
 	rm -f ispec/synthesizer.so
+	rm -f isochrones/YYmix2
 

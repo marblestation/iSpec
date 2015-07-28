@@ -31,30 +31,28 @@ def resource_path(relative):
         basedir = os.path.dirname(__file__)
     return os.path.join(basedir, relative)
 
-#if os.path.exists(resource_path("synthesizer.so")):
-try:
-    from abundances import determine_abundances
-    from abundances import read_solar_abundances
-    from abundances import enhance_solar_abundances
-    from abundances import determine_abundance_enchancements
-    from abundances import write_abundance_lines
-    from abundances import create_free_abundances_structure
-    from atmospheres import interpolate_atmosphere_layers
-    from atmospheres import load_modeled_layers_pack
-    from atmospheres import valid_atmosphere_target
-    from atmospheres import read_kurucz_atmospheres
-    from atmospheres import build_modeled_interpolated_layer_values
-    from atmospheres import dump_modeled_layers_pack
-    from atmospheres import write_atmosphere
-    #from atmospheres import estimate_proximity_to_real_atmospheres
-    from synth import generate_spectrum
-    from synth import model_spectrum, precompute_synthetic_grid, estimate_initial_ap
-    from synth import estimate_vmic, estimate_vmac
-    from synth import model_spectrum_from_ew
-    from synth import calculate_theoretical_ew_and_depth
-except ImportError as e:
-    #raise
-    pass
+
+from abundances import determine_abundances
+from abundances import read_solar_abundances
+from abundances import enhance_solar_abundances
+from abundances import determine_abundance_enchancements
+from abundances import write_abundance_lines
+from abundances import create_free_abundances_structure
+from atmospheres import interpolate_atmosphere_layers
+from atmospheres import load_modeled_layers_pack
+from atmospheres import valid_atmosphere_target
+from atmospheres import read_kurucz_atmospheres
+from atmospheres import build_modeled_interpolated_layer_values
+from atmospheres import dump_modeled_layers_pack
+from atmospheres import write_atmosphere
+#from atmospheres import estimate_proximity_to_real_atmospheres
+from common import is_turbospectrum_support_enabled, is_spectrum_support_enabled
+from synth import generate_spectrum
+from synth import model_spectrum, precompute_synthetic_grid, estimate_initial_ap
+from synth import estimate_vmic, estimate_vmac
+from synth import model_spectrum_from_ew
+from synth import calculate_theoretical_ew_and_depth
+
 from common import calculate_barycentric_velocity_correction, sigma_clipping, interquartile_range_filtering, save_results, restore_results, mkdir_p
 from spectrum import *
 from continuum import *

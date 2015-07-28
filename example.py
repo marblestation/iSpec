@@ -794,23 +794,12 @@ def synthesize_spectrum(turbo=False):
     teff = 5777.0
     logg = 4.44
     MH = 0.00
-    #MH -= 0.01
-    #teff = 6000
-    #logg = 2.5
-    #MH = 0
     microturbulence_vel = 1.0
     macroturbulence = 0.0
     vsini = 2.0
     limb_darkening_coeff = 0.0
     resolution = 300000
     wave_step = 0.001
-
-    #teff = 4246.11
-    #logg = 1.38
-    #MH = -0.88
-    #microturbulence_vel = 1.65
-    #macroturbulence = 5.05
-    #resolution = 47000
 
     # Wavelengths to synthesis
     #regions = ispec.read_segment_regions(ispec_dir + "/input/regions/fe_lines_segments.txt")
@@ -891,7 +880,11 @@ def synthesize_spectrum(turbo=False):
             turbo=turbo, use_molecules=use_molecules)
     ##--- Save spectrum ------------------------------------------------------------
     logging.info("Saving spectrum...")
-    ispec.write_spectrum(synth_spectrum, "example_synth.s")
+    if turbo:
+        synth_filename = "example_synth_turbo.s"
+    else:
+        synth_filename = "example_synth.s"
+    ispec.write_spectrum(synth_spectrum, synth_filename)
     return synth_spectrum
 
 
@@ -918,7 +911,10 @@ def generate_new_random_realizations_from_spectrum():
     return spectra
 
 def precompute_synthetic_grid(turbo=False):
-    precomputed_grid_dir = "example_grid/"
+    if turbo:
+        precomputed_grid_dir = "example_grid_turbo/"
+    else:
+        precomputed_grid_dir = "example_grid/"
 
     # - Read grid ranges from file
     #ranges_filename = "input/grid/grid_ranges.txt"
@@ -1129,12 +1125,22 @@ def determine_astrophysical_parameters_using_synth_spectra(turbo=False):
             turbo=turbo, use_molecules=use_molecules)
     ##--- Save results -------------------------------------------------------------
     logging.info("Saving results...")
-    ispec.save_results("example_results_synth.dump", (params, errors, abundances_found, status, stats_linemasks))
+    if turbo:
+        dump_file = "example_results_synth_turbo.dump"
+    else:
+        dump_file = "example_results_synth.dump"
+    logging.info("Saving results...")
+    ispec.save_results(dump_file, (params, errors, abundances_found, status, stats_linemasks))
     # If we need to restore the results from another script:
-    params, errors, abundances_found, status, stats_linemasks = ispec.restore_results("example_results_synth.dump")
+    params, errors, abundances_found, status, stats_linemasks = ispec.restore_results(dump_file)
 
     logging.info("Saving synthetic spectrum...")
-    ispec.write_spectrum(modeled_synth_spectrum, "example_modeled_synth.s")
+    if turbo:
+        synth_filename = "example_modeled_synth_turbo.s"
+    else:
+        synth_filename = "example_modeled_synth.s"
+    ispec.write_spectrum(modeled_synth_spectrum, synth_filename)
+
     return obs_spec, modeled_synth_spectrum, params, errors, free_abundances, status, stats_linemasks
 
 
@@ -1143,7 +1149,10 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     # WARNING !!!
     #  This routine depends on the previous precomputation of the synthetic grid
     ############################################################################
-    precomputed_grid_dir = "example_grid/"
+    if turbo:
+        precomputed_grid_dir = "example_grid_turbo/"
+    else:
+        precomputed_grid_dir = "example_grid/"
 
 
     sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -1289,12 +1298,21 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
 
     ##--- Save results -------------------------------------------------------------
     logging.info("Saving results...")
-    ispec.save_results("example_results_synth_precomputed.dump", (params, errors, abundances_found, status, stats_linemasks))
+    if turbo:
+        dump_file = "example_results_synth_precomputed_turbo.dump"
+    else:
+        dump_file = "example_results_synth_precomputed.dump"
+    logging.info("Saving results...")
+    ispec.save_results(dump_file, (params, errors, abundances_found, status, stats_linemasks))
     # If we need to restore the results from another script:
-    params, errors, abundances_found, status, stats_linemasks = ispec.restore_results("example_results_synth_precomputed.dump")
+    params, errors, abundances_found, status, stats_linemasks = ispec.restore_results(dump_file)
 
     logging.info("Saving synthetic spectrum...")
-    ispec.write_spectrum(modeled_synth_spectrum, "example_modeled_synth_precomputed.s")
+    if turbo:
+        synth_filename = "example_modeled_synth_precomputed_turbo.s"
+    else:
+        synth_filename = "example_modeled_synth_precomputed.s"
+    ispec.write_spectrum(modeled_synth_spectrum, synth_filename)
     return obs_spec, modeled_synth_spectrum, params, errors, free_abundances, status, stats_linemasks
 
 
@@ -1415,13 +1433,21 @@ def determine_abundances_using_synth_spectra(turbo=False):
             turbo=turbo, use_molecules=use_molecules)
 
     ##--- Save results -------------------------------------------------------------
+    if turbo:
+        dump_file = "example_results_synth_abundances_turbo.dump"
+    else:
+        dump_file = "example_results_synth_abundances.dump"
     logging.info("Saving results...")
-    ispec.save_results("example_results_synth_abundances.dump", (params, errors, abundances_found, status, stats_linemasks))
+    ispec.save_results(dump_file, (params, errors, abundances_found, status, stats_linemasks))
     # If we need to restore the results from another script:
-    params, errors, abundances_found, status, stats_linemasks = ispec.restore_results("example_results_synth_abundances.dump")
+    params, errors, abundances_found, status, stats_linemasks = ispec.restore_results(dump_file)
 
     logging.info("Saving synthetic spectrum...")
-    ispec.write_spectrum(modeled_synth_spectrum, "example_modeled_synth_abundances.s")
+    if turbo:
+        synth_filename = "example_modeled_synth_abundances_turbo.s"
+    else:
+        synth_filename = "example_modeled_synth_abundances.s"
+    ispec.write_spectrum(modeled_synth_spectrum, synth_filename)
 
     return obs_spec, modeled_synth_spectrum, params, errors, free_abundances, status, stats_linemasks
 
@@ -1600,9 +1626,14 @@ def determine_astrophysical_parameters_from_ew(turbo=False):
 
     ##--- Save results -------------------------------------------------------------
     logging.info("Saving results...")
-    ispec.save_results("example_results_ew.dump", (params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params))
+    if turbo:
+        dump_file = "example_results_ew_turbo.dump"
+    else:
+        dump_file = "example_results_ew.dump"
+
+    ispec.save_results(dump_file, (params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params))
     # If we need to restore the results from another script:
-    params, errors, status, x_over_h, selected_x_over_h, fitted_lines_param = ispec.restore_results("example_results_ew.dump")
+    params, errors, status, x_over_h, selected_x_over_h, fitted_lines_param = ispec.restore_results(dump_file)
 
     return params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params
 
@@ -1740,8 +1771,6 @@ def determine_abundances_from_ew(turbo=False):
     #print "[X/Fe]: %.2f" % np.median(x_over_fe[np.logical_and(fe1, ~bad)])
     print "[Fe 2/H]: %.2f" % np.median(x_over_h[np.logical_and(fe2, ~bad)])
     #print "[X/Fe]: %.2f" % np.median(x_over_fe[np.logical_and(fe2, ~bad)])
-    import pudb
-    pudb.set_trace()
 
 
 
@@ -1879,10 +1908,6 @@ def generate_and_plot_YY_isochrone():
 def interpolate_atmosphere(turbo=False):
     #--- Synthesizing spectrum -----------------------------------------------------
     # Parameters
-    #s6000_g+2.5_m1.0_t01_st_z+0.00_a+0.00_c+0.00_n+0.00_o+0.00_r+0.00_s+0.00.mod.txt
-    #teff = 6000
-    #logg = 2.5
-    #MH = 0
     teff = 5777.0
     logg = 4.44
     MH = 0.05
@@ -1912,60 +1937,60 @@ def interpolate_atmosphere(turbo=False):
 
 
 if __name__ == '__main__':
-    #read_write_spectrum()
-    #convert_air_to_vacuum()
-    ##plot()
-    #cut_spectrum_from_range()
-    #cut_spectrum_from_segments()
-    #determine_radial_velocity_with_mask()
-    #determine_radial_velocity_with_template()
-    #correct_radial_velocity()
-    #determine_tellurics_shift_with_mask()
-    #determine_tellurics_shift_with_template()
-    #degrade_resolution()
-    #smooth_spectrum()
-    #resample_spectrum()
-    #coadd_spectra()
-    #merge_spectra()
-    #normalize_spectrum_using_continuum_regions()
-    #normalize_spectrum_in_segments()
-    #normalize_whole_spectrum_strategy2()
-    #normalize_whole_spectrum_strategy1()
-    #normalize_whole_spectrum_strategy1_ignoring_prefixed_strong_lines()
-    #filter_cosmic_rays()
-    #find_continuum_regions()
-    #find_continuum_regions_in_segments()
-    #find_linemasks()
-    #fit_lines_and_determine_ew()
-    #calculate_barycentric_velocity()
-    #estimate_snr_from_flux()
-    #estimate_snr_from_err()
-    #estimate_errors_from_snr()
-    #clean_spectrum()
-    #clean_telluric_regions()
-    #adjust_line_masks()
-    #create_segments_around_linemasks()
-    #synthesize_spectrum(turbo=False)
+    read_write_spectrum()
+    convert_air_to_vacuum()
+    #plot()
+    cut_spectrum_from_range()
+    cut_spectrum_from_segments()
+    determine_radial_velocity_with_mask()
+    determine_radial_velocity_with_template()
+    correct_radial_velocity()
+    determine_tellurics_shift_with_mask()
+    determine_tellurics_shift_with_template()
+    degrade_resolution()
+    smooth_spectrum()
+    resample_spectrum()
+    coadd_spectra()
+    merge_spectra()
+    normalize_spectrum_using_continuum_regions()
+    normalize_spectrum_in_segments()
+    normalize_whole_spectrum_strategy2()
+    normalize_whole_spectrum_strategy1()
+    normalize_whole_spectrum_strategy1_ignoring_prefixed_strong_lines()
+    filter_cosmic_rays()
+    find_continuum_regions()
+    find_continuum_regions_in_segments()
+    find_linemasks()
+    fit_lines_and_determine_ew()
+    calculate_barycentric_velocity()
+    estimate_snr_from_flux()
+    estimate_snr_from_err()
+    estimate_errors_from_snr()
+    clean_spectrum()
+    clean_telluric_regions()
+    adjust_line_masks()
+    create_segments_around_linemasks()
+    synthesize_spectrum(turbo=False)
     synthesize_spectrum(turbo=True)
-    #add_noise_to_spectrum()
-    #generate_new_random_realizations_from_spectrum()
-    ##precompute_synthetic_grid(turbo=False)
-    ##precompute_synthetic_grid(turbo=True)
-    #determine_astrophysical_parameters_using_synth_spectra(turbo=False)
-    #determine_astrophysical_parameters_using_synth_spectra(turbo=True)
-    ##determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(turbo=False)
-    ##determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(turbo=True)
-    #determine_abundances_using_synth_spectra(turbo=False)
-    #determine_abundances_using_synth_spectra(turbo=True)
-    #determine_astrophysical_parameters_from_ew(turbo=False)
-    #determine_astrophysical_parameters_from_ew(turbo=True)
-    #determine_abundances_from_ew(turbo=False)
-    #determine_abundances_from_ew(turbo=True)
-    #calculate_theoretical_ew_and_depth()
-    #paralelize_code()
-    #estimate_vmic_from_empirical_relation()
-    #estimate_vmac_from_empirical_relation()
-    ##generate_and_plot_YY_isochrone()
-    #interpolate_atmosphere(turbo=False)
-    #interpolate_atmosphere(turbo=True)
+    add_noise_to_spectrum()
+    generate_new_random_realizations_from_spectrum()
+    #precompute_synthetic_grid(turbo=False)
+    #precompute_synthetic_grid(turbo=True)
+    determine_astrophysical_parameters_using_synth_spectra(turbo=False)
+    determine_astrophysical_parameters_using_synth_spectra(turbo=True)
+    #determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(turbo=False)
+    #determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(turbo=True)
+    determine_abundances_using_synth_spectra(turbo=False)
+    determine_abundances_using_synth_spectra(turbo=True)
+    determine_astrophysical_parameters_from_ew(turbo=False)
+    determine_astrophysical_parameters_from_ew(turbo=True)
+    determine_abundances_from_ew(turbo=False)
+    determine_abundances_from_ew(turbo=True)
+    calculate_theoretical_ew_and_depth()
+    paralelize_code()
+    estimate_vmic_from_empirical_relation()
+    estimate_vmac_from_empirical_relation()
+    #generate_and_plot_YY_isochrone()
+    interpolate_atmosphere(turbo=False)
+    interpolate_atmosphere(turbo=True)
     pass

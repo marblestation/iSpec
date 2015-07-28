@@ -32,6 +32,32 @@ import logging
 import cPickle as pickle
 import gzip
 
+def is_spectrum_support_enabled():
+    try:
+        import synthesizer as __synthesizer_ignore__
+        return True
+    except:
+        return False
+
+def is_turbospectrum_support_enabled():
+    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
+    turbospectrum_dir = ispec_dir + "/synthesizer/turbospectrum/"
+    turbospectrum_data = turbospectrum_dir + "/DATA/"
+    molecules_dir = ispec_dir + "input/linelists/turbospectrum/molecules/"
+    turbospectrum_bsyn_lu = turbospectrum_dir + "bin/bsyn_lu"
+    turbospectrum_eqwidt_lu = turbospectrum_dir + "bin/eqwidt_lu"
+    turbospectrum_babsma_lu = turbospectrum_dir + "bin/babsma_lu"
+
+    if not os.path.exists(turbospectrum_eqwidt_lu) or \
+            not os.path.exists(turbospectrum_bsyn_lu) or \
+            not os.path.exists(turbospectrum_babsma_lu) or \
+            not os.path.exists(molecules_dir) or \
+            not os.path.exists(turbospectrum_data):
+        return False
+    else:
+        return True
+
+
 def save_results(dump_filename, data):
     pickle.dump(data, gzip.open(dump_filename, "wb", compresslevel=3), protocol=2)
 

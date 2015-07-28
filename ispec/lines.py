@@ -26,15 +26,11 @@ import scipy.stats as stats
 import cPickle as pickle
 import gzip
 import os
-#import ipdb
 from common import *
 from continuum import *
 from lines import *
 from spectrum import *
 import matplotlib.pyplot as plt
-from pymodelfit import UniformKnotSplineModel
-from pymodelfit import UniformCDFKnotSplineModel
-from pymodelfit import LinearModel
 from mpfitmodels import GaussianModel
 from mpfitmodels import VoigtModel
 import log
@@ -2053,25 +2049,6 @@ def __model_velocity_profile(ccf, nbins, only_one_peak=False, peak_probability=0
 
     if len(peaks) == 0 or len(base_points) == 0:
         return models
-
-    # Fit continuum to try to remove trends that may affect the peak detection
-    #try:
-        ##nknots = 2
-        ##continuum_model = UniformCDFKnotSplineModel(nknots)
-        ##continuum_model.fitData(xcoord[base_points], fluxes[base_points])
-        ##continuum = continuum_model(xcoord)
-
-        #continuum_model = LinearModel()
-        #continuum_model.fitData(xcoord[base_points], fluxes[base_points])
-        #continuum = continuum_model(xcoord)
-        #if not np.any(continuum == 0) and not np.any(np.isnan(continuum)):
-            #smoothed_fluxes /= continuum
-            #fluxes /= continuum
-            #errors /= continuum
-        #else:
-            #raise Exception()
-    #except Exception:
-        #logging.warn("Velocity profile cannot be normalized")
 
     if len(peaks) != 0:
         base = base_points[:-1]
