@@ -57,6 +57,18 @@ def is_turbospectrum_support_enabled():
     else:
         return True
 
+def is_moog_support_enabled():
+    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
+    moog_dir = ispec_dir + "/synthesizer/moog/"
+    moog_executable = moog_dir + "MOOGSILENT"
+
+    if not os.path.exists(moog_executable) or \
+            not os.path.exists(moog_dir):
+        return False
+    else:
+        return True
+
+
 
 def save_results(dump_filename, data):
     pickle.dump(data, gzip.open(dump_filename, "wb", compresslevel=3), protocol=2)

@@ -788,7 +788,7 @@ def fit_lines_and_determine_ew():
     return linemasks, ew, ew_err
 
 
-def synthesize_spectrum(turbo=False):
+def synthesize_spectrum(code="spectrum"):
     #--- Synthesizing spectrum -----------------------------------------------------
     # Parameters
     teff = 5777.0
@@ -834,15 +834,17 @@ def synthesize_spectrum(turbo=False):
     isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
 
     # Load chemical information and linelist
-    use_molecules = turbo # Only for turbo
-    #use_molecules = False # Only for turbo
+    if code == "turbospectrum":
+        use_molecules = True # Only for turbo
+    else:
+        use_molecules = False
     molecules = ispec.read_molecular_symbols(molecules_file)
     chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
-    if turbo:
+    if code == "turbospectrum":
         atomic_linelist_file = ispec_dir + "input/linelists/turbospectrum/GESv5_atom_hfs_iso.420_920nm/atomic_lines.bsyn"
-        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, turbo=turbo) ## TurboSpectrum
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, code=code) ## TurboSpectrum
     else:
-        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements=chemical_elements, molecules=molecules, turbo=turbo)
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements=chemical_elements, molecules=molecules, code=code)
     isotopes = ispec.read_isotope_data(isotope_file)
 
     solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
@@ -868,7 +870,7 @@ def synthesize_spectrum(turbo=False):
     abundances = ispec.enhance_solar_abundances(solar_abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
 
     # Prepare atmosphere model
-    atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH, turbo=turbo)
+    atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH, code=code)
 
     # Synthesis
     synth_spectrum = ispec.create_spectrum_structure(np.arange(wave_base, wave_top, wave_step))
@@ -877,11 +879,13 @@ def synthesize_spectrum(turbo=False):
             fixed_abundances, microturbulence_vel = microturbulence_vel, \
             macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, \
             R=resolution, regions=regions, verbose=1,
-            turbo=turbo, use_molecules=use_molecules)
+            code=code, use_molecules=use_molecules)
     ##--- Save spectrum ------------------------------------------------------------
     logging.info("Saving spectrum...")
-    if turbo:
+    if code == "turbospectrum":
         synth_filename = "example_synth_turbo.s"
+    elif code == "moog":
+        synth_filename = "example_synth_moog.s"
     else:
         synth_filename = "example_synth.s"
     ispec.write_spectrum(synth_spectrum, synth_filename)
@@ -910,9 +914,11 @@ def generate_new_random_realizations_from_spectrum():
     spectra = ispec.random_realizations(sun_spectrum, number, distribution="poisson")
     return spectra
 
-def precompute_synthetic_grid(turbo=False):
-    if turbo:
+def precompute_synthetic_grid(code="spectrum"):
+    if code == "turbospectrum":
         precomputed_grid_dir = "example_grid_turbo/"
+    elif code == "moog":
+        precomputed_grid_dir = "example_grid_moog/"
     else:
         precomputed_grid_dir = "example_grid/"
 
@@ -962,14 +968,17 @@ def precompute_synthetic_grid(turbo=False):
     isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
 
     # Load chemical information and linelist
-    use_molecules = turbo # Only for turbo
+    if code == "turbospectrum":
+        use_molecules = True # Only for turbo
+    else:
+        use_molecules = False
     molecules = ispec.read_molecular_symbols(molecules_file)
     chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
-    if turbo:
+    if code == "turbospectrum":
         atomic_linelist_file = ispec_dir + "input/linelists/turbospectrum/GESv5_atom_hfs_iso.420_920nm/atomic_lines.bsyn"
-        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, turbo=turbo) ## TurboSpectrum
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, code=code) ## TurboSpectrum
     else:
-        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements=chemical_elements, molecules=molecules, turbo=turbo)
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements=chemical_elements, molecules=molecules, code=code)
     isotopes = ispec.read_isotope_data(isotope_file)
 
     solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
@@ -988,10 +997,10 @@ def precompute_synthetic_grid(turbo=False):
     ispec.precompute_synthetic_grid(precomputed_grid_dir, ranges, wavelengths, to_resolution, \
                                     modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, \
                                     segments=None, number_of_processes=number_of_processes, \
-                                    turbo=turbo, use_molecules=use_molecules)
+                                    code=code, use_molecules=use_molecules)
 
 
-def determine_astrophysical_parameters_using_synth_spectra(turbo=False):
+def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -1061,15 +1070,17 @@ def determine_astrophysical_parameters_using_synth_spectra(turbo=False):
     isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
 
     # Load chemical information and linelist
-    use_molecules = turbo # Only for turbo
-    use_molecules = False
+    if code == "turbospectrum":
+        use_molecules = True # Only for turbo
+    else:
+        use_molecules = False
     molecules = ispec.read_molecular_symbols(molecules_file)
     chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
-    if turbo:
+    if code == "turbospectrum":
         atomic_linelist_file = ispec_dir + "input/linelists/turbospectrum/GESv5_atom_hfs_iso.420_920nm/atomic_lines.bsyn"
-        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, turbo=turbo) ## TurboSpectrum
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, code=code) ## TurboSpectrum
     else:
-        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements=chemical_elements, molecules=molecules, turbo=turbo)
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements=chemical_elements, molecules=molecules, code=code)
     isotopes = ispec.read_isotope_data(isotope_file)
 
 
@@ -1122,11 +1133,13 @@ def determine_astrophysical_parameters_using_synth_spectra(turbo=False):
             use_errors = True, \
             max_iterations=max_iterations, \
             tmp_dir = None, \
-            turbo=turbo, use_molecules=use_molecules)
+            code=code, use_molecules=use_molecules)
     ##--- Save results -------------------------------------------------------------
     logging.info("Saving results...")
-    if turbo:
+    if code == "turbospectrum":
         dump_file = "example_results_synth_turbo.dump"
+    elif code == "moog":
+        dump_file = "example_results_synth_moog.dump"
     else:
         dump_file = "example_results_synth.dump"
     logging.info("Saving results...")
@@ -1135,8 +1148,10 @@ def determine_astrophysical_parameters_using_synth_spectra(turbo=False):
     params, errors, abundances_found, status, stats_linemasks = ispec.restore_results(dump_file)
 
     logging.info("Saving synthetic spectrum...")
-    if turbo:
+    if code == "turbospectrum":
         synth_filename = "example_modeled_synth_turbo.s"
+    elif code == "moog":
+        synth_filename = "example_modeled_synth_moog.s"
     else:
         synth_filename = "example_modeled_synth.s"
     ispec.write_spectrum(modeled_synth_spectrum, synth_filename)
@@ -1144,13 +1159,15 @@ def determine_astrophysical_parameters_using_synth_spectra(turbo=False):
     return obs_spec, modeled_synth_spectrum, params, errors, free_abundances, status, stats_linemasks
 
 
-def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(turbo=False):
+def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(code="spectrum"):
     ############################################################################
     # WARNING !!!
     #  This routine depends on the previous precomputation of the synthetic grid
     ############################################################################
-    if turbo:
+    if code == "turbospectrum":
         precomputed_grid_dir = "example_grid_turbo/"
+    elif code == "moog":
+        precomputed_grid_dir = "example_grid_moog/"
     else:
         precomputed_grid_dir = "example_grid/"
 
@@ -1217,14 +1234,17 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
 
     # Load chemical information and linelist
-    use_molecules = turbo # Only for turbo
+    if code == "turbospectrum":
+        use_molecules = True # Only for turbo
+    else:
+        use_molecules = False
     molecules = ispec.read_molecular_symbols(molecules_file)
     chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
-    if turbo:
+    if code == "turbospectrum":
         atomic_linelist_file = ispec_dir + "input/linelists/turbospectrum/GESv5_atom_hfs_iso.420_920nm/atomic_lines.bsyn"
-        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, turbo=turbo) ## TurboSpectrum
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, code=code) ## TurboSpectrum
     else:
-        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements=chemical_elements, molecules=molecules, turbo=turbo)
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements=chemical_elements, molecules=molecules, code=code)
     isotopes = ispec.read_isotope_data(isotope_file)
 
 
@@ -1288,7 +1308,7 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
             use_errors = True, \
             max_iterations=max_iterations, \
             tmp_dir = None, \
-            turbo=turbo, use_molecules=use_molecules)
+            code=code, use_molecules=use_molecules)
 
     #--- Change LOG level ----------------------------------------------------------
     #LOG_LEVEL = "warning"
@@ -1298,8 +1318,10 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
 
     ##--- Save results -------------------------------------------------------------
     logging.info("Saving results...")
-    if turbo:
+    if code == "turbospectrum":
         dump_file = "example_results_synth_precomputed_turbo.dump"
+    elif code == "moog":
+        dump_file = "example_results_synth_precomputed_moog.dump"
     else:
         dump_file = "example_results_synth_precomputed.dump"
     logging.info("Saving results...")
@@ -1308,8 +1330,10 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     params, errors, abundances_found, status, stats_linemasks = ispec.restore_results(dump_file)
 
     logging.info("Saving synthetic spectrum...")
-    if turbo:
+    if code == "turbospectrum":
         synth_filename = "example_modeled_synth_precomputed_turbo.s"
+    elif code == "moog":
+        synth_filename = "example_modeled_synth_precomputed_moog.s"
     else:
         synth_filename = "example_modeled_synth_precomputed.s"
     ispec.write_spectrum(modeled_synth_spectrum, synth_filename)
@@ -1318,7 +1342,7 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
 
 
 
-def determine_abundances_using_synth_spectra(turbo=False):
+def determine_abundances_using_synth_spectra(code="spectrum"):
     sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -1386,14 +1410,17 @@ def determine_abundances_using_synth_spectra(turbo=False):
     isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
 
     # Load chemical information and linelist
-    use_molecules = turbo # Only for turbo
+    if code == "turbospectrum":
+        use_molecules = True # Only for turbo
+    else:
+        use_molecules = False
     molecules = ispec.read_molecular_symbols(molecules_file)
     chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
-    if turbo:
+    if code == "turbospectrum":
         atomic_linelist_file = ispec_dir + "input/linelists/turbospectrum/GESv5_atom_hfs_iso.420_920nm/atomic_lines.bsyn"
-        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, turbo=turbo) ## TurboSpectrum
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, code=code) ## TurboSpectrum
     else:
-        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements=chemical_elements, molecules=molecules, turbo=turbo)
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements=chemical_elements, molecules=molecules, code=code)
     isotopes = ispec.read_isotope_data(isotope_file)
 
 
@@ -1430,11 +1457,13 @@ def determine_abundances_using_synth_spectra(turbo=False):
             use_errors = True, \
             max_iterations=max_iterations, \
             tmp_dir = None, \
-            turbo=turbo, use_molecules=use_molecules)
+            code=code, use_molecules=use_molecules)
 
     ##--- Save results -------------------------------------------------------------
-    if turbo:
+    if code == "turbospectrum":
         dump_file = "example_results_synth_abundances_turbo.dump"
+    elif code == "moog":
+        dump_file = "example_results_synth_abundances_moog.dump"
     else:
         dump_file = "example_results_synth_abundances.dump"
     logging.info("Saving results...")
@@ -1443,8 +1472,10 @@ def determine_abundances_using_synth_spectra(turbo=False):
     params, errors, abundances_found, status, stats_linemasks = ispec.restore_results(dump_file)
 
     logging.info("Saving synthetic spectrum...")
-    if turbo:
+    if code == "turbospectrum":
         synth_filename = "example_modeled_synth_abundances_turbo.s"
+    elif code == "moog":
+        synth_filename = "example_modeled_synth_abundances_moog.s"
     else:
         synth_filename = "example_modeled_synth_abundances.s"
     ispec.write_spectrum(modeled_synth_spectrum, synth_filename)
@@ -1452,11 +1483,12 @@ def determine_abundances_using_synth_spectra(turbo=False):
     return obs_spec, modeled_synth_spectrum, params, errors, free_abundances, status, stats_linemasks
 
 
-def determine_astrophysical_parameters_from_ew(turbo=False):
+def determine_astrophysical_parameters_from_ew(code="spectrum"):
     sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Read lines and adjust them ------------------------------------------------
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines_biglist.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines_biglist.txt")
     #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_golden_lines.txt")
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/GES/v5/atomic_lines_yy_fe.txt")
     line_regions = ispec.adjust_linemasks(sun_spectrum, line_regions, max_margin=0.5)
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -1495,14 +1527,17 @@ def determine_astrophysical_parameters_from_ew(turbo=False):
     telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
 
     # Load chemical information and linelist
-    use_molecules = turbo # Only for turbo
+    if code == "turbospectrum":
+        use_molecules = True # Only for turbo
+    else:
+        use_molecules = False
     molecules = ispec.read_molecular_symbols(molecules_file)
     chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
-    if turbo:
+    if code == "turbospectrum":
         atomic_linelist_file = ispec_dir + "input/linelists/turbospectrum/GESv5_atom_hfs_iso.420_920nm/atomic_lines.bsyn"
-        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, turbo=turbo) ## TurboSpectrum
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, code=code) ## TurboSpectrum
     else:
-        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements=chemical_elements, molecules=molecules, turbo=turbo)
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements=chemical_elements, molecules=molecules, code=code)
     telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
 
     # To reduce bad cross-matches, we reduce the linelist to those elements we are going to analyse
@@ -1614,20 +1649,28 @@ def determine_astrophysical_parameters_from_ew(turbo=False):
     ## Filter also bad fits
     efilter = np.logical_and(efilter, linemasks['rms'] < 0.05)
 
+    if code == "moog":
+        adjust_model_metalicity = True
+    else:
+        adjust_model_metalicity = False
+
     results = ispec.model_spectrum_from_ew(linemasks[efilter], modeled_layers_pack, atomic_linelist,\
                         solar_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, \
                         free_params=["teff", "logg", "vmic"], \
+                        adjust_model_metalicity=adjust_model_metalicity, \
                         max_iterations=max_iterations, \
                         enhance_abundances=True, \
                         outliers_weight_limit = 0.90, \
                         tmp_dir = None, \
-                        turbo=turbo)
+                        code=code)
     params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params = results
 
     ##--- Save results -------------------------------------------------------------
     logging.info("Saving results...")
-    if turbo:
+    if code == "turbospectrum":
         dump_file = "example_results_ew_turbo.dump"
+    elif code == "moog":
+        dump_file = "example_results_ew_moog.dump"
     else:
         dump_file = "example_results_ew.dump"
 
@@ -1638,11 +1681,12 @@ def determine_astrophysical_parameters_from_ew(turbo=False):
     return params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params
 
 
-def determine_abundances_from_ew(turbo=False):
+def determine_abundances_from_ew(code="spectrum"):
     sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Read lines and adjust them ------------------------------------------------
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines_biglist.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines_biglist.txt")
     #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_golden_lines.txt")
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/GES/v5/atomic_lines_yy_fe.txt")
     line_regions = ispec.adjust_linemasks(sun_spectrum, line_regions, max_margin=0.5)
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -1681,14 +1725,17 @@ def determine_abundances_from_ew(turbo=False):
     telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
 
     # Load chemical information and linelist
-    use_molecules = turbo # Only for turbo
+    if code == "turbospectrum":
+        use_molecules = True # Only for turbo
+    else:
+        use_molecules = False
     molecules = ispec.read_molecular_symbols(molecules_file)
     chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
-    if turbo:
+    if code == "turbospectrum":
         atomic_linelist_file = ispec_dir + "input/linelists/turbospectrum/GESv5_atom_hfs_iso.420_920nm/atomic_lines.bsyn"
-        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, turbo=turbo) ## TurboSpectrum
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, code=code) ## TurboSpectrum
     else:
-        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements=chemical_elements, molecules=molecules, turbo=turbo)
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, chemical_elements=chemical_elements, molecules=molecules, code=code)
     telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
 
     # To reduce bad cross-matches, we reduce the linelist to those elements we are going to analyse
@@ -1759,10 +1806,10 @@ def determine_abundances_from_ew(turbo=False):
         print msg
 
     # Prepare atmosphere model
-    atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH, turbo=turbo)
+    atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH, code=code)
     spec_abund, normal_abund, x_over_h, x_over_fe = ispec.determine_abundances(atmosphere_layers, \
             teff, logg, MH, linemasks, solar_abundances, microturbulence_vel = microturbulence_vel, \
-            verbose=1, turbo=turbo)
+            verbose=1, code=code)
 
     bad = np.isnan(x_over_h)
     fe1 = linemasks['element'] == "Fe 1"
@@ -1905,7 +1952,7 @@ def generate_and_plot_YY_isochrone():
 
 
 
-def interpolate_atmosphere(turbo=False):
+def interpolate_atmosphere(code="spectrum"):
     #--- Synthesizing spectrum -----------------------------------------------------
     # Parameters
     teff = 5777.0
@@ -1931,9 +1978,9 @@ def interpolate_atmosphere(turbo=False):
         print msg
 
     # Prepare atmosphere model
-    atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH, turbo=turbo)
+    atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH, code=code)
     atmosphere_layers_file = "example_atmosphere.txt"
-    atmosphere_layers_file = ispec.write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=atmosphere_layers_file, turbo=turbo)
+    atmosphere_layers_file = ispec.write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=atmosphere_layers_file, code=code)
 
 
 if __name__ == '__main__':
@@ -1970,27 +2017,34 @@ if __name__ == '__main__':
     clean_telluric_regions()
     adjust_line_masks()
     create_segments_around_linemasks()
-    synthesize_spectrum(turbo=False)
-    synthesize_spectrum(turbo=True)
+    synthesize_spectrum(code="spectrum")
+    synthesize_spectrum(code="turbospectrum")
+    synthesize_spectrum(code="moog")
     add_noise_to_spectrum()
     generate_new_random_realizations_from_spectrum()
-    #precompute_synthetic_grid(turbo=False)
-    #precompute_synthetic_grid(turbo=True)
-    determine_astrophysical_parameters_using_synth_spectra(turbo=False)
-    determine_astrophysical_parameters_using_synth_spectra(turbo=True)
-    #determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(turbo=False)
-    #determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(turbo=True)
-    determine_abundances_using_synth_spectra(turbo=False)
-    determine_abundances_using_synth_spectra(turbo=True)
-    determine_astrophysical_parameters_from_ew(turbo=False)
-    determine_astrophysical_parameters_from_ew(turbo=True)
-    determine_abundances_from_ew(turbo=False)
-    determine_abundances_from_ew(turbo=True)
+    #precompute_synthetic_grid(code="spectrum")
+    #precompute_synthetic_grid(code="turbospectrum")
+    determine_astrophysical_parameters_using_synth_spectra(code="spectrum")
+    determine_astrophysical_parameters_using_synth_spectra(code="turbospectrum")
+    determine_astrophysical_parameters_using_synth_spectra(code="moog")
+    #determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(code="spectrum")
+    #determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(code="turbospectrum")
+    #determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(code="moog")
+    determine_abundances_using_synth_spectra(code="spectrum")
+    determine_abundances_using_synth_spectra(code="turbospectrum")
+    determine_abundances_using_synth_spectra(code="moog")
+    determine_astrophysical_parameters_from_ew(code="spectrum")
+    determine_astrophysical_parameters_from_ew(code="turbospectrum")
+    determine_astrophysical_parameters_from_ew(code="moog")
+    determine_abundances_from_ew(code="spectrum")
+    determine_abundances_from_ew(code="turbospectrum")
+    determine_abundances_from_ew(code="moog")
     calculate_theoretical_ew_and_depth()
     paralelize_code()
     estimate_vmic_from_empirical_relation()
     estimate_vmac_from_empirical_relation()
     #generate_and_plot_YY_isochrone()
-    interpolate_atmosphere(turbo=False)
-    interpolate_atmosphere(turbo=True)
+    interpolate_atmosphere(code="spectrum")
+    interpolate_atmosphere(code="turbospectrum")
+    interpolate_atmosphere(code="moog")
     pass

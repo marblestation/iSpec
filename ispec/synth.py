@@ -28,7 +28,7 @@ from segments import create_segments_around_lines
 from atmospheres import write_atmosphere, interpolate_atmosphere_layers, valid_atmosphere_target, calculate_opacities
 from lines import write_atomic_linelist, write_isotope_data
 from common import mkdir_p
-from common import is_turbospectrum_support_enabled, is_spectrum_support_enabled
+from common import is_turbospectrum_support_enabled, is_spectrum_support_enabled, is_moog_support_enabled
 from spectrum import create_spectrum_structure, convolve_spectrum, correct_velocity, resample_spectrum, read_spectrum, normalize_spectrum, create_wavelength_filter, read_spectrum, write_spectrum
 from multiprocessing import Process
 from multiprocessing import Queue
@@ -69,14 +69,20 @@ class Constants:
     EW_STEP_VMIC = 0.5
 
 
-def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None, turbo=False, use_molecules=False, tmp_dir=None):
+def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None, code="spectrum", use_molecules=False, tmp_dir=None):
     """
     waveobs_mask is for SPECTRUM
     regions is for Turbospectrum
     """
-    if turbo:
+    code = code.lower()
+    if code not in ['spectrum', 'turbospectrum', 'moog']:
+        raise Exception("Unknown radiative transfer code: %s" % (code))
+
+    if code == "turbospectrum":
         return __turbospectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir)
-    else:
+    elif code == "moog":
+        return __moog_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, tmp_dir=tmp_dir)
+    elif code == "spectrum":
         return __spectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions, waveobs_mask=waveobs_mask)
 
 
@@ -99,14 +105,20 @@ def __spectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, l
     return __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence = 0.0, vsini = 0.0, limb_darkening_coeff = 0.20, R=0, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions)
 
 
-def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.20, R=500000, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None, turbo=False, use_molecules=False, tmp_dir=None):
+def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.20, R=500000, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None, code="spectrum", use_molecules=False, tmp_dir=None):
     """
     waveobs_mask is for SPECTRUM
     regions is for Turbospectrum
     """
-    if turbo:
+    code = code.lower()
+    if code not in ['spectrum', 'turbospectrum', 'moog']:
+        raise Exception("Unknown radiative transfer code: %s" % (code))
+
+    if code == "turbospectrum":
         return __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir)
-    else:
+    elif code == "moog":
+        return __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, tmp_dir=tmp_dir)
+    elif code == "spectrum":
         return __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions, waveobs_mask=waveobs_mask)
 
 
@@ -156,7 +168,7 @@ def __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, lin
     remove_tmp_linelist_file = False
     remove_tmp_isotope_file = False
     if atmosphere_layers_file is None:
-        atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH, tmp_dir=tmp_dir)
+        atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH, code="spectrum", tmp_dir=tmp_dir)
         remove_tmp_atm_file = True
     if abundances_file is None:
         abundances_file = write_solar_abundances(abundances, tmp_dir=tmp_dir)
@@ -236,7 +248,7 @@ def calculate_theoretical_ew_and_depth(atmosphere_layers, teff, logg, MH, lineli
     remove_tmp_linelist_file = False
     remove_tmp_isotope_file = False
     if atmosphere_layers_file is None:
-        atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH, tmp_dir=tmp_dir)
+        atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH, code="spectrum", tmp_dir=tmp_dir)
         remove_tmp_atm_file = True
     if abundances_file is None:
         abundances_file = write_solar_abundances(abundances, tmp_dir=tmp_dir)
@@ -610,11 +622,13 @@ class SynthModel(MPFitModel):
                     abundances = self.abundances
 
                 # Atmosphere
-                atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH(), turbo=self.turbo)
+                atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH(), code=self.code)
                 # Fundamental synthetic fluxes
-                if self.turbo:
-                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.linelist, self.isotopes, abundances, fixed_abundances, microturbulence_vel=self.vmic(), abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, turbo=self.turbo, use_molecules=self.use_molecules, tmp_dir=self.tmp_dir)
-                else:
+                if self.code == "turbospectrum":
+                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.linelist, self.isotopes, abundances, fixed_abundances, microturbulence_vel=self.vmic(), abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, use_molecules=self.use_molecules, tmp_dir=self.tmp_dir)
+                elif self.code == "moog":
+                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.linelist, self.isotopes, abundances, fixed_abundances, microturbulence_vel=self.vmic(), abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir)
+                elif self.code == "spectrum":
                     self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.linelist, self.isotopes, abundances, fixed_abundances, microturbulence_vel=self.vmic(), abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, waveobs_mask=self.waveobs_mask, verbose=0, tmp_dir=self.tmp_dir)
 
 
@@ -625,7 +639,11 @@ class SynthModel(MPFitModel):
 
         return self.last_final_fluxes[self.comparing_mask]
 
-    def fitData(self, waveobs, segments, comparing_mask, fluxes, weights=None, parinfo=None, use_errors=False, max_iterations=20, quiet=True, turbo=False, use_molecules=False, tmp_dir=None):
+    def fitData(self, waveobs, segments, comparing_mask, fluxes, weights=None, parinfo=None, use_errors=False, max_iterations=20, quiet=True, code="spectrum", use_molecules=False, tmp_dir=None):
+        code = code.lower()
+        if code not in ['spectrum', 'turbospectrum', 'moog']:
+            raise Exception("Unknown radiative transfer code: %s" % (code))
+
         self.use_errors = use_errors
         base = 8
         if len(parinfo) < base:
@@ -638,7 +656,7 @@ class SynthModel(MPFitModel):
             # On most other platforms the best timer is time.time()
             default_timer = time.time
         self.waveobs = waveobs
-        self.turbo = turbo
+        self.code = code
         self.use_molecules = use_molecules
         self.tmp_dir = tmp_dir
 
@@ -664,7 +682,7 @@ class SynthModel(MPFitModel):
         else:
             self.abundances_file = write_solar_abundances(self.abundances)
 
-        if not self.turbo:
+        if self.code not in ['turbo']:
             self.linelist_file = write_atomic_linelist(self.linelist, tmp_dir=tmp_dir)
             self.isotope_file = write_isotope_data(self.isotopes, tmp_dir=tmp_dir)
 
@@ -690,7 +708,7 @@ class SynthModel(MPFitModel):
 
         if self.abundances_file is not None:
             os.remove(self.abundances_file)
-        if not self.turbo:
+        if self.code not in ['turbo']:
             os.remove(self.linelist_file)
             os.remove(self.isotope_file)
         self.abundances_file = None
@@ -1118,7 +1136,7 @@ def __get_stats_per_linemask(waveobs, fluxes, synthetic_fluxes, weights, free_pa
 
     return results
 
-def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=None, linemasks=None, enhance_abundances=True, scale=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1, turbo=False, use_molecules=False, tmp_dir=None):
+def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=None, linemasks=None, enhance_abundances=True, scale=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1, code="spectrum", use_molecules=False, tmp_dir=None):
     """
     It matches synthetic spectrum to observed spectrum by applying a least
     square algorithm.
@@ -1141,6 +1159,11 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     else:
         verbose = False
         quiet = True
+
+    code = code.lower()
+    if code not in ['spectrum', 'turbospectrum', 'moog']:
+        raise Exception("Unknown radiative transfer code: %s" % (code))
+
 
     # Duplicate
     if segments is not None:
@@ -1232,7 +1255,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     synth_model = SynthModel(modeled_layers_pack, linelist, isotopes, abundances, enhance_abundances=enhance_abundances, scale=scale, precomputed_grid_dir=precomputed_grid_dir)
 
     #segments = None
-    synth_model.fitData(waveobs, segments, comparing_mask, flux, weights=weights, parinfo=parinfo, use_errors=use_errors, max_iterations=max_iterations, quiet=quiet, turbo=turbo, use_molecules=use_molecules, tmp_dir=tmp_dir)
+    synth_model.fitData(waveobs, segments, comparing_mask, flux, weights=weights, parinfo=parinfo, use_errors=use_errors, max_iterations=max_iterations, quiet=quiet, code=code, use_molecules=use_molecules, tmp_dir=tmp_dir)
 
     if verbose:
         print "\n"
@@ -1481,7 +1504,7 @@ class EquivalentWidthModel(MPFitModel):
             if not self.quiet:
                 print "Generating:", key
             # Optimization to avoid too small changes in parameters or repetition
-            atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH(), turbo=self.turbo)
+            atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH(), code=self.code)
             if self.fe1_filter is None or self.fe2_filter is None:
                 ignore = np.ones(len(self.linemasks)) # Do not ignore any line since it's the first execution and it has not been done any selection
             else:
@@ -1490,7 +1513,7 @@ class EquivalentWidthModel(MPFitModel):
 
             spec_abund, absolute_abund, x_over_h, x_over_fe = determine_abundances(atmosphere_layers, \
                     self.teff(), self.logg(), self.MH(), self.linemasks, self.abundances, microturbulence_vel = self.vmic(), \
-                    ignore=ignore, verbose=0, turbo=self.turbo, tmp_dir=self.tmp_dir, \
+                    ignore=ignore, verbose=0, code=self.code, tmp_dir=self.tmp_dir, \
                     enhance_abundances=self.enhance_abundances, scale=self.scale)
 
 
@@ -1516,8 +1539,10 @@ class EquivalentWidthModel(MPFitModel):
         import statsmodels.api as sm
         ### Temperature
         ## y = mx + c
-        x = self.linemasks['lower state (eV)'][self.fe1_filter]
-        y = x_over_h[self.fe1_filter]
+        #x = self.linemasks['lower state (eV)'][self.fe1_filter]
+        #y = x_over_h[self.fe1_filter]
+        x = self.linemasks['lower state (eV)'][np.logical_or(self.fe1_filter, self.fe2_filter)]
+        y = x_over_h[np.logical_or(self.fe1_filter, self.fe2_filter)]
         x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
         linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
         self.m1 = linear_model.params[0]
@@ -1535,8 +1560,10 @@ class EquivalentWidthModel(MPFitModel):
 
         ### Vmic
         ## y = mx + c
-        x = self.linemasks['ewr'][self.fe1_filter]
-        y = x_over_h[self.fe1_filter]
+        #x = self.linemasks['ewr'][self.fe1_filter]
+        #y = x_over_h[self.fe1_filter]
+        x = self.linemasks['ewr'][np.logical_or(self.fe1_filter, self.fe2_filter)]
+        y = x_over_h[np.logical_or(self.fe1_filter, self.fe2_filter)]
         x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
         linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
         self.m2 = linear_model.params[0]
@@ -1679,6 +1706,12 @@ class EquivalentWidthModel(MPFitModel):
             linear_model = huber_t.fit()
             reject_filter1 = linear_model.weights < self.outliers_weight_limit
             #reject_filter1 = np.logical_or(reject_filter1, bad) # Done later
+            linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
+            m1 = linear_model.params[0]
+            c1 = linear_model.params[1]
+            corrected_y = y - (m1*x + c1)
+            sigma = np.std(corrected_y)
+            reject_filter1 = np.logical_or(corrected_y > +3.*sigma, corrected_y < -3.*sigma)
             #import matplotlib.pyplot as plt
             #plt.scatter(self.linemasks['lower state (eV)'], x_over_h)
             #plt.scatter(self.linemasks['lower state (eV)'][reject_filter1], x_over_h[reject_filter1], color="red")
@@ -1708,6 +1741,13 @@ class EquivalentWidthModel(MPFitModel):
             linear_model = huber_t.fit()
             reject_filter2 = linear_model.weights < self.outliers_weight_limit
             #reject_filter2 = np.logical_or(reject_filter2, bad) # Done later
+
+            linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
+            m2 = linear_model.params[0]
+            c2 = linear_model.params[1]
+            corrected_y = y - (m1*x + c1)
+            sigma = np.std(corrected_y)
+            reject_filter2 = np.logical_or(corrected_y > +3.*sigma, corrected_y < -3.*sigma)
             #import matplotlib.pyplot as plt
             #plt.scatter(self.linemasks['ewr'], x_over_h)
             #plt.scatter(self.linemasks['ewr'][reject_filter2], x_over_h[reject_filter2], color="red")
@@ -1768,12 +1808,17 @@ class EquivalentWidthModel(MPFitModel):
 
 
 
-    def fitData(self, linemasks, outliers_weight_limit=0.90, parinfo=None, max_iterations=20, quiet=True, turbo=False, tmp_dir=None):
+    def fitData(self, linemasks, outliers_weight_limit=0.90, parinfo=None, max_iterations=20, quiet=True, code="spectrum", tmp_dir=None):
         base = 3
         if len(parinfo) < base:
             raise Exception("Wrong number of parameters!")
 
-        self.turbo = turbo
+        code = code.lower()
+        if code not in ['spectrum', 'turbospectrum', 'moog']:
+            raise Exception("Unknown radiative transfer code: %s" % (code))
+
+
+        self.code = code
         self.tmp_dir = tmp_dir
         self.outliers_weight_limit = outliers_weight_limit
 
@@ -1790,7 +1835,10 @@ class EquivalentWidthModel(MPFitModel):
         gtol = 1.e-4
         damp = 0.0   # Not active: Residuals are limited between -1.0 and 1.0 (np.tanh(residuals/1.0))
         #chisq_limit = 4.0e-4 # 0.0004 = np.sum(np.asarray([0.01, 0.01, 0.01, 0.01])**2))
-        chisq_limit = 3 # = np.sum((np.asarray([0.01, 0.01, 0.01])*100)**2) # weight 100)
+        if code == "moog":
+            chisq_limit = None
+        else:
+            chisq_limit = 3 # = np.sum((np.asarray([0.01, 0.01, 0.01])*100)**2) # weight 100)
 
         _t0 = default_timer()
 
@@ -1867,7 +1915,7 @@ class EquivalentWidthModel(MPFitModel):
         print "Return code:", self.m.status
 
 
-def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, free_params=["teff", "logg", "vmic"], adjust_model_metalicity=False, enhance_abundances=True, scale=None, max_iterations=20, outliers_weight_limit=0.90, turbo=False, tmp_dir=None):
+def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, free_params=["teff", "logg", "vmic"], adjust_model_metalicity=False, enhance_abundances=True, scale=None, max_iterations=20, outliers_weight_limit=0.90, code="spectrum", tmp_dir=None):
     """
     The parameter 'outliers_weight_limit' limits the outlier detection done in the first iteration,
     if it is set to 0. then no outliers are filtered. The recommended value is 0.90.
@@ -1875,6 +1923,10 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances,
       depending on the metallicity. If scale is None, by default the standard
       MARCS composition will be used (recommended).
     """
+    code = code.lower()
+    if code not in ['spectrum', 'turbospectrum', 'moog']:
+        raise Exception("Unknown radiative transfer code: %s" % (code))
+
     teff_range = modeled_layers_pack[3]
     logg_range = modeled_layers_pack[4]
     MH_range = modeled_layers_pack[5]
@@ -1897,7 +1949,7 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances,
     lfilter = linemasks['element'] == "Fe 1"
     lfilter = np.logical_or(lfilter, linemasks['element'] == "Fe 2")
     linemasks = linemasks[lfilter]
-    EW_model.fitData(linemasks, parinfo=parinfo, max_iterations=max_iterations, quiet=False, outliers_weight_limit=outliers_weight_limit, turbo=turbo, tmp_dir=tmp_dir)
+    EW_model.fitData(linemasks, parinfo=parinfo, max_iterations=max_iterations, quiet=False, outliers_weight_limit=outliers_weight_limit, code=code, tmp_dir=tmp_dir)
     print "\n"
     EW_model.print_solution()
 
@@ -1947,13 +1999,13 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances,
 
 
 
-def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, turbo=False, use_molecules=False, tmp_dir=None):
+def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, code="spectrum", use_molecules=False, tmp_dir=None):
     multiprocessing.current_process().daemon=False
 
     if valid_atmosphere_target(modeled_layers_pack, teff, logg, MH):
         print "[started]", teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution
         # Prepare atmosphere model
-        atmosphere_layers = interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH, turbo=turbo)
+        atmosphere_layers = interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH, code=code)
         # Synthesis
         synth_spectrum = create_spectrum_structure(wavelengths)
         synth_spectrum['flux'] = generate_spectrum(synth_spectrum['waveobs'], \
@@ -1961,7 +2013,7 @@ def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, M
                 fixed_abundances=None, microturbulence_vel = vmic, \
                 macroturbulence=vmac, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, \
                 R=resolution, regions=segments, verbose=0, \
-                turbo=turbo, use_molecules=use_molecules, tmp_dir=tmp_dir)
+                code=code, use_molecules=use_molecules, tmp_dir=tmp_dir)
         # FITS
         write_spectrum(synth_spectrum, filename_out)
         print "[finished]", teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution
@@ -1970,7 +2022,7 @@ def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, M
 
 
 
-def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, enhance_abundances=True, scale=None, segments=None, number_of_processes=1, turbo=False, use_molecules=False, tmp_dir=None):
+def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, enhance_abundances=True, scale=None, segments=None, number_of_processes=1, code="spectrum", use_molecules=False, tmp_dir=None):
     """
     Pre-compute a synthetic grid with some reference ranges (Teff, log(g) and
     MH combinations) and all the steps that iSpec will perform in the
@@ -1983,6 +2035,10 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
     The output directory can be used by the routines 'model_spectrum' and
     'estimate_initial_ap'.
     """
+    code = code.lower()
+    if code not in ['spectrum', 'turbospectrum', 'moog']:
+        raise Exception("Unknown radiative transfer code: %s" % (code))
+
     reference_list_filename = output_dirname + "/reference.txt"
     reference_grid_filename = output_dirname + "/reference_grid_%i.fits" % to_resolution
     fits_dir = output_dirname + "unconvolved_steps/"
@@ -2041,7 +2097,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                     default_timer = time.time
                 tcheck = default_timer()
                 # Validate parameters
-                __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, abundances, turbo=turbo, use_molecules=use_molecules, tmp_dir=tmp_dir)
+                __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, abundances, code=code, use_molecules=use_molecules, tmp_dir=tmp_dir)
                 elapsed = default_timer() - tcheck
 
                 print "-----------------------------------------------------"
@@ -2052,7 +2108,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                 print "\t", (num_spec-i)*(elapsed/(60*60*24)), "days"
                 print "-----------------------------------------------------"
             else:
-                pool.apply_async(__generate_synthetic_fits, [filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, abundances], kwds={'turbo': turbo, 'use_molecules': use_molecules, 'tmp_dir':tmp_dir})
+                pool.apply_async(__generate_synthetic_fits, [filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, abundances], kwds={'code': code, 'use_molecules': use_molecules, 'tmp_dir':tmp_dir})
             i += 1
 
     if pool is not None:
@@ -2093,7 +2149,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
     # Generate FITS file with grid for fast comparison
     primary_hdu = fits.PrimaryHDU(reference_grid)
     wavelengths_hdu = fits.ImageHDU(wavelengths, name="WAVELENGTHS")
-    params_bintable_hdu = fits.BinTableHDU(reference_list._data, name="PARAMS")
+    params_bintable_hdu = fits.BinTableHDU(reference_list.as_array(), name="PARAMS")
     fits_format = fits.HDUList([primary_hdu, wavelengths_hdu, params_bintable_hdu])
     fits_format.writeto(reference_grid_filename, clobber=True)
 
@@ -2677,8 +2733,8 @@ def __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH
         segments['wave_top'][0] = global_wave_top
 
 
-    atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=atmosphere_layers_file, turbo=True, tmp_dir=tmp_dir)
-    linelist_filename = write_atomic_linelist(linelist, linelist_filename=linelist_file, turbo=True, tmp_dir=tmp_dir)
+    atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=atmosphere_layers_file, code="turbospectrum", tmp_dir=tmp_dir)
+    linelist_filename = write_atomic_linelist(linelist, linelist_filename=linelist_file, code="turbospectrum", tmp_dir=tmp_dir)
 
     opacities_filename = calculate_opacities(atmosphere_layers_file, atom_abundances, MH, microturbulence_vel, global_wave_base-10, global_wave_top+10, wave_step, verbose=verbose, opacities_filename=None, tmp_dir=tmp_dir)
 
@@ -2723,7 +2779,7 @@ def __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH
         #command_input += "3  1.05\n"
         command_input += "'INDIVIDUAL ABUNDANCES:'   '"+str(len(atom_abundances))+"'\n"
         for atom_abundance in atom_abundances:
-            abund = 12.04 + atom_abundance['Abund'] # From SPECTRUM format to Turbospectrum
+            abund = 12.036 + atom_abundance['Abund'] # From SPECTRUM format to Turbospectrum
             command_input +=  "%i  %.2f\n" % (atom_abundance['code'], abund)
         #command_input += "'ISOTOPES : ' '2'\n"
         #command_input += "3.006  0.075\n"
@@ -2773,6 +2829,8 @@ def __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH
 
         try:
             data = np.loadtxt(synth_spectrum_filename)
+            if len(data) == 0:
+                raise Exception()
         except:
             print out
             sys.stdout.flush()
@@ -2812,3 +2870,200 @@ def __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH
     return synth_spectrum['flux']
 
 
+def __moog_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, regions=None, tmp_dir=None):
+    return __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, R=0, macroturbulence=0, vsini=0, tmp_dir=tmp_dir)
+
+def __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, regions=None, R=None, macroturbulence=None, vsini=None, tmp_dir=None):
+    if not is_moog_support_enabled():
+        raise Exception("MOOG support is not enabled")
+
+    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
+    moog_dir = ispec_dir + "/synthesizer/moog/"
+    moog_executable = moog_dir + "MOOGSILENT"
+
+
+    if regions is None:
+        global_wave_base = np.min(waveobs)
+        global_wave_top = np.max(waveobs)
+        regions = np.recarray((1,),  dtype=[('wave_base', float), ('wave_top', float)])
+        regions['wave_base'][0] = global_wave_base
+        regions['wave_top'][0] = global_wave_top
+    else:
+        global_wave_base = np.min(regions['wave_base'])
+        global_wave_top = np.max(regions['wave_top'])
+
+    # TODO: decide how to stablish wave_step
+    waveobs = waveobs.copy()
+    waveobs.sort()
+    #wave_step = waveobs[1] - waveobs[0] # 0.001
+    wave_step = np.max((0.001, np.min(waveobs[1:] - waveobs[:-1])))
+
+    # Limit linelist
+    linelist = __filter_linelist(linelist, regions)
+
+    # MOOG only supports neutral and single ionization (i.e. Fe I and Fe II)
+    not_ignore = []
+    for line in linelist:
+        if ".0" in line['species'] or ".1" in line['species']:
+            not_ignore.append(True)
+        else:
+            not_ignore.append(False)
+    not_ignore = np.asarray(not_ignore)
+    linelist = linelist[not_ignore]
+
+    # MOOG does not have hard-coded lines, we use a external file:
+    #hydrogen_lines_file = moog_dir + "/hydrogen_moog_lines.txt"
+    #hydrogen_lines = ascii.read(hydrogen_lines_file, names=["wave (A)", "species", "lower state (eV)", "log(gf)"])
+    hydrogen_lines_file = moog_dir + "../Hlinedata_for_moog.txt"
+    hydrogen_lines = ascii.read(hydrogen_lines_file, names=["wave (A)", "species", "lower state (eV)", "log(gf)", "comment"])
+
+    # Update abundances with the ones that should be fixed to a given value and
+    # not affected by metallicity scalation
+    if fixed_abundances is not None and len(fixed_abundances) > 0:
+        abundances = abundances.copy()
+        for fixed_abundance in fixed_abundances:
+            index = np.where(abundances['code'] == fixed_abundance['code'])[0]
+            abundances['Abund'][index] = fixed_abundance['Abund']
+
+
+    ## Turbospectrum cannot compute in a single run a big chunk of wavelength so
+    ## we split the computation in several pieces
+    #max_segment = 100. # nm
+    #if (global_wave_top - global_wave_base)/wave_step > max_segment/wave_step:
+        #segment_wave_base = np.arange(global_wave_base, global_wave_top, max_segment)
+        #segments = np.recarray((len(segment_wave_base),),  dtype=[('wave_base', float), ('wave_top', float)])
+        #segments['wave_base'] = segment_wave_base
+        #segments['wave_top'] = segment_wave_base + max_segment - wave_step
+        #segments['wave_top'][-1] = global_wave_top # Last segment should not over pass the original global limits
+    #else:
+    segments = np.recarray((1,),  dtype=[('wave_base', float), ('wave_top', float)])
+    segments['wave_base'][0] = global_wave_base
+    segments['wave_top'][0] = global_wave_top
+
+    synth_fluxes = []
+    synth_waveobs = []
+    for segment in segments:
+        wave_base = segment['wave_base']
+        wave_top = segment['wave_top']
+
+        tmp_execution_dir = tempfile.mkdtemp(dir=tmp_dir)
+        os.symlink(moog_dir, tmp_execution_dir+"/DATA")
+        atmosphere_filename = tmp_execution_dir + "/model.in"
+        linelist_file = tmp_execution_dir + "/lines.in"
+        stronglinelist_file = tmp_execution_dir + "/stronglines.in"
+
+        atmosphere_filename = write_atmosphere(atmosphere_layers, teff, logg, MH, code="moog", atmosphere_filename=atmosphere_filename, tmp_dir=tmp_dir)
+        linelist_filename = write_atomic_linelist(linelist, linelist_filename=linelist_file, code="moog", tmp_dir=tmp_dir)
+
+        # Append microturbulence, solar abundances and metallicity
+        moog_atmosphere = open(atmosphere_filename, "a")
+        atom_abundances = abundances[abundances['code'] <= 92]
+        moog_atmosphere.write("  %.2f\n" % (microturbulence_vel))
+        moog_atmosphere.write("NATOMS=   %i %.2f\n" % (len(atom_abundances), MH))
+        for atom_abundance in atom_abundances:
+            abund = 12.036 + atom_abundance['Abund'] # From SPECTRUM format to Turbospectrum
+            moog_atmosphere.write("%i  %.2f\n" % (atom_abundance['code'], abund))
+        moog_atmosphere.write("NMOL      22\n")
+        moog_atmosphere.write("  101.0   106.0   107.0   108.0   112.0  126.0\n")
+        moog_atmosphere.write("  606.0   607.0   608.0\n")
+        moog_atmosphere.write("  707.0   708.0\n")
+        moog_atmosphere.write("  808.0   812.0   822.0\n")
+        moog_atmosphere.write("  10108.0 60808.0\n")
+        moog_atmosphere.write("  6.1     7.1     8.1   12.1  22.1  26.1")
+        moog_atmosphere.close()
+
+        # Add hydrogen lines
+        wfilter = np.logical_and(hydrogen_lines['wave (A)'] >= wave_base*10., hydrogen_lines['wave (A)'] <= wave_top*10.)
+        selected_hydrogen_lines = hydrogen_lines[wfilter]
+        if len(selected_hydrogen_lines) > 40:
+            # TODO: Find a work around to this
+            raise Exception("Wavelength range too big, it includes too many hydrogen lines")
+        out = open(stronglinelist_file, "w")
+        for line in selected_hydrogen_lines:
+            out.write("%10.3f%10s%10.3f%10.3f%10s%10s%10s%10s\n" \
+                    % (line['wave (A)'], line['species'], line['lower state (eV)'], line['log(gf)'], "", "", "", line['comment']))
+        out.close()
+
+        par_file = open(tmp_execution_dir + "/batch.par", "w")
+        par_file.write("synth\n")
+        par_file.write("standard_out moog.std\n")
+        par_file.write("summary_out  moog.sum\n")
+        par_file.write("smoothed_out moog.spec\n")
+        par_file.write("model_in     model.in\n")
+        par_file.write("lines_in     lines.in\n")
+        par_file.write("stronglines_in stronglines.in\n")
+        par_file.write("atmosphere  0\n")
+        par_file.write("molecules   1\n")
+        par_file.write("lines       1\n")
+        par_file.write("strong      1\n")
+        par_file.write("flux/int    0\n")
+        par_file.write("damping     1\n")
+        par_file.write("freeform    0\n") # Linelist format of 7 columns with numbers %10.3f and comment %10s
+        par_file.write("plot        3\n")
+        par_file.write("abundances  0  1\n")
+        par_file.write("isotopes    0  1\n")
+        par_file.write("synlimits\n")
+        wave_range_of_line_influence = 20.0 # Amstrong
+        par_file.write(" %.2f %.2f %.2f %.1f\n" % (wave_base*10., wave_top*10., wave_step*10., wave_range_of_line_influence))
+        par_file.write("obspectrum    5\n")
+        #par_file.write("plotpars    0\n")
+        par_file.write("plotpars    1\n")
+        par_file.write(" %.2f %.2f 0.0 1.10\n" % (wave_base*10., wave_top*10.)) # Ploting limits
+        par_file.write(" 0.0     0.0    0.00  1.0\n") # vshift       lamshift    obsadd    obsmult
+        par_file.write(" r       0.0  0.0  0.0  0.00  0.0") #  smooth-type  FWHM-Gauss  vsini     LimbDarkeningCoeff    FWHM-Macro     FWHM-Loren
+        par_file.close()
+
+        previous_cwd = os.getcwd()
+        os.chdir(tmp_execution_dir)
+
+        command = moog_executable
+        command_input = ""
+
+        # MOOG clears the screen, so it is better to always don't do verbose this part
+        # also the information printed is not specially useful
+        #if verbose == 1:
+            #proc = subprocess.Popen(command.split(), stdin=subprocess.PIPE)
+        #else:
+        proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+        # wait for the process to terminate
+        out, err = proc.communicate(input=command_input)
+        errcode = proc.returncode
+
+
+        os.chdir(previous_cwd)
+
+        try:
+            data = np.loadtxt(tmp_execution_dir+"/moog.spec", skiprows=2)
+        except:
+            print out
+            sys.stdout.flush()
+            raise Exception("Synthesis failed!")
+        #synth_waveobs_tmp = np.linspace(wave_base, wave_top, len(synth_fluxes_tmp)) # Not exactly identical to turbospectrum wavelengths
+        synth_waveobs_tmp = data[:,0] / 10. # Armstrong to nm
+        synth_waveobs = np.hstack((synth_waveobs, synth_waveobs_tmp))
+
+        synth_fluxes_tmp = data[:,1]
+        if len(synth_fluxes_tmp) > 1 and np.isnan(synth_fluxes_tmp[-1]):
+            synth_fluxes_tmp[-1] = synth_fluxes_tmp[-2] # Turbospectrum bug with gfortran, last flux is always NaN
+        synth_fluxes = np.hstack((synth_fluxes, synth_fluxes_tmp))
+
+        shutil.rmtree(tmp_execution_dir)
+
+    synth_spectrum = create_spectrum_structure(synth_waveobs, synth_fluxes)
+    synth_spectrum.sort(order=['waveobs'])
+
+    # Make sure we return the number of expected fluxes
+    if np.any(synth_spectrum['waveobs'] != waveobs):
+        synth_spectrum = resample_spectrum(synth_spectrum, waveobs, method="bessel", zero_edges=True)
+
+    if R is not None and R > 0:
+        ## Use iSpec convolution routine instead of SPECTRUM one, since iSpec is more reliable
+        synth_spectrum['flux'] = convolve_spectrum(synth_spectrum, R, from_resolution=None, frame=None)['flux']
+
+    if macroturbulence is not None and macroturbulence > 0:
+        synth_spectrum['flux'] = __broadening_macroturbulent(waveobs, synth_spectrum['flux'], macroturbulence, return_kernel=False)
+
+    if vsini is not None and vsini > 0:
+        synth_spectrum['flux'] = __broadening_rotational(waveobs, synth_spectrum['flux'], vsini)
+
+    return synth_spectrum['flux']

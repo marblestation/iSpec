@@ -43,7 +43,7 @@ class ConstantValue:
     def __call__(self, x, y):
         return self.value
 
-def read_kurucz_atmospheres(atmosphere_models, required_layers=56, max_teff = 9000., min_teff = 2500., max_logg = 5., min_logg = 0, turbo=False):
+def read_kurucz_atmospheres(atmosphere_models, required_layers=56, max_teff = 9000., min_teff = 2500., max_logg = 5., min_logg = 0, code="spectrum"):
     """
     Read castelli and kurucz atmospheres.
 
@@ -59,7 +59,11 @@ def read_kurucz_atmospheres(atmosphere_models, required_layers=56, max_teff = 90
         temperature, gravity and metallicity
 
     """
-    if turbo:
+    code = code.lower()
+    if code not in ['spectrum', 'turbospectrum', 'moog']:
+        raise Exception("Unknown radiative transfer code: %s" % (code))
+
+    if code == "turbospectrum":
         min_values_per_layer = 10 # 7 + 3 and later on another will be added to conserve radius for spherical models
     else:
         min_values_per_layer = 7
@@ -84,6 +88,10 @@ def read_kurucz_atmospheres(atmosphere_models, required_layers=56, max_teff = 90
                       #mean_absorption_coeff = 4
                       #radiation_preassure = 5
                       #microturbulent_vel = 6 # In m/s
+                      #
+                      #logtau5 = 7
+                      #depth = 8
+                      #pelectron = 9
 
     metallicities = []
     temperatures = []
@@ -146,7 +154,7 @@ def read_kurucz_atmospheres(atmosphere_models, required_layers=56, max_teff = 90
 
                     # Only use the X first values
                     values = map(float, layer[0:min_values_per_layer])
-                    if turbo:
+                    if code == "turbospectrum":
                         # Needed for spherical models
                         #depth = values[8]
                         #values.append(radius - depth)
@@ -429,7 +437,7 @@ def __copy_closest(initial_values, logg_range, teff_range, logg_index, teff_inde
 
 
 
-def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, teff_range, logg_range, MH_range, required_layers=56, turbo=False):
+def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, teff_range, logg_range, MH_range, required_layers=56, code="spectrum"):
     """
     Builds an structure where each value of each layer has a RectBivariateSpline (based on the values
     read from atmospheric models) that can be used for interpolation.
@@ -458,12 +466,16 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
 
         Layers - Used values - Matrix value (for each teff-logg)
     """
+    code = code.lower()
+    if code not in ['spectrum', 'turbospectrum', 'moog']:
+        raise Exception("Unknown radiative transfer code: %s" % (code))
+
     warnned = {}
     nteff = len(teff_range)
     nlogg = len(logg_range)
     nMH  = len(MH_range)
     nlayers = required_layers
-    if turbo:
+    if code == "turbospectrum":
         nvalues = 11 # Use the 7 first values + 3 extra values needed for turbospectrum + 1 extra needed for spherical models in turbospectrum
     else:
         nvalues = 7 # Only use the 7 first values
@@ -783,7 +795,7 @@ def estimate_proximity_to_real_atmospheres(modeled_layers_pack, teff_target, log
     return p
 
 
-def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target, MH_target, turbo=False):
+def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target, MH_target, code="spectrum"):
     """
     Generates an interpolated atmosphere for a given teff, logg and metallicity
 
@@ -794,10 +806,14 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
     :returns:
         Interpolated model atmosphere
     """
+    code = code.lower()
+    if code not in ['spectrum', 'turbospectrum', 'moog']:
+        raise Exception("Unknown radiative transfer code: %s" % (code))
+
     modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
 
     nMH  = len(MH_range)
-    if turbo:
+    if code == "turbospectrum":
         nvalues = 11 # Use the 7 first values + 3 extra values needed for turbospectrum + 1 extra needed for spherical models in turbospectrum
     else:
         nvalues = 7 # Only use the 7 first values
@@ -833,7 +849,7 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
     return layers
 
 
-def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None, turbo=False, tmp_dir=None):
+def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None, code='spectrum', tmp_dir=None):
     """
     Write a model atmosphere to file
     If filename is not specified, a temporary file is created and the name is returned.
@@ -845,13 +861,32 @@ def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None
     :returns:
         Name of the temporary file
     """
+    code = code.lower()
+    if code not in ['spectrum', 'turbospectrum', 'moog']:
+        raise Exception("Unknown radiative transfer code: %s" % (code))
+
     if atmosphere_filename is not None:
         atm_file = open(atmosphere_filename, "w")
     else:
         # Temporary file
         atm_file = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
 
-    if turbo:
+    code = code.lower()
+    if code not in ['spectrum', 'turbospectrum', 'moog']:
+        raise Exception("Unknown radiative transfer code: %s" % (code))
+
+    if code == "moog":
+        atm_file.write("KURUCZ\n")
+        atm_file.write("TEFF=%i,LOGG=%.2f,[FE/H]=%.2f,marcs\n" % (teff, logg, MH))
+        atm_file.write("ND=            %i\n" % (len(atmosphere_layers)))
+                                #0.62483359E-03   3636.6 1.937E+01 2.604E+09
+        for i, layer in enumerate(atmosphere_layers):
+            atm_file.write("%.8E %.1f %.4E %.4E %.4E\n" % (layer[0], layer[1], layer[2], layer[3], layer[4]))
+        #vmic = 1.0
+        #atm_file.write("  %.2f\n" % (vmic))
+        #atm_file.write("NATOMS = 0  %.2f\n" % (MH))
+        #atm_file.write("NMOL 0")
+    elif code == "turbospectrum":
         radius = atmosphere_layers[0][-1]
         if radius > 1.0:
             atm_file.write("spherical model\n")
@@ -867,7 +902,8 @@ def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None
         #1 -5.00 -4.9174 -6.931E+07  4066.8  2.1166E-02  2.6699E+02  1.4884E+00  0.0000E+00
         for i, layer in enumerate(atmosphere_layers):
             atm_file.write("%i %.2f %.4f %.3E %.1f %.4E %.4E %.4E %.4E\n" % (i+1, 0., layer[7], layer[8], layer[1], layer[9], layer[2], layer[5], layer[6]))
-    else:
+    elif code == "spectrum":
+        # Spectrum
         atm_file.write("%.1f  %.5f  %.2f  %i\n" % (teff, logg, MH, len(atmosphere_layers)) )
         atm_file.write("\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]))) for layer in atmosphere_layers]))
         #for layer in layers:
@@ -949,7 +985,7 @@ def calculate_opacities(atmosphere_layers_file, abundances, MH, microturbulence_
         raise Exception("No abundances for all 92 elements!")
     command_input += "'INDIVIDUAL ABUNDANCES:'   '"+str(len(atom_abundances))+"'\n"
     for atom_abundance in atom_abundances:
-        abund = 12.04 + atom_abundance['Abund'] # From SPECTRUM format to Turbospectrum
+        abund = 12.036 + atom_abundance['Abund'] # From SPECTRUM format to Turbospectrum
         command_input +=  "%i  %.2f\n" % (atom_abundance['code'], abund)
     command_input += "'XIFIX:' 'T'\n"
     command_input += str(microturbulence_vel)+"\n"
