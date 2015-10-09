@@ -17,8 +17,8 @@
 #
 import numpy as np
 from atmospheres import *
-from lines import write_atomic_linelist
-from common import is_turbospectrum_support_enabled, is_spectrum_support_enabled
+from lines import write_atomic_linelist, van_der_Waals_ABO_to_single_gamma_format
+from common import is_turbospectrum_support_enabled, is_spectrum_support_enabled, is_moog_support_enabled, is_width_support_enabled
 from multiprocessing import Process
 from multiprocessing import Queue
 from multiprocessing import JoinableQueue
@@ -262,13 +262,15 @@ def write_solar_abundances(abundances, abundances_filename=None, tmp_dir=None):
 
 def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, gui_queue=None, timeout=1800, isotopes=None, code="spectrum", tmp_dir=None, enhance_abundances=True, scale=None):
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'width']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
     if code == "turbospectrum":
         return __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
     elif code == "moog":
         return __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+    elif code == "width":
+        return __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
     elif code == "spectrum":
         return __spectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, gui_queue=gui_queue, timeout=timeout, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
 
@@ -584,8 +586,8 @@ def __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, line
 
 
 def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, tmp_dir=None, enhance_abundances=True, scale=None):
-    if not is_turbospectrum_support_enabled():
-        raise Exception("Turbospectrum support is not enabled")
+    if not is_moog_support_enabled():
+        raise Exception("MOOG support is not enabled")
 
     ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
     moog_dir = ispec_dir + "/synthesizer/moog/"
@@ -596,9 +598,16 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
     atmosphere_filename = tmp_execution_dir + "/model.in"
     linelist_file = tmp_execution_dir + "/lines.in"
 
-    sorted_idx = np.argsort(linemasks, order='species')
     atmosphere_filename = write_atmosphere(atmosphere_layers, teff, logg, MH, code="moog", atmosphere_filename=atmosphere_filename, tmp_dir=tmp_dir)
-    linelist_filename = write_atomic_linelist(linemasks[sorted_idx], linelist_filename=linelist_file, code="moog", tmp_dir=tmp_dir)
+
+    sorted_idx = np.argsort(linemasks, order='species')
+    tmp_linemasks = linemasks.copy()
+    for i, line in enumerate(linemasks):
+        # MOOG does not support ABO theory, transform to single gamma damping coefficient
+        if line['waals'] > 0:
+            atom_mass = abundances['Amass'][abundances['code'] == int(float(line['species']))][0]
+            tmp_linemasks['waals'][i] = van_der_Waals_ABO_to_single_gamma_format(line['waals'], atom_mass, temperature=10000.)
+    linelist_filename = write_atomic_linelist(tmp_linemasks[sorted_idx], linelist_filename=linelist_file, code="moog", tmp_dir=tmp_dir)
 
     # Enhance alpha elements + CNO abundances following MARCS standard composition
     original_abundances = abundances.copy()
@@ -633,7 +642,8 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
     par_file.write("molecules    1\n")
     par_file.write("lines        1\n")
     par_file.write("flux/int     0\n")
-    par_file.write("damping      1\n")
+    #par_file.write("damping      1\n") # Use Barklem MOOG's data, if not found then do like damping = 0
+    par_file.write("damping      0\n") # Use single gamma damping coefficient (van der Waals) if provided, if zero then use Unsold equation
     par_file.write("freeform     0\n")  # Linelist format of 7 columns with numbers %10.3f and comment %10s
     par_file.write("plot         0\n")
     par_file.close()
@@ -690,6 +700,147 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
     x_over_h = x_over_h[sorted_idx_idx]
     spec_abund = absolute_abund - 12.036 # For compatibility with SPECTRUM
     x_over_fe = x_over_h - MH
+
+    return spec_abund, absolute_abund, x_over_h, x_over_fe
+
+
+def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, tmp_dir=None, enhance_abundances=True, scale=None):
+    if not is_width_support_enabled():
+        raise Exception("WIDTH support is not enabled")
+
+    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
+    atmos_dir = ispec_dir + "/synthesizer/atmos/"
+    system_64bits = sys.maxsize > 2**32
+    if system_64bits:
+        width_executable = atmos_dir + "bin.amd64/width9.exe"
+    else:
+        width_executable = atmos_dir + "bin.ia32/width9.exe"
+    width_molecules = atmos_dir + "lines/molecules.dat"
+
+    tmp_execution_dir = tempfile.mkdtemp(dir=tmp_dir)
+    os.symlink(width_molecules, tmp_execution_dir+"/fort.2")
+
+    # Enhance alpha elements + CNO abundances following MARCS standard composition
+    original_abundances = abundances.copy()
+    if enhance_abundances:
+        alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(MH, scale=scale)
+        abundances = enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
+
+    previous_cwd = os.getcwd()
+    os.chdir(tmp_execution_dir)
+
+    command = width_executable
+    command_input = ""
+    command_input += "VTUR\n"
+    command_input += "    1 %.2f\n" % (microturbulence_vel)
+    filtered = []
+    for line in linemasks:
+        ew_picometer = line['ew'] / 10.
+        lower_state = line['lower state (eV)'] / 1.23984182E-4 # cm^-1 with decimals
+        if lower_state < 1.:
+            # WIDTH does not like zero lower_state
+            filtered.append(True)
+            continue
+        else:
+            filtered.append(False)
+        upper_state = line['upper state (eV)'] / 1.23984182E-4 # cm^-1 with decimals
+        #upper_state = (1.23984182E-4/(line['wave (nm)']*1E-11)) + lower_state # cm^-1 following GALA width9_gala.for
+        lower_level = 1.0
+        upper_level = 0.0
+        species = line['species']
+        vspecies = species.split(".")
+        width_species = vspecies[0] + '.0' + vspecies[1] # 26.1 => 26.01, 26.0 => 26.00
+        nelion = 0 # ?
+        if line['waals'] > 0:
+            atom_mass = abundances['Amass'][abundances['code'] == int(float(line['species']))][0]
+            waals = van_der_Waals_ABO_to_single_gamma_format(line['waals'], atom_mass, temperature=10000.)
+        else:
+            waals = line['waals']
+        command_input += "LINE      %.2f  %.4f    STARNAME\n" % (ew_picometer, line['mu'])
+        command_input += "  %.4f %.3f  %.1f   %.3f  %.1f  %.3f     %s\n" % (line['wave (nm)'], line['log(gf)'], lower_level, lower_state, upper_level, upper_state, width_species)
+        command_input += "  %.4f  %i  %.2f %.2f  %.2f     0  0  0.000  0  0.000    0    0\n" % (line['wave (nm)'], nelion, line['rad'], line['stark'], waals)
+    command_input += "END\n"
+
+    command_input += "TEFF   %.0f  GRAVITY %.5f LTE\n" % (teff, logg)
+    # command_input += "TITLE  [0.0] VTURB=1.0 KM/SEC  L/H=1.25 NOVER NEW ODF ASPLUND ABUNDANCES\n"
+    # command_input += " OPACITY IFOP 1 1 1 1 1 1 1 1 1 1 1 1 1 0 1 0 0 0 0 0\n"
+    # mixing_length_param = 1.25
+    # command_input += " CONVECTION ON   %.2f TURBULENCE OFF  0.00  0.00  0.00  0.00\n" % (mixing_length_param)
+    abundance_scale = 10**MH
+    ## Fraction in number of the total atoms from WIDTH example:
+    #   hydrogen_number_atom_fraction = 0.92080
+    #   helium_number_atom_fraction = 0.07837
+    # Fraction in mass from MARCS model (X=Hydrogen, Y=Helium, Z=Metals):
+    #   0.74732 0.25260 7.81E-05 are X, Y and Z, 12C/13C=89 (=solar)
+    # Transfor to number fraction:
+    #   Y = 0.25260 / (4-3*0.25260) = 0.07791
+    #   X = 1 - Y = 0.92209
+    hydrogen_number_atom_fraction = 0.92209
+    helium_number_atom_fraction = 0.07791
+
+    command_input += "ABUNDANCE SCALE   %.5f ABUNDANCE CHANGE 1 %.5f 2 %.5f\n" % (abundance_scale, hydrogen_number_atom_fraction, helium_number_atom_fraction)
+    # command_input += " ABUNDANCE CHANGE  3 -10.99  4 -10.66  5  -9.34  6  -3.65  7  -4.26  8  -3.38\n"
+    # command_input += " ABUNDANCE CHANGE  9  -7.48 10  -4.20 11  -5.87 12  -4.51 13  -5.67 14  -4.53\n"
+    atom_abundances = abundances[abundances['code'] <= 92]
+    for atom_abundance in atom_abundances:
+        # abund = 12.036 + atom_abundance['Abund'] # From SPECTRUM format to Turbospectrum
+        abund = atom_abundance['Abund']
+        command_input += " ABUNDANCE CHANGE  %i  %.2f\n" % (atom_abundance['code'], abund)
+
+    command_input += "READ DECK6 %i RHOX,T,P,XNE,ABROSS,ACCRAD,VTURB\n" % (len(atmosphere_layers))
+    #command_input += " 6.12960183E-04   3686.1 1.679E+01 2.580E+09 2.175E-04 4.386E-02 1.000E+05\n"
+    #atm_kurucz.write("%.8e   %.1f %.3e %.3e %.3e %.3e %.3e" % (rhox[i], temperature[i], pgas[i], xne[i], abross[i], accrad[i], vturb[i]) )
+    command_input += "\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]))) for layer in atmosphere_layers])
+    command_input += "\nPRADK 1.4878E+00\n"
+    command_input += "READ MOLECULES\n"
+    command_input += "MOLECULES ON\n"
+    command_input += "BEGIN                    ITERATION  15 COMPLETED\n"
+    command_input += "END\n"
+    command_input += "STOP\n"
+
+    # Never verbose because WIDTH's output is printed on stdout (not saved on a file)
+    # and it is needed by iSpec
+    #if verbose == 1:
+        #proc = subprocess.Popen(command.split(), stdin=subprocess.PIPE)
+    #else:
+    proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    # wait for the process to terminate
+    out, err = proc.communicate(input=command_input)
+    errcode = proc.returncode
+    #c = open("conf.txt", "w")
+    #c.writelines(command_input)
+    #c.close()
+
+    line_number = 0
+    not_converged = False
+    spec_abund = np.zeros(len(linemasks))
+    absolute_abund = np.zeros(len(linemasks))
+    x_over_h = np.zeros(len(linemasks))
+    x_over_fe = np.zeros(len(linemasks))
+    for line in out.split("\n"):
+        if "NOT CONVERGED" in line:
+            not_converged = True
+        if "STARNAME" not in line:
+            continue
+        if not_converged or filtered[line_number]:
+            spec_abund[line_number] = np.nan
+            absolute_abund[line_number] = np.nan
+            x_over_h[line_number] = np.nan
+            x_over_fe[line_number] = np.nan
+            line_number += 1
+            not_converged = False
+            continue
+        values = line.split()
+        spec_abund[line_number] = float(values[-1])
+        absolute_abund[line_number] = spec_abund[line_number] + 12.036
+        species = int(float(linemasks['species'][line_number])) # Convert from '26.0' or '26.1' to 26
+        solar_abund = abundances['Abund'][abundances['code'] == species]
+        x_over_h[line_number] = spec_abund[line_number] - solar_abund
+        x_over_fe[line_number] = x_over_h[line_number] - MH
+        line_number += 1
+
+    os.chdir(previous_cwd)
+    shutil.rmtree(tmp_execution_dir)
 
     return spec_abund, absolute_abund, x_over_h, x_over_fe
 

@@ -719,12 +719,12 @@ def __create_linemasks_structure(num_peaks):
 
 def read_atomic_linelist(linelist_filename, chemical_elements=None, molecules=None, code="spectrum"):
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'width']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
     if code == "turbospectrum":
         return __turbospectrum_read_atomic_linelist(linelist_filename)
-    elif code in ["spectrum", "moog"]:
+    elif code in ["spectrum", "moog", "width"]:
         if chemical_elements is None:
             raise Exception("Chemical elements argument should be specified when using SPECTRUM")
         if molecules is None:
@@ -2363,6 +2363,9 @@ def __moog_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=None)
     """
     Saves a MOOG linelist for spectral synthesis.
     If filename is not specified, a temporary file is created and the name is returned.
+
+    linelist['waals'] ares spected to be in single gamma damping coefficient
+    ABO theory is not supported and if waals is bigger than 0, it won't be considered
     """
     if linelist_filename is not None:
         out = open(linelist_filename, "w")
@@ -2370,24 +2373,23 @@ def __moog_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=None)
         # Temporary file
         out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
 
-    out.write("wavelength species lower_state_eV loggf damping_option rad equivalent_width comment\n")
+    out.write("wavelength species lower_state_eV loggf damping d0 equivalent_width comment\n")
     for line in linelist:
         if line['species'] in ["2.0", "2.1"]:
             # Ignore Helium, MOOG does not manage it well when combined with some other elements
             continue
         #6690.261  24.0   3.888    -2.442  2.0    0.0    0.0    vald0.016 CrI may2008
         #6690.269  607.0  0.542    -3.334  0.00  7.73    0.0  ( 7, 2)Q12 12.5
-        if line['rad'] > 0:
-            damping_option = 0.0
-            rad = line['rad']
+        if line['waals'] < 0:
+            damping = line['waals']
         else:
-            damping_option = 3.0
-            rad = 0.00
+            damping = 0.0
+        d0 = 0 # Dissociation energy [eV] (only for molecules)
         # damping options in MOOG's Params.f
         width = line['ew']
         comment = ""
         out.write("%10.3f%10s%10.3f%10.3f%10.2f%10.2f%10.2f%10s\n" \
-                % (line['wave (A)'], line['species'], line['lower state (eV)'], line['log(gf)'], damping_option, rad, width, comment))
+                % (line['wave (A)'], line['species'], line['lower state (eV)'], line['log(gf)'], damping, d0, width, comment))
         #out.write("%10.3f%10s%10.3f%10.3f%10s%10s%10s%10s\n" \
                 #% (line['wave (A)'], line['species'], line['lower state (eV)'], line['log(gf)'], "", "", "", comment))
     out.close()
@@ -2555,8 +2557,8 @@ def update_ew_with_ares(spectrum, linelist, rejt="0.995", tmp_dir=None, verbose=
         rejt="100" # SNR
         rejt="3;5764,5766,6047,6052,6068,6076"
     """
-    #if not is_ares_support_enabled():
-        #raise Exception("ARES support is not enabled")
+    if not is_ares_support_enabled():
+        raise Exception("ARES support is not enabled")
 
     ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
     ares_dir = ispec_dir + "/synthesizer/ARES/"
@@ -2565,21 +2567,30 @@ def update_ew_with_ares(spectrum, linelist, rejt="0.995", tmp_dir=None, verbose=
     tmp_execution_dir = tempfile.mkdtemp(dir=tmp_dir)
     ares_conf_file = tmp_execution_dir + "/mine.opt"
     linelist_file = tmp_execution_dir + "/linelist.dat"
-    spectrum_file = tmp_execution_dir + "/spectrum.fits"
 
+    linelist = linelist.copy()
+    linelist.sort(order=['wave (A)'])
     linelist_filename = write_atomic_linelist(linelist, linelist_filename=linelist_file, code="moog", tmp_dir=tmp_dir)
+
+    # ARES2 supports ASCII spectra with non-regular sampling but it seems to be buggy
+    # it is better to homogeneize spectra by resampling if needed:
+    spectrum_file = tmp_execution_dir + "/spectrum.fits"
     tmp_spectrum = spectrum.copy()
+    tmp_spectrum.sort(order=['waveobs'])
     tmp_spectrum['waveobs'] *= 10. # Ares requires Amstrongs and not nm
+    wavelengths = np.arange(np.min(tmp_spectrum['waveobs']), np.max(tmp_spectrum['waveobs']), 0.01)
+    tmp_spectrum = resample_spectrum(tmp_spectrum, wavelengths, method="bessel", zero_edges=True)
     tmp_spectrum['err'] = 0.
     write_spectrum(tmp_spectrum, spectrum_file)
 
     # Append microturbulence, solar abundances and metallicity
     ares_conf = open(ares_conf_file, "a")
     ares_conf.write("specfits='spectrum.fits'\n")
+    #ares_conf.write("specfits='spectrum.txt'\n")
     ares_conf.write("readlinedat='linelist.dat'\n")
     ares_conf.write("fileout='results.ares'\n")
     ares_conf.write("lambdai=%.2f\n" % (np.min(tmp_spectrum['waveobs'])))
-    ares_conf.write("lambdaf=%.2f.\n" % (np.max(tmp_spectrum['waveobs'])))
+    ares_conf.write("lambdaf=%.2f\n" % (np.max(tmp_spectrum['waveobs'])))
     ares_conf.write("smoothder=4\n")
     ares_conf.write("space=3.0\n")
     ares_conf.write("rejt=%s\n" % (rejt))
@@ -2603,17 +2614,15 @@ def update_ew_with_ares(spectrum, linelist, rejt="0.995", tmp_dir=None, verbose=
     out, err = proc.communicate(input=command_input)
     errcode = proc.returncode
 
-    os.chdir(previous_cwd)
 
     try:
         data = np.loadtxt(tmp_execution_dir+"/results.ares")
     except:
         print out
         sys.stdout.flush()
-        import pudb
-        pudb.set_trace()
         raise Exception("ARES failed!")
 
+    os.chdir(previous_cwd)
     shutil.rmtree(tmp_execution_dir)
 
     # ARES does not return EW for some lines sometimes, we should search for them
@@ -2630,12 +2639,12 @@ def update_ew_with_ares(spectrum, linelist, rejt="0.995", tmp_dir=None, verbose=
             i += 1
             j += 1
         else:
-            ew_tmp.append(0.)
-            ew_err_tmp.append(0.)
+            ew_tmp.append(np.nan)
+            ew_err_tmp.append(np.nan)
             i += 1
     while i < len(linelist):
-        ew_tmp.append(0.)
-        ew_err_tmp.append(0.)
+        ew_tmp.append(np.nan)
+        ew_err_tmp.append(np.nan)
         i += 1
 
     ew = np.asarray(ew_tmp)
@@ -2646,4 +2655,42 @@ def update_ew_with_ares(spectrum, linelist, rejt="0.995", tmp_dir=None, verbose=
     linelist['ewr'] = np.log10(linelist['ew'] / (1000.*linelist['wave (A)']))
 
     return linelist
+
+def van_der_Waals_ABO_to_single_gamma_format(gamvdw, atomic_mass, temperature=10000.):
+    """
+    This function converts the extended van der Waals in Paul Barklem's
+    format sigma.alpha to a single gamma_vdw parameter computed for 10000 K.
+
+    Written: 22-Feb-1999 N.Piskunov based on F77 code by Paul Barklem
+    UH 2014-10-16: copied from preselect3.f90, svn Revision: 831
+                   translated to IDL
+    SBC 2015-10-9: Translated to python
+    """
+    if gamvdw <= 0:
+        return gamvdw
+    else:
+        k = 1.380658e-23      # boltzmanns constant J/K
+        m0 = 1.660540e-27     # unit atomic mass kg (Carbon 12 scale)
+        a0 = 5.29177249e-11   # bohr radius m
+
+        # Compute the broadening by hydrogen from cross-section data
+        sigma = int(gamvdw)*a0*a0   # change to m^2
+        alpha = gamvdw - int(gamvdw)
+
+        # Compute the Gamma function of Z, this function valid over the range 1<Z<2
+        # ie 0<ALPHA<2
+        z =2. - alpha*0.5
+        x = z - 1.0
+        gammaf = 1.+(-0.5748646+(0.9512363+(-0.6998588+(0.4245549-0.1010678*x)*x)*x)*x)*x
+
+        # Compute the halfwidth per unit perturber number density for vbar
+        gvw = (4./np.pi)**(alpha*0.5)*gammaf*1.E4*sigma
+
+        # Compute a single value for 10000K
+        vbar = np.sqrt(8.*k*temperature/np.pi/m0*(1./1.008+1./atomic_mass))
+        gvw = gvw * ((vbar/1.E4)**(1.-alpha))
+
+        # Full width per perturber per cm^3
+        gvw = gvw*1.E6*2.
+        return np.log10(gvw)
 

@@ -15,7 +15,7 @@ YYmix2
 synthesizer/turbospectrum/bin/*
 synthesizer/turbospectrum/exec-gf-v15.1/*.o
 synthesizer/ARES/bin/*
-synthesizer/moog/*.o                                                             
-synthesizer/moog/fake_sm-2.4.35/lib/*                                            
-synthesizer/moog/fake_sm-2.4.35/src/*.o                                          
+synthesizer/moog/*.o
+synthesizer/moog/fake_sm-2.4.35/lib/*
+synthesizer/moog/fake_sm-2.4.35/src/*.o
 

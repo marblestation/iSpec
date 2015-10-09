@@ -682,7 +682,7 @@ class SynthModel(MPFitModel):
         else:
             self.abundances_file = write_solar_abundances(self.abundances)
 
-        if self.code not in ['turbo']:
+        if self.code not in ['turbospectrum', 'moog']:
             self.linelist_file = write_atomic_linelist(self.linelist, tmp_dir=tmp_dir)
             self.isotope_file = write_isotope_data(self.isotopes, tmp_dir=tmp_dir)
 
@@ -708,7 +708,7 @@ class SynthModel(MPFitModel):
 
         if self.abundances_file is not None:
             os.remove(self.abundances_file)
-        if self.code not in ['turbo']:
+        if self.code not in ['turbospectrum', 'moog']:
             os.remove(self.linelist_file)
             os.remove(self.isotope_file)
         self.abundances_file = None
@@ -1697,21 +1697,26 @@ class EquivalentWidthModel(MPFitModel):
             # they could come back to normal values later on
             x = self.linemasks['lower state (eV)'][~unknown]
             y = x_over_h[~unknown]
-            # RLM (Robust least squares)
-            # Huber's T norm with the (default) median absolute deviation scaling
-            # - http://en.wikipedia.org/wiki/Huber_loss_function
-            # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
             x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
-            huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
-            linear_model = huber_t.fit()
-            reject_filter1 = linear_model.weights < self.outliers_weight_limit
-            #reject_filter1 = np.logical_or(reject_filter1, bad) # Done later
-            linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
-            m1 = linear_model.params[0]
-            c1 = linear_model.params[1]
-            corrected_y = y - (m1*x + c1)
-            sigma = np.std(corrected_y)
-            reject_filter1 = np.logical_or(corrected_y > +3.*sigma, corrected_y < -3.*sigma)
+            if self.outliers_detection == "robust":
+                # RLM (Robust least squares)
+                # Huber's T norm with the (default) median absolute deviation scaling
+                # - http://en.wikipedia.org/wiki/Huber_loss_function
+                # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
+                huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
+                linear_model = huber_t.fit()
+                reject_filter1 = linear_model.weights < self.outliers_weight_limit
+                #reject_filter1 = np.logical_or(reject_filter1, bad) # Done later
+            elif self.outliers_detection == "sigma_clipping":
+                linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
+                m1 = linear_model.params[0]
+                c1 = linear_model.params[1]
+                corrected_y = y - (m1*x + c1)
+                sigma = np.std(corrected_y)
+                reject_filter1 = np.logical_or(corrected_y > + self.sigma_level*sigma, corrected_y < -self.sigma_level*sigma)
+            else:
+                logging.warn("Unknown outlier detection technique: %s" % (self.outliers_detection))
+                reject_filter1 = np.asarray([False]*len(x))
             #import matplotlib.pyplot as plt
             #plt.scatter(self.linemasks['lower state (eV)'], x_over_h)
             #plt.scatter(self.linemasks['lower state (eV)'][reject_filter1], x_over_h[reject_filter1], color="red")
@@ -1732,22 +1737,26 @@ class EquivalentWidthModel(MPFitModel):
             # they could come back to normal values later on
             x = self.linemasks['ewr'][~unknown]
             y = x_over_h[~unknown]
-            # RLM (Robust least squares)
-            # Huber's T norm with the (default) median absolute deviation scaling
-            # - http://en.wikipedia.org/wiki/Huber_loss_function
-            # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
             x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
-            huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
-            linear_model = huber_t.fit()
-            reject_filter2 = linear_model.weights < self.outliers_weight_limit
-            #reject_filter2 = np.logical_or(reject_filter2, bad) # Done later
-
-            linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
-            m2 = linear_model.params[0]
-            c2 = linear_model.params[1]
-            corrected_y = y - (m1*x + c1)
-            sigma = np.std(corrected_y)
-            reject_filter2 = np.logical_or(corrected_y > +3.*sigma, corrected_y < -3.*sigma)
+            if self.outliers_detection == "robust":
+                # RLM (Robust least squares)
+                # Huber's T norm with the (default) median absolute deviation scaling
+                # - http://en.wikipedia.org/wiki/Huber_loss_function
+                # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
+                huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
+                linear_model = huber_t.fit()
+                reject_filter2 = linear_model.weights < self.outliers_weight_limit
+                #reject_filter2 = np.logical_or(reject_filter2, bad) # Done later
+            elif self.outliers_detection == "sigma_clipping":
+                linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
+                m2 = linear_model.params[0]
+                c2 = linear_model.params[1]
+                corrected_y = y - (m1*x + c1)
+                sigma = np.std(corrected_y)
+                reject_filter2 = np.logical_or(corrected_y > self.sigma_level*sigma, corrected_y < -self.sigma_level*sigma)
+            else:
+                logging.warn("Unknown outlier detection technique: %s" % (self.outliers_detection))
+                reject_filter2 = np.asarray([False]*len(x))
             #import matplotlib.pyplot as plt
             #plt.scatter(self.linemasks['ewr'], x_over_h)
             #plt.scatter(self.linemasks['ewr'][reject_filter2], x_over_h[reject_filter2], color="red")
@@ -1808,18 +1817,20 @@ class EquivalentWidthModel(MPFitModel):
 
 
 
-    def fitData(self, linemasks, outliers_weight_limit=0.90, parinfo=None, max_iterations=20, quiet=True, code="spectrum", tmp_dir=None):
+    def fitData(self, linemasks, outliers_detection='robust', sigma_level=3, outliers_weight_limit=0.90, parinfo=None, max_iterations=20, quiet=True, code="spectrum", tmp_dir=None):
         base = 3
         if len(parinfo) < base:
             raise Exception("Wrong number of parameters!")
 
         code = code.lower()
-        if code not in ['spectrum', 'turbospectrum', 'moog']:
+        if code not in ['spectrum', 'turbospectrum', 'moog', 'width']:
             raise Exception("Unknown radiative transfer code: %s" % (code))
 
 
         self.code = code
         self.tmp_dir = tmp_dir
+        self.outliers_detection = outliers_detection
+        self.sigma_level = sigma_level
         self.outliers_weight_limit = outliers_weight_limit
 
 
@@ -1915,16 +1926,16 @@ class EquivalentWidthModel(MPFitModel):
         print "Return code:", self.m.status
 
 
-def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, free_params=["teff", "logg", "vmic"], adjust_model_metalicity=False, enhance_abundances=True, scale=None, max_iterations=20, outliers_weight_limit=0.90, code="spectrum", tmp_dir=None):
+def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, free_params=["teff", "logg", "vmic"], adjust_model_metalicity=False, enhance_abundances=True, scale=None, max_iterations=20, outliers_detection='robust', sigma_level=3, outliers_weight_limit=0.90, code="spectrum", tmp_dir=None):
     """
-    The parameter 'outliers_weight_limit' limits the outlier detection done in the first iteration,
-    if it is set to 0. then no outliers are filtered. The recommended value is 0.90.
+    - outlier_detection:
+        - 'robust': Fit a robust least square linear model, outliers_weight_limit will be use as a threshold. If it is set to zero, no outliers are filtered.
+        - 'sigma_clipping': Fit a tradition least square linear model and filter X times the standard deviation (sigma_level)
     - If enhance_abundances is True, alpha elements and CNO abundances will be scaled
-      depending on the metallicity. If scale is None, by default the standard
-      MARCS composition will be used (recommended).
+      depending on the metallicity.
     """
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'width']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
     teff_range = modeled_layers_pack[3]
@@ -1949,7 +1960,7 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, linelist, abundances,
     lfilter = linemasks['element'] == "Fe 1"
     lfilter = np.logical_or(lfilter, linemasks['element'] == "Fe 2")
     linemasks = linemasks[lfilter]
-    EW_model.fitData(linemasks, parinfo=parinfo, max_iterations=max_iterations, quiet=False, outliers_weight_limit=outliers_weight_limit, code=code, tmp_dir=tmp_dir)
+    EW_model.fitData(linemasks, parinfo=parinfo, max_iterations=max_iterations, quiet=False, outliers_detection=outliers_detection, sigma_level=sigma_level, outliers_weight_limit=outliers_weight_limit, code=code, tmp_dir=tmp_dir)
     print "\n"
     EW_model.print_solution()
 

@@ -807,7 +807,7 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
         Interpolated model atmosphere
     """
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'width']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
     modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack

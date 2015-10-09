@@ -68,7 +68,30 @@ def is_moog_support_enabled():
     else:
         return True
 
+def is_width_support_enabled():
+    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
+    atmos_dir = ispec_dir + "/synthesizer/atmos/"
+    system_64bits = sys.maxsize > 2**32
+    if system_64bits:
+        width_executable = atmos_dir + "bin.amd64/width9.exe"
+    else:
+        width_executable = atmos_dir + "bin.ia32/width9.exe"
 
+    if not os.path.exists(width_executable) or \
+            not os.path.exists(atmos_dir):
+        return False
+    else:
+        return True
+
+def is_ares_support_enabled():
+    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
+    ares_dir = ispec_dir + "/synthesizer/ARES/"
+    ares_executable = ares_dir + "bin/ARES"
+
+    if not os.path.exists(ares_executable):
+        return False
+    else:
+        return True
 
 def save_results(dump_filename, data):
     pickle.dump(data, gzip.open(dump_filename, "wb", compresslevel=3), protocol=2)

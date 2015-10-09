@@ -25,14 +25,8 @@ from multiprocessing import Pool
 
 ################################################################################
 #--- iSpec directory -------------------------------------------------------------
-if os.path.exists('/home/sblancoc/shared/iSpec/'):
-    # avakas
-    ispec_dir = '/home/sblancoc/shared/iSpec/'
-elif os.path.exists('/home/blanco/shared/iSpec/'):
-    # vanoise
-    ispec_dir = '/home/blanco/shared/iSpec-dev/'
-else:
-    ispec_dir = '/home/marble/shared/iSpec/'
+ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/"
+#ispec_dir = '/home/virtual/shared/iSpec/'
 sys.path.insert(0, os.path.abspath(ispec_dir))
 import ispec
 
@@ -581,6 +575,10 @@ def find_linemasks():
     rejected_by_atomic_line_not_found = (sun_linemasks['wave (nm)'] == 0)
     sun_linemasks = sun_linemasks[~rejected_by_atomic_line_not_found]
 
+    # Exclude lines with EW equal to zero
+    rejected_by_zero_ew = (sun_linemasks['ew'] == 0)
+    sun_linemasks = sun_linemasks[~rejected_by_zero_ew]
+
     # Select only iron lines
     iron = sun_linemasks['element'] == "Fe 1"
     iron = np.logical_or(iron, sun_linemasks['element'] == "Fe 2")
@@ -713,7 +711,7 @@ def create_segments_around_linemasks():
     segments = ispec.create_segments_around_lines(line_regions, margin=0.25)
     return segments
 
-def fit_lines_and_determine_ew():
+def fit_lines_and_determine_ew(use_ares=False):
     sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -734,6 +732,10 @@ def fit_lines_and_determine_ew():
                                 automatic_strong_line_detection=True, \
                                 strong_line_probability=0.5, \
                                 use_errors_for_fitting=True)
+    #--- Normalize -------------------------------------------------------------
+    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
+    # Use a fixed value because the spectrum is already normalized
+    sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
     #--- Fit lines -----------------------------------------------------------------
     logging.info("Fitting lines...")
     #atomic_linelist_file = ispec_dir + "/input/linelists/SPECTRUM/VALD_atom.300_1100nm/atomic_lines.lst"
@@ -759,9 +761,9 @@ def fit_lines_and_determine_ew():
 
     vel_telluric = 17.79 # km/s
     line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines.txt")
-    line_regions = ispec.adjust_linemasks(sun_spectrum, line_regions, max_margin=0.5)
+    line_regions = ispec.adjust_linemasks(normalized_sun_spectrum, line_regions, max_margin=0.5)
     # Spectrum should be already radial velocity corrected
-    linemasks = ispec.fit_lines(line_regions, sun_spectrum, sun_continuum_model, \
+    linemasks = ispec.fit_lines(line_regions, normalized_sun_spectrum, sun_continuum_model, \
                                 atomic_linelist = atomic_linelist, \
                                 #max_atomic_wave_diff = 0.005, \
                                 max_atomic_wave_diff = 0.00, \
@@ -779,9 +781,26 @@ def fit_lines_and_determine_ew():
     rejected_by_atomic_line_not_found = (linemasks['wave (nm)'] == 0)
     linemasks = linemasks[~rejected_by_atomic_line_not_found]
 
+    # Exclude lines with EW equal to zero
+    rejected_by_zero_ew = (linemasks['ew'] == 0)
+    linemasks = linemasks[~rejected_by_zero_ew]
+
     # Exclude lines that may be affected by tellurics
     rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
     linemasks = linemasks[~rejected_by_telluric_line]
+
+    if use_ares:
+        # Replace the measured equivalent widths by the ones computed by ARES
+        old_linemasks = linemasks.copy()
+        ### Different rejection parameters (check ARES papers):
+        ##   - http://adsabs.harvard.edu/abs/2007A%26A...469..783S
+        ##   - http://adsabs.harvard.edu/abs/2015A%26A...577A..67S
+        #linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="0.995", tmp_dir=None, verbose=0)
+        #linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="3;5764,5766,6047,6052,6068,6076", tmp_dir=None, verbose=0)
+        snr = 50
+        linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="%s" % (snr), tmp_dir=None, verbose=0)
+
+
     ew = linemasks['ew']
     ew_err = linemasks['ew_err']
 
@@ -1483,7 +1502,7 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     return obs_spec, modeled_synth_spectrum, params, errors, free_abundances, status, stats_linemasks
 
 
-def determine_astrophysical_parameters_from_ew(code="spectrum"):
+def determine_astrophysical_parameters_from_ew(code="spectrum", use_ares=False):
     sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Read lines and adjust them ------------------------------------------------
     #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines_biglist.txt")
@@ -1509,6 +1528,10 @@ def determine_astrophysical_parameters_from_ew(code="spectrum"):
                                 automatic_strong_line_detection=True, \
                                 strong_line_probability=0.5, \
                                 use_errors_for_fitting=True)
+    #--- Normalize -------------------------------------------------------------
+    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
+    # Use a fixed value because the spectrum is already normalized
+    sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
     #--- Fit lines -----------------------------------------------------------------
     logging.info("Fitting lines...")
 
@@ -1554,7 +1577,7 @@ def determine_astrophysical_parameters_from_ew(code="spectrum"):
     #continuum_adjustment_margin = 0.05 # Allow +/-5% free baseline fit around continuum
     continuum_adjustment_margin = 0.0
     # Spectrum should be already radial velocity corrected
-    linemasks = ispec.fit_lines(line_regions, sun_spectrum, sun_continuum_model, \
+    linemasks = ispec.fit_lines(line_regions, normalized_sun_spectrum, sun_continuum_model, \
                                 atomic_linelist = atomic_linelist, \
                                 max_atomic_wave_diff = 0.005, \
                                 telluric_linelist = telluric_linelist, \
@@ -1568,9 +1591,9 @@ def determine_astrophysical_parameters_from_ew(code="spectrum"):
     linemasks = linemasks[linemasks['element'] == line_regions['note']]
 
     # Discard bad masks
-    flux_peak = sun_spectrum['flux'][linemasks['peak']]
-    flux_base = sun_spectrum['flux'][linemasks['base']]
-    flux_top = sun_spectrum['flux'][linemasks['top']]
+    flux_peak = normalized_sun_spectrum['flux'][linemasks['peak']]
+    flux_base = normalized_sun_spectrum['flux'][linemasks['base']]
+    flux_top = normalized_sun_spectrum['flux'][linemasks['top']]
     bad_mask = np.logical_or(linemasks['wave_peak'] <= linemasks['wave_base'], linemasks['wave_peak'] >= linemasks['wave_top'])
     bad_mask = np.logical_or(bad_mask, flux_peak >= flux_base)
     bad_mask = np.logical_or(bad_mask, flux_peak >= flux_top)
@@ -1581,9 +1604,24 @@ def determine_astrophysical_parameters_from_ew(code="spectrum"):
     rejected_by_atomic_line_not_found = (linemasks['wave (nm)'] == 0)
     linemasks = linemasks[~rejected_by_atomic_line_not_found]
 
+    # Exclude lines with EW equal to zero
+    rejected_by_zero_ew = (linemasks['ew'] == 0)
+    linemasks = linemasks[~rejected_by_zero_ew]
+
     # Exclude lines that may be affected by tellurics
     rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
     linemasks = linemasks[~rejected_by_telluric_line]
+
+    if use_ares:
+        # Replace the measured equivalent widths by the ones computed by ARES
+        old_linemasks = linemasks.copy()
+        ### Different rejection parameters (check ARES papers):
+        ##   - http://adsabs.harvard.edu/abs/2007A%26A...469..783S
+        ##   - http://adsabs.harvard.edu/abs/2015A%26A...577A..67S
+        #linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="0.995", tmp_dir=None, verbose=0)
+        #linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="3;5764,5766,6047,6052,6068,6076", tmp_dir=None, verbose=0)
+        snr = 50
+        linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="%s" % (snr), tmp_dir=None, verbose=0)
 
 
     #--- Model spectra from EW --------------------------------------------------
@@ -1649,7 +1687,7 @@ def determine_astrophysical_parameters_from_ew(code="spectrum"):
     ## Filter also bad fits
     efilter = np.logical_and(efilter, linemasks['rms'] < 0.05)
 
-    if code == "moog":
+    if code in ["moog", "width"]:
         adjust_model_metalicity = True
     else:
         adjust_model_metalicity = False
@@ -1660,6 +1698,7 @@ def determine_astrophysical_parameters_from_ew(code="spectrum"):
                         adjust_model_metalicity=adjust_model_metalicity, \
                         max_iterations=max_iterations, \
                         enhance_abundances=True, \
+                        outliers_detection = "robust", \
                         outliers_weight_limit = 0.90, \
                         tmp_dir = None, \
                         code=code)
@@ -1681,7 +1720,7 @@ def determine_astrophysical_parameters_from_ew(code="spectrum"):
     return params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params
 
 
-def determine_abundances_from_ew(code="spectrum"):
+def determine_abundances_from_ew(code="spectrum", use_ares=False):
     sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Read lines and adjust them ------------------------------------------------
     #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines_biglist.txt")
@@ -1707,6 +1746,10 @@ def determine_abundances_from_ew(code="spectrum"):
                                 automatic_strong_line_detection=True, \
                                 strong_line_probability=0.5, \
                                 use_errors_for_fitting=True)
+    #--- Normalize -------------------------------------------------------------
+    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
+    # Use a fixed value because the spectrum is already normalized
+    sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
     #--- Fit lines -----------------------------------------------------------------
     logging.info("Fitting lines...")
 
@@ -1750,7 +1793,7 @@ def determine_abundances_from_ew(code="spectrum"):
 
     vel_telluric = 17.79 # km/s
     # Spectrum should be already radial velocity corrected
-    linemasks = ispec.fit_lines(line_regions, sun_spectrum, sun_continuum_model, \
+    linemasks = ispec.fit_lines(line_regions, normalized_sun_spectrum, sun_continuum_model, \
                                 atomic_linelist = atomic_linelist, \
                                 max_atomic_wave_diff = 0.005, \
                                 telluric_linelist = telluric_linelist, \
@@ -1767,9 +1810,24 @@ def determine_abundances_from_ew(code="spectrum"):
     rejected_by_atomic_line_not_found = (linemasks['wave (nm)'] == 0)
     linemasks = linemasks[~rejected_by_atomic_line_not_found]
 
+    # Exclude lines with EW equal to zero
+    rejected_by_zero_ew = (linemasks['ew'] == 0)
+    linemasks = linemasks[~rejected_by_zero_ew]
+
     # Exclude lines that may be affected by tellurics
     rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
     linemasks = linemasks[~rejected_by_telluric_line]
+
+    if use_ares:
+        # Replace the measured equivalent widths by the ones computed by ARES
+        old_linemasks = linemasks.copy()
+        ### Different rejection parameters (check ARES papers):
+        ##   - http://adsabs.harvard.edu/abs/2007A%26A...469..783S
+        ##   - http://adsabs.harvard.edu/abs/2015A%26A...577A..67S
+        #linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="0.995", tmp_dir=None, verbose=0)
+        #linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="3;5764,5766,6047,6052,6068,6076", tmp_dir=None, verbose=0)
+        snr = 50
+        linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="%s" % (snr), tmp_dir=None, verbose=0)
 
 
     #--- Determining abundances by EW of the previously fitted lines ---------------
@@ -2008,7 +2066,8 @@ if __name__ == '__main__':
     find_continuum_regions()
     find_continuum_regions_in_segments()
     find_linemasks()
-    fit_lines_and_determine_ew()
+    fit_lines_and_determine_ew(use_ares=False)
+    fit_lines_and_determine_ew(use_ares=True)
     calculate_barycentric_velocity()
     estimate_snr_from_flux()
     estimate_snr_from_err()
@@ -2033,12 +2092,22 @@ if __name__ == '__main__':
     determine_abundances_using_synth_spectra(code="spectrum")
     determine_abundances_using_synth_spectra(code="turbospectrum")
     determine_abundances_using_synth_spectra(code="moog")
-    determine_astrophysical_parameters_from_ew(code="spectrum")
-    determine_astrophysical_parameters_from_ew(code="turbospectrum")
-    determine_astrophysical_parameters_from_ew(code="moog")
-    determine_abundances_from_ew(code="spectrum")
-    determine_abundances_from_ew(code="turbospectrum")
-    determine_abundances_from_ew(code="moog")
+    #determine_astrophysical_parameters_from_ew(code="spectrum", use_ares=False)
+    #determine_astrophysical_parameters_from_ew(code="turbospectrum", use_ares=False)
+    determine_astrophysical_parameters_from_ew(code="moog", use_ares=False)
+    determine_astrophysical_parameters_from_ew(code="width", use_ares=False)
+    #determine_astrophysical_parameters_from_ew(code="spectrum", use_ares=True)
+    #determine_astrophysical_parameters_from_ew(code="turbospectrum", use_ares=True)
+    determine_astrophysical_parameters_from_ew(code="moog", use_ares=True)
+    determine_astrophysical_parameters_from_ew(code="width", use_ares=True)
+    #determine_abundances_from_ew(code="spectrum", use_ares=False)
+    #determine_abundances_from_ew(code="turbospectrum", use_ares=False)
+    determine_abundances_from_ew(code="moog", use_ares=False)
+    determine_abundances_from_ew(code="width", use_ares=False)
+    #determine_abundances_from_ew(code="spectrum", use_ares=True)
+    #determine_abundances_from_ew(code="turbospectrum", use_ares=True)
+    determine_abundances_from_ew(code="moog", use_ares=True)
+    determine_abundances_from_ew(code="width", use_ares=True)
     calculate_theoretical_ew_and_depth()
     paralelize_code()
     estimate_vmic_from_empirical_relation()
