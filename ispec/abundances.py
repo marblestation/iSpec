@@ -602,12 +602,14 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
 
     sorted_idx = np.argsort(linemasks, order='species')
     tmp_linemasks = linemasks.copy()
+    sorted_tmp_linemasks = tmp_linemasks[sorted_idx]
+    ew_not_valid = np.logical_or(sorted_tmp_linemasks['ew'] < 1e-9, np.isnan(sorted_tmp_linemasks['ew']))
     for i, line in enumerate(linemasks):
         # MOOG does not support ABO theory, transform to single gamma damping coefficient
-        if line['waals'] > 0:
+        if line['waals'] > 0 and not ew_not_valid[i]:
             atom_mass = abundances['Amass'][abundances['code'] == int(float(line['species']))][0]
-            tmp_linemasks['waals'][i] = van_der_Waals_ABO_to_single_gamma_format(line['waals'], atom_mass, temperature=10000.)
-    linelist_filename = write_atomic_linelist(tmp_linemasks[sorted_idx], linelist_filename=linelist_file, code="moog", tmp_dir=tmp_dir)
+            sorted_tmp_linemasks['waals'][i] = van_der_Waals_ABO_to_single_gamma_format(line['waals'], atom_mass, temperature=10000.)
+    linelist_filename = write_atomic_linelist(sorted_tmp_linemasks[~ew_not_valid], linelist_filename=linelist_file, code="moog", tmp_dir=tmp_dir)
 
     # Enhance alpha elements + CNO abundances following MARCS standard composition
     original_abundances = abundances.copy()
@@ -664,6 +666,10 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
     out, err = proc.communicate(input=command_input)
     errcode = proc.returncode
 
+    for line in out.split("\n"):
+        if "I QUIT" in line:
+            logging.error("MOOG ERROR: %s" % (line))
+            raise Exception("MOOG ERROR: %s" % (line))
 
     absolute_abund = []
     x_over_h = []
@@ -673,16 +679,28 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
     #   4893.813   26.10000   2.828  -4.267    23.62    -5.316     7.650    0.018
     f = "(?:[+-]?\d+\.\d+|NaN|[+-]?Inf)" # Float
     atomic_line_pattern = re.compile("^\s+("+f+")\s+(.*)\n$")
-    for line in results_lines:
+    line_number = 0
+    for i, line in enumerate(results_lines):
         atomic_line = atomic_line_pattern.match(line)
         if atomic_line:
             values = map(float, line.split())
+            # Make sure we recover the abundance for the good line by checking the wavelength
+            wave = values[0] # A
+            while ew_not_valid[line_number] or np.abs(sorted_tmp_linemasks['wave (A)'][line_number] - wave) > 0.001:
+                absolute_abund.append(np.nan)
+                x_over_h.append(np.nan)
+                if ew_not_valid[line_number]:
+                    logging.warn("Missed line %.3f because of NaN equivalent width" % (sorted_tmp_linemasks['wave (A)'][line_number]))
+                else:
+                    logging.warn("Missed line %.3f" % (sorted_tmp_linemasks['wave (A)'][line_number], wave))
+                line_number += 1
             absolute_abund.append(values[-2])
             #x_over_h.append(values[-1]) # This MOOG value is not consistent with absolute_abund - solar abundance
             if reference_abund is None:
                 species = int(float(values[1])) # Convert from '26.0' or '26.1' to 26
                 reference_abund = original_abundances['Abund'][original_abundances['code'] == species][0] + 12.036
             x_over_h.append(values[-2] - reference_abund)
+            line_number += 1
         else:
             # Detect new species results
             if "Abundance Results for Species" in line:
@@ -737,28 +755,32 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
     for line in linemasks:
         ew_picometer = line['ew'] / 10.
         lower_state = line['lower state (eV)'] / 1.23984182E-4 # cm^-1 with decimals
-        if lower_state < 1.:
+        if lower_state < 1. or np.isnan(line['ew']) or line['ew'] < 1e-9:
             # WIDTH does not like zero lower_state
             filtered.append(True)
             continue
         else:
-            filtered.append(False)
-        upper_state = line['upper state (eV)'] / 1.23984182E-4 # cm^-1 with decimals
-        #upper_state = (1.23984182E-4/(line['wave (nm)']*1E-11)) + lower_state # cm^-1 following GALA width9_gala.for
-        lower_level = 1.0
-        upper_level = 0.0
-        species = line['species']
-        vspecies = species.split(".")
-        width_species = vspecies[0] + '.0' + vspecies[1] # 26.1 => 26.01, 26.0 => 26.00
-        nelion = 0 # ?
-        if line['waals'] > 0:
-            atom_mass = abundances['Amass'][abundances['code'] == int(float(line['species']))][0]
-            waals = van_der_Waals_ABO_to_single_gamma_format(line['waals'], atom_mass, temperature=10000.)
-        else:
-            waals = line['waals']
-        command_input += "LINE      %.2f  %.4f    STARNAME\n" % (ew_picometer, line['mu'])
-        command_input += "  %.4f %.3f  %.1f   %.3f  %.1f  %.3f     %s\n" % (line['wave (nm)'], line['log(gf)'], lower_level, lower_state, upper_level, upper_state, width_species)
-        command_input += "  %.4f  %i  %.2f %.2f  %.2f     0  0  0.000  0  0.000    0    0\n" % (line['wave (nm)'], nelion, line['rad'], line['stark'], waals)
+            upper_state = line['upper state (eV)'] / 1.23984182E-4 # cm^-1 with decimals
+            #upper_state = (1.23984182E-4/(line['wave (nm)']*1E-11)) + lower_state # cm^-1 following GALA width9_gala.for
+            lower_level = 1.0
+            upper_level = 0.0
+            species = line['species']
+            vspecies = species.split(".")
+            width_species = vspecies[0] + '.0' + vspecies[1] # 26.1 => 26.01, 26.0 => 26.00
+            nelion = 0 # ?
+            if line['waals'] > 0:
+                atom_mass = abundances['Amass'][abundances['code'] == int(float(line['species']))][0]
+                waals = van_der_Waals_ABO_to_single_gamma_format(line['waals'], atom_mass, temperature=10000.)
+            else:
+                waals = line['waals']
+            if line['rad'] == 0 and line['stark'] == 0  and waals == 0:
+                # WIDTH does not all damping parameters to zero
+                filtered.append(True)
+            else:
+                filtered.append(False)
+                command_input += "LINE      %.2f  %.4f    STARNAME\n" % (ew_picometer, line['mu'])
+                command_input += "  %.4f %.3f  %.1f   %.3f  %.1f  %.3f     %s\n" % (line['wave (nm)'], line['log(gf)'], lower_level, lower_state, upper_level, upper_state, width_species)
+                command_input += "  %.4f  %i  %.2f %.2f  %.2f     0  0  0.000  0  0.000    0    0\n" % (line['wave (nm)'], nelion, line['rad'], line['stark'], waals)
     command_input += "END\n"
 
     command_input += "TEFF   %.0f  GRAVITY %.5f LTE\n" % (teff, logg)
@@ -810,6 +832,8 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
     #c = open("conf.txt", "w")
     #c.writelines(command_input)
     #c.close()
+    #import pudb
+    #pudb.set_trace()
 
     line_number = 0
     not_converged = False
@@ -817,12 +841,34 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
     absolute_abund = np.zeros(len(linemasks))
     x_over_h = np.zeros(len(linemasks))
     x_over_fe = np.zeros(len(linemasks))
-    for line in out.split("\n"):
+    #  666.7710 -2.112  1.0   36972.005  0.0   51966.006    26.00
+    #  666.7710   0  8.09 -5.63 -7.67     0 0  0  0.000  0  0.000  0    0
+    #     STARNAME                                                                  666.7724  8.09 -5.63 -7.67  0.60      1.21    -4.391
+    #         VTURB  ABUND    -4.59    -4.38    -4.09    -3.59    -4.39
+    #          1.00     EW   -0.090    0.093    0.320    0.624    0.083
+    #                          0.81     1.24     2.09     4.21     1.21
+    #                DEPTH     0.61     0.59     0.55     0.40     0.60
+    #
+    #  667.7985 -1.418  1.0   21712.003  0.0   36690.005    26.00
+    #  667.7985   0  8.07 -6.09 -7.64     0 0  0  0.000  0  0.000  0    0
+    #0    STARNAME                                                               **********  8.07 -6.09 -7.64 -0.18     12.50    -4.729
+    #         VTURB  ABUND    -5.59    -5.09    -4.74    -4.59    -4.73
+    #          1.00     EW    0.848    0.993    1.095    1.140    1.097
+    #                          7.04     9.84    12.43    13.80    12.50
+    #                DEPTH     0.10    -0.09    -0.18    -0.20    -0.18
+    out_lines = out.split("\n")
+    for i, line in enumerate(out_lines):
+        if "BETTER LUCK NEXT TIME" in line:
+            logging.error("WIDTH" + out_lines[i-2])
+            logging.error("WIDTH" + out_lines[i-1])
+            logging.error("WIDTH" + out_lines[i])
+            raise Exception("WIDTH error!")
         if "NOT CONVERGED" in line:
             not_converged = True
         if "STARNAME" not in line:
             continue
-        if not_converged or filtered[line_number]:
+
+        if not_converged:
             spec_abund[line_number] = np.nan
             absolute_abund[line_number] = np.nan
             x_over_h[line_number] = np.nan
@@ -830,6 +876,20 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
             line_number += 1
             not_converged = False
             continue
+
+        # Make sure we recover the abundance for the good line by checking the wavelength
+        wave = float(out_lines[i-1].split()[0]) # nm
+        while filtered[line_number] or np.abs(linemasks['wave (nm)'][line_number] - wave) > 0.0001:
+            spec_abund[line_number] = np.nan
+            absolute_abund[line_number] = np.nan
+            x_over_h[line_number] = np.nan
+            x_over_fe[line_number] = np.nan
+            if filtered[line_number]:
+                logging.warn("Missed line %.3f because of NaN equivalent width or bad atomic information" % (linemasks['wave (A)'][line_number]))
+            else:
+                logging.warn("Missed line %.3f" % (linemasks['wave (A)'][line_number], wave))
+            line_number += 1
+
         values = line.split()
         spec_abund[line_number] = float(values[-1])
         absolute_abund[line_number] = spec_abund[line_number] + 12.036

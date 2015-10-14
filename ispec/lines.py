@@ -859,7 +859,7 @@ def __spectrum_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=N
         # Temporary file
         out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
     #4750.196  26.0 0  36078  57130  -3.662  1.0  GA  8.09  -4.61  -7.32  Fe_1  True  0.27  0.01
-    out.write("\n".join(["  ".join(map(str, (line['wave (A)'], line['species'], line['isotope'], line['lower state (cm^-1)'], line['upper state (cm^-1)'], line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], line['note'], line['valid_theoretical_ew_depth'], line['theoretical_ew'], line['theoretical_depth']))) for line in linelist]))
+    out.write("\n".join(["  ".join(map(str, (line['wave (A)'], line['species'], line['isotope'], line['lower state (cm^-1)'], line['upper state (cm^-1)'], line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], "_".join(line['element'].split()), line['valid_theoretical_ew_depth'], line['theoretical_ew'], line['theoretical_depth']))) for line in linelist]))
     out.close()
     return out.name
 
