@@ -69,6 +69,9 @@ def is_moog_support_enabled():
         return True
 
 def is_width_support_enabled():
+    from sys import platform as _platform
+    if "linux" not in _platform:
+        return False
     ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
     atmos_dir = ispec_dir + "/synthesizer/atmos/"
     system_64bits = sys.maxsize > 2**32
@@ -89,6 +92,47 @@ def is_ares_support_enabled():
     ares_executable = ares_dir + "bin/ARES"
 
     if not os.path.exists(ares_executable):
+        return False
+    else:
+        return True
+
+def is_synthe_support_enabled():
+    from sys import platform as _platform
+    if "linux" not in _platform:
+        return False
+    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
+    atmos_dir = ispec_dir + "/synthesizer/atmos/"
+    system_64bits = sys.maxsize > 2**32
+    if system_64bits:
+        xnfpelsyn_executable = atmos_dir + "bin.amd64/xnfpelsyn.exe"
+        synbeg_executable = atmos_dir + "bin.amd64/synbeg.exe"
+        #rline2.exe # It does not exist in the source code!
+        rgfallinesnew_executable = atmos_dir + "bin.amd64/rgfalllinesnew.exe"
+        rmolescasc_executable = atmos_dir + "bin.amd64/rmolecasc.exe"
+        synthe_executable = atmos_dir + "bin.amd64/synthe.exe"
+        spectrv_executable = atmos_dir + "bin.amd64/spectrv.exe"
+        rotate_executable = atmos_dir + "bin.amd64/rotate.exe"
+        syntoascanga_executable = atmos_dir + "bin.amd64/syntoascanga.exe"
+    else:
+        xnfpelsyn_executable = atmos_dir + "bin.ia32/xnfpelsyn.exe"
+        synbeg_executable = atmos_dir + "bin.ia32/synbeg.exe"
+        #rline2.exe # It does not exist in the source code!
+        rgfallinesnew_executable = atmos_dir + "bin.ia32/rgfalllinesnew.exe"
+        rmolescasc_executable = atmos_dir + "bin.ia32/rmolecasc.exe"
+        synthe_executable = atmos_dir + "bin.ia32/synthe.exe"
+        spectrv_executable = atmos_dir + "bin.ia32/spectrv.exe"
+        rotate_executable = atmos_dir + "bin.ia32/rotate.exe"
+        syntoascanga_executable = atmos_dir + "bin.ia32/syntoascanga.exe"
+
+    if not os.path.exists(atmos_dir) \
+            or not os.path.exists(xnfpelsyn_executable) \
+            or not os.path.exists(synbeg_executable) \
+            or not os.path.exists(rgfallinesnew_executable) \
+            or not os.path.exists(rmolescasc_executable) \
+            or not os.path.exists(synthe_executable) \
+            or not os.path.exists(spectrv_executable) \
+            or not os.path.exists(rotate_executable) \
+            or not os.path.exists(syntoascanga_executable):
         return False
     else:
         return True

@@ -11,7 +11,7 @@ class AbundancesDialog(CustomDialog):
             element_linemasks = self.__linemasks[flines]
             element_abundances = self.__x_over_h[flines]
             #axes.plot(element_linemasks['VALD_wave_peak'], element_abundances, linestyle='', marker='o', markersize=5, zorder=1, label=element)
-            axes.plot(element_linemasks['lower state (eV)'], element_abundances, linestyle='', marker='o', markersize=5, zorder=1, label=element)
+            axes.plot(element_linemasks['lower_state_eV'], element_abundances, linestyle='', marker='o', markersize=5, zorder=1, label=element)
 
         leg = axes.legend(loc='upper right', shadow=False)
         ltext  = leg.get_texts()
@@ -33,10 +33,10 @@ class AbundancesDialog(CustomDialog):
         # We have data, we can assign the plotting function
         self.__components[0]["function"] = self.plot
 
-        teff = float(self.__components[4]["default"])
-        logg = float(self.__components[5]["default"])
-        feh = float(self.__components[6]["default"])
-        vmic = float(self.__components[7]["default"])
+        teff = float(self.__components[5]["default"])
+        logg = float(self.__components[6]["default"])
+        feh = float(self.__components[7]["default"])
+        vmic = float(self.__components[8]["default"])
 
         ## Stats
         for i in xrange(len(self.__stats)):
@@ -53,16 +53,16 @@ class AbundancesDialog(CustomDialog):
             element_linemasks = linemasks[flines]
             element_abundances_over_h = x_over_h[flines]
             element_abundances_over_fe = x_over_fe[flines]
-            self.__stats.append("%-50s: %10.2f" % ( element + " median abundance in [X/H] (dex)", np.round(np.median(element_abundances_over_h), 2)))
-            self.__stats.append("%-50s: %10.2f" % ( element + " mean abundance in [X/H] (dex)", np.round(np.mean(element_abundances_over_h), 2)))
-            self.__stats.append("%-50s: %10.2f" % ( element + " standard deviation in [X/H] (dex)", np.round(np.std(element_abundances_over_h), 2)))
-            self.__stats.append("%-50s: %10.2f" % ( element + " median abundance in [X/Fe] (dex)", np.round(np.median(element_abundances_over_fe), 2)))
-            self.__stats.append("%-50s: %10.2f" % ( element + " mean abundance in [X/Fe] (dex)", np.round(np.mean(element_abundances_over_fe), 2)))
-            self.__stats.append("%-50s: %10.2f" % ( element + " standard deviation in [X/Fe] (dex)", np.round(np.std(element_abundances_over_fe), 2)))
+            self.__stats.append("%-50s: %10.2f" % ( element + " median abundance in [X/H] (dex)", np.round(np.nanmedian(element_abundances_over_h), 2)))
+            self.__stats.append("%-50s: %10.2f" % ( element + " mean abundance in [X/H] (dex)", np.round(np.nanmean(element_abundances_over_h), 2)))
+            self.__stats.append("%-50s: %10.2f" % ( element + " standard deviation in [X/H] (dex)", np.round(np.nanstd(element_abundances_over_h), 2)))
+            self.__stats.append("%-50s: %10.2f" % ( element + " median abundance in [X/Fe] (dex)", np.round(np.nanmedian(element_abundances_over_fe), 2)))
+            self.__stats.append("%-50s: %10.2f" % ( element + " mean abundance in [X/Fe] (dex)", np.round(np.nanmean(element_abundances_over_fe), 2)))
+            self.__stats.append("%-50s: %10.2f" % ( element + " standard deviation in [X/Fe] (dex)", np.round(np.nanstd(element_abundances_over_fe), 2)))
             self.__stats.append("%-50s: %10.2f" % ( element + " lines number", np.round(len(element_abundances_over_h), 0)))
 
 
-    def __init__(self, parent, title, teff, logg, feh, vmic):
+    def __init__(self, parent, title, teff, logg, feh, vmic, lists, default_lists):
         self.__parent = parent
         self.__title = title
         self.__plot = None
@@ -78,15 +78,21 @@ class AbundancesDialog(CustomDialog):
         self.__components.append(component)
         component = {}
         component["type"] = "OptionMenu"
+        component["text"] = "Code"
+        component["options"] = lists['ew_code']
+        component["default"] = component["options"][default_lists['ew_code']]
+        self.__components.append(component)
+        component = {}
+        component["type"] = "OptionMenu"
         component["text"] = "Model atmosphere"
-        component["options"] = ["MARCS", "MARCS.GES", "MARCS.APOGEE", "ATLAS9.APOGEE", "ATLAS9.Castelli", "ATLAS9.Kurucz", "ATLAS9.Kirby"]
-        component["default"] = component["options"][1]
+        component["options"] = lists['atmospheres']['name']
+        component["default"] = component["options"][default_lists['atmospheres']]
         self.__components.append(component)
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Solar abundances"
-        component["options"] = ["Asplund.2009", "Asplund.2005", "Grevesse.2007", "Grevesse.1998", "Anders.1989"]
-        component["default"] = component["options"][1]
+        component["options"] = lists['abundances']['name']
+        component["default"] = component["options"][default_lists['abundances']]
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"

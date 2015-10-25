@@ -91,20 +91,6 @@ def __get_element(chemical_elements, molecules, species):
 
     return symbol + " " + str(int(ion_state) + 1)
 
-def __get_abund_rank(chemical_elements, species):
-    """
-    Convert species code form by the atomic number + "." + ionization state to element names type "Fe 1" or "Fe 2".
-    Returns "Discard" if not found.
-    """
-    atomic_num, ion_state = species.split(".")
-
-    tfilter = (chemical_elements['atomic_num'] == int(atomic_num))
-    if len(chemical_elements["symbol"][tfilter]) == 0:
-        return np.max(chemical_elements["solar_abund_rank"])
-    else:
-        return chemical_elements["solar_abund_rank"][tfilter][0]
-
-
 
 def __get_upper_state(lower_state, wavelength):
     """
@@ -610,36 +596,8 @@ def __create_linemasks_structure(num_peaks):
     Creates a linemasks structure compatible with SPECTRUM, Turbospectrum and
     several iSpec functions
     """
-    linemasks = np.recarray((num_peaks, ), dtype=[ \
-            ('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100'), \
-            ('peak', int), ('base', int), ('top', int), \
-            ('depth', float), ('relative_depth', float), \
-            ('wave_base_fit', float), ('wave_top_fit', float), \
-            ('base_fit', int), ('top_fit', int), \
-            ('mu', float), ('sig', float), ('A', float), ('baseline', float), ('gamma', float), \
-            ('mu_err', float), \
-            ('fwhm', float), ('fwhm_kms', float), ('R', float), \
-            ('depth_fit', float), ('relative_depth_fit', float), \
-            ('integrated_flux', float), ('ewr', float), ('ew', float), ('ew_err', float), \
-            ('snr', float), ('mean_flux', float), ('mean_flux_continuum', float), ('diff_wavelength', float), \
-            ('rms', float), \
-            ('telluric_wave_peak', float), ('telluric_fwhm', float), ('telluric_R', float), ('telluric_depth', float), \
-            ('wave (nm)', '<f8'), ('wave (A)', '<f8'), \
-            ('species', '|S10'), ('element', '|S4'), ('isotope', int), \
-            ('lower state (cm^-1)', int), ('upper state (cm^-1)', int), \
-            ('lower state (eV)', float), ('upper state (eV)', float), \
-            ('log(gf)', '<f8'), ('fudge factor', float), ('transition type', '|S10'), \
-            ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), \
-            ('valid_theoretical_ew_depth', bool), ('theoretical_ew', float), ('theoretical_depth', float), \
-            ('line_strength', float), \
-            ('solar_abund_rank', int), \
-            ('grouped', bool), ('reference_for_group', bool),
-            ('discarded', bool), \
-            ('ionization', '|S10'), ('upper statistical weight', float), ('radiation dumping', float), \
-            ('lower level state', '|S1'), \
-            ('upper level state', '|S1'), \
-            ('comment', '|S100'), \
-            ])
+    dtype = __get_atomic_linelist_definition() + __get_fitted_lines_definition()
+    linemasks = np.recarray((num_peaks, ), dtype=dtype)
     # Initialization
     linemasks['grouped'] = False # Lines that share the same mask (i.e. HFS and isotopes)
     linemasks['reference_for_group'] = False # It is a representant for its group
@@ -686,180 +644,329 @@ def __create_linemasks_structure(num_peaks):
     linemasks['mean_flux_continuum'] = 0.0
     linemasks['diff_wavelength'] = 0.0
     linemasks['rms'] = 9999.0
-    # Default values for line identification
-    linemasks['wave (nm)'] = 0.0
-    linemasks['wave (A)'] = 0.0
-    linemasks["species"] = ""
+
+    # Atomic
     linemasks['element'] = ""
-    linemasks['isotope'] = 0
-    linemasks['log(gf)'] = 0
-    linemasks["lower state (cm^-1)"] = 0
-    linemasks["upper state (cm^-1)"] = 0
-    linemasks['lower state (eV)'] = 0
-    linemasks['upper state (eV)'] = 0
-    linemasks["fudge factor"] = 1.0
-    linemasks["transition type"] = "99"
-    linemasks["rad"] = 0
-    linemasks["stark"] = 0
-    linemasks["waals"] = 0
-    linemasks["valid_theoretical_ew_depth"] = False
-    linemasks["theoretical_ew"] = 0
-    linemasks["theoretical_depth"] = 0
-    linemasks["line_strength"] = 0
-    linemasks["solar_abund_rank"] = 0
-    # Turbospectrum specific
-    linemasks['ionization'] = ""
-    linemasks['upper statistical weight'] = 0.
-    linemasks['radiation dumping'] = 0.
-    linemasks['lower level state'] = ""
-    linemasks['upper level state'] = ""
-    linemasks['comment'] = ""
+    #linemasks['turbospectrum_element'] = ""
+    #for key in ['wave_A', 'wave_nm', 'loggf', 'lower_state_eV', 'lower_state_cm1', 'lower_j', 'lower_g']:
+    for key in ['wave_A', 'wave_nm', 'loggf', 'lower_state_eV', 'lower_state_cm1', 'lower_j']:
+        linemasks[key] = 0.
+    for key in ['upper_state_eV', 'upper_state_cm1', 'upper_j', 'upper_g']:
+        linemasks[key] = 0.
+    #for key in ['lande_lower', 'lande_upper', 'lande_mean']:
+    for key in ['lande_lower', 'lande_upper']:
+        linemasks[key] = 0.
+    linemasks['spectrum_transition_type'] = "99"
+    linemasks['turbospectrum_rad'] = 1e5
+    for key in ['rad', 'stark', 'waals', 'waals_single_gamma_format', 'turbospectrum_fdamp', 'spectrum_fudge_factor']:
+        linemasks[key] = 0.
+    for key in ['theoretical_depth', 'theoretical_ew']:
+        linemasks[key] = 0.
+    linemasks['lower_orbital_type'] = "X"
+    linemasks['upper_orbital_type'] = "X"
+    #for key in ['lower_coupling', 'lower_shrinked_designation', 'upper_coupling', 'upper_shrinked_designation', 'designation']:
+    #for key in ['lower_coupling', 'lower_shrinked_designation', 'upper_coupling', 'upper_shrinked_designation']:
+        #linemasks[key] = ""
+    linemasks['molecule'] = "False"
+    #for key in ['lower_coupling', 'lower_shrinked_designation', 'upper_coupling', 'upper_shrinked_designation', 'designation']:
+    #for key in ['lower_coupling', 'lower_shrinked_designation', 'upper_coupling', 'upper_shrinked_designation']:
+        #linemasks[key] = ""
+    #linemasks['atomic_number_001'] = 0
+    #linemasks['atomic_number_002'] = 0
+    #linemasks['isotope_001'] = 0
+    #linemasks['isotope_002'] = 0
+    linemasks['spectrum_synthe_isotope'] = 0
+    linemasks['ion'] = 0
+    linemasks['spectrum_moog_species'] = ""
+    linemasks['turbospectrum_species'] = ""
+    linemasks['width_species'] = ""
+    linemasks['reference_code'] = ""
+    #linemasks['reference'] = ""
+    for key in ['spectrum_support', 'turbospectrum_support', 'moog_support', 'width_support', 'synthe_support']:
+        linemasks[key] = "False"
     return linemasks
 
 
-def read_atomic_linelist(linelist_filename, chemical_elements=None, molecules=None, code="spectrum"):
-    code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog', 'width']:
-        raise Exception("Unknown radiative transfer code: %s" % (code))
-
-    if code == "turbospectrum":
-        return __turbospectrum_read_atomic_linelist(linelist_filename)
-    elif code in ["spectrum", "moog", "width"]:
-        if chemical_elements is None:
-            raise Exception("Chemical elements argument should be specified when using SPECTRUM")
-        if molecules is None:
-            raise Exception("Molecules argument should be specified when using SPECTRUM")
-        return __spectrum_read_atomic_linelist(linelist_filename, chemical_elements, molecules)
-
-def __spectrum_read_atomic_linelist(linelist_filename, chemical_elements, molecules):
+def read_atomic_linelist(linelist_filename, wave_base=None, wave_top=None):
     """
-    Load a SPECTRUM format linelist and add complementary information.
+    Read atomic linelist. It will automatically read fitted information if it is included
+    (i.e. saved with write_atomic_linelist(..., include_fit=True))
 
-    If chemical_elements and molecules is indicated, the field 'element' will be filled
-    with the name of the element + ionization state (i.e. 'Fe 1')
+    The linelist can be filtered by wave_base and wave_top (in nm) to reduce
+    memory consumption.
     """
-    ncols = len(open(linelist_filename).readline().split())
-    if ncols == 14:
-        has_depth = True
-        has_iso = False
-    elif ncols == 15:
-        has_depth = True
-        has_iso = True
-    elif ncols == 12:
-        has_depth = False
-        has_iso = True
-    elif ncols == 11:
-        has_depth = False
-        has_iso = False
-    else:
-        raise Exception("Unknown number of columns for atomic linelist: %i" % ncols)
+    atomic_dtype = __get_atomic_linelist_definition()
+    fitted_dtype = __get_fitted_lines_definition()
+    try:
+        num_cols = len(open(linelist_filename, "r").readline().split("\t"))
+        if num_cols == len(atomic_dtype):
+            # Only atomic linelist
+            linelist = np.genfromtxt(linelist_filename, dtype=atomic_dtype, delimiter="\t", skip_header=1, loose=False)
+        elif num_cols == len(atomic_dtype) + len(fitted_dtype):
+            # Atomic + fitted information
+            linelist = np.genfromtxt(linelist_filename, dtype=atomic_dtype+fitted_dtype, delimiter="\t", skip_header=1, loose=False)
+        else:
+            raise Exception()
+    except:
+        raise Exception("Wrong atomic linelist file format!")
+    wfilter = None
+    if wave_base is not None and wave_top is not None:
+        wfilter = np.logical_and(linelist['wave_nm']  >= wave_base, linelist['wave_nm']  <= wave_top)
+    elif wave_base is not None:
+        wfilter = linelist['wave_nm']  >= wave_base
+    elif wave_top is not None:
+        wfilter = linelist['wave_nm']  <= wave_top
 
-    cols = [('wave (A)', '<f8'), ('species', '|S10'), ]
-    if has_iso:
-        cols += [('isotope', int)]
-    cols += [('lower state (cm^-1)', int), \
-            ('upper state (cm^-1)', int), ('log(gf)', '<f8'), ('fudge factor', '<f8'), \
-            ('transition type', '|S10'), ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), \
-            ('note', '|S100'), ]
-    if has_depth:
-        cols += [('valid_theoretical_ew_depth', '|S100'), \
-                ('theoretical_ew', '<f8'), \
-                ('theoretical_depth', '<f8')]
-    raw_linelist = np.array([tuple(line.rstrip('\r\n').split()) for line in open(linelist_filename,)], \
-                        dtype=cols)
+    if wfilter is not None:
+        linelist = linelist[wfilter]
+    if len (linelist) == 0:
+        logging.warn("Linelist does not contain any line between %.4f and %.4f nm" % (wave_base, wave_top))
 
-    linelist = __create_linemasks_structure(len(raw_linelist))
-    #linelist = np.recarray((len(raw_linelist), ), dtype=[ \
-            #('wave (nm)', '<f8'), ('wave (A)', '<f8'), \
-            #('species', '|S10'), ('isotope', int), ('element', '|S4'), \
-            #('lower state (cm^-1)', int), ('upper state (cm^-1)', int), \
-            #('lower state (eV)', float), ('upper state (eV)', float), \
-            #('log(gf)', '<f8'), ('fudge factor', float), ('transition type', '|S10'), \
-            #('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), \
-            #('valid_theoretical_ew_depth', bool), ('theoretical_ew', float), ('theoretical_depth', float), \
-            #('line_strength', float), \
-            #('solar_abund_rank', int), \
-            #('note', '|S100'), \
-            #('ionization', '|S10'), ('upper statistical weight', float), ('radiation dumping', float), \
-            #('lower level state', '|S1'), \
-            #('upper level state', '|S1'), \
-            #('comment', '|S100')])
-    ## Turbospectrum specific
-    #linelist['ionization'] = ""
-    #linelist['upper statistical weight'] = 0.
-    #linelist['radiation dumping'] = 0.
-    #linelist['lower level state'] = ""
-    #linelist['upper level state'] = ""
-    #linelist['comment'] = ""
-    # Default values for line identification
-    linelist['wave (nm)'] = raw_linelist['wave (A)'] / 10.
-    linelist['wave (A)'] = raw_linelist['wave (A)']
-    linelist["species"] = raw_linelist['species']
-    if has_iso:
-        linelist["isotope"] = raw_linelist['isotope']
-    #else:
-        #linelist["isotope"] = 0
-    if chemical_elements is not None and molecules is not None:
-        for species in np.unique(raw_linelist['species']):
-            sfilter = raw_linelist['species'] == species
-            element = __get_element(chemical_elements, molecules, species)
-            solar_abund_rank = __get_abund_rank(chemical_elements, species)
-            linelist['element'][sfilter] = element
-            linelist['solar_abund_rank'][sfilter] = solar_abund_rank
-    else:
-        linelist['element'] = ""
-    linelist["lower state (cm^-1)"] = raw_linelist['lower state (cm^-1)']
-    linelist["upper state (cm^-1)"] = raw_linelist['upper state (cm^-1)']
-    linelist['lower state (eV)'] = __inverse_cm_to_eV(raw_linelist['lower state (cm^-1)'])
-    linelist['upper state (eV)'] = __inverse_cm_to_eV(raw_linelist['upper state (cm^-1)'])
-    linelist['log(gf)'] = raw_linelist['log(gf)']
-    linelist["fudge factor"] = raw_linelist['fudge factor']
-    linelist["transition type"] = raw_linelist['transition type']
-    linelist["rad"] = raw_linelist['rad']
-    linelist["stark"] = raw_linelist['stark']
-    linelist["waals"] = raw_linelist['waals']
-    # Line strength is calculated by using a theoretical proxy: log(gf) - 5040/Teff
-    # - Mucciarelli et al. 2013 - GALA: An automatic tool for the abundance analysis of stellar spectra
-    # - Mucciarelli et al. 2010 - Microturbulent velocity from stellar spectra: a comparison between different approaches
-    # - Temperature of reference used by Gaia ESO Survey: 3000
-    teff_ref = 3000 # K
-    linelist["line_strength"] = raw_linelist['log(gf)'] - (5040./teff_ref)*linelist['lower state (eV)']
-    #line_strength_proxy = the oscillator strength - the Boltzmann factor (5040./Teff) * excitation potential
-    linelist["note"] = raw_linelist['note']
-    if has_depth:
-        linelist["valid_theoretical_ew_depth"] = raw_linelist['valid_theoretical_ew_depth'] == "True"
-        linelist["theoretical_ew"] = raw_linelist['theoretical_ew']
-        linelist["theoretical_depth"] = raw_linelist['theoretical_depth']
-    #else:
-        #linelist["valid_theoretical_ew_depth"] = False
-        #linelist["theoretical_ew"] = 0.0
-        #linelist["theoretical_depth"] = 0.0
     return linelist
 
-def write_atomic_linelist(linelist, linelist_filename=None, code="spectrum", tmp_dir=None):
-    code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog']:
-        raise Exception("Unknown radiative transfer code: %s" % (code))
+def __get_fitted_lines_definition():
+    return [
+            ('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100'), \
+            ('peak', int), ('base', int), ('top', int), \
+            ('depth', float), ('relative_depth', float), \
+            ('wave_base_fit', float), ('wave_top_fit', float), \
+            ('base_fit', int), ('top_fit', int), \
+            ('mu', float), ('sig', float), ('A', float), ('baseline', float), ('gamma', float), \
+            ('mu_err', float), \
+            ('fwhm', float), ('fwhm_kms', float), ('R', float), \
+            ('depth_fit', float), ('relative_depth_fit', float), \
+            ('integrated_flux', float), ('ewr', float), ('ew', float), ('ew_err', float), \
+            ('snr', float), ('mean_flux', float), ('mean_flux_continuum', float), ('diff_wavelength', float), \
+            ('rms', float), \
+            ('telluric_wave_peak', float), ('telluric_fwhm', float), ('telluric_R', float), ('telluric_depth', float), \
+            ('grouped', '|S5'), ('reference_for_group', '|S5'),
+            ('discarded', '|S5'), \
+            ]
 
-    if code == "moog":
-        return __moog_write_atomic_linelist(linelist, linelist_filename=linelist_filename, tmp_dir=tmp_dir)
-    elif code == "turbospectrum":
-        return __turbospectrum_write_atomic_linelist(linelist, linelist_filename=linelist_filename, tmp_dir=tmp_dir)
+def __get_atomic_linelist_definition():
+    return [('element', '|S4'),
+     #('turbospectrum_element', '|S6'),
+     ('wave_A', '<f8'),
+     ('wave_nm', '<f8'),
+     ('loggf', '<f8'),
+     ('lower_state_eV', '<f8'),
+     ('lower_state_cm1', '<f8'),
+     ('lower_j', '<f8'),
+     #('lower_g', '<f8'),
+     ('upper_state_eV', '<f8'),
+     ('upper_state_cm1', '<f8'),
+     ('upper_j', '<f8'),
+     ('upper_g', '<f8'),
+     ('lande_lower', '<f8'),
+     ('lande_upper', '<f8'),
+     #('lande_mean', '<f8'),
+     ('spectrum_transition_type', '|S2'),
+     ('turbospectrum_rad', '<f8'),
+     ('rad', '<f8'),
+     ('stark', '<f8'),
+     ('waals', '<f8'),
+     ('waals_single_gamma_format', '<f8'),
+     ('turbospectrum_fdamp', '<f8'),
+     ('spectrum_fudge_factor', '<f8'),
+     ('theoretical_depth', '<f8'),
+     ('theoretical_ew', '<f8'),
+     ('lower_orbital_type', '|S1'),
+     ('upper_orbital_type', '|S1'),
+     #('lower_coupling', '|S2'),
+     #('lower_shrinked_designation', '|S41'),
+     #('upper_coupling', '|S2'),
+     #('upper_shrinked_designation', '|S45'),
+     #('designation', '|S93'),
+     ('molecule', '|S1'),
+     #('molecule', '|S5'),
+     #('atomic_number_001', '<i4'),
+     #('atomic_number_002', '<f8'),
+     #('isotope_001', '<f8'),
+     #('isotope_002', '<f8'),
+     ('spectrum_synthe_isotope', '<i4'),
+     ('ion', '<i4'),
+     ('spectrum_moog_species', '|S6'),
+     ('turbospectrum_species', '|S14'),
+     ('width_species', '|S6'),
+     ('reference_code', '|S10'),
+     #('reference', '|S39'),
+     ('spectrum_support', '|S1'),
+     ('turbospectrum_support', '|S1'),
+     ('moog_support', '|S1'),
+     ('width_support', '|S1'),
+     ('synthe_support', '|S1')]
+     #('spectrum_support', '|S5'),
+     #('turbospectrum_support', '|S5'),
+     #('moog_support', '|S5'),
+     #('width_support', '|S5'),
+     #('synthe_support', '|S5')]
+
+def write_atomic_linelist(linelist, linelist_filename=None, code=None, include_fit=False, tmp_dir=None):
+    """
+    Write atomic linelist. Include fitted information if "include_fit" is true.
+    If code is specified ('spectrum', 'turbospectrum', 'moog'), then it is saved
+    in the file format compatible with the indicated code (thus not all the atomic
+    information will be stored).
+    """
+    if code is not None:
+        code = code.lower()
+        if code not in ['spectrum', 'turbospectrum', 'moog', 'synthe']:
+            raise Exception("Unknown radiative transfer code: %s" % (code))
+
+        if code == "moog":
+            logging.info("MOOG file format")
+            return __moog_write_atomic_linelist(linelist, linelist_filename=linelist_filename, tmp_dir=tmp_dir)
+        elif code == "turbospectrum":
+            logging.info("Turbospectrum file format")
+            return __turbospectrum_write_atomic_linelist(linelist, linelist_filename=linelist_filename, tmp_dir=tmp_dir)
+        elif code == "synthe":
+            logging.info("Synthe file format")
+            return __synthe_write_atomic_linelist(linelist, linelist_filename=linelist_filename, tmp_dir=tmp_dir)
+        else:
+            logging.info("SPECTRUM file format")
+            return __spectrum_write_atomic_linelist(linelist, linelist_filename=linelist_filename, tmp_dir=tmp_dir)
     else:
-        return __spectrum_write_atomic_linelist(linelist, linelist_filename=linelist_filename, tmp_dir=tmp_dir)
+        if linelist_filename is not None:
+            out = open(linelist_filename, "w")
+        else:
+            # Temporary file
+            out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
+        __generic_write_atomic_linelist_header(out, include_fit)
+        for line in linelist:
+            __generic_write_atomic_linelist_element(out, line, include_fit)
+        out.close()
+        return out.name
+
+def __generic_write_atomic_linelist_header(out, include_fit):
+    for i, (key, dtype) in enumerate(__get_atomic_linelist_definition()):
+        if i == 0:
+            out.write("%s" % (key))
+        else:
+            out.write("\t%s" % (key))
+    if include_fit:
+        for key, dtype in __get_fitted_lines_definition():
+            out.write("\t%s" % (key))
+    out.write("\n")
+
+def __generic_write_atomic_linelist_element(out, data, include_fit):
+    out.write("%s\t" % (data['element']))
+    #out.write("%s\t" % (data['turbospectrum_element']))
+    out.write("%.3f\t" % (data['wave_A']))
+    out.write("%.4f\t" % (data['wave_nm']))
+    out.write("%.3f\t" % (data['loggf']))
+    out.write("%.4f\t" % (data['lower_state_eV']))
+    out.write("%.3f\t" % (data['lower_state_cm1']))
+    out.write("%.1f\t" % (data['lower_j']))
+    #out.write("%.1f\t" % (data['lower_g']))
+    out.write("%.4f\t" % (data['upper_state_eV']))
+    out.write("%.3f\t" % (data['upper_state_cm1']))
+    out.write("%.1f\t" % (data['upper_j']))
+    out.write("%.1f\t" % (data['upper_g']))
+    out.write("%.3f\t" % (data['lande_lower']))
+    out.write("%.3f\t" % (data['lande_upper']))
+    #out.write("%.3f\t" % (data['lande_mean']))
+    out.write("%s\t" % (data['spectrum_transition_type']))
+    out.write("%.2E\t" % (data['turbospectrum_rad']))
+    out.write("%.3f\t" % (data['rad']))
+    out.write("%.3f\t" % (data['stark']))
+    out.write("%.3f\t" % (data['waals']))
+    out.write("%.3f\t" % (data['waals_single_gamma_format']))
+    out.write("%.3f\t" % (data['turbospectrum_fdamp']))
+    out.write("%.3f\t" % (data['spectrum_fudge_factor']))
+    out.write("%.3f\t" % (data['theoretical_depth']))
+    out.write("%.3f\t" % (data['theoretical_ew']))
+    out.write("%s\t" % (data['lower_orbital_type']))
+    out.write("%s\t" % (data['upper_orbital_type']))
+    #out.write("%s\t" % (data['lower_coupling']))
+    #out.write("%s\t" % (data['lower_shrinked_designation']))
+    #out.write("%s\t" % (data['upper_coupling']))
+    #out.write("%s\t" % (data['upper_shrinked_designation']))
+    #out.write("%s\t" % (data['designation']))
+    out.write("%s\t" % (str(data['molecule'])[0]))
+    #out.write("%s\t" % (str(data['molecule'])))
+    #out.write("%i\t" % (data['atomic_number_001']))
+    #out.write("%.0f\t" % (data['atomic_number_002'])) # Zero decimal float instead of integer because it can be a float('nan')
+    #out.write("%.0f\t" % (data['isotope_001'])) # Zero decimal float instead of integer because it can be a float('nan')
+    #out.write("%.0f\t" % (data['isotope_002'])) # Zero decimal float instead of integer because it can be a float('nan')
+    out.write("%i\t" % (data['spectrum_synthe_isotope']))
+    out.write("%i\t" % (data['ion']))
+    out.write("%s\t" % (data['spectrum_moog_species']))
+    out.write("%s\t" % (data['turbospectrum_species']))
+    out.write("%s\t" % (data['width_species']))
+    out.write("%s\t" % (data['reference_code']))
+    #out.write("%s\t" % (data['reference']))
+    out.write("%s\t" % (str(data['spectrum_support'])[0])) # Only 'T' or 'F' to save memory
+    out.write("%s\t" % (str(data['turbospectrum_support'])[0]))
+    out.write("%s\t" % (str(data['moog_support'])[0]))
+    out.write("%s\t" % (str(data['width_support'])[0]))
+    out.write("%s" % (str(data['synthe_support'])[0]))
+    if include_fit:
+        out.write("\t%.4f\t" % (data['wave_peak']))
+        out.write("%.4f\t" % (data['wave_base']))
+        out.write("%.4f\t" % (data['wave_top']))
+        out.write("%s\t" % (data['note']))
+        out.write("%i\t" % (data['peak']))
+        out.write("%i\t" % (data['base']))
+        out.write("%i\t" % (data['top']))
+        out.write("%.3f\t" % (data['depth']))
+        out.write("%.3f\t" % (data['relative_depth']))
+        out.write("%.4f\t" % (data['wave_base_fit']))
+        out.write("%.4f\t" % (data['wave_top_fit']))
+        out.write("%i\t" % (data['base_fit']))
+        out.write("%i\t" % (data['top_fit']))
+        out.write("%.4f\t" % (data['mu']))
+        out.write("%.4f\t" % (data['sig']))
+        out.write("%.4f\t" % (data['A']))
+        out.write("%.3f\t" % (data['baseline']))
+        out.write("%.4f\t" % (data['gamma']))
+        out.write("%.4f\t" % (data['mu_err']))
+        out.write("%.4f\t" % (data['fwhm']))
+        out.write("%.4f\t" % (data['fwhm_kms']))
+        out.write("%.0f\t" % (data['R']))
+        out.write("%.3f\t" % (data['depth_fit']))
+        out.write("%.3f\t" % (data['relative_depth_fit']))
+        out.write("%.4f\t" % (data['integrated_flux']))
+        out.write("%.2f\t" % (data['ewr']))
+        out.write("%.1f\t" % (data['ew']))
+        out.write("%.1f\t" % (data['ew_err']))
+        out.write("%.1f\t" % (data['snr']))
+        out.write("%.3f\t" % (data['mean_flux']))
+        out.write("%.3f\t" % (data['mean_flux_continuum']))
+        out.write("%.4f\t" % (data['diff_wavelength']))
+        out.write("%.3f\t" % (data['rms']))
+        out.write("%.4f\t" % (data['telluric_wave_peak']))
+        out.write("%.4f\t" % (data['telluric_fwhm']))
+        out.write("%.0f\t" % (data['telluric_R']))
+        out.write("%.3f\t" % (data['telluric_depth']))
+        out.write("%s\t" % (str(data['grouped'])))
+        out.write("%s\t" % (str(data['reference_for_group'])))
+        out.write("%s" % (str(data['discarded'])))
+    out.write("\n")
+
 
 def __spectrum_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=None):
     """
     Saves a SPECTRUM linelist for spectral synthesis.
     If filename is not specified, a temporary file is created and the name is returned.
     """
+    supported = np.logical_or(linelist['spectrum_support'] == "True", linelist['spectrum_support'] == True)
+    supported = np.logical_or(supported, linelist['spectrum_support'] == "T")
+    linelist = linelist[supported]
+    linelist = linelist.copy()
+    # http://www.appstate.edu/~grayro/spectrum/spectrum276/node14.html
+    #  Since only the energy of the lower state is used in molecular calculations,
+    #  this entry (upper state) is sometimes used to encode the molecular band information
+    molecules = np.logical_or(linelist['molecule'] == "True", linelist['molecule'] == True)
+    molecules = np.logical_or(molecules, linelist['molecule'] == "T")
+    linelist['upper_state_cm1'][molecules] = 0.
+
     if linelist_filename is not None:
         out = open(linelist_filename, "w")
     else:
         # Temporary file
         out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
-    #4750.196  26.0 0  36078  57130  -3.662  1.0  GA  8.09  -4.61  -7.32  Fe_1  True  0.27  0.01
-    out.write("\n".join(["  ".join(map(str, (line['wave (A)'], line['species'], line['isotope'], line['lower state (cm^-1)'], line['upper state (cm^-1)'], line['log(gf)'], line['fudge factor'], line['transition type'], line['rad'], line['stark'], line['waals'], "_".join(line['element'].split()), line['valid_theoretical_ew_depth'], line['theoretical_ew'], line['theoretical_depth']))) for line in linelist]))
+    #4750.196  26.0 0  36078  57130  -3.662  1.0  GA  8.09  -4.61  -7.32  Fe_1
+    out.write("\n".join(["  ".join(map(str, (line['wave_A'], line['spectrum_moog_species'], line['spectrum_synthe_isotope'], line['lower_state_cm1'], line['upper_state_cm1'], line['loggf'], line['spectrum_fudge_factor'], line['spectrum_transition_type'], line['rad'], line['stark'], line['waals'], "_".join(line['element'].split())))) for line in linelist]))
     out.close()
     return out.name
 
@@ -1325,26 +1432,26 @@ def __fill_linemasks_with_atomic_data(linemasks, atomic_linelist, diff_limit=0.0
 
 
     ## Sort
-    #atomic_linelist.sort(order=['wave (nm)']) # Ascending
+    #atomic_linelist.sort(order=['wave_nm']) # Ascending
 
     clean_linemasks = linemasks[linemasks['wave_peak'] != 0]
     max_wave_peak = np.max(clean_linemasks['wave_peak'])
     min_wave_peak = np.min(clean_linemasks['wave_peak'])
 
-    if atomic_linelist['wave (nm)'][0] > min_wave_peak or atomic_linelist['wave (nm)'][-1] < max_wave_peak:
+    if atomic_linelist['wave_nm'][0] > min_wave_peak or atomic_linelist['wave_nm'][-1] < max_wave_peak:
         print "WARNING: The atomic linelist does not cover the whole linemask wavelength range"
-        print "- Atomic line's range from", atomic_linelist['wave (nm)'][0], "to", atomic_linelist['wave (nm)'][-1], "nm"
+        print "- Atomic line's range from", atomic_linelist['wave_nm'][0], "to", atomic_linelist['wave_nm'][-1], "nm"
         print "- Linemask range from", min_wave_peak, "to", max_wave_peak, "nm"
 
-    wfilter = (atomic_linelist['wave (nm)'] >= min_wave_peak - diff_limit) & (atomic_linelist['wave (nm)'] <= max_wave_peak + diff_limit)
+    wfilter = (atomic_linelist['wave_nm'] >= min_wave_peak - diff_limit) & (atomic_linelist['wave_nm'] <= max_wave_peak + diff_limit)
     atomic_linelist = atomic_linelist[wfilter]
 
     if len(atomic_linelist) > 0:
         for j in np.arange(len(linemasks)):
             if crossmatch_with_mu:
-                diff = atomic_linelist['wave (nm)'] - linemasks['mu'][j]
+                diff = atomic_linelist['wave_nm'] - linemasks['mu'][j]
             else:
-                diff = atomic_linelist['wave (nm)'] - linemasks['wave_peak'][j]
+                diff = atomic_linelist['wave_nm'] - linemasks['wave_peak'][j]
 
             # Find index of the nearest lines
             abs_diff = np.abs(diff)
@@ -1369,33 +1476,10 @@ def __fill_linemasks_with_atomic_data(linemasks, atomic_linelist, diff_limit=0.0
                     else:
                         ii = np.argmax(atomic_linelist['theoretical_depth'][imin_diff])
                         i = imin_diff[ii]
-                linemasks['wave (nm)'][j] = atomic_linelist['wave (nm)'][i]
-                linemasks['wave (A)'][j]= atomic_linelist['wave (A)'][i]
-                linemasks["species"][j] = atomic_linelist['species'][i]
-                linemasks["isotope"][j] = atomic_linelist['isotope'][i]
-                linemasks['element'][j] = atomic_linelist['element'][i]
-                linemasks['log(gf)'][j] = atomic_linelist['log(gf)'][i]
-                linemasks["lower state (cm^-1)"][j] = atomic_linelist['lower state (cm^-1)'][i]
-                linemasks["upper state (cm^-1)"][j] = atomic_linelist['upper state (cm^-1)'][i]
-                linemasks['lower state (eV)'][j] = atomic_linelist['lower state (eV)'][i]
-                linemasks['upper state (eV)'][j] = atomic_linelist['upper state (eV)'][i]
-                linemasks["fudge factor"][j] = atomic_linelist['fudge factor'][i]
-                linemasks["transition type"][j] = atomic_linelist['transition type'][i]
-                linemasks["rad"][j] = atomic_linelist['rad'][i]
-                linemasks["stark"][j] = atomic_linelist['stark'][i]
-                linemasks["waals"][j] = atomic_linelist['waals'][i]
-                linemasks["valid_theoretical_ew_depth"][j] = atomic_linelist['valid_theoretical_ew_depth'][i]
-                linemasks["theoretical_ew"][j] = atomic_linelist['theoretical_ew'][i]
-                linemasks["theoretical_depth"][j] = atomic_linelist['theoretical_depth'][i]
-                linemasks["line_strength"][j] = atomic_linelist['line_strength'][i]
-                linemasks["solar_abund_rank"][j] = atomic_linelist['solar_abund_rank'][i]
-                # Turbospectrum specific
-                linemasks['ionization'][j] = atomic_linelist['ionization'][i]
-                linemasks['upper statistical weight'][j] = atomic_linelist['upper statistical weight'][i]
-                linemasks['radiation dumping'][j] = atomic_linelist['radiation dumping'][i]
-                linemasks['lower level state'][j] = atomic_linelist['lower level state'][i]
-                linemasks['upper level state'][j] = atomic_linelist['upper level state'][i]
-                linemasks['comment'][j] = atomic_linelist['comment'][i]
+
+                # Copy atomic information
+                for key, dtype in __get_atomic_linelist_definition():
+                    linemasks[key][j] = atomic_linelist[key][i]
 
     if vel_atomic != 0:
         linemasks['wave_peak'] = original_wave_peak
@@ -2367,39 +2451,110 @@ def __moog_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=None)
     linelist['waals'] ares spected to be in single gamma damping coefficient
     ABO theory is not supported and if waals is bigger than 0, it won't be considered
     """
+    supported = np.logical_or(linelist['moog_support'] == "True", linelist['moog_support'] == True)
+    supported = np.logical_or(supported, linelist['moog_support'] == "T")
+    linelist = linelist[supported]
+
     if linelist_filename is not None:
         out = open(linelist_filename, "w")
     else:
         # Temporary file
         out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
 
+    with_ew = 'ew' in linelist.dtype.names
+    line_ew = 0.
     out.write("wavelength species lower_state_eV loggf damping d0 equivalent_width comment\n")
     for line in linelist:
-        if line['species'] in ["2.0", "2.1"]:
-            # Ignore Helium, MOOG does not manage it well when combined with some other elements
-            continue
         #6690.261  24.0   3.888    -2.442  2.0    0.0    0.0    vald0.016 CrI may2008
         #6690.269  607.0  0.542    -3.334  0.00  7.73    0.0  ( 7, 2)Q12 12.5
-        if line['waals'] < 0:
-            damping = line['waals']
-        else:
-            damping = 0.0
         d0 = 0 # Dissociation energy [eV] (only for molecules)
-        # damping options in MOOG's Params.f
-        width = line['ew']
-        comment = ""
-        out.write("%10.3f%10s%10.3f%10.3f%10.2f%10.2f%10.2f%10s\n" \
-                % (line['wave (A)'], line['species'], line['lower state (eV)'], line['log(gf)'], damping, d0, width, comment))
-        #out.write("%10.3f%10s%10.3f%10.3f%10s%10s%10s%10s\n" \
-                #% (line['wave (A)'], line['species'], line['lower state (eV)'], line['log(gf)'], "", "", "", comment))
+        if with_ew:
+            line_ew = line['ew']
+        out.write("%10.3f%10s%10.3f%10.3f%10.2f%10.2f%10.2f %10s\n" \
+                % (line['wave_A'], line['spectrum_moog_species'], line['lower_state_eV'], line['loggf'], line['waals_single_gamma_format'], d0, line_ew, ""))
     out.close()
     return out.name
+
+def __synthe_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=None):
+    """
+    Saves a Synthe linelist for spectral synthesis.
+    If filename is not specified, a temporary file is created and the name is returned.
+    """
+    supported = np.logical_or(linelist['synthe_support'] == "True", linelist['synthe_support'] == True)
+    supported = np.logical_or(supported, linelist['synthe_support'] == "T")
+    #supported = np.logical_and(supported, linelist['spectrum_support'] == "T")
+    #supported = np.logical_and(supported, linelist['width_support'] == "T")
+    linelist = linelist[supported]
+    #linelist = linelist[linelist['spectrum_support'] == 'True']
+    molecules = np.logical_or(linelist['molecule'] == "True", linelist['molecule'] == True)
+    molecules = np.logical_or(molecules, linelist['molecule'] == "T")
+
+    there_are_molecules = len(np.where(molecules)[0]) > 0
+    there_are_molecules = False
+
+    if linelist_filename is not None:
+        atomic_out = open(linelist_filename[0], "w")
+    else:
+        # Temporary file
+        atomic_out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
+
+    molecules_out = []
+    if there_are_molecules:
+        iwidth_species = map(int, map(float, linelist[molecules]['width_species']))
+        unique_iwidth_species = np.unique(iwidth_species)
+        nfiles = len(unique_iwidth_species)
+        for i in xrange(nfiles):
+            molecules_out.append(tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir))
+
+    for line in linelist[~molecules]:
+        #300.0021 -7.261 26.00   60197.937  4.0 s6D3/5g[4]   26874.548  5.0 5Dsp3P z5F  7.19 -5.69 -7.85K94  0 0  0 0.000  0 0.000    0    0           1059 1399
+        #300.0047 -0.617 24.01   99677.930  0.5 a3P)5s f4P   66354.830  1.5 a3P)4p y4P  8.87 -5.64 -7.67K88  0 0  0 0.000  0 0.000    0    0           2617 1671
+        #300.0061 -1.463  8.01  232536.060  1.5 3d   4P     265859.000  0.5 5f  *4D     9.61  0.00  0.00NBS  0 0  0 0.000  0 0.000    0    0              0    0
+        #300.0082 -2.495 23.00    9824.610  2.5 d3s2 a4P     43147.280  3.5 s4F         7.47 -4.87 -7.49K88  0 0 51-1.333 51-0.001  -35    0F2 -2z0    1550 1240     0
+        atomic_out.write("%11.4f%7.3f%6s%12.3f%5.2f %10s%12.3f%5.2f %10s%6.2f%6.2f%6.2f%4s 0 0%3i 0.000%3i 0.000    0    %5i          %5i    0\n" % \
+                        (line['wave_nm'], line['loggf'], line['width_species'], \
+                            line['lower_state_cm1'], line['lower_j'], "X", \
+                            line['upper_state_cm1'], line['upper_j'], "X", \
+                            line['rad'], line['stark'], line['waals_single_gamma_format'], \
+                            line['reference_code'][:4], \
+                            line['spectrum_synthe_isotope'], line['spectrum_synthe_isotope'], \
+                            int(line['lande_lower']*1000), int(line['lande_upper']*1000), \
+                        )
+                    )
+    atomic_out.close()
+    if not there_are_molecules:
+        return (atomic_out.name, None)
+    else:
+        for i, iwidth in enumerate(unique_iwidth_species):
+            sublinelist = linelist[molecules][iwidth_species == iwidth]
+            for line in sublinelist:
+                #256.2855 -8.611  1.5    17.770  2.5 -39025.059 106X00F1   C03F2   12 706.000
+                molecules_out[i].write("%10.4f%7.3f%5.1f%10.3f%5.1f%11.3f%4iXXXXX   XXXXX  %3i%8.3f\n" % \
+                                (line['wave_nm'], line['loggf'], \
+                                    line['lower_j'], line['lower_state_cm1'], \
+                                    line['upper_j'], line['upper_state_cm1'], \
+                                    int(float(line['width_species'])), \
+                                    #0, \
+                                    line['spectrum_synthe_isotope'], \
+                                    line['rad']*100
+                                )
+                            )
+            molecules_out[i].close()
+
+        molecules_out_name = []
+        for out in molecules_out:
+            molecules_out_name.append(out.name)
+        return (atomic_out.name, molecules_out_name)
 
 def __turbospectrum_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=None):
     """
     Saves a TurboSpectrum linelist for spectral synthesis.
     If filename is not specified, a temporary file is created and the name is returned.
     """
+    supported = np.logical_or(linelist['turbospectrum_support'] == "True", linelist['turbospectrum_support'] == True)
+    supported = np.logical_or(supported, linelist['turbospectrum_support'] == "T")
+    linelist = linelist[supported]
+
     if linelist_filename is not None:
         out = open(linelist_filename, "w")
     else:
@@ -2411,144 +2566,41 @@ def __turbospectrum_write_atomic_linelist(linelist, linelist_filename=None, tmp_
     # And different ionization with the same species:
     #   26.000: Fe I and Fe II
     # thus we have to separate them looking at 'species' and 'element
-    for species in  np.unique(linelist['species']):
-        sublinelist = linelist[linelist['species'] == species]
+    with_ew = 'ew' in linelist.dtype.names
+    line_ew = 0.
+    for species in  np.unique(linelist['turbospectrum_species']):
+        sublinelist = linelist[linelist['turbospectrum_species'] == species]
         for element in np.unique(sublinelist['element']):
             #print element
             subsublinelist = sublinelist[sublinelist['element'] == element]
+            molecule = np.logical_or(subsublinelist['molecule'][0] == "True", subsublinelist['molecule'][0] == True)
+            molecule = np.logical_or(molecule, subsublinelist['molecule'][0] == "T")
             # '   3.000            '    1        28
             # 'Li I   '
-            out.write("'%20s' %4s %9i\n" % (species, subsublinelist['ionization'][0], len(subsublinelist)))
-            element = element.replace("2", "II").replace("1", "I")
+            out.write("'%20s' %4s %9i\n" % (species, subsublinelist['ion'][0], len(subsublinelist)))
             out.write("'%-7s'\n" % (element))
             for line in subsublinelist:
                 # Do not use error or turbospectrum will calculate 3 times the abundance for a single line
                 #line_ew_err = line['ew_err']
                 line_ew_err = 0.0
-                # 4602.826  1.848 -0.613 2006.342    4.0  6.61E+07 'p' 'd'   0.0    1.0 'Li I LS:1s2.2p 2P* LS:1s2.4d 2D'
-                out.write("%10.3f %9.5f %6.3f %8.3f %6.1f %9.2E '%s' '%s' %5.1f %6.1f '%s'\n" % (line['wave (A)'], line['lower state (eV)'], \
-                                                line['log(gf)'], line['fudge factor'], line['upper statistical weight'], \
-                                                line['radiation dumping'], line['lower level state'], \
-                                                line['upper level state'], line['ew'], line_ew_err, line['comment']))
+                if with_ew:
+                    line_ew = line['ew']
+                if not molecule:
+                    # 4602.826  1.848 -0.613 2006.342    4.0  6.61E+07 'p' 'd'   0.0    1.0 'Li I LS:1s2.2p 2P* LS:1s2.4d 2D'
+                    out.write("%10.3f %9.5f %6.3f %8.3f %6.1f %9.2E '%s' '%s' %5.1f %6.1f '%s'\n" % (line['wave_A'], line['lower_state_eV'], \
+                                                    line['loggf'], line['turbospectrum_fdamp'], line['upper_g'], \
+                                                    line['turbospectrum_rad'], line['lower_orbital_type'], \
+                                                    line['upper_orbital_type'], line_ew, line_ew_err, ""))
+                else:
+                    # 5152.971   1.08000 -3.516    0.000   14.0  2.00E+08 'X' 'X'   0.0    1.0 'X' 'X' 0.0 1.0 'pP2(7.5) 1 6.5 e 2 - 3 7.5 e 8 '
+                    out.write("%10.3f %9.5f %6.3f %8.3f %6.1f %9.2E '%s' '%s' %5.1f %6.1f  '%s' '%s' %5.1f %6.1f  '%s'\n" % (line['wave_A'], line['lower_state_eV'], \
+                                                    line['loggf'], line['turbospectrum_fdamp'], line['upper_g'], \
+                                                    line['turbospectrum_rad'], \
+                                                    line['lower_orbital_type'], line['upper_orbital_type'], line_ew, line_ew_err, \
+                                                    line['lower_orbital_type'], line['upper_orbital_type'], line_ew, line_ew_err, \
+                                                    ""))
     out.close()
     return out.name
-
-
-def __turbospectrum_read_atomic_linelist(linelist_filename):
-    """
-    Read TurboSpectrum linelist format and return a recarry
-    """
-    # Fields for SPECTRUM compatibility Defaults
-    isotope = 0
-    transition_type = "99"
-    rad = 0.
-    stark = 0.
-    waals = 0.
-    valid_theoretical_ew_depth = False
-    #theoretical_ew = 0. # Use ew
-    theoretical_depth = 0.
-    line_strength = 0.
-    solar_abund_rank = 0
-    #
-    f = "[+-]?\d*(?:(?:\.)|(?:\.\d+)?)" # Float
-    sf = f + "[eE][+-]?\d+" # Exponent (scientific notation)
-    #
-    first_line_pattern = re.compile("^'\s*("+f+")\s*'\s*(\d+)\s*(\d+)\n$")
-    #second_line_pattern = re.compile("^'(\w+\s\w+)\s*'\n$")
-    #second_line_pattern = re.compile("^'(\w+(?:\s\w+)*)\s*'\n$")
-    second_line_pattern = re.compile("^'(.*)'\n$")
-    atomic_line_pattern = re.compile("^\s*("+f+")\s+("+f+")\s+("+f+")\s+("+f+")\s+("+f+")\s+("+sf+")\s+'(\w)'\s+'(\w)'\s+("+f+")\s+("+f+")(?:\s+'(.*)')?\s*\n$")
-    nlines_read = 0
-    data = []
-    with open(linelist_filename, "ro") as linelist:
-        for line_number, line in enumerate(linelist):
-            if nlines_read == 0:
-                first_line = first_line_pattern.match(line)
-                if first_line:
-                    specie, ionization, nlines_to_read = first_line.groups()
-                    nlines_to_read = int(nlines_to_read)
-                    nlines_read += 1
-                else:
-                    #import pudb
-                    #pudb.set_trace()
-                    raise Exception("Wrong format (line %i): %s" % (line_number, line))
-            elif nlines_read == 1:
-                second_line = second_line_pattern.match(line)
-                if second_line:
-                    element = second_line.groups()[0].strip()
-                    element = element.replace("II", "2").replace("I", "1")
-                    nlines_read += 1
-                else:
-                    #import pudb
-                    #pudb.set_trace()
-                    raise Exception("Wrong format (line %i): %s" % (line_number, line))
-            elif nlines_read > 1 and nlines_read-2 < nlines_to_read:
-                atomic_line = atomic_line_pattern.match(line)
-                if atomic_line:
-                    if len(atomic_line_pattern.match(line).groups()) == 11:
-                        wave_a, lower_state_eV, loggf, fudge_factor, upper_statistical_weight, \
-                                radiation_dumping, lower_level_state, upper_level_state, ew, ew_err, \
-                                comment = atomic_line_pattern.match(line).groups()
-                    else:
-                        wave_a, lower_state_eV, loggf, fudge_factor, upper_statistical_weight, \
-                                radiation_dumping, lower_level_state, upper_level_state, ew, ew_err, \
-                                = atomic_line_pattern.match(line).groups()
-                        comment = ""
-                    # Convert from string to float
-                    wave_a, lower_state_eV, loggf, fudge_factor, upper_statistical_weight, \
-                            radiation_dumping, ew, ew_err = map(float, (wave_a, lower_state_eV, \
-                            loggf, fudge_factor, upper_statistical_weight, radiation_dumping, ew, ew_err))
-                    wave_nm = wave_a / 10.
-                    lower_state_cm1 = __eV_to_inverse_cm(lower_state_eV)
-                    upper_state_eV = __get_upper_state(lower_state_eV, wave_nm)
-                    upper_state_cm1 = __eV_to_inverse_cm(upper_state_eV)
-                    data.append((specie, ionization, element, \
-                            wave_a, wave_nm, \
-                            lower_state_eV, lower_state_cm1, \
-                            upper_state_eV, upper_state_cm1, \
-                            loggf, fudge_factor, \
-                            upper_statistical_weight, radiation_dumping, \
-                            lower_level_state, upper_level_state, ew, ew_err, comment, element, \
-                            isotope, transition_type, rad, stark, waals, valid_theoretical_ew_depth, \
-                            ew, theoretical_depth, line_strength, solar_abund_rank))
-                    nlines_read += 1
-
-                    # If end of atomic lines for this element
-                    if nlines_read-2 == nlines_to_read:
-                        nlines_read = 0 # Restart
-                else:
-                    #import pudb
-                    #pudb.set_trace()
-                    raise Exception("Wrong format (line %i): %s" % (line_number, line))
-
-
-    linelist = np.rec.fromarrays(zip(*data), dtype=[ \
-            ('species', '|S20'), ('ionization', '|S10'), \
-            ('element', '|S100'), \
-            ('wave (A)', '<f8'), ('wave (nm)', '<f8'), \
-            ('lower state (eV)', float), \
-            ('lower state (cm^-1)', float), \
-            ('upper state (eV)', float), \
-            ('upper state (cm^-1)', float), \
-            ('log(gf)', '<f8'), \
-            ('fudge factor', float), \
-            ('upper statistical weight', float), \
-            ('radiation dumping', float), \
-            ('lower level state', '|S1'), \
-            ('upper level state', '|S1'), \
-            ('ew', float), \
-            ('ew_err', float), \
-            ('comment', '|S100'), \
-            ('note', '|S100'), \
-            ('isotope', int), \
-            ('transition type', '|S10'), \
-            ('rad', '<f8'),  ('stark', '<f8'), ('waals', '<f8'), \
-            ('valid_theoretical_ew_depth', bool), ('theoretical_ew', float), ('theoretical_depth', float), \
-            ('line_strength', float), \
-            ('solar_abund_rank', int)
-            ])
-    return linelist
-
 
 
 def update_ew_with_ares(spectrum, linelist, rejt="0.995", tmp_dir=None, verbose=0):
@@ -2569,7 +2621,7 @@ def update_ew_with_ares(spectrum, linelist, rejt="0.995", tmp_dir=None, verbose=
     linelist_file = tmp_execution_dir + "/linelist.dat"
 
     linelist = linelist.copy()
-    linelist.sort(order=['wave (A)'])
+    linelist.sort(order=['wave_A'])
     linelist_filename = write_atomic_linelist(linelist, linelist_filename=linelist_file, code="moog", tmp_dir=tmp_dir)
 
     # ARES2 supports ASCII spectra with non-regular sampling but it seems to be buggy
@@ -2632,7 +2684,7 @@ def update_ew_with_ares(spectrum, linelist, rejt="0.995", tmp_dir=None, verbose=
     i = 0
     j = 0
     while i < len(linelist) and j < len(data):
-        equal_wave_a = np.abs(linelist['wave (A)'][i] - data[j][0]) < 0.01
+        equal_wave_a = np.abs(linelist['wave_A'][i] - data[j][0]) < 0.01
         if equal_wave_a:
             ew_tmp.append(data[j][4])
             ew_err_tmp.append(data[j][5])
@@ -2652,7 +2704,7 @@ def update_ew_with_ares(spectrum, linelist, rejt="0.995", tmp_dir=None, verbose=
     linelist = linelist.copy()
     linelist['ew'] = ew
     linelist['ew_err'] = ew
-    linelist['ewr'] = np.log10(linelist['ew'] / (1000.*linelist['wave (A)']))
+    linelist['ewr'] = np.log10(linelist['ew'] / (1000.*linelist['wave_A']))
 
     return linelist
 

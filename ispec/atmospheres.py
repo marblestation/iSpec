@@ -807,16 +807,19 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
         Interpolated model atmosphere
     """
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog', 'width']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'width', 'synthe']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
     modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
 
     nMH  = len(MH_range)
-    if code == "turbospectrum":
-        nvalues = 11 # Use the 7 first values + 3 extra values needed for turbospectrum + 1 extra needed for spherical models in turbospectrum
-    else:
-        nvalues = 7 # Only use the 7 first values
+    nvalues = len(modeled_layers[0][0])
+    if code == "turbospectrum" and nvalues != 11:
+        # nvalues = 11 # Use the 7 first values + 3 extra values needed for turbospectrum + 1 extra needed for spherical models in turbospectrum
+        # nvalues = 7 # The rest of codes only use the first 7 values
+        raise Exception("Turbospectrum can only be used with MARCS model atmospheres.")
+
+
     MH_index = MH_range.searchsorted(MH_target)
     if MH_index == 0 and MH_target != MH_range[0]:
         raise Exception("Out of range: low MH value")
@@ -871,10 +874,6 @@ def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None
         # Temporary file
         atm_file = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
 
-    code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog']:
-        raise Exception("Unknown radiative transfer code: %s" % (code))
-
     if code == "moog":
         atm_file.write("KURUCZ\n")
         atm_file.write("TEFF=%i,LOGG=%.2f,[FE/H]=%.2f,marcs\n" % (teff, logg, MH))
@@ -887,6 +886,9 @@ def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None
         #atm_file.write("NATOMS = 0  %.2f\n" % (MH))
         #atm_file.write("NMOL 0")
     elif code == "turbospectrum":
+        nvalues = len(atmosphere_layers[0])
+        if nvalues != 11:
+            raise Exception("Turbospectrum can only be used with MARCS model atmospheres.")
         radius = atmosphere_layers[0][-1]
         if radius > 1.0:
             atm_file.write("spherical model\n")

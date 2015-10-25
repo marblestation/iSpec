@@ -109,14 +109,35 @@ class iSpecBaseApp(Tkinter.Tk):
         self.lists = {}
         self.lists['atmospheres'] = self.__get_filelist('input/atmospheres/', 'modeled_layers_pack.dump')
         self.lists['abundances'] = self.__get_filelist('input/abundances/', 'stdatom.dat')
-        self.lists['atomic_lines'] = self.__get_filelist('input/linelists/SPECTRUM/', 'atomic_lines.lst')
+        self.lists['atomic_lines'] = self.__get_filelist('input/linelists/transitions/', 'atomic_lines.tsv')
         self.lists['masks'] = self.__get_filelist('input/linelists/CCF/', 'mask.lst')
         self.lists['templates'] = self.__get_filelist('input/spectra/templates/', 'template.txt.gz')
 
         self.default_lists = {}
+        self.default_lists['synth_code'] = 0
+        self.default_lists['ew_code'] = 0
         self.default_lists['atmospheres'] = 0
         self.default_lists['abundances'] = 0
         self.default_lists['atomic_lines'] = 0
+
+        # Radiative transfer codes
+        self.lists['synth_code'] = []
+        self.lists['ew_code'] = []
+        if ispec.is_spectrum_support_enabled():
+            self.lists['synth_code'].append("SPECTRUM")
+            self.lists['ew_code'].append("SPECTRUM")
+        if ispec.is_turbospectrum_support_enabled():
+            self.lists['synth_code'].append("Turbospectrum")
+            self.lists['ew_code'].append("Turbospectrum")
+        if ispec.is_moog_support_enabled():
+            self.lists['synth_code'].append("MOOG")
+            self.lists['ew_code'].append("MOOG")
+            self.default_lists['ew_code'] = len(self.lists['ew_code'])-1 # Prefer moog before spectrum
+        if ispec.is_width_support_enabled():
+            self.lists['ew_code'].append("Width")
+            self.default_lists['ew_code'] = len(self.lists['ew_code'])-1 # Prefer width before moog
+        if ispec.is_synthe_support_enabled():
+            self.lists['synth_code'].append("Synthe")
 
         ######
         # Prefered defaults:
@@ -916,7 +937,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 if sys.platform == "darwin":
                     ftypes = [] # Not working properly in MacOSX
                 answer = tkFileDialog.askopenfilenames(title="Open %s..." % elements, initialdir=dirname, filetypes=ftypes, defaultextension=".txt")
-                if len(np.unique(answer)) > 0:
+                unique_answer = np.unique(answer)
+                if len(unique_answer) > 0 and len(unique_answer[0]) > 0:
                     answer_ok = True
                 else:
                     answer_ok = False
@@ -997,9 +1019,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
                     self.filenames[elements] = path
                     self.canvas.draw()
                     action_ended = True
-                except Exception:
+                except Exception, e:
                     msg = 'A file does not have a compatible format.'
-                    title = 'File formatincompatible'
+                    title = 'File format incompatible'
                     self.error(title, msg)
                     continue
             else:
@@ -2282,7 +2304,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if self.chemical_elements is None:
             self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
         if not selected_linelist in self.atomic_linelist.keys():
-            self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file, self.chemical_elements, self.molecules)
+            self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file)
         if self.telluric_linelist is None:
             self.telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
 
@@ -2329,7 +2351,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                             free_mu=free_mu, crossmatch_with_mu=free_mu, closest_match=False)
         # Exclude lines that have not been successfully cross matched with the atomic data
         # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
-        rejected_by_atomic_line_not_found = (linemasks['wave (nm)'] == 0)
+        rejected_by_atomic_line_not_found = (linemasks['wave_nm'] == 0)
         linemasks = linemasks[~rejected_by_atomic_line_not_found]
 
         self.queue.put((self.on_fit_lines_finnish, [linemasks], {}))
@@ -2378,10 +2400,10 @@ SPECTRUM a Stellar Spectral Synthesis Program
             line_extras = []
             i = 0
             for line in linemasks:
-                line_extra = str(line['wave (nm)']) + ";" + str(line['species']) + ";"
-                line_extra = line_extra + str(line['lower state (cm^-1)']) + ";" + str(line['upper state (cm^-1)']) + ";"
-                line_extra = line_extra + str(line['log(gf)']) + ";" + str(line['fudge factor']) + ";"
-                line_extra = line_extra + str(line['transition type']) + ";" + str(line['rad']) + ";"
+                line_extra = str(line['wave_nm']) + ";" + str(line['spectrum_moog_species']) + ";"
+                line_extra = line_extra + str(line['lower_state_cm1']) + ";" + str(line['upper_state_cm1']) + ";"
+                line_extra = line_extra + str(line['loggf']) + ";" + str(line['spectrum_fudge_factor']) + ";"
+                line_extra = line_extra + str(line['spectrum_transition_type']) + ";" + str(line['rad']) + ";"
                 line_extra = line_extra + str(line['stark']) + ";" + str(line['waals']) + ";"
                 line_extra = line_extra + str(line['ew']) + ";" + line['element'] + ";"
                 line_extra = line_extra + str(line['telluric_wave_peak']) + ";" + str(line['telluric_depth'])
@@ -2687,7 +2709,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if self.chemical_elements is None:
             self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
         if not selected_linelist in self.atomic_linelist.keys():
-            self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file, self.chemical_elements, self.molecules)
+            self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file)
         if self.telluric_linelist is None:
             self.telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
 
@@ -2759,7 +2781,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         logging.info("Applying filters to discard bad line masks...")
         self.queue.put((self.status_message, ["Applying filters to discard bad line masks..."], {}))
 
-        rejected_by_atomic_line_not_found = (linemasks['wave (nm)'] == 0)
+        rejected_by_atomic_line_not_found = (linemasks['wave_nm'] == 0)
         rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
 
         discarded = linemasks['wave_peak'] <= 0 # All to false
@@ -3904,6 +3926,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 self.dialog[key].destroy()
                 return
 
+            code = self.dialog[key].results["Code"].lower()
             teff = self.dialog[key].results["Effective temperature (K)"]
             logg = self.dialog[key].results["Surface gravity (log g)"]
             MH = self.dialog[key].results["Metallicity [Fe/H]"]
@@ -3965,7 +3988,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             if self.chemical_elements is None:
                 self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
             if not selected_linelist in self.atomic_linelist.keys():
-                self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file, self.chemical_elements, self.molecules)
+                self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file)
             isotopes = ispec.read_isotope_data(isotope_file)
             linelist = self.atomic_linelist[selected_linelist]
 
@@ -4018,11 +4041,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
             self.operation_in_progress = True
             self.status_message("Synthesizing spectrum...")
-            thread = threading.Thread(target=self.on_synthesize_thread, args=(waveobs, regions, linelist, isotopes, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, ))
+            thread = threading.Thread(target=self.on_synthesize_thread, args=(code, waveobs, regions, linelist, isotopes, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, ))
             thread.setDaemon(True)
             thread.start()
 
-    def on_synthesize_thread(self, waveobs, regions, linelist, isotopes, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
+    def on_synthesize_thread(self, code, waveobs, regions, linelist, isotopes, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
 
         synth_spectrum = ispec.create_spectrum_structure(waveobs)
 
@@ -4033,16 +4056,26 @@ SPECTRUM a Stellar Spectral Synthesis Program
         alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = ispec.determine_abundance_enchancements(MH)
         abundances = ispec.enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
 
-        # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
-        synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, regions=regions, verbose=1, gui_queue=self.queue)
+        error_message = None
+        try:
+            # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
+            synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, regions=regions, verbose=1, gui_queue=self.queue, code=code)
+        except Exception, e:
+            error_message = str(e)
 
 
         synth_spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
 
         # Remove atmosphere model temporary file
-        self.queue.put((self.on_synthesize_finnish, [synth_spectrum, teff, logg, MH, microturbulence_vel], {}))
+        self.queue.put((self.on_synthesize_finnish, [synth_spectrum, teff, logg, MH, microturbulence_vel, error_message], {}))
 
-    def on_synthesize_finnish(self, synth_spectrum, teff, logg, MH, microturbulence_vel):
+    def on_synthesize_finnish(self, synth_spectrum, teff, logg, MH, microturbulence_vel, error_message):
+        if error_message is not None:
+            msg = error_message
+            title = 'Problem synthesizing spectrum'
+            self.error(title, msg)
+            self.operation_in_progress = False
+            return
         self.operation_in_progress = False
 
         # Check if synthetic generation has failed
@@ -4095,7 +4128,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             logg = 4.44
             MH = 0.00
             microturbulence_vel = 1.0
-            self.active_spectrum.dialog[key] = AbundancesDialog(self, "Abundances determination", teff, logg, MH, microturbulence_vel)
+            self.active_spectrum.dialog[key] = AbundancesDialog(self, "Abundances determination", teff, logg, MH, microturbulence_vel, self.lists, self.default_lists)
             self.active_spectrum.dialog[key].show()
         elif show_previous_results:
             self.active_spectrum.dialog[key].show()
@@ -4105,6 +4138,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.active_spectrum.dialog[key].destroy()
             return
 
+        code = self.active_spectrum.dialog[key].results["Code"].lower()
         teff = self.active_spectrum.dialog[key].results["Effective temperature (K)"]
         logg = self.active_spectrum.dialog[key].results["Surface gravity (log g)"]
         MH = self.active_spectrum.dialog[key].results["Metallicity [Fe/H]"]
@@ -4143,18 +4177,33 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.operation_in_progress = True
         self.status_message("Determining abundances...")
 
-        thread = threading.Thread(target=self.on_determine_abundances_thread, args=(atmosphere_layers, teff, logg, MH, abundances, microturbulence_vel,))
+        thread = threading.Thread(target=self.on_determine_abundances_thread, args=(code, atmosphere_layers, teff, logg, MH, abundances, microturbulence_vel,))
         thread.setDaemon(True)
         thread.start()
 
 
-    def on_determine_abundances_thread(self, atmosphere_layers, teff, logg, MH, abundances, microturbulence_vel):
+    def on_determine_abundances_thread(self, code, atmosphere_layers, teff, logg, MH, abundances, microturbulence_vel):
         linemasks = self.active_spectrum.linemasks
-        spec_abund, normal_abund, x_over_h, x_over_fe = ispec.determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 1.0, verbose=1, gui_queue=self.queue)
+        error_message = None
+        try:
+            spec_abund, normal_abund, x_over_h, x_over_fe = ispec.determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 1.0, verbose=1, gui_queue=self.queue, code=code)
+        except Exception, e:
+            spec_abund = None
+            normal_abund = None
+            x_over_h = None
+            x_over_fe = None
+            error_message = str(e)
 
-        self.queue.put((self.on_determine_abundances_finnish, [spec_abund, normal_abund, x_over_h, x_over_fe], {}))
+        self.queue.put((self.on_determine_abundances_finnish, [spec_abund, normal_abund, x_over_h, x_over_fe, error_message], {}))
 
-    def on_determine_abundances_finnish(self, spec_abund, normal_abund, x_over_h, x_over_fe):
+    def on_determine_abundances_finnish(self, spec_abund, normal_abund, x_over_h, x_over_fe, error_message):
+        if error_message is not None:
+            msg = error_message
+            title = 'Problem determining abundances'
+            self.error(title, msg)
+            self.operation_in_progress = False
+            return
+
         self.flash_status_message("Abundances determined!")
         self.operation_in_progress = False
 
@@ -4203,6 +4252,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.active_spectrum.dialog[key].destroy()
             return
 
+        code = self.active_spectrum.dialog[key].results["Code"].lower()
         initial_teff = self.active_spectrum.dialog[key].results["Effective temperature (K)"]
         initial_logg = self.active_spectrum.dialog[key].results["Surface gravity (log g)"]
         initial_MH = self.active_spectrum.dialog[key].results["Metallicity [Fe/H]"]
@@ -4290,7 +4340,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if self.chemical_elements is None:
             self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
         if not selected_linelist in self.atomic_linelist.keys():
-            self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file, self.chemical_elements, self.molecules)
+            self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file)
         linelist = self.atomic_linelist[selected_linelist]
         isotopes = ispec.read_isotope_data(isotope_file)
 
@@ -4338,18 +4388,34 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.operation_in_progress = True
         self.status_message("Determining parameters...")
         self.update_progress(10)
-        thread = threading.Thread(target=self.on_determine_parameters_thread, args=(selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, max_iterations))
+        thread = threading.Thread(target=self.on_determine_parameters_thread, args=(code, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, max_iterations))
         thread.setDaemon(True)
         thread.start()
 
-    def on_determine_parameters_thread(self, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, max_iterations):
+    def on_determine_parameters_thread(self, code, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, max_iterations):
         self.__update_numpy_arrays_from_widgets("lines")
         self.__update_numpy_arrays_from_widgets("segments")
 
-        obs_spectrum, synth_spectrum, params, errors, free_abundances, status, stats_linemasks = ispec.model_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations)
-        self.queue.put((self.on_determine_parameters_finnish, [obs_spectrum, synth_spectrum, params, errors, status, stats_linemasks], {}))
+        error_message = None
+        try:
+            obs_spectrum, synth_spectrum, params, errors, free_abundances, status, stats_linemasks = ispec.model_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations, code=code)
+        except Exception, e:
+            obs_spectrum = None
+            synth_spectrum = None
+            params = None
+            errors = None
+            status = None
+            stats_linemasks = None
+            error_message = str(e)
+        self.queue.put((self.on_determine_parameters_finnish, [obs_spectrum, synth_spectrum, params, errors, status, stats_linemasks, error_message], {}))
 
-    def on_determine_parameters_finnish(self, obs_spectrum, synth_spectrum, params, errors, status, stats_linemasks):
+    def on_determine_parameters_finnish(self, obs_spectrum, synth_spectrum, params, errors, status, stats_linemasks, error_message):
+        if error_message is not None:
+            msg = error_message
+            title = 'Problem synthesizing spectrum'
+            self.error(title, msg)
+            self.operation_in_progress = False
+            return
         # Name: If it already exists, add a suffix
         base_name = "%.1f_%.2f_%.2f_%.1f_%.1f_%.1f_%.1f_%.0f" % (params['teff'], params['logg'], params['MH'], params['vmic'], params['vmac'], params['vsini'], params['limb_darkening_coeff'], params['R'])
 

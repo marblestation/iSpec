@@ -8,6 +8,12 @@ class SyntheticSpectrumDialog(CustomDialog):
         self.__components = []
         component = {}
         component["type"] = "OptionMenu"
+        component["text"] = "Code"
+        component["options"] = lists['synth_code']
+        component["default"] = component["options"][default_lists['synth_code']]
+        self.__components.append(component)
+        component = {}
+        component["type"] = "OptionMenu"
         component["text"] = "Model atmosphere"
         component["options"] = lists['atmospheres']['name']
         component["default"] = component["options"][default_lists['atmospheres']]
