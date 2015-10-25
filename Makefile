@@ -15,6 +15,7 @@ isochrones/YYmix2: isochrones/YYmix2.f
 	gfortran -o isochrones/YYmix2 isochrones/YYmix2.f
 
 synthesizer/ARES/bin/ARES:	synthesizer/ARES/src/ARES_v2.c synthesizer/ARES/src/*.h
+	mkdir -p synthesizer/ARES/bin/
 	gcc -o synthesizer/ARES/bin/ARES synthesizer/ARES/src/ARES_v2.c -lcfitsio -lgsl -lgslcblas -lm -lgomp -fopenmp
 
 synthesizer/turbospectrum/bin/babsma_lu synthesizer/turbospectrum/bin/bsyn_lu synthesizer/turbospectrum/bin/eqwidt_lu: synthesizer/turbospectrum/src/*.f
@@ -23,6 +24,7 @@ synthesizer/turbospectrum/bin/babsma_lu synthesizer/turbospectrum/bin/bsyn_lu sy
 	rm -f synthesizer/turbospectrum/exec-gf-v15.1/bsyn_lu
 	rm -f synthesizer/turbospectrum/exec-gf-v15.1/eqwidt_lu
 	$(MAKE) -C synthesizer/turbospectrum/exec-gf-v15.1/
+	mkdir -p synthesizer/turbospectrum/bin/
 	mv synthesizer/turbospectrum/exec-gf-v15.1/babsma_lu synthesizer/turbospectrum/bin/
 	mv synthesizer/turbospectrum/exec-gf-v15.1/bsyn_lu synthesizer/turbospectrum/bin/
 	mv synthesizer/turbospectrum/exec-gf-v15.1/eqwidt_lu synthesizer/turbospectrum/bin/

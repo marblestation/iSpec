@@ -2951,7 +2951,7 @@ def __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelis
     # MOOG does not have hard-coded lines, we use a external file:
     #hydrogen_lines_file = moog_dir + "/hydrogen_moog_lines.txt"
     #hydrogen_lines = ascii.read(hydrogen_lines_file, names=["wave_A", "spectrum_moog_species", "lower_state_eV", "loggf"])
-    hydrogen_lines_file = moog_dir + "../Hlinedata_for_moog.txt"
+    hydrogen_lines_file = moog_dir + "DATA/Hlinedata"
     hydrogen_lines = ascii.read(hydrogen_lines_file, names=["wave_A", "spectrum_moog_species", "lower_state_eV", "loggf", "designation"])
 
     # Update abundances with the ones that should be fixed to a given value and
