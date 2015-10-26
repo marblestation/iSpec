@@ -36,7 +36,7 @@ def interpolate_isochrone(dirname, age, feh, alpha_over_iron=0.0):
     if alpha_over_iron < 0 or alpha_over_iron > 0.6:
         raise Exception("Alpha enhancement out of range!")
     tmp_dir = tempfile.mkdtemp()
-    os.symlink(YY_grid, tmp_dir+"/isochrones")
+    os.symlink(YY_grid, tmp_dir+"/i")
 
     #### YY.age file can contain one age per line
     age_file = open(tmp_dir + "/YY.age", "w")
@@ -53,45 +53,45 @@ def interpolate_isochrone(dirname, age, feh, alpha_over_iron=0.0):
  $END
  $ISET1
  NYYiso=11
- YYiso(1)='isochrones/yy00l.x76997z00001a0o2v2'
- YYiso(2)='isochrones/yy00l.x7697z0001a0o2v2'
- YYiso(3)='isochrones/yy00l.x7688z0004a0o2v2'
- YYiso(4)='isochrones/yy00l.x767z001a0o2v2'
- YYiso(5)='isochrones/yy00l.x758z004a0o2v2'
- YYiso(6)='isochrones/yy00l.x749z007a0o2v2'
- YYiso(7)='isochrones/yy00l.x74z01a0o2v2'
- YYiso(8)='isochrones/yy00l.x71z02a0o2v2'
- YYiso(9)='isochrones/yy00l.x65z04a0o2v2'
- YYiso(10)='isochrones/yy00l.x59z06a0o2v2'
- YYiso(11)='isochrones/yy00l.x53z08a0o2v2'
+ YYiso(1)='i/yy00l.x76997z00001a0o2v2'
+ YYiso(2)='i/yy00l.x7697z0001a0o2v2'
+ YYiso(3)='i/yy00l.x7688z0004a0o2v2'
+ YYiso(4)='i/yy00l.x767z001a0o2v2'
+ YYiso(5)='i/yy00l.x758z004a0o2v2'
+ YYiso(6)='i/yy00l.x749z007a0o2v2'
+ YYiso(7)='i/yy00l.x74z01a0o2v2'
+ YYiso(8)='i/yy00l.x71z02a0o2v2'
+ YYiso(9)='i/yy00l.x65z04a0o2v2'
+ YYiso(10)='i/yy00l.x59z06a0o2v2'
+ YYiso(11)='i/yy00l.x53z08a0o2v2'
  $END
  $ISET2
  NYYiso=11
- YYiso(1)='isochrones/yy00l.x76997z00001a2o2v2'
- YYiso(2)='isochrones/yy00l.x7697z0001a2o2v2'
- YYiso(3)='isochrones/yy00l.x7688z0004a2o2v2'
- YYiso(4)='isochrones/yy00l.x767z001a2o2v2'
- YYiso(5)='isochrones/yy00l.x758z004a2o2v2'
- YYiso(6)='isochrones/yy00l.x749z007a2o2v2'
- YYiso(7)='isochrones/yy00l.x74z01a2o2v2'
- YYiso(8)='isochrones/yy00l.x71z02a2o2v2'
- YYiso(9)='isochrones/yy00l.x65z04a2o2v2'
- YYiso(10)='isochrones/yy00l.x59z06a2o2v2'
- YYiso(11)='isochrones/yy00l.x53z08a2o2v2'
+ YYiso(1)='i/yy00l.x76997z00001a2o2v2'
+ YYiso(2)='i/yy00l.x7697z0001a2o2v2'
+ YYiso(3)='i/yy00l.x7688z0004a2o2v2'
+ YYiso(4)='i/yy00l.x767z001a2o2v2'
+ YYiso(5)='i/yy00l.x758z004a2o2v2'
+ YYiso(6)='i/yy00l.x749z007a2o2v2'
+ YYiso(7)='i/yy00l.x74z01a2o2v2'
+ YYiso(8)='i/yy00l.x71z02a2o2v2'
+ YYiso(9)='i/yy00l.x65z04a2o2v2'
+ YYiso(10)='i/yy00l.x59z06a2o2v2'
+ YYiso(11)='i/yy00l.x53z08a2o2v2'
  $END
  $ISET4
  NYYiso=11
- YYiso(1)='isochrones/yy00l.x76997z00001a4o2v2'
- YYiso(2)='isochrones/yy00l.x7697z0001a4o2v2'
- YYiso(3)='isochrones/yy00l.x7688z0004a4o2v2'
- YYiso(4)='isochrones/yy00l.x767z001a4o2v2'
- YYiso(5)='isochrones/yy00l.x758z004a4o2v2'
- YYiso(6)='isochrones/yy00l.x749z007a4o2v2'
- YYiso(7)='isochrones/yy00l.x74z01a4o2v2'
- YYiso(8)='isochrones/yy00l.x71z02a4o2v2'
- YYiso(9)='isochrones/yy00l.x65z04a4o2v2'
- YYiso(10)='isochrones/yy00l.x59z06a4o2v2'
- YYiso(11)='isochrones/yy00l.x53z08a4o2v2'
+ YYiso(1)='i/yy00l.x76997z00001a4o2v2'
+ YYiso(2)='i/yy00l.x7697z0001a4o2v2'
+ YYiso(3)='i/yy00l.x7688z0004a4o2v2'
+ YYiso(4)='i/yy00l.x767z001a4o2v2'
+ YYiso(5)='i/yy00l.x758z004a4o2v2'
+ YYiso(6)='i/yy00l.x749z007a4o2v2'
+ YYiso(7)='i/yy00l.x74z01a4o2v2'
+ YYiso(8)='i/yy00l.x71z02a4o2v2'
+ YYiso(9)='i/yy00l.x65z04a4o2v2'
+ YYiso(10)='i/yy00l.x59z06a4o2v2'
+ YYiso(11)='i/yy00l.x53z08a4o2v2'
  $END
 """ % (alpha_over_iron, targetZ, feh, age)
 
@@ -107,7 +107,7 @@ def interpolate_isochrone(dirname, age, feh, alpha_over_iron=0.0):
     #names = ["EEP", "M/Mo", "LogTeff", "LogG", "LogL/Lo", "U", "B", "V", "R", "I", "J", "H", "Ks", "Kp", "D51"]
     #isochrone = ascii.read(tmp_dir + "/tmp.iso", names=names)._data
     names = ["M/Msun", "logT", "logL/Ls", "logg", "Mv", "U-B", "B-V", "V-R", "V-I", "V-J", "V-H", "V-K", "V-L", "V-M", "#(x=-1)", "#(x=1.35)", "#(x=3)"]
-    isochrone = ascii.read(tmp_dir + "/output.txt", data_start=3, names=names)._data
+    isochrone = ascii.read(tmp_dir + "/output.txt", data_start=3, names=names).as_array()
     shutil.rmtree(tmp_dir)
 
     return isochrone

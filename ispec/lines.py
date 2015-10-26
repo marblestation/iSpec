@@ -159,7 +159,7 @@ def write_isotope_data(isotope, isotope_filename=None, tmp_dir=None):
     return out.name
 
 
-def read_linelist_mask(mask_file):
+def read_cross_correlation_mask(mask_file):
     """
     Read linelist for building a mask and doing cross-correlation with the
     cross correlation function.
@@ -206,8 +206,24 @@ def read_line_regions(line_regions_filename):
         505.8498        505.8348        505.8660        Fe 1
 
     The note can be blank but the previous **tab** character should exists anyway.
+
+    The function detects automatically if the file being read was saved with
+    write_line_regions(..., extended=True), which contains more fields corresponding
+    to atomic cross-match and line fits.
     """
-    line_regions = np.array([tuple(line.rstrip('\r\n').split("\t")) for line in open(line_regions_filename,)][1:], dtype=[('wave_peak', float),('wave_base', float),('wave_top', float), ('note', '|S100')])
+    atomic_dtype = __get_atomic_linelist_definition()
+    fitted_dtype = __get_fitted_lines_definition()
+    try:
+        num_cols = len(open(line_regions_filename, "r").readline().split("\t"))
+        if num_cols == len(atomic_dtype) + len(fitted_dtype):
+            # Atomic + fitted information
+            line_regions = np.genfromtxt(line_regions_filename, dtype=atomic_dtype+fitted_dtype, delimiter="\t", skip_header=1, loose=False)
+        elif num_cols == 4:
+            line_regions = np.array([tuple(line.rstrip('\r\n').split("\t")) for line in open(line_regions_filename,)][1:], dtype=[('wave_peak', float),('wave_base', float),('wave_top', float), ('note', '|S100')])
+        else:
+            raise Exception()
+    except:
+        raise Exception("Wrong line regions file format!")
 
     if np.any(line_regions['wave_top'] - line_regions['wave_base'] <= 0):
         logging.error("Line regions where wave_base is equal or bigger than wave_top")
@@ -219,7 +235,7 @@ def read_line_regions(line_regions_filename):
 
     return line_regions
 
-def write_line_regions(line_regions, line_regions_filename):
+def write_line_regions(line_regions, line_regions_filename, extended=False):
     """
     Write line regions file with the following format:
     ::
@@ -229,12 +245,23 @@ def write_line_regions(line_regions, line_regions_filename):
         496.2572        496.2400        496.2820        Fe 1
         499.2785        499.2610        499.2950
         505.8498        505.8348        505.8660        Fe 1
+
+    Except if extended is True, in which case the complete cross-matched
+    atomic data and fitted data is also saved.
     """
-    out = open(line_regions_filename, "w")
-    out.write("wave_peak\twave_base\twave_top\tnote\n")
-    out.write("\n".join(["\t".join(map(str, (line['wave_peak'], line['wave_base'], line['wave_top'], line['note']))) for line in line_regions]))
-    out.close()
-    # 5934.6545  26.0  0  31689  48530  -1.07  1.0  AO  7.78  -5.29  959.247  Fe_1  False  0.04  0.0
+    if extended:
+        out = open(line_regions_filename, "w")
+        __generic_write_atomic_linelist_header(out, include_fit=True)
+        for line in line_regions:
+            __generic_write_atomic_linelist_element(out, line, include_fit=True)
+        out.close()
+    else:
+        out = open(line_regions_filename, "w")
+        out.write("wave_peak\twave_base\twave_top\tnote\n")
+        out.write("\n".join(["\t".join(map(str, (line['wave_peak'], line['wave_base'], line['wave_top'], line['note']))) for line in line_regions]))
+        out.close()
+        # 5934.6545  26.0  0  31689  48530  -1.07  1.0  AO  7.78  -5.29  959.247  Fe_1  False  0.04  0.0
+
 
 
 def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None, baseline_margin=0., free_mu=False):
@@ -689,8 +716,7 @@ def __create_linemasks_structure(num_peaks):
 
 def read_atomic_linelist(linelist_filename, wave_base=None, wave_top=None):
     """
-    Read atomic linelist. It will automatically read fitted information if it is included
-    (i.e. saved with write_atomic_linelist(..., include_fit=True))
+    Read atomic linelist.
 
     The linelist can be filtered by wave_base and wave_top (in nm) to reduce
     memory consumption.
@@ -702,9 +728,9 @@ def read_atomic_linelist(linelist_filename, wave_base=None, wave_top=None):
         if num_cols == len(atomic_dtype):
             # Only atomic linelist
             linelist = np.genfromtxt(linelist_filename, dtype=atomic_dtype, delimiter="\t", skip_header=1, loose=False)
-        elif num_cols == len(atomic_dtype) + len(fitted_dtype):
-            # Atomic + fitted information
-            linelist = np.genfromtxt(linelist_filename, dtype=atomic_dtype+fitted_dtype, delimiter="\t", skip_header=1, loose=False)
+        #elif num_cols == len(atomic_dtype) + len(fitted_dtype):
+            ## Atomic + fitted information
+            #linelist = np.genfromtxt(linelist_filename, dtype=atomic_dtype+fitted_dtype, delimiter="\t", skip_header=1, loose=False)
         else:
             raise Exception()
     except:
@@ -801,9 +827,9 @@ def __get_atomic_linelist_definition():
      #('width_support', '|S5'),
      #('synthe_support', '|S5')]
 
-def write_atomic_linelist(linelist, linelist_filename=None, code=None, include_fit=False, tmp_dir=None):
+def write_atomic_linelist(linelist, linelist_filename=None, code=None, tmp_dir=None):
     """
-    Write atomic linelist. Include fitted information if "include_fit" is true.
+    Write atomic linelist.
     If code is specified ('spectrum', 'turbospectrum', 'moog'), then it is saved
     in the file format compatible with the indicated code (thus not all the atomic
     information will be stored).
@@ -831,9 +857,9 @@ def write_atomic_linelist(linelist, linelist_filename=None, code=None, include_f
         else:
             # Temporary file
             out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
-        __generic_write_atomic_linelist_header(out, include_fit)
+        __generic_write_atomic_linelist_header(out, include_fit=False)
         for line in linelist:
-            __generic_write_atomic_linelist_element(out, line, include_fit)
+            __generic_write_atomic_linelist_element(out, line, include_fit=False)
         out.close()
         return out.name
 
@@ -1102,10 +1128,71 @@ def find_linemasks(spectrum, continuum_model, atomic_linelist=None, max_atomic_w
 
     return linemasks
 
+def __find_wave_indices(regions, spectrum):
+    """
+    Find index in spectrum for base, top and peak
+    """
+    regions['base'] = 0
+    regions['top'] = 0
+    regions['peak'] = 0
+    for i in np.arange(len(regions)):
+        where_base = np.where(spectrum['waveobs'] >= regions['wave_base'][i])
+        if len(where_base[0]) > 0:
+            regions['base'][i] = where_base[0][0]
+        where_top = np.where(spectrum['waveobs'] >= regions['wave_top'][i])
+        if len(where_top[0]) > 0:
+            regions['top'][i] = where_top[0][0]
+        where_peak = np.where(spectrum['waveobs'] >= regions['wave_peak'][i])
+        if len(where_peak[0]) > 0:
+            regions['peak'][i] = where_peak[0][0]
+    return regions
+
+def __calculate_depths(regions, spectrum, continuum_model):
+    """
+    Calculate depth and relative depth for regions where 'peak', 'base' and 'top'
+    is already indicated.
+    """
+    # Depth of the peak with respect to the total continuum in % over the total continuum
+    # - In case that the peak is higher than the continuum, depth < 0
+    peaks = regions['peak']
+    top = regions['top']
+    base = regions['base']
+    continuum_at_peak = continuum_model(spectrum['waveobs'][peaks])
+    flux_at_peak = spectrum['flux'][peaks]
+    depth = 1 - (flux_at_peak /continuum_at_peak)
+    dfilter = depth < 0.0
+    depth[dfilter] = 0.0
+    regions['depth'] = depth
+    # Relative depth is "peak - mean_base_point" with respect to the total continuum
+    # - In case that the mean base point is higher than the continuum, relative_depth < 0
+    # - relative_depth < depth is always true
+    flux_from_top_base_point_to_continuum = np.abs(continuum_at_peak - np.mean((spectrum['flux'][base], spectrum['flux'][top])))
+    regions['relative_depth'] = ((continuum_at_peak - (flux_at_peak + flux_from_top_base_point_to_continuum)) / continuum_at_peak)
+
+    return regions
+
+def reset_fitted_data_fields(regions):
+    """
+    Set to the default value (e.g. zeros) the columns corresponding to fitted
+    lines (e.g. mu, sigma, equivalent width) for regions coming from
+    find_linemasks or fit_lines
+    """
+    regions = regions.copy()
+    total_regions = len(regions)
+    # Regions coming from a previous find_linemasks or fit_lines
+    # Clean fitted lines data
+    zeroed_regions = __create_linemasks_structure(total_regions)
+    fitted_lines_dtype = __get_fitted_lines_definition()
+    for key, vtype in fitted_lines_dtype:
+        if key in ('wave_base', 'wave_top', 'wave_peak'):
+            continue
+        regions[key] = zeroed_regions[key]
+    return regions
+
 def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wave_diff=0.0005, telluric_linelist=None, vel_telluric=None, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, continuum_adjustment_margin=0.0, free_mu=False, crossmatch_with_mu=False, closest_match=False, frame=None):
     """
-    Fits gaussians models in the specified line regions.
-    * 'regions' should be an array with 'wave_base', 'wave_peak' and 'wave_top' columns.
+    Fits gaussians/voigt models in the specified line regions.
+    * 'regions' should be an array with 'wave_base', 'wave_peak' and 'wave_top' columns, but it can be also the result of a previous fit_lines or find_linemasks.
     * If 'check_derivates' is True, the fit will be limited not to the region limits but to a refined smaller limits calculated from the second and third derivative (convex+concave regions) from 'smoothed_spectrum' if present or 'spectrum' if not.
     * If 'accepted_for_fitting' array is present, only those regions that are set to true
     will be fitted
@@ -1147,7 +1234,14 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
     #continuum_model = ispec.fit_continuum(self.active_spectrum.data, fixed_value=1.0, model="Fixed value")
 
     logging.info("Fitting line models...")
-    if not regions.dtype.fields.has_key('wave_base_fit'):
+
+    atomic_data_dtype = __get_atomic_linelist_definition()
+    fitted_lines_dtype = __get_fitted_lines_definition()
+    if regions.dtype == atomic_data_dtype+fitted_lines_dtype:
+        regions = reset_fitted_data_fields(regions)
+    elif regions.dtype.fields.has_key('wave_base') \
+            and regions.dtype.fields.has_key('wave_top') \
+            and regions.dtype.fields.has_key('wave_peak'):
         # If it is not a complete regions (it has not been created with
         # __create_linemasks_structure and it only contains wave base, top and peak)
         # we create a complete one
@@ -1156,21 +1250,10 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
         regions['wave_base'] = regions_tmp['wave_base']
         regions['wave_top'] = regions_tmp['wave_top']
         regions['wave_peak'] = regions_tmp['wave_peak']
-
-        # Find index in spectrum for base, top and peak
-        regions['base'] = 0
-        regions['top'] = 0
-        regions['peak'] = 0
-        for i in np.arange(len(regions_tmp)):
-            where_base = np.where(spectrum['waveobs'] >= regions_tmp['wave_base'][i])
-            if len(where_base[0]) > 0:
-                regions['base'][i] = where_base[0][0]
-            where_top = np.where(spectrum['waveobs'] >= regions_tmp['wave_top'][i])
-            if len(where_top[0]) > 0:
-                regions['top'][i] = where_top[0][0]
-            where_peak = np.where(spectrum['waveobs'] >= regions_tmp['wave_peak'][i])
-            if len(where_peak[0]) > 0:
-                regions['peak'][i] = where_peak[0][0]
+    else:
+        raise Exception("Wrong fields in regions.")
+    regions = __find_wave_indices(regions, spectrum)
+    regions = __calculate_depths(regions, spectrum, continuum_model)
 
     i = 0
     wfilter = np.logical_and(spectrum['flux'] > 0., spectrum['err'] > 0.)
@@ -1178,7 +1261,7 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
         snr = np.median(spectrum['flux'][wfilter] / spectrum['err'][wfilter])
     else:
         snr = None
-    # Model: fit gaussian
+    # Model: fit gaussian/voigt
     for i in np.arange(total_regions):
         fitting_not_possible = False
         if accepted_for_fitting is None or accepted_for_fitting[i]:

@@ -102,7 +102,7 @@ def determine_radial_velocity_with_mask():
     #mask_file = ispec_dir + "input/linelists/CCF/HARPS_SOPHIE.M5.400_687nm/mask.lst"
     #mask_file = ispec_dir + "input/linelists/CCF/Synthetic.Sun.350_1100nm/mask.lst"
     #mask_file = ispec_dir + "input/linelists/CCF/VALD.Sun.300_1100nm/mask.lst"
-    ccf_mask = ispec.read_linelist_mask(mask_file)
+    ccf_mask = ispec.read_cross_correlation_mask(mask_file)
 
     models, ccf = ispec.cross_correlate_with_mask(mu_cas_spectrum, ccf_mask, \
                             lower_velocity_limit=-200, upper_velocity_limit=200, \
@@ -574,14 +574,19 @@ def find_linemasks(code = "spectrum"):
     iron = np.logical_or(iron, sun_linemasks['element'] == "Fe 2")
     iron_sun_linemasks = sun_linemasks[iron]
 
-    # Regions:
+    # Write regions with only masks limits and note:
     ispec.write_line_regions(sun_linemasks, "example_sun_linemasks.txt")
-    # Iron line regions:
+    # Write iron regions with only masks limits and note:
     ispec.write_line_regions(iron_sun_linemasks, "example_sun_fe_linemasks.txt")
-    # Atomic linelist for the selected regions:
+    # Write regions with masks limits, cross-matched atomic data and fit data
+    ispec.write_line_regions(sun_linemasks, "example_sun_fitted_linemasks.txt", extended=True)
+    recover_sun_linemasks = ispec.read_line_regions("example_sun_fitted_linemasks.txt")
+    # Write regions with masks limits and cross-matched atomic data (fit data fields are zeroed)
+    zeroed_sun_linemasks = ispec.reset_fitted_data_fields(sun_linemasks)
+    ispec.write_line_regions(zeroed_sun_linemasks, "example_sun_zeroed_fitted_linemasks.txt", extended=True)
+
+    # Write only atomic data for the selected regions:
     ispec.write_atomic_linelist(sun_linemasks, "example_sun_atomic_linelist.txt")
-    # Include information from the fitted lines:
-    ispec.write_atomic_linelist(sun_linemasks, "example_sun_fitted_atomic_linelist.txt", include_fit=True)
 
 
 def calculate_barycentric_velocity():
@@ -790,8 +795,8 @@ def fit_lines_and_determine_ew(use_ares=False):
     ew = linemasks['ew']
     ew_err = linemasks['ew_err']
 
-    # Save linemasks (atomic information + fit information)
-    ispec.write_atomic_linelist(linemasks, "example_fitted_atomic_linelist.txt", include_fit=True)
+    # Save linemasks (line masks + atomic cross-matched information + fit information)
+    ispec.write_line_regions(linemasks, "example_fitted_atomic_linemask.txt", extended=True)
 
     return linemasks, ew, ew_err
 
