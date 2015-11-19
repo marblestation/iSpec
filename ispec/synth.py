@@ -1584,8 +1584,12 @@ class EquivalentWidthModel(MPFitModel):
         #print "Fe 1", np.median(linear_model.fittedvalues), np.nanmedian(x_over_h[self.fe1_filter])
         #print "    ", np.std(linear_model.fittedvalues), np.nanstd(x_over_h[self.fe1_filter])
         #import matplotlib.pyplot as plt
+        #plt.figure()
         #plt.scatter(x, y)
-        #plt.plot(x, m1*x + c1)
+        #plt.plot(x, self.m1*x + self.c1)
+        #plt.xlabel("Lower state (eV)")
+        #plt.ylabel("[Fe/H]")
+        #plt.grid()
         #plt.show()
 
         ### Vmic
@@ -1599,8 +1603,12 @@ class EquivalentWidthModel(MPFitModel):
         self.m2 = linear_model.params[0]
         self.c2 = linear_model.params[1]
         #import matplotlib.pyplot as plt
+        #plt.figure()
         #plt.scatter(x, y)
-        #plt.plot(x, m2*x + c2)
+        #plt.plot(x, self.m2*x + self.c2)
+        #plt.xlabel("Reduced EW")
+        #plt.ylabel("[Fe/H]")
+        #plt.grid()
         #plt.show()
 
         ### Fe2

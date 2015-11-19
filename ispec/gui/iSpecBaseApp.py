@@ -2157,7 +2157,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if relative_to_atomic_data or relative_to_telluric_data:
             if not mask_name in self.ccf_mask.keys():
                 i = np.where(self.lists['masks']['name'] == mask_name)[0][0]
-                self.ccf_mask[mask_name] = ispec.read_linelist_mask(self.lists['masks']['path'][i])
+                self.ccf_mask[mask_name] = ispec.read_cross_correlation_mask(self.lists['masks']['path'][i])
             mask_linelist = self.ccf_mask[mask_name]
         elif relative_to_template:
             mask_linelist = None
