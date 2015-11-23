@@ -111,8 +111,14 @@ FILE *qf;
             flagai = 0;
         /* If transition type is AO, read in alp and sig parameters */
         if (strcmp(tr, "AO") == 0) {
-            gammar = pow(10.0, atof(strtok(NULL, " "))); // SBC
-            gammas = pow(10.0, atof(strtok(NULL, " "))); // SBC
+            gammar = atof(strtok(NULL, " ")); // SBC
+            if (gammar != 0) { // If gammar/gammas are zero when using AO, do not power  or line is anormaly blended
+                gammar = pow(10.0, gammar); // SBC
+            }
+            gammas = atof(strtok(NULL, " ")); // SBC
+            if (gammas != 0) { // If gammar/gammas are zero when using AO, do not power  or line is anormaly blended
+                gammas = pow(10.0, gammas); // SBC
+            }
             gammaw = 0.;                                 // SBC
             SA = atof(strtok(NULL, " "));
             sig = floor(SA);
