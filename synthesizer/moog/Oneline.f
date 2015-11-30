@@ -59,7 +59,8 @@ c*****check the wavelength step size; expand/contract as necessary
          d(1) = rinteg(xref,cd,dummy1,ntau,first)
          do k=1,30
             if (k .eq. 30) then
-               write (*,1010) wave
+               !write (*,1010) wave ! SBC
+               write (*,1010) wave1(lim1) ! SBC
                stop
             endif
             wave = wave1(lim1) + 5.*st1

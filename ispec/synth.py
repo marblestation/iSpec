@@ -1559,8 +1559,8 @@ class EquivalentWidthModel(MPFitModel):
 
         # First iteration
         if self.fe1_filter is None or self.fe2_filter is None:
-            self.select_good_lines(x_over_h, strict=True)
-            #self.select_good_lines(x_over_h, strict=False) # Don't identify and filter outliers
+            #self.outliers_detection = None # Don't identify and filter outliers
+            self.select_good_lines(x_over_h)
 
         values_to_evaluate = []
         fitted_lines_params = []
@@ -1573,6 +1573,9 @@ class EquivalentWidthModel(MPFitModel):
         #y = x_over_h[self.fe1_filter]
         x = self.linemasks['lower_state_eV'][np.logical_or(self.fe1_filter, self.fe2_filter)]
         y = x_over_h[np.logical_or(self.fe1_filter, self.fe2_filter)]
+        unknown = np.isnan(y)
+        x = x[~unknown]
+        y = y[~unknown]
         x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
         linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
         self.m1 = linear_model.params[0]
@@ -1598,6 +1601,9 @@ class EquivalentWidthModel(MPFitModel):
         #y = x_over_h[self.fe1_filter]
         x = self.linemasks['ewr'][np.logical_or(self.fe1_filter, self.fe2_filter)]
         y = x_over_h[np.logical_or(self.fe1_filter, self.fe2_filter)]
+        unknown = np.isnan(y)
+        x = x[~unknown]
+        y = y[~unknown]
         x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
         linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
         self.m2 = linear_model.params[0]
@@ -1616,6 +1622,9 @@ class EquivalentWidthModel(MPFitModel):
         x = self.linemasks['ewr'][self.fe2_filter]
         if len(x) > 1:
             y = x_over_h[self.fe2_filter]
+            unknown = np.isnan(y)
+            x = x[~unknown]
+            y = y[~unknown]
             x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
             linear_model = sm.OLS(y, x_c).fit() # Ordinary Least Square
             self.fe2 = np.nanmedian(x_over_h[self.fe2_filter])
@@ -1711,7 +1720,7 @@ class EquivalentWidthModel(MPFitModel):
 
         ##### Lines
         #values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
-        #self.select_good_lines(x_over_h, strict=True) # Modifies self.lines_for_teff and self.lines_for_vmic
+        #self.select_good_lines(x_over_h) # Modifies self.lines_for_teff and self.lines_for_vmic
 
         return 0
 
@@ -1727,6 +1736,11 @@ class EquivalentWidthModel(MPFitModel):
         #### Line selection
         fe1_filter = self.linemasks['element'] == "Fe 1"
         fe2_filter = self.linemasks['element'] == "Fe 2"
+
+        if self.outliers_detection not in ['robust', 'sigma_clipping']:
+            strict = False
+        else:
+            scrict = True
 
         if strict and len(np.where(~bad)[0]) > 1:
             # Outliers

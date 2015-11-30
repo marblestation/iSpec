@@ -271,11 +271,69 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
     if code == "turbospectrum":
         return __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
     elif code == "moog":
-        return __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+        #return __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+        success = False
+        bad = linemasks['wave_A'] < 0 # All to false
+        # MOOG can fail for some lines and it stops the execution, automatically detect that
+        # filter the line and re-execute
+        while not success and np.any(~bad):
+            try:
+                spec_abund, absolute_abund, x_over_h, x_over_fe = __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks[~bad], isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+            except Exception, e:
+                # MOOG ERROR: CANNOT DECIDE ON LINE WAVELENGTH STEP SIZE FOR   5158.62   I QUIT!
+                if "CANNOT DECIDE ON LINE WAVELENGTH STEP SIZE FOR" in str(e):
+                    logging.error(str(e))
+                    logging.warn("Re-executing MOOG without the problematic line (it is recommended to manually remove that line to improve execution time)")
+                    wave_A = float(str(e).split()[-3])
+                    bad_idx = np.argmin(np.abs(linemasks['wave_A'][~bad] - wave_A))
+                    bad[np.where(~bad)[0][bad_idx]] = True
+                else:
+                    raise
+            else:
+                success = True
+        if np.any(bad):
+            nlines = len(linemasks)
+            spec_abund = __reconstruct(nlines, spec_abund, bad)
+            absolute_abund = __reconstruct(nlines, absolute_abund, bad)
+            x_over_h = __reconstruct(nlines, x_over_h, bad)
+            x_over_fe = __reconstruct(nlines, x_over_fe, bad)
+        return spec_abund, absolute_abund, x_over_h, x_over_fe
     elif code == "width":
-        return __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+        #return __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+        success = False
+        bad = linemasks['wave_A'] < 0 # All to false
+        # WIDTH can fail for some lines and it stops the execution, automatically detect that
+        # filter the line and re-execute
+        while not success and np.any(~bad):
+            try:
+                spec_abund, absolute_abund, x_over_h, x_over_fe =  __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks[~bad], isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+            except Exception, e:
+                # WIDTH ERROR: 515.8551 -2.379  3.5  108707.400  2.0*********************01
+                if "WIDTH ERROR:" in str(e):
+                    logging.warn("Re-executing WIDTH without the problematic line (it is recommended to manually remove that line to improve execution time)")
+                    wave_nm = float(str(e).split()[2])
+                    bad_idx = np.argmin(np.abs(linemasks['wave_nm'][~bad] - wave_nm))
+                    bad[np.where(~bad)[0][bad_idx]] = True
+                else:
+                    raise
+            else:
+                success = True
+        if np.any(bad):
+            nlines = len(linemasks)
+            spec_abund = __reconstruct(nlines, spec_abund, bad)
+            absolute_abund = __reconstruct(nlines, absolute_abund, bad)
+            x_over_h = __reconstruct(nlines, x_over_h, bad)
+            x_over_fe = __reconstruct(nlines, x_over_fe, bad)
+        return spec_abund, absolute_abund, x_over_h, x_over_fe
     elif code == "spectrum":
         return __spectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, gui_queue=gui_queue, timeout=timeout, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+
+def __reconstruct(nlines, spec_abund, bad):
+    spec_abund_reconstructed = np.zeros(nlines)
+    spec_abund_reconstructed[~bad] = spec_abund
+    spec_abund_reconstructed[bad] = np.nan
+    return spec_abund_reconstructed
+
 
 def __spectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, gui_queue=None, timeout=1800, tmp_dir=None, enhance_abundances=True, scale=None):
     """
@@ -695,7 +753,10 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
 
     for line in out.split("\n"):
         if "I QUIT" in line:
+            # MOOG ERROR: CANNOT DECIDE ON LINE WAVELENGTH STEP SIZE FOR   5158.62   I QUIT!
             logging.error("MOOG ERROR: %s" % (line))
+            os.chdir(previous_cwd)
+            shutil.rmtree(tmp_execution_dir)
             raise Exception("MOOG ERROR: %s" % (line))
 
     absolute_abund = []
@@ -733,6 +794,9 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
             # Detect new species results
             if "Abundance Results for Species" in line:
                 reference_abund = None
+    for last_missing_lines in sorted_tmp_linemasks['wave_A'][line_number:]:
+        absolute_abund.append(np.nan)
+        x_over_h.append(np.nan)
 
     absolute_abund = np.asarray(absolute_abund)
     x_over_h = np.asarray(x_over_h)
@@ -900,7 +964,9 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
             logging.error("WIDTH" + out_lines[i-2])
             logging.error("WIDTH" + out_lines[i-1])
             logging.error("WIDTH" + out_lines[i])
-            raise Exception("WIDTH error!")
+            os.chdir(previous_cwd)
+            shutil.rmtree(tmp_execution_dir)
+            raise Exception("WIDTH ERROR: %s" % (out_lines[i-2]))
         if "NOT CONVERGED" in line:
             #  679.3258 -2.326  4.0   32875.157  4.0       5.900    26.00
             #  679.3258   0  7.56 -5.99 -7.82     0 0  0  0.000  0  0.000  0    0
