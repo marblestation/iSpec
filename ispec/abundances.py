@@ -240,6 +240,7 @@ def enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enh
     abundances['Abund'][o] += o_enhancement
     abundances['Abund'][alpha] += alpha_enhancement
 
+    logging.info("alpha += %.2f; c += %.2f; n += %.2f; o += %.2f" % (alpha_enhancement, c_enhancement, n_enhancement, o_enhancement))
     return abundances
 
 
@@ -278,7 +279,11 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
         # filter the line and re-execute
         while not success and np.any(~bad):
             try:
-                spec_abund, absolute_abund, x_over_h, x_over_fe = __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks[~bad], isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+                if ignore is not None:
+                    filtered_ignore = ignore[~bad]
+                else:
+                    filtered_ignore = None
+                spec_abund, absolute_abund, x_over_h, x_over_fe = __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks[~bad], isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=filtered_ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
             except Exception, e:
                 # MOOG ERROR: CANNOT DECIDE ON LINE WAVELENGTH STEP SIZE FOR   5158.62   I QUIT!
                 if "CANNOT DECIDE ON LINE WAVELENGTH STEP SIZE FOR" in str(e):
@@ -291,6 +296,8 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
                     raise
             else:
                 success = True
+        if np.all(bad):
+            raise Exception("MOOG: No abundances could be calculated")
         if np.any(bad):
             nlines = len(linemasks)
             spec_abund = __reconstruct(nlines, spec_abund, bad)
@@ -306,7 +313,11 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
         # filter the line and re-execute
         while not success and np.any(~bad):
             try:
-                spec_abund, absolute_abund, x_over_h, x_over_fe =  __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks[~bad], isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+                if ignore is not None:
+                    filtered_ignore = ignore[~bad]
+                else:
+                    filtered_ignore = None
+                spec_abund, absolute_abund, x_over_h, x_over_fe =  __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks[~bad], isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=filtered_ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
             except Exception, e:
                 # WIDTH ERROR: 515.8551 -2.379  3.5  108707.400  2.0*********************01
                 if "WIDTH ERROR:" in str(e):
@@ -318,6 +329,8 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
                     raise
             else:
                 success = True
+        if np.all(bad):
+            raise Exception("WIDTH: No abundances could be calculated")
         if np.any(bad):
             nlines = len(linemasks)
             spec_abund = __reconstruct(nlines, spec_abund, bad)
@@ -475,19 +488,23 @@ def __turbospectrum_read_abund_results(abundances_filename):
                 else:
                     raise Exception("Wrong format (line %i): %s" % (line_number, line))
             nlines_read += 1
-    abundances = np.rec.fromarrays(zip(*data), dtype=[ \
-            ('element', '|S4'), \
-            ('wave_A', '<f8'), ('wave_nm', '<f8'), \
-            ('lower_state_eV', float), \
-            ('loggf', '<f8'), \
-            ('ew', float), \
-            ('ew_err', float), \
-            ('x_over_h', float), \
-            ('lower absolute abundance', float), \
-            ('absolute abundance', float), \
-            ('upper absolute abundance', float), \
-            ('comment', '|S100') \
-            ])
+
+    if len(data) == 0:
+        abundances = data
+    else:
+        abundances = np.rec.fromarrays(zip(*data), dtype=[ \
+                ('element', '|S4'), \
+                ('wave_A', '<f8'), ('wave_nm', '<f8'), \
+                ('lower_state_eV', float), \
+                ('loggf', '<f8'), \
+                ('ew', float), \
+                ('ew_err', float), \
+                ('x_over_h', float), \
+                ('lower absolute abundance', float), \
+                ('absolute abundance', float), \
+                ('upper absolute abundance', float), \
+                ('comment', '|S100') \
+                ])
     return abundances
 
 
@@ -702,9 +719,17 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
         alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(MH, scale=scale)
         abundances = enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
 
+    # MOOG is not going to scale the abundances because we are indicating
+    # our abundances in the input and that overrides any other prescription, thus
+    # we have to manually scale (but do not change Hydrogen and Helium!)
+    abundances = abundances.copy()
+    efilter = np.logical_and(abundances['code'] != 1, abundances['code'] != 2)
+    efilter = np.logical_and(efilter, abundances['code'] <= 92)
+    abundances['Abund'][efilter] += MH
+
     # Append microturbulence, solar abundances and metallicity
     moog_atmosphere = open(atmosphere_filename, "a")
-    atom_abundances = abundances[abundances['code'] <= 92]
+    atom_abundances = abundances[efilter] # Don't update hydrogen or helium abundances
     moog_atmosphere.write("  %.2f\n" % (microturbulence_vel))
     moog_atmosphere.write("NATOMS=   %i %.2f\n" % (len(atom_abundances), MH))
     for atom_abundance in atom_abundances:
@@ -859,7 +884,9 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
     filtered = []
     for line in linemasks:
         ew_picometer = line['ew'] / 10.
-        if line['width_support'] == "False" or np.isnan(line['ew']) or line['ew'] < 1e-9:
+        # TODO: Mark not compatible with WIDTH the lines that have stark/waals set to zero
+        if line['width_support'] == "False" or np.isnan(line['ew']) or line['ew'] < 1e-9 \
+                or line['stark'] == 0 or line['waals'] == 0:
             filtered.append(True)
             continue
         else:
@@ -875,7 +902,7 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
                 filtered.append(True)
             else:
                 filtered.append(False)
-                command_input += "LINE      %.2f  %.4f    STARNAME\n" % (ew_picometer, line['mu'])
+                command_input += "LINE     %.2f  %.4f    STARNAME\n" % (ew_picometer, line['mu'])
                 command_input += "  %.4f %.3f  %.1f   %.3f  %.1f  %.3f     %s\n" % (line['wave_nm'], line['loggf'], lower_level, lower_state, upper_level, upper_state, width_species)
                 command_input += "  %.4f  %i  %.2f %.2f  %.2f     0  0  0.000  0  0.000    0    0\n" % (line['wave_nm'], nelion, line['rad'], line['stark'], waals)
     command_input += "END\n"
@@ -910,6 +937,7 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
     #command_input += " 6.12960183E-04   3686.1 1.679E+01 2.580E+09 2.175E-04 4.386E-02 1.000E+05\n"
     #atm_kurucz.write("%.8e   %.1f %.3e %.3e %.3e %.3e %.3e" % (rhox[i], temperature[i], pgas[i], xne[i], abross[i], accrad[i], vturb[i]) )
     command_input += "\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]))) for layer in atmosphere_layers])
+    #command_input += "\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], 1.0))) for layer in atmosphere_layers])
     command_input += "\nPRADK 1.4878E+00\n"
     command_input += "READ MOLECULES\n"
     command_input += "MOLECULES ON\n"

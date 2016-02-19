@@ -906,4 +906,57 @@ def calendar_to_jd(caltime,tz=None,gregorian=True,mjd=False):
         return res
 #### [end]   Astropysics
 
+def estimate_vmic(teff, logg, feh):
+    """
+    Estimate Microturbulence velocity (Vmic) by using an empirical relation
+    considering the effective temperature, surface gravity and metallicity.
+
+    The relation was constructed based on the UVES Gaia ESO Survey iDR1 data,
+    results for the benchmark stars (Jofre et al. 2013),
+    and globular cluster data from external literature sources.
+
+    Source: http://great.ast.cam.ac.uk/GESwiki/GesWg/GesWg11/Microturbulence
+    """
+    t0 = 5500
+    g0 = 4.0
+
+    if logg >= 3.5:
+        if teff >= 5000:
+            # main sequence and subgiants (RGB)
+            vmic = 1.05 + 2.51e-4*(teff-t0) + 1.5e-7*(teff-t0)**2 - 0.14*(logg-g0) - 0.05e-1*(logg-g0)**2 + 0.05*feh + 0.01*feh**2
+        else:
+            # main sequence
+            vmic = 1.05 + 2.51e-4*(5000-t0) + 1.5e-7*(5000-t0)**2 - 0.14*(logg-g0) - 0.05e-1*(logg-g0)**2 + 0.05*feh + 0.01*feh**2
+    else:
+        # giants (RGB/AGB)
+        vmic = 1.25 + 4.01e-4*(teff-t0) + 3.1e-7*(teff-t0)**2 - 0.14*(logg-g0) - 0.05*(logg-g0)**2 + 0.05*feh + 0.01*feh**2
+    vmic = float("%.2f" % vmic)
+    return vmic
+
+
+
+def estimate_vmac(teff, logg, feh):
+    """
+    Estimate Microturbulence velocity (Vmic) by using an empirical relation
+    considering the effective temperature, surface gravity and metallicity.
+
+    The relation was constructed by Maria Bergemann for the Gaia ESO Survey.
+    """
+    t0 = 5500
+    g0 = 4.0
+
+    if logg >= 3.5:
+        if teff >= 5000:
+            # main sequence and subgiants (RGB)
+            vmac = 3*(1.15 + 7e-4*(teff-t0) + 1.2e-6*(teff-t0)**2 - 0.13*(logg-g0) + 0.13*(logg-g0)**2 - 0.37*feh - 0.07*feh**2)
+        else:
+            # main sequence
+            vmac = 3*(1.15 + 2e-4*(teff-t0) + 3.95e-7*(teff-t0)**2 - 0.13*(logg-g0) + 0.13*(logg-g0)**2)
+    else:
+        # giants (RGB/AGB)
+        vmac = 3*(1.15 + 2.2e-5*(teff-t0) - 0.5e-7*(teff-t0)**2 - 0.1*(logg-g0) + 0.04*(logg-g0)**2 - 0.37*feh - 0.07*feh**2)
+
+    vmac = float("%.2f" % vmac)
+    return vmac
+
 

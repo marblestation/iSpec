@@ -411,6 +411,7 @@ Perform Levenberg-Marquardt least-squares minimization, based on MINPACK-1.
 import numpy
 import types
 import scipy.linalg.blas
+from common import estimate_vmic, estimate_vmac
 
 #     Original FORTRAN documentation
 #     **********

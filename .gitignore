@@ -1,6 +1,7 @@
 *.pyc
 input/*
 build/*
+tests/*
 *.so
 *.o
 *.log

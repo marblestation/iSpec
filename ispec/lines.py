@@ -2752,6 +2752,9 @@ def update_ew_with_ares(spectrum, linelist, rejt="0.995", tmp_dir=None, verbose=
 
     try:
         data = np.loadtxt(tmp_execution_dir+"/results.ares")
+        if len(data.shape) == 1:
+            # If there is only one line, do a list or this function will fail
+            data = (data,)
     except:
         print out
         sys.stdout.flush()

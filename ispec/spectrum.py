@@ -218,7 +218,7 @@ def read_spectrum(spectrum_filename, apply_filters=True, sort=True):
         spectrum = __read_spectrum(tmp_spec)
         os.remove(tmp_spec)
     else:
-        raise Exception("Spectrum file does not exists!")
+        raise Exception("Spectrum file does not exists: %s" %(spectrum_filename))
 
     if apply_filters:
         # Filtering...

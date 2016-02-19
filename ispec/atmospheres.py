@@ -865,7 +865,7 @@ def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None
         Name of the temporary file
     """
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'width', 'synthe']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
     if atmosphere_filename is not None:
@@ -901,15 +901,45 @@ def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None
         atm_file.write("  %i Number of depth points\n" % (len(atmosphere_layers)))
         atm_file.write("Model structure\n")
         atm_file.write(" k lgTauR  lgTau5    Depth     T        Pe          Pg         Prad       Pturb\n")
+        #  temperature structure measured at the continuum optical depth at 5000 A
         #1 -5.00 -4.9174 -6.931E+07  4066.8  2.1166E-02  2.6699E+02  1.4884E+00  0.0000E+00
+        ## Gustafsson et al. 2008:
+        #  http://marcs.astro.uu.se/GEEJNP08.pdf
+        # We have tested the use of Eq. (7) to simulate
+        # the effects of turbulent pressure for a number of models at
+        # various points in the grid and find that it leads to very small errors
+        # in the temperature structure (less than 5 K in the temperature
+        # throughout the model for a depth independent vt in the interval 0
+        # to 10 km s-1). We, therefore, have chosen to set vt = 0 for all
+        # grid models, and advise those who would have liked a different
+        # choice to use models with a different mass or g, according to
+        # the recipe given in Eq. (7).
+        lgTauR = -5.00
         for i, layer in enumerate(atmosphere_layers):
-            atm_file.write("%i %.2f %.4f %.3E %.1f %.4E %.4E %.4E %.4E\n" % (i+1, 0., layer[7], layer[8], layer[1], layer[9], layer[2], layer[5], layer[6]))
+            atm_file.write("%i %.2f %.4f %.3E %.1f %.4E %.4E %.4E %.4E\n" % (i+1, lgTauR, layer[7], layer[8], layer[1], layer[9], layer[2], layer[5], 0.))
+            lgTauR += 0.20
     elif code == "spectrum":
         # Spectrum
+        # mass depth, temperature in kelvin, gas pressure, electron density, Rosseland mean absorption coefficient, radiation pressure, microturbulent velocity in meters/second.
         atm_file.write("%.1f  %.5f  %.2f  %i\n" % (teff, logg, MH, len(atmosphere_layers)) )
-        atm_file.write("\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]))) for layer in atmosphere_layers]))
+        #atm_file.write("\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]))) for layer in atmosphere_layers]))
+        atm_file.write("\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], 1.0))) for layer in atmosphere_layers]))
         #for layer in layers:
             #atm_file.write("%.8e   %.1f %.3e %.3e %.3e %.3e %.3e\n" % (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]) )
+    elif code == "width" or code == "synthe":
+        command_input = ""
+        command_input += "READ DECK6 %i RHOX,T,P,XNE,ABROSS,ACCRAD,VTURB\n" % (len(atmosphere_layers))
+        #command_input += " 6.12960183E-04   3686.1 1.679E+01 2.580E+09 2.175E-04 4.386E-02 1.000E+05\n"
+        #atm_kurucz.write("%.8e   %.1f %.3e %.3e %.3e %.3e %.3e" % (rhox[i], temperature[i], pgas[i], xne[i], abross[i], accrad[i], vturb[i]) )
+        command_input += "\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]))) for layer in atmosphere_layers])
+        #command_input += "\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], 1.0))) for layer in atmosphere_layers])
+        command_input += "\nPRADK 1.4878E+00\n"
+        command_input += "READ MOLECULES\n"
+        command_input += "MOLECULES ON\n"
+        command_input += "BEGIN                    ITERATION  15 COMPLETED\n"
+        command_input += "END\n"
+        command_input += "STOP\n"
+        atm_file.write(command_input)
     atm_file.close()
     return atm_file.name
 

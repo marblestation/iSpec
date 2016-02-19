@@ -47,7 +47,7 @@ c  set up some data upon first entrance with a new model atmosphere
       do i=1,ntau
          ex = boltex(i)
          if (freq .lt. 4.05933d13) ex = exlim(i)/evhkt(i)
-         h = (cont(7)*bolt(i,7) + cont8*bolt(i,8) + 
+         h = (cont(7)*bolt(i,7) + cont(8)*bolt(i,8) + 
      .       (ex - exlim(i))*c + 
      .       coulff(1,tlog(i),freq)*freet(i)*cfree)*(1.-evhkt(i))
          do n=1,6

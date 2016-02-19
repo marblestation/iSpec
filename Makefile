@@ -16,7 +16,7 @@ isochrones/YYmix2: isochrones/YYmix2.f
 
 synthesizer/ARES/bin/ARES:	synthesizer/ARES/src/ARES_v2.c synthesizer/ARES/src/*.h
 	mkdir -p synthesizer/ARES/bin/
-	gcc -o synthesizer/ARES/bin/ARES synthesizer/ARES/src/ARES_v2.c -lcfitsio -lgsl -lgslcblas -lm -lgomp -fopenmp
+	gcc -o synthesizer/ARES/bin/ARES synthesizer/ARES/src/ARES_v2.c -lcfitsio -lgsl -lgslcblas -lm -lgomp -fopenmp ${CPPFLAGS} ${LDFLAGS}
 
 synthesizer/turbospectrum/bin/babsma_lu synthesizer/turbospectrum/bin/bsyn_lu synthesizer/turbospectrum/bin/eqwidt_lu: synthesizer/turbospectrum/src/*.f
 	rm -f synthesizer/turbospectrum/exec-gf-v15.1/*.o
