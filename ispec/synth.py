@@ -3103,9 +3103,10 @@ def __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelis
         wave_top = segment['wave_top']
 
         tmp_execution_dir = tempfile.mkdtemp(dir=tmp_dir)
-        os.symlink(moog_dir, tmp_execution_dir+"/DATA")
+        os.makedirs(tmp_execution_dir+"/DATA/")
         atmosphere_filename = tmp_execution_dir + "/model.in"
         linelist_filename = tmp_execution_dir + "/lines.in"
+        barklem_linelist_filename = tmp_execution_dir + "/DATA/Barklem.dat"
         stronglinelist_file = tmp_execution_dir + "/stronglines.in"
 
         if atmosphere_layers_file is None:
@@ -3116,6 +3117,8 @@ def __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelis
             linelist_filename = write_atomic_linelist(linelist, linelist_filename=linelist_filename, code="moog", tmp_dir=tmp_dir)
         else:
             shutil.copyfile(linelist_file, linelist_filename)
+        # Write (MOOG requires a separate file for damping coeff if we want to provide rad coeff and alpha from ABO theory)
+        barklem_linelist_filename = write_atomic_linelist(linelist, linelist_filename=barklem_linelist_filename, code="moog_barklem", tmp_dir=tmp_dir)
 
         # Append microturbulence, solar abundances and metallicity
         moog_atmosphere = open(atmosphere_filename, "a")
@@ -3155,12 +3158,12 @@ def __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelis
         par_file.write("model_in     model.in\n")
         par_file.write("lines_in     lines.in\n")
         par_file.write("stronglines_in stronglines.in\n")
-        par_file.write("atmosphere  0\n")
-        par_file.write("molecules   1\n")
-        par_file.write("lines       1\n")
+        par_file.write("atmosphere  0\n") # controls the output of atmosphere quantities
+        par_file.write("molecules   1\n") # controls the molecular equilibrium calculations (1 = do molecular equilibrium but do not print results)
+        par_file.write("lines       1\n") # controls the output of line data (print out standard information about the input line list)
         par_file.write("strong      1\n")
-        par_file.write("flux/int    0\n")
-        par_file.write("damping     1\n")
+        par_file.write("flux/int    0\n") # choses integrated flux or central intensity (0 = integrated flux calculations)
+        par_file.write("damping     1\n") # Use Barklem.dat file with waals, alpha and rad damping coeff, if not found then do like damping = 0
         par_file.write("freeform    0\n") # Linelist format of 7 columns with numbers %10.3f and comment %10s
         par_file.write("plot        3\n")
         par_file.write("abundances  0  1\n")

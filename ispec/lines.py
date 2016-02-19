@@ -836,12 +836,15 @@ def write_atomic_linelist(linelist, linelist_filename=None, code=None, tmp_dir=N
     """
     if code is not None:
         code = code.lower()
-        if code not in ['spectrum', 'turbospectrum', 'moog', 'synthe']:
+        if code not in ['spectrum', 'turbospectrum', 'moog', 'moog_barklem', 'synthe']:
             raise Exception("Unknown radiative transfer code: %s" % (code))
 
         if code == "moog":
             logging.info("MOOG file format")
             return __moog_write_atomic_linelist(linelist, linelist_filename=linelist_filename, tmp_dir=tmp_dir)
+        elif code == "moog_barklem":
+            logging.info("MOOG Barklem.dat file format")
+            return __moog_barklem_write_atomic_linelist(linelist, linelist_filename=linelist_filename, tmp_dir=tmp_dir)
         elif code == "turbospectrum":
             logging.info("Turbospectrum file format")
             return __turbospectrum_write_atomic_linelist(linelist, linelist_filename=linelist_filename, tmp_dir=tmp_dir)
@@ -2558,6 +2561,35 @@ def __moog_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=None)
     out.close()
     return out.name
 
+def __moog_barklem_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=None):
+    """
+    Saves a MOOG linelist for spectral synthesis.
+    If filename is not specified, a temporary file is created and the name is returned.
+
+    linelist['waals'] ares spected to be in single gamma damping coefficient
+    ABO theory is not supported and if waals is bigger than 0, it won't be considered
+    """
+    supported = np.logical_or(linelist['moog_support'] == "True", linelist['moog_support'] == True)
+    supported = np.logical_or(supported, linelist['moog_support'] == "T")
+    linelist = linelist[supported]
+
+    if linelist_filename is not None:
+        out = open(linelist_filename, "w")
+    else:
+        # Temporary file
+        out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
+
+    for line in linelist:
+        # wavelength species waals  alpha     rad
+        #  4800.649  26.0  -7.73    0.250     8.13E+07
+        alpha = 0.00 # Omara theory (ABO) sigma.alpha (sigma was transformed to waals_single_gamma_format) and alpha is provided separately
+        if line['spectrum_transition_type'] == "AO":
+            alpha = line['waals'] % 1 # Decimal part
+        out.write("%10.3f%10s%10.2f%10.3f%10.2E\n" \
+                % (line['wave_A'], line['spectrum_moog_species'], line['waals_single_gamma_format'], alpha, line['turbospectrum_rad']))
+    out.close()
+    return out.name
+
 def __synthe_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=None):
     """
     Saves a Synthe linelist for spectral synthesis.
@@ -2594,7 +2626,11 @@ def __synthe_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=Non
         #300.0047 -0.617 24.01   99677.930  0.5 a3P)5s f4P   66354.830  1.5 a3P)4p y4P  8.87 -5.64 -7.67K88  0 0  0 0.000  0 0.000    0    0           2617 1671
         #300.0061 -1.463  8.01  232536.060  1.5 3d   4P     265859.000  0.5 5f  *4D     9.61  0.00  0.00NBS  0 0  0 0.000  0 0.000    0    0              0    0
         #300.0082 -2.495 23.00    9824.610  2.5 d3s2 a4P     43147.280  3.5 s4F         7.47 -4.87 -7.49K88  0 0 51-1.333 51-0.001  -35    0F2 -2z0    1550 1240     0
-        atomic_out.write("%11.4f%7.3f%6s%12.3f%5.2f %10s%12.3f%5.2f %10s%6.2f%6.2f%6.2f%4s 0 0%3i 0.000%3i 0.000    0    %5i          %5i    0\n" % \
+        alpha = 0.00 # Omara theory (ABO) sigma.alpha (sigma was transformed to waals_single_gamma_format) and alpha is provided separately
+        if line['spectrum_transition_type'] == "AO":
+            alpha = line['waals'] % 1 # Decimal part
+
+        atomic_out.write("%11.4f%7.3f%6s%12.3f%5.2f %10s%12.3f%5.2f %10s%6.2f%6.2f%6.2f%4s 0 0%3i 0.000%3i 0.000    0    %5i          %5i    0    %.3f\n" % \
                         (line['wave_nm'], line['loggf'], line['width_species'], \
                             line['lower_state_cm1'], line['lower_j'], "X", \
                             line['upper_state_cm1'], line['upper_j'], "X", \
@@ -2602,6 +2638,7 @@ def __synthe_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=Non
                             line['reference_code'][:4], \
                             line['spectrum_synthe_isotope'], line['spectrum_synthe_isotope'], \
                             int(line['lande_lower']*1000), int(line['lande_upper']*1000), \
+                            alpha, \
                         )
                     )
     atomic_out.close()

@@ -685,9 +685,11 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
     moog_executable = moog_dir + "MOOGSILENT"
 
     tmp_execution_dir = tempfile.mkdtemp(dir=tmp_dir)
-    os.symlink(moog_dir, tmp_execution_dir+"/DATA")
+    #os.symlink(moog_dir, tmp_execution_dir+"/DATA")
+    os.makedirs(tmp_execution_dir+"/DATA/")
     atmosphere_filename = tmp_execution_dir + "/model.in"
     linelist_file = tmp_execution_dir + "/lines.in"
+    barklem_linelist_file = tmp_execution_dir + "/DATA/Barklem.dat"
 
     atmosphere_filename = write_atmosphere(atmosphere_layers, teff, logg, MH, code="moog", atmosphere_filename=atmosphere_filename, tmp_dir=tmp_dir)
 
@@ -710,8 +712,9 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
     # MOOG does not support zero equivalent widths, so we will filter them:
     filtered = np.logical_or(sorted_tmp_linemasks['ew'] < 1e-9, np.isnan(sorted_tmp_linemasks['ew']))
 
-    # Write
+    # Write (MOOG requires a separate file for damping coeff if we want to provide rad coeff and alpha from ABO theory)
     linelist_filename = write_atomic_linelist(sorted_tmp_linemasks[~filtered], linelist_filename=linelist_file, code="moog", tmp_dir=tmp_dir)
+    linelist_filename = write_atomic_linelist(sorted_tmp_linemasks[~filtered], linelist_filename=barklem_linelist_file, code="moog_barklem", tmp_dir=tmp_dir)
 
     # Enhance alpha elements + CNO abundances following MARCS standard composition
     original_abundances = abundances.copy()
@@ -750,12 +753,13 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
     par_file.write("summary_out  moog.sum\n")
     par_file.write("model_in     model.in\n")
     par_file.write("lines_in     lines.in\n")
-    par_file.write("atmosphere   1\n")
-    par_file.write("molecules    1\n")
-    par_file.write("lines        1\n")
-    par_file.write("flux/int     0\n")
-    #par_file.write("damping      1\n") # Use Barklem MOOG's data, if not found then do like damping = 0
-    par_file.write("damping      0\n") # Use single gamma damping coefficient (van der Waals) if provided, if zero then use Unsold equation
+    par_file.write("atmosphere   1\n") # controls the output of atmosphere quantities (print out the standard things about an atmsophere)
+    par_file.write("molecules    1\n") # controls the molecular equilibrium calculations (1 = do molecular equilibrium but do not print results)
+    par_file.write("units        0\n") # controls the units in which moog outputs the final spectrum (0 = angs, 1 = microns, 2 = 1/cm)
+    par_file.write("lines        1\n") # controls the output of line data (print out standard information about the input line list)
+    par_file.write("flux/int     0\n") # choses integrated flux or central intensity (0 = integrated flux calculations)
+    par_file.write("damping      1\n") # Use Barklem.dat file with waals, alpha and rad damping coeff, if not found then do like damping = 0
+    #par_file.write("damping      0\n") # Use single gamma damping coefficient (van der Waals) if provided, if zero then use Unsold equation
     par_file.write("freeform     0\n")  # Linelist format of 7 columns with numbers %10.3f and comment %10s
     par_file.write("plot         0\n")
     par_file.close()
@@ -881,6 +885,7 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
     command_input = ""
     command_input += "VTUR\n"
     command_input += "    1 %.2f\n" % (microturbulence_vel)
+    lines_input = ""
     filtered = []
     for line in linemasks:
         ew_picometer = line['ew'] / 10.
@@ -897,6 +902,9 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
             width_species = line['width_species']
             nelion = 0 # ?
             waals = line['waals_single_gamma_format']
+            alpha = 0.00 # Omara theory (ABO) sigma.alpha (sigma was transformed to waals_single_gamma_format) and alpha is provided separately
+            if line['spectrum_transition_type'] == "AO":
+                alpha = line['waals'] % 1 # Decimal part
             if line['rad'] == 0 and line['stark'] == 0  and waals == 0:
                 # WIDTH does not all damping parameters to zero
                 filtered.append(True)
@@ -904,7 +912,8 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
                 filtered.append(False)
                 command_input += "LINE     %.2f  %.4f    STARNAME\n" % (ew_picometer, line['mu'])
                 command_input += "  %.4f %.3f  %.1f   %.3f  %.1f  %.3f     %s\n" % (line['wave_nm'], line['loggf'], lower_level, lower_state, upper_level, upper_state, width_species)
-                command_input += "  %.4f  %i  %.2f %.2f  %.2f     0  0  0.000  0  0.000    0    0\n" % (line['wave_nm'], nelion, line['rad'], line['stark'], waals)
+                command_input += "  %.4f  %i  %.2f %.2f  %.2f     0  0  0.000  0  0.000    0    0   0  0 %.3f\n" % (line['wave_nm'], nelion, line['rad'], line['stark'], waals, alpha)
+
     command_input += "END\n"
 
     command_input += "TEFF   %.0f  GRAVITY %.5f LTE\n" % (teff, logg)
