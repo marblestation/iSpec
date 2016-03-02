@@ -347,6 +347,7 @@ def write_spectrum(spectrum, spectrum_filename):
         out.write("\n".join(["\t".join(map(str, (line['waveobs'], line['flux'], line['err']))) for line in spectrum]))
         out.close()
 
+
 def normalize_spectrum(spectrum, continuum_model, consider_continuum_errors=True):
     """
     Normalizes a spectrum given a continuum fit

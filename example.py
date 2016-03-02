@@ -42,48 +42,46 @@ logger.setLevel(logging.getLevelName(LOG_LEVEL.upper()))
 def read_write_spectrum():
     #--- Reading spectra -----------------------------------------------------------
     logging.info("Reading spectra")
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     ##--- Save spectrum ------------------------------------------------------------
     logging.info("Saving spectrum...")
-    ispec.write_spectrum(sun_spectrum, "example_sun.s")
-    return sun_spectrum
-
-
+    ispec.write_spectrum(star_spectrum, "example_sun.fits")
+    return star_spectrum
 
 def convert_air_to_vacuum():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Converting wavelengths from air to vacuum and viceversa -------------------
-    sun_spectrum_vacuum = ispec.air_to_vacuum(sun_spectrum)
-    sun_spectrum_air = ispec.vacuum_to_air(sun_spectrum_vacuum)
-    return sun_spectrum_vacuum, sun_spectrum_air
+    star_spectrum_vacuum = ispec.air_to_vacuum(star_spectrum)
+    star_spectrum_air = ispec.vacuum_to_air(star_spectrum_vacuum)
+    return star_spectrum_vacuum, star_spectrum_air
 
 def plot():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_muCas.txt.gz")
     #--- Plotting (requires graphical interface) -----------------------------------
     logging.info("Plotting...")
-    ispec.plot_spectra([sun_spectrum, mu_cas_spectrum])
-    ispec.show_histogram(sun_spectrum['flux'])
+    ispec.plot_spectra([star_spectrum, mu_cas_spectrum])
+    ispec.show_histogram(star_spectrum['flux'])
 
 def cut_spectrum_from_range():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Cut -----------------------------------------------------------------------
     logging.info("Cutting...")
 
     # - Keep points between two given wavelengths
-    wfilter = ispec.create_wavelength_filter(sun_spectrum, wave_base=480.0, wave_top=670.0)
-    cutted_sun_spectrum = sun_spectrum[wfilter]
-    return cutted_sun_spectrum
+    wfilter = ispec.create_wavelength_filter(star_spectrum, wave_base=470.0, wave_top=680.0)
+    cutted_star_spectrum = star_spectrum[wfilter]
+    return cutted_star_spectrum
 
 def cut_spectrum_from_segments():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Cut -----------------------------------------------------------------------
     logging.info("Cutting...")
     # Keep only points inside a list of segments
     segments = ispec.read_segment_regions(ispec_dir + "/input/regions/fe_lines_segments.txt")
-    wfilter = ispec.create_wavelength_filter(sun_spectrum, regions=segments)
-    cutted_sun_spectrum = sun_spectrum[wfilter]
-    return cutted_sun_spectrum
+    wfilter = ispec.create_wavelength_filter(star_spectrum, regions=segments)
+    cutted_star_spectrum = star_spectrum[wfilter]
+    return cutted_star_spectrum
 
 
 def determine_radial_velocity_with_mask():
@@ -147,14 +145,14 @@ def correct_radial_velocity():
 
 
 def determine_tellurics_shift_with_mask():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Telluric velocity shift determination from spectrum --------------------------
     logging.info("Telluric velocity shift determination...")
     # - Telluric
     telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
-    linelist_telluric = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
+    telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
 
-    models, ccf = ispec.cross_correlate_with_mask(sun_spectrum, linelist_telluric, \
+    models, ccf = ispec.cross_correlate_with_mask(star_spectrum, telluric_linelist, \
                             lower_velocity_limit=-100, upper_velocity_limit=100, \
                             velocity_step=0.5, mask_depth=0.01, \
                             fourier = False,
@@ -165,13 +163,13 @@ def determine_tellurics_shift_with_mask():
     return bv, bv_err
 
 def determine_tellurics_shift_with_template():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Telluric velocity shift determination from spectrum --------------------------
     logging.info("Telluric velocity shift determination...")
     # - Read synthetic template
     template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Tellurics.350_1100nm/template.txt.gz")
 
-    models, ccf = ispec.cross_correlate_with_template(sun_spectrum, template, \
+    models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
                             lower_velocity_limit=-100, upper_velocity_limit=100, \
                             velocity_step=0.5, fourier=False, \
                             only_one_peak = True)
@@ -180,54 +178,55 @@ def determine_tellurics_shift_with_template():
     bv_err = np.round(models[0].emu(), 2) # km/s
     return bv, bv_err
 
-
-
 def degrade_resolution():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Resolution degradation ----------------------------------------------------
     logging.info("Resolution degradation...")
     from_resolution = 80000
-    to_resolution = 40000
-    convolved_sun_spectrum = ispec.convolve_spectrum(sun_spectrum, to_resolution, \
+    to_resolution = 47000
+    convolved_star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, \
                                                     from_resolution=from_resolution)
-    return convolved_sun_spectrum
+    return convolved_star_spectrum
 
 def smooth_spectrum():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Smoothing spectrum (resolution will be affected) --------------------------
     logging.info("Smoothing spectrum...")
     resolution = 80000
-    smoothed_sun_spectrum = ispec.convolve_spectrum(sun_spectrum, resolution)
-    return smoothed_sun_spectrum
-
+    smoothed_star_spectrum = ispec.convolve_spectrum(star_spectrum, resolution)
+    return smoothed_star_spectrum
 
 def resample_spectrum():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Resampling  --------------------------------------------------------------
     logging.info("Resampling...")
-    wavelengths = np.arange(480.0, 670.0, 0.001)
-    resampled_sun_spectrum = ispec.resample_spectrum(sun_spectrum, wavelengths, method="bessel", zero_edges=True)
-    #resampled_sun_spectrum = ispec.resample_spectrum(sun_spectrum, wavelengths, method="linear", zero_edges=True)
-    return resampled_sun_spectrum
-
+    wavelengths = np.arange(470.0, 680.0, 0.001)
+    resampled_star_spectrum = ispec.resample_spectrum(star_spectrum, wavelengths, method="bessel", zero_edges=True)
+    #resampled_star_spectrum = ispec.resample_spectrum(star_spectrum, wavelengths, method="linear", zero_edges=True)
+    return resampled_star_spectrum
 
 def coadd_spectra():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    # WARNING: This example co-adds spectra from different stars, in a real life situation
+    #          the logical thing is to co-add spectra from the same star/instrument
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_muCas.txt.gz")
     #--- Resampling and combining --------------------------------------------------
     logging.info("Resampling and comibining...")
-    wavelengths = np.arange(480.0, 670.0, 0.001)
-    resampled_sun_spectrum = ispec.resample_spectrum(sun_spectrum, wavelengths, zero_edges=True)
+    wavelengths = np.arange(470.0, 680.0, 0.001)
+    resampled_star_spectrum = ispec.resample_spectrum(star_spectrum, wavelengths, zero_edges=True)
     resampled_mu_cas_spectrum = ispec.resample_spectrum(mu_cas_spectrum, wavelengths, zero_edges=True)
     # Coadd previously resampled spectra
-    coadded_spectrum = ispec.create_spectrum_structure(resampled_sun_spectrum['waveobs'])
-    coadded_spectrum['flux'] = resampled_sun_spectrum['flux'] + resampled_mu_cas_spectrum['flux']
-    coadded_spectrum['err'] = np.sqrt(np.power(resampled_sun_spectrum['err'],2) + \
+    coadded_spectrum = ispec.create_spectrum_structure(resampled_star_spectrum['waveobs'])
+    coadded_spectrum['flux'] = resampled_star_spectrum['flux'] + resampled_mu_cas_spectrum['flux']
+    coadded_spectrum['err'] = np.sqrt(np.power(resampled_star_spectrum['err'],2) + \
                                     np.power(resampled_mu_cas_spectrum['err'],2))
     return coadded_spectrum
 
 
 def merge_spectra():
+    # WARNING: This example merges spectra from different stars, in a real life situation
+    #          the logical thing is to merge spectra from the same star/instrument
+    #          and different wavelength ranges
     #--- Mergin spectra ------------------------------------------------------------
     logging.info("Mergin spectra...")
     left_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -240,21 +239,21 @@ def normalize_spectrum_using_continuum_regions():
     """
     Consider only continuum regions for the fit, strategy 'median+max'
     """
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
 
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
-    nknots = None # Automatic: 1 spline every 1 nm
+    nknots = None # Automatic: 1 spline every 5 nm
     from_resolution = 80000
 
     # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
     order='median+max'
-    median_wave_range=0.01
+    median_wave_range=0.05
     max_wave_range=1.0
 
     continuum_regions = ispec.read_continuum_regions(ispec_dir + "/input/regions/fe_lines_continuum.txt")
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
                             continuum_regions=continuum_regions, nknots=nknots, degree=degree, \
                             median_wave_range=median_wave_range, \
                             max_wave_range=max_wave_range, \
@@ -265,17 +264,17 @@ def normalize_spectrum_using_continuum_regions():
 
     #--- Continuum normalization ---------------------------------------------------
     logging.info("Continuum normalization...")
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
+    normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
-    return normalized_sun_spectrum, sun_continuum_model
+    star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
+    return normalized_star_spectrum, star_continuum_model
 
 
 def normalize_spectrum_in_segments():
     """
     Fit continuum in each segment independently, strategy 'median+max'
     """
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
 
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -285,11 +284,11 @@ def normalize_spectrum_in_segments():
 
     # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
     order='median+max'
-    median_wave_range=0.01
+    median_wave_range=0.05
     max_wave_range=1.0
 
     segments = ispec.read_segment_regions(ispec_dir + "/input/regions/fe_lines_segments.txt")
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
                             independent_regions=segments, nknots=nknots, degree=degree,\
                             median_wave_range=median_wave_range, \
                             max_wave_range=max_wave_range, \
@@ -300,64 +299,60 @@ def normalize_spectrum_in_segments():
 
     #--- Continuum normalization ---------------------------------------------------
     logging.info("Continuum normalization...")
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
+    normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
-    return normalized_sun_spectrum, sun_continuum_model
+    star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
+    return normalized_star_spectrum, star_continuum_model
 
-
-def normalize_whole_spectrum_strategy2():
+def normalize_whole_spectrum_with_template():
     """
-    Use the whole spectrum, strategy 'max+median'
+    Use a template to normalize the whole spectrum
     """
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    synth_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
 
     #--- Continuum fit -------------------------------------------------------------
-    model = "Splines" # "Polynomy"
-    degree = 2
-    nknots = None # Automatic: 1 spline every 1 nm
+    model = "Template"
+    nknots = None # Automatic: 1 spline every 5 nm
     from_resolution = 80000
+    median_wave_range=0.05
 
-    # Strategy: Filter first MAXIMUM values and secondly medians in order to find the continuum
-    order='max+median'
-    median_wave_range=3.0
-    max_wave_range=0.5
-
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
-                                nknots=nknots, degree=degree, \
+    #strong_lines = ispec.read_line_regions(ispec_dir + "/input/regions/strong_lines/absorption_lines.txt")
+    strong_lines = ispec.read_line_regions(ispec_dir + "/input/regions/relevant/relevant_line_masks.txt")
+    #strong_lines = None
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
+                                ignore=strong_lines, \
+                                nknots=nknots, \
                                 median_wave_range=median_wave_range, \
-                                max_wave_range=max_wave_range, \
-                                model=model, order=order, \
+                                model=model, \
                                 automatic_strong_line_detection=True, \
-                                strong_line_probability=0.5, \
-                                use_errors_for_fitting=True)
+                                template=synth_spectrum)
 
     #--- Continuum normalization ---------------------------------------------------
     logging.info("Continuum normalization...")
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
+    normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
-    return normalized_sun_spectrum, sun_continuum_model
+    star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
+    return normalized_star_spectrum, star_continuum_model
 
-
-def normalize_whole_spectrum_strategy1():
+def normalize_whole_spectrum():
     """
     Use the whole spectrum, strategy 'median+max'
     """
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
 
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
-    nknots = None # Automatic: 1 spline every 1 nm
+    nknots = None # Automatic: 1 spline every 5 nm
     from_resolution = 80000
 
     # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
     order='median+max'
-    median_wave_range=0.01
+    median_wave_range=0.05
     max_wave_range=1.0
 
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
@@ -368,31 +363,31 @@ def normalize_whole_spectrum_strategy1():
 
     #--- Continuum normalization ---------------------------------------------------
     logging.info("Continuum normalization...")
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
+    normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
-    return normalized_sun_spectrum, sun_continuum_model
+    star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
+    return normalized_star_spectrum, star_continuum_model
 
 
-def normalize_whole_spectrum_strategy1_ignoring_prefixed_strong_lines():
+def normalize_whole_spectrum_ignoring_prefixed_strong_lines():
     """
     Use the whole spectrum but ignoring some strong lines, strategy 'median+max'
     """
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
 
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
-    nknots = None # Automatic: 1 spline every 1 nm
+    nknots = None # Automatic: 1 spline every 5 nm
     from_resolution = 80000
 
     # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
     order='median+max'
-    median_wave_range=0.01
+    median_wave_range=0.05
     max_wave_range=1.0
 
     strong_lines = ispec.read_line_regions(ispec_dir + "/input/regions/strong_lines/absorption_lines.txt")
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
                                 ignore=strong_lines, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
@@ -404,26 +399,26 @@ def normalize_whole_spectrum_strategy1_ignoring_prefixed_strong_lines():
 
     #--- Continuum normalization ---------------------------------------------------
     logging.info("Continuum normalization...")
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
+    normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
-    return normalized_sun_spectrum, sun_continuum_model
+    star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
+    return normalized_star_spectrum, star_continuum_model
 
 
 def filter_cosmic_rays():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
-    nknots = None # Automatic: 1 spline every 1 nm
+    nknots = None # Automatic: 1 spline every 5 nm
     from_resolution = 80000
 
     # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
     order='median+max'
-    median_wave_range=0.01
+    median_wave_range=0.05
     max_wave_range=1.0
 
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
@@ -433,27 +428,27 @@ def filter_cosmic_rays():
                                 use_errors_for_fitting=True)
     #--- Filtering cosmic rays -----------------------------------------------------
     # Spectrum should be already normalized
-    cosmics = ispec.create_filter_cosmic_rays(sun_spectrum, sun_continuum_model, \
+    cosmics = ispec.create_filter_cosmic_rays(star_spectrum, star_continuum_model, \
                                             resampling_wave_step=0.001, window_size=15, \
                                             variation_limit=0.01)
-    clean_sun_spectrum = sun_spectrum[~cosmics]
-    return clean_sun_spectrum
+    clean_star_spectrum = star_spectrum[~cosmics]
+    return clean_star_spectrum
 
 
 def find_continuum_regions():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
-    nknots = None # Automatic: 1 spline every 1 nm
+    nknots = None # Automatic: 1 spline every 5 nm
     from_resolution = 80000
 
     # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
     order='median+max'
-    median_wave_range=0.01
+    median_wave_range=0.05
     max_wave_range=1.0
 
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
@@ -467,28 +462,28 @@ def find_continuum_regions():
     sigma = 0.001
     max_continuum_diff = 1.0
     fixed_wave_step = 0.05
-    sun_continuum_regions = ispec.find_continuum(sun_spectrum, resolution, \
+    star_continuum_regions = ispec.find_continuum(star_spectrum, resolution, \
                                         max_std_continuum = sigma, \
-                                        continuum_model = sun_continuum_model, \
+                                        continuum_model = star_continuum_model, \
                                         max_continuum_diff=max_continuum_diff, \
                                         fixed_wave_step=fixed_wave_step)
-    ispec.write_continuum_regions(sun_continuum_regions, "example_sun_fe_lines_continuum.txt")
+    ispec.write_continuum_regions(star_continuum_regions, "example_star_fe_lines_continuum.txt")
 
 
 def find_continuum_regions_in_segments():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
-    nknots = None # Automatic: 1 spline every 1 nm
+    nknots = None # Automatic: 1 spline every 5 nm
     from_resolution = 80000
 
     # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
     order='median+max'
-    median_wave_range=0.01
+    median_wave_range=0.05
     max_wave_range=1.0
 
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
@@ -504,29 +499,63 @@ def find_continuum_regions_in_segments():
     fixed_wave_step = 0.05
     # Limit the search to given segments
     segments = ispec.read_segment_regions(ispec_dir + "/input/regions/fe_lines_segments.txt")
-    limited_sun_continuum_regions = ispec.find_continuum(sun_spectrum, resolution, \
+    limited_star_continuum_regions = ispec.find_continuum(star_spectrum, resolution, \
                                             segments=segments, max_std_continuum = sigma, \
-                                            continuum_model = sun_continuum_model, \
+                                            continuum_model = star_continuum_model, \
                                             max_continuum_diff=max_continuum_diff, \
                                             fixed_wave_step=fixed_wave_step)
-    ispec.write_continuum_regions(limited_sun_continuum_regions, \
-            "example_limited_sun_continuum_region.txt")
+    ispec.write_continuum_regions(limited_star_continuum_regions, \
+            "example_limited_star_continuum_region.txt")
 
 
 def find_linemasks(code = "spectrum"):
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    #--- Radial Velocity determination with template -------------------------------
+    logging.info("Radial velocity determination with template...")
+    # - Read synthetic template
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
+    template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+
+    models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
+                            lower_velocity_limit=-200, upper_velocity_limit=200, \
+                            velocity_step=1.0, fourier=False)
+
+    # Number of models represent the number of components
+    components = len(models)
+    # First component:
+    rv = np.round(models[0].mu(), 2) # km/s
+    rv_err = np.round(models[0].emu(), 2) # km/s
+    #--- Radial Velocity correction ------------------------------------------------
+    logging.info("Radial velocity correction... %.2f +/- %.2f" % (rv, rv_err))
+    star_spectrum = ispec.correct_velocity(star_spectrum, rv)
+    #--- Telluric velocity shift determination from spectrum --------------------------
+    logging.info("Telluric velocity shift determination...")
+    # - Telluric
+    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
+    telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
+
+    models, ccf = ispec.cross_correlate_with_mask(star_spectrum, telluric_linelist, \
+                            lower_velocity_limit=-100, upper_velocity_limit=100, \
+                            velocity_step=0.5, mask_depth=0.01, \
+                            fourier = False,
+                            only_one_peak = True)
+
+    vel_telluric = np.round(models[0].mu(), 2) # km/s
+    vel_telluric_err = np.round(models[0].emu(), 2) # km/s
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
-    nknots = None # Automatic: 1 spline every 1 nm
+    nknots = None # Automatic: 1 spline every 5 nm
     from_resolution = 80000
 
     # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
     order='median+max'
-    median_wave_range=0.01
+    median_wave_range=0.05
     max_wave_range=1.0
 
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
@@ -537,56 +566,60 @@ def find_linemasks(code = "spectrum"):
     #--- Find linemasks ------------------------------------------------------------
     logging.info("Finding line masks...")
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
     telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
 
     # Read
-    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(sun_spectrum['waveobs']), wave_top=np.max(sun_spectrum['waveobs']))
-    telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
+    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(star_spectrum['waveobs']), wave_top=np.max(star_spectrum['waveobs']))
+    atomic_linelist = atomic_linelist[atomic_linelist['theoretical_depth'] >= 0.01] # Select lines that have some minimal contribution in the sun
+    #telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
+    #vel_telluric = 17.79  # km/s
+    #telluric_linelist = None
+    #vel_telluric = None
 
     resolution = 80000
-    smoothed_sun_spectrum = ispec.convolve_spectrum(sun_spectrum, resolution)
+    smoothed_star_spectrum = ispec.convolve_spectrum(star_spectrum, resolution)
     min_depth = 0.05
     max_depth = 1.00
-    vel_telluric = 17.79  # km/s
-    sun_linemasks = ispec.find_linemasks(sun_spectrum, sun_continuum_model, \
+    star_linemasks = ispec.find_linemasks(star_spectrum, star_continuum_model, \
                             atomic_linelist=atomic_linelist, \
                             max_atomic_wave_diff = 0.005, \
                             telluric_linelist=telluric_linelist, \
                             vel_telluric=vel_telluric, \
                             minimum_depth=min_depth, maximum_depth=max_depth, \
-                            smoothed_spectrum=smoothed_sun_spectrum, \
+                            smoothed_spectrum=smoothed_star_spectrum, \
                             check_derivatives=False, \
                             discard_gaussian=False, discard_voigt=True )
     # Exclude lines that have not been successfully cross matched with the atomic data
     # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
-    rejected_by_atomic_line_not_found = (sun_linemasks['wave_nm'] == 0)
-    sun_linemasks = sun_linemasks[~rejected_by_atomic_line_not_found]
+    rejected_by_atomic_line_not_found = (star_linemasks['wave_nm'] == 0)
+    star_linemasks = star_linemasks[~rejected_by_atomic_line_not_found]
 
     # Exclude lines with EW equal to zero
-    rejected_by_zero_ew = (sun_linemasks['ew'] == 0)
-    sun_linemasks = sun_linemasks[~rejected_by_zero_ew]
+    rejected_by_zero_ew = (star_linemasks['ew'] == 0)
+    star_linemasks = star_linemasks[~rejected_by_zero_ew]
 
     # Select only iron lines
-    iron = sun_linemasks['element'] == "Fe 1"
-    iron = np.logical_or(iron, sun_linemasks['element'] == "Fe 2")
-    iron_sun_linemasks = sun_linemasks[iron]
+    iron = star_linemasks['element'] == "Fe 1"
+    iron = np.logical_or(iron, star_linemasks['element'] == "Fe 2")
+    iron_star_linemasks = star_linemasks[iron]
 
     # Write regions with only masks limits and note:
-    ispec.write_line_regions(sun_linemasks, "example_sun_linemasks.txt")
+    ispec.write_line_regions(star_linemasks, "example_star_linemasks.txt")
     # Write iron regions with only masks limits and note:
-    ispec.write_line_regions(iron_sun_linemasks, "example_sun_fe_linemasks.txt")
+    ispec.write_line_regions(iron_star_linemasks, "example_star_fe_linemasks.txt")
     # Write regions with masks limits, cross-matched atomic data and fit data
-    ispec.write_line_regions(sun_linemasks, "example_sun_fitted_linemasks.txt", extended=True)
-    recover_sun_linemasks = ispec.read_line_regions("example_sun_fitted_linemasks.txt")
+    ispec.write_line_regions(star_linemasks, "example_star_fitted_linemasks.txt", extended=True)
+    recover_star_linemasks = ispec.read_line_regions("example_star_fitted_linemasks.txt")
     # Write regions with masks limits and cross-matched atomic data (fit data fields are zeroed)
-    zeroed_sun_linemasks = ispec.reset_fitted_data_fields(sun_linemasks)
-    ispec.write_line_regions(zeroed_sun_linemasks, "example_sun_zeroed_fitted_linemasks.txt", extended=True)
+    zeroed_star_linemasks = ispec.reset_fitted_data_fields(star_linemasks)
+    ispec.write_line_regions(zeroed_star_linemasks, "example_star_zeroed_fitted_linemasks.txt", extended=True)
 
     # Write only atomic data for the selected regions:
-    ispec.write_atomic_linelist(sun_linemasks, "example_sun_atomic_linelist.txt")
+    ispec.write_atomic_linelist(star_linemasks, "example_star_atomic_linelist.txt")
 
 
 def calculate_barycentric_velocity():
@@ -615,23 +648,23 @@ def calculate_barycentric_velocity():
     return corrected_spectrum
 
 def estimate_snr_from_flux():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     ## WARNING: To compare SNR estimation between different spectra, they should
     ##          be homogeneously sampled (consider a uniform re-sampling)
     #--- Estimate SNR from flux ----------------------------------------------------
     logging.info("Estimating SNR from fluxes...")
     num_points = 10
-    estimated_snr = ispec.estimate_snr(sun_spectrum['flux'], num_points=num_points)
+    estimated_snr = ispec.estimate_snr(star_spectrum['flux'], num_points=num_points)
     return estimated_snr
 
 def estimate_snr_from_err():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Estimate SNR from errors --------------------------------------------------
     logging.info("Estimating SNR from errors...")
-    efilter = sun_spectrum['err'] > 0
-    filtered_sun_spectrum = sun_spectrum[efilter]
-    if len(filtered_sun_spectrum) > 1:
-        estimated_snr = np.median(filtered_sun_spectrum['flux'] / filtered_sun_spectrum['err'])
+    efilter = star_spectrum['err'] > 0
+    filtered_star_spectrum = star_spectrum[efilter]
+    if len(filtered_star_spectrum) > 1:
+        estimated_snr = np.median(filtered_star_spectrum['flux'] / filtered_star_spectrum['err'])
     else:
         # All the errors are set to zero and we cannot calculate SNR using them
         estimated_snr = 0
@@ -639,37 +672,37 @@ def estimate_snr_from_err():
 
 
 def estimate_errors_from_snr():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Calculate errors based on SNR ---------------------------------------------
     snr = 100
-    sun_spectrum['err'] = sun_spectrum['flux'] / snr
-    return sun_spectrum
+    star_spectrum['err'] = star_spectrum['flux'] / snr
+    return star_spectrum
 
 
 def clean_spectrum():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Clean fluxes and errors ---------------------------------------------------
     logging.info("Cleaning fluxes and errors...")
     flux_base = 0.0
     flux_top = 1.0
     err_base = 0.0
     err_top = 1.0
-    ffilter = (sun_spectrum['flux'] > flux_base) & (sun_spectrum['flux'] <= flux_top)
-    efilter = (sun_spectrum['err'] > err_base) & (sun_spectrum['err'] <= err_top)
+    ffilter = (star_spectrum['flux'] > flux_base) & (star_spectrum['flux'] <= flux_top)
+    efilter = (star_spectrum['err'] > err_base) & (star_spectrum['err'] <= err_top)
     wfilter = np.logical_and(ffilter, efilter)
-    clean_sun_spectrum = sun_spectrum[wfilter]
-    return clean_sun_spectrum
+    clean_star_spectrum = star_spectrum[wfilter]
+    return clean_star_spectrum
 
 
 def clean_telluric_regions():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Telluric velocity shift determination from spectrum --------------------------
     logging.info("Telluric velocity shift determination...")
     # - Telluric
     telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
-    linelist_telluric = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
+    telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
 
-    models, ccf = ispec.cross_correlate_with_mask(sun_spectrum, linelist_telluric, \
+    models, ccf = ispec.cross_correlate_with_mask(star_spectrum, telluric_linelist, \
                             lower_velocity_limit=-100, upper_velocity_limit=100, \
                             velocity_step=0.5, mask_depth=0.01, \
                             fourier = False,
@@ -690,20 +723,20 @@ def clean_telluric_regions():
     max_vel = +30.0
     # Only the 25% of the deepest ones:
     dfilter = telluric_linelist['depth'] > np.percentile(telluric_linelist['depth'], 75)
-    tfilter = ispec.create_filter_for_regions_affected_by_tellurics(sun_spectrum['waveobs'], \
+    tfilter = ispec.create_filter_for_regions_affected_by_tellurics(star_spectrum['waveobs'], \
                                 telluric_linelist[dfilter], min_velocity=-bv+min_vel, \
                                 max_velocity=-bv+max_vel)
-    clean_sun_spectrum = sun_spectrum[~tfilter]
-    return clean_sun_spectrum
+    clean_star_spectrum = star_spectrum[~tfilter]
+    return clean_star_spectrum
 
 
 def adjust_line_masks():
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Adjust line masks ---------------------------------------------------------
     resolution = 80000
-    smoothed_sun_spectrum = ispec.convolve_spectrum(sun_spectrum, resolution)
+    smoothed_star_spectrum = ispec.convolve_spectrum(star_spectrum, resolution)
     line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines.txt")
-    linemasks = ispec.adjust_linemasks(smoothed_sun_spectrum, line_regions, max_margin=0.5)
+    linemasks = ispec.adjust_linemasks(smoothed_star_spectrum, line_regions, max_margin=0.5)
     return linemasks
 
 def create_segments_around_linemasks():
@@ -712,20 +745,59 @@ def create_segments_around_linemasks():
     segments = ispec.create_segments_around_lines(line_regions, margin=0.25)
     return segments
 
-def fit_lines_and_determine_ew(use_ares=False):
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+def fit_lines_determine_ew_and_crossmatch_with_atomic_data(use_ares=False):
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    #--- Radial Velocity determination with template -------------------------------
+    logging.info("Radial velocity determination with template...")
+    # - Read synthetic template
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
+    template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+
+    models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
+                            lower_velocity_limit=-200, upper_velocity_limit=200, \
+                            velocity_step=1.0, fourier=False)
+
+    # Number of models represent the number of components
+    components = len(models)
+    # First component:
+    rv = np.round(models[0].mu(), 2) # km/s
+    rv_err = np.round(models[0].emu(), 2) # km/s
+    #--- Radial Velocity correction ------------------------------------------------
+    logging.info("Radial velocity correction... %.2f +/- %.2f" % (rv, rv_err))
+    star_spectrum = ispec.correct_velocity(star_spectrum, rv)
+    #--- Telluric velocity shift determination from spectrum --------------------------
+    logging.info("Telluric velocity shift determination...")
+    # - Telluric
+    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
+    telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
+
+    models, ccf = ispec.cross_correlate_with_mask(star_spectrum, telluric_linelist, \
+                            lower_velocity_limit=-100, upper_velocity_limit=100, \
+                            velocity_step=0.5, mask_depth=0.01, \
+                            fourier = False,
+                            only_one_peak = True)
+
+    vel_telluric = np.round(models[0].mu(), 2) # km/s
+    vel_telluric_err = np.round(models[0].emu(), 2) # km/s
+    #--- Resolution degradation ----------------------------------------------------
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and VALD atomic linelist.
+    from_resolution = 80000
+    to_resolution = 47000
+    star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
-    nknots = None # Automatic: 1 spline every 1 nm
+    nknots = None # Automatic: 1 spline every 5 nm
     from_resolution = 80000
 
     # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
     order='median+max'
-    median_wave_range=0.01
+    median_wave_range=0.05
     max_wave_range=1.0
 
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
@@ -734,27 +806,33 @@ def fit_lines_and_determine_ew(use_ares=False):
                                 strong_line_probability=0.5, \
                                 use_errors_for_fitting=True)
     #--- Normalize -------------------------------------------------------------
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
+    normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
+    star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
     #--- Fit lines -----------------------------------------------------------------
     logging.info("Fitting lines...")
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
-    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
 
     # Read
-    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(sun_spectrum['waveobs']), wave_top=np.max(sun_spectrum['waveobs']))
-    telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
+    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(star_spectrum['waveobs']), wave_top=np.max(star_spectrum['waveobs']))
+    atomic_linelist = atomic_linelist[atomic_linelist['theoretical_depth'] >= 0.01] # Select lines that have some minimal contribution in the sun
 
+    #telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
+    #telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
+    #vel_telluric = 17.79 # km/s
+    #telluric_linelist = None
+    #vel_telluric = None
 
-    vel_telluric = 17.79 # km/s
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines.txt")
-    line_regions = ispec.adjust_linemasks(normalized_sun_spectrum, line_regions, max_margin=0.5)
-    # Spectrum should be already radial velocity corrected
-    linemasks = ispec.fit_lines(line_regions, normalized_sun_spectrum, sun_continuum_model, \
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/moog_ew_ispec_width_ew_ispec.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
+
+    line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
+
+    linemasks = ispec.fit_lines(line_regions, normalized_star_spectrum, star_continuum_model, \
                                 atomic_linelist = atomic_linelist, \
                                 #max_atomic_wave_diff = 0.005, \
                                 max_atomic_wave_diff = 0.00, \
@@ -786,11 +864,10 @@ def fit_lines_and_determine_ew(use_ares=False):
         ### Different rejection parameters (check ARES papers):
         ##   - http://adsabs.harvard.edu/abs/2007A%26A...469..783S
         ##   - http://adsabs.harvard.edu/abs/2015A%26A...577A..67S
-        #linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="0.995", tmp_dir=None, verbose=0)
-        #linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="3;5764,5766,6047,6052,6068,6076", tmp_dir=None, verbose=0)
+        #linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="0.995", tmp_dir=None, verbose=0)
+        #linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="3;5764,5766,6047,6052,6068,6076", tmp_dir=None, verbose=0)
         snr = 50
-        linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="%s" % (snr), tmp_dir=None, verbose=0)
-
+        linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="%s" % (snr), tmp_dir=None, verbose=0)
 
     ew = linemasks['ew']
     ew_err = linemasks['ew_err']
@@ -799,6 +876,123 @@ def fit_lines_and_determine_ew(use_ares=False):
     ispec.write_line_regions(linemasks, "example_fitted_atomic_linemask.txt", extended=True)
 
     return linemasks, ew, ew_err
+
+def fit_lines_already_crossmatched_with_atomic_data_and_determine_ew(use_ares=False):
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    #--- Radial Velocity determination with template -------------------------------
+    logging.info("Radial velocity determination with template...")
+    # - Read synthetic template
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
+    template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+
+    models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
+                            lower_velocity_limit=-200, upper_velocity_limit=200, \
+                            velocity_step=1.0, fourier=False)
+
+    # Number of models represent the number of components
+    components = len(models)
+    # First component:
+    rv = np.round(models[0].mu(), 2) # km/s
+    rv_err = np.round(models[0].emu(), 2) # km/s
+    #--- Radial Velocity correction ------------------------------------------------
+    logging.info("Radial velocity correction... %.2f +/- %.2f" % (rv, rv_err))
+    star_spectrum = ispec.correct_velocity(star_spectrum, rv)
+    #--- Telluric velocity shift determination from spectrum --------------------------
+    logging.info("Telluric velocity shift determination...")
+    # - Telluric
+    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
+    telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
+
+    models, ccf = ispec.cross_correlate_with_mask(star_spectrum, telluric_linelist, \
+                            lower_velocity_limit=-100, upper_velocity_limit=100, \
+                            velocity_step=0.5, mask_depth=0.01, \
+                            fourier = False,
+                            only_one_peak = True)
+
+    vel_telluric = np.round(models[0].mu(), 2) # km/s
+    vel_telluric_err = np.round(models[0].emu(), 2) # km/s
+    #--- Resolution degradation ----------------------------------------------------
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and VALD atomic linelist.
+    from_resolution = 80000
+    to_resolution = 47000
+    star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
+    #--- Continuum fit -------------------------------------------------------------
+    model = "Splines" # "Polynomy"
+    degree = 2
+    nknots = None # Automatic: 1 spline every 5 nm
+    from_resolution = to_resolution
+
+    # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
+    order='median+max'
+    median_wave_range=0.05
+    max_wave_range=1.0
+
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
+                                nknots=nknots, degree=degree, \
+                                median_wave_range=median_wave_range, \
+                                max_wave_range=max_wave_range, \
+                                model=model, order=order, \
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5, \
+                                use_errors_for_fitting=True)
+    #--- Normalize -------------------------------------------------------------
+    normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
+    # Use a fixed value because the spectrum is already normalized
+    star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
+
+    #--- Read lines with atomic data ------------------------------------------------
+    line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/custom/moog_ew_ispec_width_ew_ispec_extended.txt")
+    #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_extended.txt")
+
+    smoothed_star_spectrum = ispec.convolve_spectrum(star_spectrum, 2*to_resolution)
+    line_regions_with_atomic_data = ispec.adjust_linemasks(smoothed_star_spectrum, line_regions_with_atomic_data, max_margin=0.5)
+
+    #telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
+    #telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
+    #vel_telluric = 17.79 # km/s
+    #telluric_linelist = None
+    #vel_telluric = None
+
+    #--- Fit the lines but do NOT cross-match with any atomic linelist since they already have that information
+    linemasks = ispec.fit_lines(line_regions_with_atomic_data, normalized_star_spectrum, star_continuum_model, \
+                                atomic_linelist = None, \
+                                max_atomic_wave_diff = 0.005, \
+                                telluric_linelist = telluric_linelist, \
+                                check_derivatives = False, \
+                                vel_telluric = vel_telluric, discard_gaussian=False, \
+                                smoothed_spectrum=None, \
+                                discard_voigt=True, \
+                                free_mu=True, crossmatch_with_mu=False, closest_match=True)
+
+    # Discard bad masks
+    flux_peak = normalized_star_spectrum['flux'][linemasks['peak']]
+    flux_base = normalized_star_spectrum['flux'][linemasks['base']]
+    flux_top = normalized_star_spectrum['flux'][linemasks['top']]
+    bad_mask = np.logical_or(linemasks['wave_peak'] <= linemasks['wave_base'], linemasks['wave_peak'] >= linemasks['wave_top'])
+    bad_mask = np.logical_or(bad_mask, flux_peak >= flux_base)
+    bad_mask = np.logical_or(bad_mask, flux_peak >= flux_top)
+    linemasks = linemasks[~bad_mask]
+
+    # Exclude lines with EW equal to zero
+    rejected_by_zero_ew = (linemasks['ew'] == 0)
+    linemasks = linemasks[~rejected_by_zero_ew]
+
+    # Exclude lines that may be affected by tellurics
+    rejected_by_telluric_line = (linemasks['telluric_wave_peak'] != 0)
+    linemasks = linemasks[~rejected_by_telluric_line]
+
+    if use_ares:
+        # Replace the measured equivalent widths by the ones computed by ARES
+        old_linemasks = linemasks.copy()
+        ### Different rejection parameters (check ARES papers):
+        ##   - http://adsabs.harvard.edu/abs/2007A%26A...469..783S
+        ##   - http://adsabs.harvard.edu/abs/2015A%26A...577A..67S
+        #linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="0.995", tmp_dir=None, verbose=0)
+        #linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="3;5764,5766,6047,6052,6068,6076", tmp_dir=None, verbose=0)
+        snr = 50
+        linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="%s" % (snr), tmp_dir=None, verbose=0)
 
 
 def synthesize_spectrum(code="spectrum"):
@@ -831,6 +1025,7 @@ def synthesize_spectrum(code="spectrum"):
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
@@ -838,6 +1033,7 @@ def synthesize_spectrum(code="spectrum"):
 
     # Load chemical information and linelist
     atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=wave_base, wave_top=wave_top)
+    atomic_linelist = atomic_linelist[atomic_linelist['theoretical_depth'] >= 0.01] # Select lines that have some minimal contribution in the sun
 
     isotopes = ispec.read_isotope_data(isotope_file)
 
@@ -876,7 +1072,7 @@ def synthesize_spectrum(code="spectrum"):
             code=code)
     ##--- Save spectrum ------------------------------------------------------------
     logging.info("Saving spectrum...")
-    synth_filename = "example_synth_%s.s" % (code)
+    synth_filename = "example_synth_%s.fits" % (code)
     ispec.write_spectrum(synth_spectrum, synth_filename)
     return synth_spectrum
 
@@ -885,22 +1081,22 @@ def add_noise_to_spectrum():
     """
     Add noise to an spectrum (ideally to a synthetic one) based on a given SNR.
     """
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Adding poisson noise -----------------------------------------------------
     snr = 100
     distribution = "poisson" # "gaussian"
-    noisy_sun_spectrum = ispec.add_noise(sun_spectrum, snr, distribution)
-    return noisy_sun_spectrum
+    noisy_star_spectrum = ispec.add_noise(star_spectrum, snr, distribution)
+    return noisy_star_spectrum
 
 def generate_new_random_realizations_from_spectrum():
     """
     Considering fluxes as mean values and errors as standard deviation, generate
     N new random spectra.
     """
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
 
     number = 10
-    spectra = ispec.random_realizations(sun_spectrum, number, distribution="poisson")
+    spectra = ispec.random_realizations(star_spectrum, number, distribution="poisson")
     return spectra
 
 def precompute_synthetic_grid(code="spectrum"):
@@ -919,8 +1115,8 @@ def precompute_synthetic_grid(code="spectrum"):
     ranges['MH'][1] = 0.0
 
     # Wavelengths
-    initial_wave = 480.0
-    final_wave = 670.0
+    initial_wave = 470.0
+    final_wave = 680.0
     step_wave = 0.001
     wavelengths = np.arange(initial_wave, final_wave, step_wave)
 
@@ -938,6 +1134,7 @@ def precompute_synthetic_grid(code="spectrum"):
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
@@ -945,6 +1142,7 @@ def precompute_synthetic_grid(code="spectrum"):
 
     # Load chemical information and linelist
     atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=initial_wave, wave_top=final_wave)
+    atomic_linelist = atomic_linelist[atomic_linelist['theoretical_depth'] >= 0.01] # Select lines that have some minimal contribution in the sun
 
     isotopes = ispec.read_isotope_data(isotope_file)
 
@@ -968,19 +1166,44 @@ def precompute_synthetic_grid(code="spectrum"):
 
 
 def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    #--- Radial Velocity determination with template -------------------------------
+    logging.info("Radial velocity determination with template...")
+    # - Read synthetic template
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
+    template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+
+    models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
+                            lower_velocity_limit=-200, upper_velocity_limit=200, \
+                            velocity_step=1.0, fourier=False)
+
+    # Number of models represent the number of components
+    components = len(models)
+    # First component:
+    rv = np.round(models[0].mu(), 2) # km/s
+    rv_err = np.round(models[0].emu(), 2) # km/s
+    #--- Radial Velocity correction ------------------------------------------------
+    logging.info("Radial velocity correction... %.2f +/- %.2f" % (rv, rv_err))
+    star_spectrum = ispec.correct_velocity(star_spectrum, rv)
+    #--- Resolution degradation ----------------------------------------------------
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and VALD atomic linelist.
+    from_resolution = 80000
+    to_resolution = 47000
+    star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
-    nknots = None # Automatic: 1 spline every 1 nm
-    from_resolution = 80000
+    nknots = None # Automatic: 1 spline every 5 nm
+    from_resolution = to_resolution
 
     # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
     order='median+max'
-    median_wave_range=0.01
+    median_wave_range=0.05
     max_wave_range=1.0
 
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
@@ -989,10 +1212,9 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
                                 strong_line_probability=0.5, \
                                 use_errors_for_fitting=True)
     #--- Normalize -------------------------------------------------------------
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
-    #normalized_sun_spectrum['flux'] *= 0.99
+    normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
+    star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
     #--- Model spectra ----------------------------------------------------------
     # Parameters
     initial_teff = 5750.0
@@ -1000,10 +1222,9 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     initial_MH = 0.00
     initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
     initial_vmac = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH)
-    #initial_vsini = 2.0
     initial_vsini = 0.0
     initial_limb_darkening_coeff = 0.0
-    initial_R = 80000
+    initial_R = to_resolution
     max_iterations = 6
 
     # Selected model amtosphere, linelist and solar abundances
@@ -1016,6 +1237,7 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
@@ -1028,7 +1250,8 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
 
     # Load chemical information and linelist
-    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(sun_spectrum['waveobs']), wave_top=np.max(sun_spectrum['waveobs']))
+    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(star_spectrum['waveobs']), wave_top=np.max(star_spectrum['waveobs']))
+    atomic_linelist = atomic_linelist[atomic_linelist['theoretical_depth'] >= 0.01] # Select lines that have some minimal contribution in the sun
 
     isotopes = ispec.read_isotope_data(isotope_file)
 
@@ -1041,15 +1264,16 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
 
     # Free parameters
     #free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "limb_darkening_coeff"]
-    free_params = ["teff", "logg", "MH", "vmic", "vmac"]
+    free_params = ["teff", "logg", "MH", "vmic", "R"]
 
     # Free individual element abundance
     free_abundances = None
 
-    # Fe 1/2 regions
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines.txt")
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_golden_lines.txt")
-    line_regions = ispec.adjust_linemasks(normalized_sun_spectrum, line_regions, max_margin=0.5)
+    # Line regions
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
+    # Select only some lines to speed up the execution (in a real analysis is better not to do this)
+    line_regions = line_regions[np.logical_or(line_regions['note'] == 'Ti 1', line_regions['note'] == 'Ti 2')]
+    line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
     # Read segments if we have them or...
     #segments = ispec.read_segment_regions(ispec_dir + "/input/regions/fe_lines_segments.txt")
     # ... or we can create the segments on the fly:
@@ -1073,13 +1297,15 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     #segments = np.hstack((segments, mgtriplet_segments))
 
     obs_spec, modeled_synth_spectrum, params, errors, abundances_found, status, stats_linemasks = \
-            ispec.model_spectrum(normalized_sun_spectrum, sun_continuum_model, \
+            ispec.model_spectrum(normalized_star_spectrum, star_continuum_model, \
             modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, initial_teff, \
             initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
             initial_limb_darkening_coeff, initial_R, free_params, segments=segments, \
             linemasks=line_regions, \
-            enhance_abundances=False, \
+            enhance_abundances=True, \
             use_errors = True, \
+            vmic_from_empirical_relation = False, \
+            vmac_from_empirical_relation = True, \
             max_iterations=max_iterations, \
             tmp_dir = None, \
             code=code)
@@ -1092,7 +1318,7 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     params, errors, abundances_found, status, stats_linemasks = ispec.restore_results(dump_file)
 
     logging.info("Saving synthetic spectrum...")
-    synth_filename = "example_modeled_synth_%s.s" % (code)
+    synth_filename = "example_modeled_synth_%s.fits" % (code)
     ispec.write_spectrum(modeled_synth_spectrum, synth_filename)
 
     return obs_spec, modeled_synth_spectrum, params, errors, free_abundances, status, stats_linemasks
@@ -1105,20 +1331,46 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     ############################################################################
     precomputed_grid_dir = "example_grid_%s/" % (code)
 
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    #--- Radial Velocity determination with template -------------------------------
+    logging.info("Radial velocity determination with template...")
+    # - Read synthetic template
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
+    template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+
+    models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
+                            lower_velocity_limit=-200, upper_velocity_limit=200, \
+                            velocity_step=1.0, fourier=False)
+
+    # Number of models represent the number of components
+    components = len(models)
+    # First component:
+    rv = np.round(models[0].mu(), 2) # km/s
+    rv_err = np.round(models[0].emu(), 2) # km/s
+    #--- Radial Velocity correction ------------------------------------------------
+    logging.info("Radial velocity correction... %.2f +/- %.2f" % (rv, rv_err))
+    star_spectrum = ispec.correct_velocity(star_spectrum, rv)
+
+    #--- Resolution degradation ----------------------------------------------------
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and VALD atomic linelist.
+    from_resolution = 80000
+    to_resolution = 47000
+    star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
 
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
-    nknots = None # Automatic: 1 spline every 1 nm
-    from_resolution = 80000
+    nknots = None # Automatic: 1 spline every 5 nm
+    from_resolution = to_resolution
 
     # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
     order='median+max'
-    median_wave_range=0.01
+    median_wave_range=0.05
     max_wave_range=1.0
 
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
@@ -1127,13 +1379,13 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
                                 strong_line_probability=0.5, \
                                 use_errors_for_fitting=True)
     #--- Normalize -------------------------------------------------------------
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
+    normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
+    star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
 
     #--- Model spectra ----------------------------------------------------------
     # Parameters
-    initial_R = 80000
+    initial_R = to_resolution
     max_iterations = 6
 
     # Selected model amtosphere, linelist and solar abundances
@@ -1146,6 +1398,7 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
@@ -1158,7 +1411,8 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
 
     # Load chemical information and linelist
-    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(sun_spectrum['waveobs']), wave_top=np.max(sun_spectrum['waveobs']))
+    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(star_spectrum['waveobs']), wave_top=np.max(star_spectrum['waveobs']))
+    atomic_linelist = atomic_linelist[atomic_linelist['theoretical_depth'] >= 0.01] # Select lines that have some minimal contribution in the sun
 
     isotopes = ispec.read_isotope_data(isotope_file)
 
@@ -1171,14 +1425,16 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
 
     # Free parameters
     #free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "limb_darkening_coeff"]
-    free_params = ["teff", "logg", "MH", "vmic", "vmac"]
+    free_params = ["teff", "logg", "MH", "vmic", "R"]
 
     # Free individual element abundance
     free_abundances = None
 
-    # Fe 1/2 regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines.txt")
-    line_regions = ispec.adjust_linemasks(normalized_sun_spectrum, line_regions, max_margin=0.5)
+    # Line regions
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
+    # Select only some lines to speed up the execution (in a real analysis is better not to do this)
+    line_regions = line_regions[np.logical_or(line_regions['note'] == 'Ti 1', line_regions['note'] == 'Ti 2')]
+    line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
     # Read segments if we have them or...
     segments = ispec.read_segment_regions(ispec_dir + "/input/regions/fe_lines_segments.txt")
     # ... or we can create the segments on the fly:
@@ -1202,7 +1458,7 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     segments = np.hstack((segments, mgtriplet_segments))
 
     initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff = \
-            ispec.estimate_initial_ap(normalized_sun_spectrum, precomputed_grid_dir, initial_R, line_regions)
+            ispec.estimate_initial_ap(normalized_star_spectrum, precomputed_grid_dir, initial_R, line_regions)
     print "Initial estimation:", initial_teff, initial_logg, initial_MH, \
             initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff
 
@@ -1213,7 +1469,7 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     logger.setLevel(logging.getLevelName(LOG_LEVEL.upper()))
 
     obs_spec, modeled_synth_spectrum, params, errors, abundances_found, status, stats_linemasks = \
-            ispec.model_spectrum(normalized_sun_spectrum, sun_continuum_model, \
+            ispec.model_spectrum(normalized_star_spectrum, star_continuum_model, \
             modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, initial_teff, \
             initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
             initial_limb_darkening_coeff, initial_R, free_params, segments=segments, \
@@ -1221,6 +1477,8 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
             enhance_abundances=True, \
             precomputed_grid_dir = precomputed_grid_dir, \
             use_errors = True, \
+            vmic_from_empirical_relation = False, \
+            vmac_from_empirical_relation = True, \
             max_iterations=max_iterations, \
             tmp_dir = None, \
             code=code)
@@ -1240,7 +1498,7 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     params, errors, abundances_found, status, stats_linemasks = ispec.restore_results(dump_file)
 
     logging.info("Saving synthetic spectrum...")
-    synth_filename = "example_modeled_synth_precomputed_%s.s" % (code)
+    synth_filename = "example_modeled_synth_precomputed_%s.fits" % (code)
     ispec.write_spectrum(modeled_synth_spectrum, synth_filename)
     return obs_spec, modeled_synth_spectrum, params, errors, free_abundances, status, stats_linemasks
 
@@ -1248,19 +1506,46 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
 
 
 def determine_abundances_using_synth_spectra(code="spectrum"):
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    #--- Radial Velocity determination with template -------------------------------
+    logging.info("Radial velocity determination with template...")
+    # - Read synthetic template
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
+    template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+
+    models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
+                            lower_velocity_limit=-200, upper_velocity_limit=200, \
+                            velocity_step=1.0, fourier=False)
+
+    # Number of models represent the number of components
+    components = len(models)
+    # First component:
+    rv = np.round(models[0].mu(), 2) # km/s
+    rv_err = np.round(models[0].emu(), 2) # km/s
+    #--- Radial Velocity correction ------------------------------------------------
+    logging.info("Radial velocity correction... %.2f +/- %.2f" % (rv, rv_err))
+    star_spectrum = ispec.correct_velocity(star_spectrum, rv)
+
+    #--- Resolution degradation ----------------------------------------------------
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and VALD atomic linelist.
+    from_resolution = 80000
+    to_resolution = 47000
+    star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
+
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
-    nknots = None # Automatic: 1 spline every 1 nm
-    from_resolution = 80000
+    nknots = None # Automatic: 1 spline every 5 nm
+    from_resolution = to_resolution
 
     # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
     order='median+max'
-    median_wave_range=0.01
+    median_wave_range=0.05
     max_wave_range=1.0
 
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
@@ -1269,9 +1554,9 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
                                 strong_line_probability=0.5, \
                                 use_errors_for_fitting=True)
     #--- Normalize -------------------------------------------------------------
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
+    normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
+    star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
     #--- Model spectra ----------------------------------------------------------
     # Parameters
     initial_teff = 5777.0
@@ -1281,7 +1566,7 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     initial_vmac = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH)
     initial_vsini = 2.0
     initial_limb_darkening_coeff = 0.0
-    initial_R = 80000
+    initial_R = to_resolution
     max_iterations = 6
 
     # Selected model amtosphere, linelist and solar abundances
@@ -1294,6 +1579,7 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
@@ -1306,7 +1592,8 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
 
     # Load chemical information and linelist
-    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(sun_spectrum['waveobs']), wave_top=np.max(sun_spectrum['waveobs']))
+    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(star_spectrum['waveobs']), wave_top=np.max(star_spectrum['waveobs']))
+    atomic_linelist = atomic_linelist[atomic_linelist['theoretical_depth'] >= 0.01] # Select lines that have some minimal contribution in the sun
 
     isotopes = ispec.read_isotope_data(isotope_file)
 
@@ -1326,25 +1613,32 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     # Free individual element abundance (WARNING: it should be coherent with the selected line regions!)
     chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
     chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
-    free_abundances = ispec.create_free_abundances_structure(["Fe"], chemical_elements, solar_abundances)
 
-    # Fe 1/2 regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines.txt")
-    line_regions = ispec.adjust_linemasks(normalized_sun_spectrum, line_regions, max_margin=0.5)
+    element_name = "Ca"
+    free_abundances = ispec.create_free_abundances_structure([element_name], chemical_elements, solar_abundances)
+    free_abundances['Abund'] += initial_MH # Scale to metallicity
+
+    # Line regions
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
+    # Select only the lines to get abundances from
+    line_regions = line_regions[np.logical_or(line_regions['note'] == element_name+' 1', line_regions['note'] == element_name+' 2')]
+    line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
 
     # Read segments if we have them or...
-    segments = ispec.read_segment_regions(ispec_dir + "/input/regions/fe_lines_segments.txt")
+    #segments = ispec.read_segment_regions(ispec_dir + "/input/regions/fe_lines_segments.txt")
     # ... or we can create the segments on the fly:
-    #segments = ispec.create_segments_around_lines(line_regions, margin=0.25)
+    segments = ispec.create_segments_around_lines(line_regions, margin=0.25)
 
     obs_spec, modeled_synth_spectrum, params, errors, abundances_found, status, stats_linemasks = \
-            ispec.model_spectrum(normalized_sun_spectrum, sun_continuum_model, \
+            ispec.model_spectrum(normalized_star_spectrum, star_continuum_model, \
             modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, initial_teff, \
             initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
             initial_limb_darkening_coeff, initial_R, free_params, segments=segments, \
             linemasks=line_regions, \
             enhance_abundances=True, \
             use_errors = True, \
+            vmic_from_empirical_relation = False, \
+            vmac_from_empirical_relation = False, \
             max_iterations=max_iterations, \
             tmp_dir = None, \
             code=code)
@@ -1357,31 +1651,52 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     params, errors, abundances_found, status, stats_linemasks = ispec.restore_results(dump_file)
 
     logging.info("Saving synthetic spectrum...")
-    synth_filename = "example_modeled_synth_abundances_%s.s" % (code)
+    synth_filename = "example_modeled_synth_abundances_%s.fits" % (code)
     ispec.write_spectrum(modeled_synth_spectrum, synth_filename)
 
     return obs_spec, modeled_synth_spectrum, params, errors, free_abundances, status, stats_linemasks
 
+def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    #--- Radial Velocity determination with template -------------------------------
+    logging.info("Radial velocity determination with template...")
+    # - Read synthetic template
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
+    template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
 
-def determine_astrophysical_parameters_from_ew(code="spectrum", use_ares=False):
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
-    #--- Read lines and adjust them ------------------------------------------------
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines_biglist.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_golden_lines.txt")
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/GES/v5/atomic_lines_yy_fe.txt")
-    line_regions = ispec.adjust_linemasks(sun_spectrum, line_regions, max_margin=0.5)
+    models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
+                            lower_velocity_limit=-200, upper_velocity_limit=200, \
+                            velocity_step=1.0, fourier=False)
+
+    # Number of models represent the number of components
+    components = len(models)
+    # First component:
+    rv = np.round(models[0].mu(), 2) # km/s
+    rv_err = np.round(models[0].emu(), 2) # km/s
+    #--- Radial Velocity correction ------------------------------------------------
+    logging.info("Radial velocity correction... %.2f +/- %.2f" % (rv, rv_err))
+    star_spectrum = ispec.correct_velocity(star_spectrum, rv)
+
+    #--- Resolution degradation ----------------------------------------------------
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and VALD atomic linelist.
+    from_resolution = 80000
+    to_resolution = 47000
+    star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
+
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
-    nknots = None # Automatic: 1 spline every 1 nm
-    from_resolution = 80000
+    nknots = None # Automatic: 1 spline every 5 nm
+    from_resolution = to_resolution
 
     # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
     order='median+max'
-    median_wave_range=0.01
+    median_wave_range=0.05
     max_wave_range=1.0
 
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
@@ -1390,62 +1705,261 @@ def determine_astrophysical_parameters_from_ew(code="spectrum", use_ares=False):
                                 strong_line_probability=0.5, \
                                 use_errors_for_fitting=True)
     #--- Normalize -------------------------------------------------------------
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
+    normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
-    #--- Fit lines -----------------------------------------------------------------
-    logging.info("Fitting lines...")
+    star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
+    #--- Model spectra ----------------------------------------------------------
+    # Parameters
+    initial_teff = 5777.0
+    initial_logg = 4.43
+    initial_MH = 0.00
+    initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
+    initial_vmac = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH)
+    initial_vsini = 2.0
+    initial_limb_darkening_coeff = 0.0
+    initial_R = to_resolution
+    max_iterations = 6
+
+    # Selected model amtosphere, linelist and solar abundances
+    #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
+    model = ispec_dir + "/input/atmospheres/MARCS.GES/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
-    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
+    solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
+    #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
+    #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2009/stdatom.dat"
+    #solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
+    #solar_abundances_file = ispec_dir + "/input/abundances/Anders.1989/stdatom.dat"
+
+    isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
 
     # Load chemical information and linelist
-    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(sun_spectrum['waveobs']), wave_top=np.max(sun_spectrum['waveobs']))
-    telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
+    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(star_spectrum['waveobs']), wave_top=np.max(star_spectrum['waveobs']))
+    atomic_linelist = atomic_linelist[atomic_linelist['theoretical_depth'] >= 0.01] # Select lines that have some minimal contribution in the sun
 
-    # To reduce bad cross-matches, we reduce the linelist to those elements we are going to analyse
-    efilter = None
-    for element in np.unique(line_regions['note']):
-        if efilter is None:
-            efilter = atomic_linelist['element'] == element
+    isotopes = ispec.read_isotope_data(isotope_file)
+
+
+
+    # Load model atmospheres
+    modeled_layers_pack = ispec.load_modeled_layers_pack(model)
+
+    # Load SPECTRUM abundances
+    solar_abundances = ispec.read_solar_abundances(solar_abundances_file)
+
+
+    # Free parameters
+    #free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "limb_darkening_coeff"]
+    free_params = []
+
+    # Free individual element abundance (WARNING: it should be coherent with the selected line regions!)
+    chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
+    chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
+
+    # Line regions
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
+    # Select only the lines to get abundances from
+    line_regions = line_regions[:5]
+    line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
+
+    output_dirname = "example_abundance_line_by_line_%s" % (code,)
+    ispec.mkdir_p(output_dirname)
+    for i, line in enumerate(line_regions):
+        # Directory and file names
+        #element_name = "_".join(line['element'].split())
+        element_name = "_".join(line['note'].split())
+        common_filename = "example_" + code + "_individual_" + element_name + "_%.4f" % line['wave_peak']
+
+        # Free individual element abundance (WARNING: it should be coherent with the selected line regions!)
+        #free_abundances = ispec.create_free_abundances_structure([line['element'].split()[0]], chemical_elements, solar_abundances)
+        free_abundances = ispec.create_free_abundances_structure([line['note'].split()[0]], chemical_elements, solar_abundances)
+        free_abundances['Abund'] += initial_MH # Scale to metallicity
+
+        # Line by line
+        individual_line_regions = line_regions[i:i+1] # Keep recarray structure
+
+        # Segment
+        segments = ispec.create_segments_around_lines(individual_line_regions, margin=0.25)
+        wfilter = ispec.create_wavelength_filter(normalized_star_spectrum, regions=segments) # Only use the segment
+
+        obs_spec, modeled_synth_spectrum, params, errors, abundances_found, status, stats_linemasks = \
+                ispec.model_spectrum(normalized_star_spectrum[wfilter], star_continuum_model, \
+                modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, initial_teff, \
+                initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
+                initial_limb_darkening_coeff, initial_R, free_params, segments=segments, \
+                linemasks=individual_line_regions, \
+                enhance_abundances=True, \
+                use_errors = True, \
+                vmic_from_empirical_relation = False, \
+                vmac_from_empirical_relation = False, \
+                max_iterations=max_iterations, \
+                tmp_dir = None, \
+                code=code)
+
+        ##--- Save results -------------------------------------------------------------
+        dump_file = output_dirname + "/" + common_filename + ".dump"
+        logging.info("Saving results...")
+        ispec.save_results(dump_file, (params, errors, abundances_found, status, stats_linemasks))
+        # If we need to restore the results from another script:
+        #params, errors, abundances_found, status, stats_linemasks = ispec.restore_results(dump_file)
+
+        logging.info("Saving synthetic spectrum...")
+        synth_filename = output_dirname + "/" + common_filename + ".fits"
+        ispec.write_spectrum(modeled_synth_spectrum, synth_filename)
+        #ispec.write_line_regions(individual_line_regions, output_dirname + "/" + common_filename + "_linemask.txt")
+
+    return obs_spec, modeled_synth_spectrum, params, errors, free_abundances, status, stats_linemasks
+
+
+def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False):
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    #--- Radial Velocity determination with template -------------------------------
+    logging.info("Radial velocity determination with template...")
+    # - Read synthetic template
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
+    template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+
+    models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
+                            lower_velocity_limit=-200, upper_velocity_limit=200, \
+                            velocity_step=1.0, fourier=False)
+
+    # Number of models represent the number of components
+    components = len(models)
+    # First component:
+    rv = np.round(models[0].mu(), 2) # km/s
+    rv_err = np.round(models[0].emu(), 2) # km/s
+    #--- Radial Velocity correction ------------------------------------------------
+    logging.info("Radial velocity correction... %.2f +/- %.2f" % (rv, rv_err))
+    star_spectrum = ispec.correct_velocity(star_spectrum, rv)
+    #--- Telluric velocity shift determination from spectrum --------------------------
+    logging.info("Telluric velocity shift determination...")
+    # - Telluric
+    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
+    telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
+
+    models, ccf = ispec.cross_correlate_with_mask(star_spectrum, telluric_linelist, \
+                            lower_velocity_limit=-100, upper_velocity_limit=100, \
+                            velocity_step=0.5, mask_depth=0.01, \
+                            fourier = False,
+                            only_one_peak = True)
+
+    vel_telluric = np.round(models[0].mu(), 2) # km/s
+    vel_telluric_err = np.round(models[0].emu(), 2) # km/s
+    #--- Resolution degradation ----------------------------------------------------
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and VALD atomic linelist.
+    from_resolution = 80000
+    to_resolution = 47000
+    star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
+    #--- Continuum fit -------------------------------------------------------------
+    model = "Splines" # "Polynomy"
+    degree = 2
+    nknots = None # Automatic: 1 spline every 5 nm
+    #from_resolution = 80000
+    from_resolution = to_resolution
+
+    # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
+    order='median+max'
+    median_wave_range=0.05
+    max_wave_range=1.0
+
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
+                                nknots=nknots, degree=degree, \
+                                median_wave_range=median_wave_range, \
+                                max_wave_range=max_wave_range, \
+                                model=model, order=order, \
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5, \
+                                use_errors_for_fitting=True)
+    #--- Normalize -------------------------------------------------------------
+    normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
+    # Use a fixed value because the spectrum is already normalized
+    star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
+
+    #telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
+    #telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
+    #vel_telluric = 17.79 # km/s
+    #telluric_linelist = None
+    #vel_telluric = None
+
+    if use_lines_already_crossmatched_with_atomic_data:
+        #--- Read lines and adjust them ------------------------------------------------
+        if code in ['width', 'moog']:
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/custom/moog_ew_ispec_width_ew_ispec_extended.txt")
         else:
-            efilter = np.logical_or(efilter, atomic_linelist['element'] == element)
-    atomic_linelist = atomic_linelist[efilter]
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_extended.txt")
 
+        # Select only iron lines
+        line_regions_with_atomic_data = line_regions_with_atomic_data[np.logical_or(line_regions_with_atomic_data['note'] == "Fe 1", line_regions_with_atomic_data['note'] == "Fe 2")]
 
-    vel_telluric = 17.79 # km/s
-    #continuum_adjustment_margin = 0.05 # Allow +/-5% free baseline fit around continuum
-    continuum_adjustment_margin = 0.0
-    # Spectrum should be already radial velocity corrected
-    linemasks = ispec.fit_lines(line_regions, normalized_sun_spectrum, sun_continuum_model, \
-                                atomic_linelist = atomic_linelist, \
-                                max_atomic_wave_diff = 0.005, \
-                                telluric_linelist = telluric_linelist, \
-                                smoothed_spectrum = None, \
-                                check_derivatives = False, \
-                                vel_telluric = vel_telluric, discard_gaussian=False, \
-                                discard_voigt=True, \
-                                free_mu=True, crossmatch_with_mu=False, closest_match=True, \
-                                continuum_adjustment_margin=continuum_adjustment_margin)
-    # Discard lines that are not cross matched with the same original element stored in the note
-    linemasks = linemasks[linemasks['element'] == line_regions['note']]
+        smoothed_star_spectrum = ispec.convolve_spectrum(star_spectrum, 2*to_resolution)
+        line_regions_with_atomic_data = ispec.adjust_linemasks(smoothed_star_spectrum, line_regions_with_atomic_data, max_margin=0.5)
+
+        #--- Fit the lines but do NOT cross-match with any atomic linelist since they already have that information
+        linemasks = ispec.fit_lines(line_regions_with_atomic_data, normalized_star_spectrum, star_continuum_model, \
+                                    atomic_linelist = None, \
+                                    max_atomic_wave_diff = 0.005, \
+                                    telluric_linelist = telluric_linelist, \
+                                    check_derivatives = False, \
+                                    vel_telluric = vel_telluric, discard_gaussian=False, \
+                                    smoothed_spectrum=None, \
+                                    discard_voigt=True, \
+                                    free_mu=True, crossmatch_with_mu=False, closest_match=True)
+    else:
+        #--- Fit lines -----------------------------------------------------------------
+        logging.info("Fitting lines...")
+        atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
+        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
+        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
+        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
+
+        # Read
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(star_spectrum['waveobs']), wave_top=np.max(star_spectrum['waveobs']))
+
+        if code in ['width', 'moog']:
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/moog_ew_ispec_width_ew_ispec.txt")
+        else:
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
+
+        line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
+
+        linemasks = ispec.fit_lines(line_regions, normalized_star_spectrum, star_continuum_model, \
+                                    atomic_linelist = atomic_linelist, \
+                                    #max_atomic_wave_diff = 0.005, \
+                                    max_atomic_wave_diff = 0.00, \
+                                    telluric_linelist = telluric_linelist, \
+                                    smoothed_spectrum = None, \
+                                    check_derivatives = False, \
+                                    vel_telluric = vel_telluric, discard_gaussian=False, \
+                                    discard_voigt=True, \
+                                    free_mu=True, crossmatch_with_mu=False, closest_match=True)
+        # Discard lines that are not cross matched with the same original element stored in the note
+        linemasks = linemasks[linemasks['element'] == line_regions['note']]
+
+        # Exclude lines that have not been successfully cross matched with the atomic data
+        # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
+        rejected_by_atomic_line_not_found = (linemasks['wave_nm'] == 0)
+        linemasks = linemasks[~rejected_by_atomic_line_not_found]
+
 
     # Discard bad masks
-    flux_peak = normalized_sun_spectrum['flux'][linemasks['peak']]
-    flux_base = normalized_sun_spectrum['flux'][linemasks['base']]
-    flux_top = normalized_sun_spectrum['flux'][linemasks['top']]
+    flux_peak = normalized_star_spectrum['flux'][linemasks['peak']]
+    flux_base = normalized_star_spectrum['flux'][linemasks['base']]
+    flux_top = normalized_star_spectrum['flux'][linemasks['top']]
     bad_mask = np.logical_or(linemasks['wave_peak'] <= linemasks['wave_base'], linemasks['wave_peak'] >= linemasks['wave_top'])
     bad_mask = np.logical_or(bad_mask, flux_peak >= flux_base)
     bad_mask = np.logical_or(bad_mask, flux_peak >= flux_top)
     linemasks = linemasks[~bad_mask]
-
-    # Exclude lines that have not been successfully cross matched with the atomic data
-    # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
-    rejected_by_atomic_line_not_found = (linemasks['wave_nm'] == 0)
-    linemasks = linemasks[~rejected_by_atomic_line_not_found]
 
     # Exclude lines with EW equal to zero
     rejected_by_zero_ew = (linemasks['ew'] == 0)
@@ -1461,16 +1975,16 @@ def determine_astrophysical_parameters_from_ew(code="spectrum", use_ares=False):
         ### Different rejection parameters (check ARES papers):
         ##   - http://adsabs.harvard.edu/abs/2007A%26A...469..783S
         ##   - http://adsabs.harvard.edu/abs/2015A%26A...577A..67S
-        #linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="0.995", tmp_dir=None, verbose=0)
-        #linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="3;5764,5766,6047,6052,6068,6076", tmp_dir=None, verbose=0)
+        #linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="0.995", tmp_dir=None, verbose=0)
+        #linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="3;5764,5766,6047,6052,6068,6076", tmp_dir=None, verbose=0)
         snr = 50
-        linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="%s" % (snr), tmp_dir=None, verbose=0)
+        linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="%s" % (snr), tmp_dir=None, verbose=0)
 
 
     #--- Model spectra from EW --------------------------------------------------
     # Parameters
-    initial_teff = 5750.0
-    initial_logg = 4.5
+    initial_teff = 5777.0
+    initial_logg = 4.44
     initial_MH = 0.00
     initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
     max_iterations = 10
@@ -1485,6 +1999,7 @@ def determine_astrophysical_parameters_from_ew(code="spectrum", use_ares=False):
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
@@ -1518,22 +2033,23 @@ def determine_astrophysical_parameters_from_ew(code="spectrum", use_ares=False):
     efilter = np.logical_and(efilter, linemasks['lower_state_eV'] <= 5.0)
     efilter = np.logical_and(efilter, linemasks['lower_state_eV'] >= 0.5)
     ## Filter also bad fits
-    efilter = np.logical_and(efilter, linemasks['rms'] < 0.05)
+    efilter = np.logical_and(efilter, linemasks['rms'] < 1.00)
+    # no flux
+    noflux = normalized_star_spectrum['flux'][linemasks['peak']] < 1.0e-10
+    efilter = np.logical_and(efilter, np.logical_not(noflux))
+    unfitted = linemasks['fwhm'] == 0
+    efilter = np.logical_and(efilter, np.logical_not(unfitted))
 
-    if code in ["moog", "width", "turbospectrum"]:
-        adjust_model_metalicity = True
-    else:
-        adjust_model_metalicity = False
-    adjust_model_metalicity = True
-
-    results = ispec.model_spectrum_from_ew(linemasks[efilter], modeled_layers_pack, atomic_linelist,\
+    results = ispec.model_spectrum_from_ew(linemasks[efilter], modeled_layers_pack, \
                         solar_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, \
                         free_params=["teff", "logg", "vmic"], \
-                        adjust_model_metalicity=adjust_model_metalicity, \
+                        adjust_model_metalicity=True, \
                         max_iterations=max_iterations, \
                         enhance_abundances=True, \
-                        outliers_detection = "robust", \
-                        outliers_weight_limit = 0.90, \
+                        #outliers_detection = "robust", \
+                        #outliers_weight_limit = 0.90, \
+                        outliers_detection = "sigma_clipping", \
+                        #sigma_level = 3, \
                         tmp_dir = None, \
                         code=code)
     params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params = results
@@ -1549,25 +2065,60 @@ def determine_astrophysical_parameters_from_ew(code="spectrum", use_ares=False):
     return params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params
 
 
-def determine_abundances_from_ew(code="spectrum", use_ares=False):
-    sun_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
-    #--- Read lines and adjust them ------------------------------------------------
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines_biglist.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_golden_lines.txt")
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/GES/v5/atomic_lines_yy_fe.txt")
-    line_regions = ispec.adjust_linemasks(sun_spectrum, line_regions, max_margin=0.5)
+def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False):
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    #--- Radial Velocity determination with template -------------------------------
+    logging.info("Radial velocity determination with template...")
+    # - Read synthetic template
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
+    template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+
+    models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
+                            lower_velocity_limit=-200, upper_velocity_limit=200, \
+                            velocity_step=1.0, fourier=False)
+
+    # Number of models represent the number of components
+    components = len(models)
+    # First component:
+    rv = np.round(models[0].mu(), 2) # km/s
+    rv_err = np.round(models[0].emu(), 2) # km/s
+    #--- Radial Velocity correction ------------------------------------------------
+    logging.info("Radial velocity correction... %.2f +/- %.2f" % (rv, rv_err))
+    star_spectrum = ispec.correct_velocity(star_spectrum, rv)
+    #--- Telluric velocity shift determination from spectrum --------------------------
+    logging.info("Telluric velocity shift determination...")
+    # - Telluric
+    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
+    telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.0)
+
+    models, ccf = ispec.cross_correlate_with_mask(star_spectrum, telluric_linelist, \
+                            lower_velocity_limit=-100, upper_velocity_limit=100, \
+                            velocity_step=0.5, mask_depth=0.01, \
+                            fourier = False,
+                            only_one_peak = True)
+
+    vel_telluric = np.round(models[0].mu(), 2) # km/s
+    vel_telluric_err = np.round(models[0].emu(), 2) # km/s
+    #--- Resolution degradation ----------------------------------------------------
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and VALD atomic linelist.
+    from_resolution = 80000
+    to_resolution = 47000
+    star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
     degree = 2
-    nknots = None # Automatic: 1 spline every 1 nm
-    from_resolution = 80000
+    nknots = None # Automatic: 1 spline every 5 nm
+    #from_resolution = 80000
+    from_resolution = to_resolution
 
     # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
     order='median+max'
-    median_wave_range=0.01
+    median_wave_range=0.05
     max_wave_range=1.0
 
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, from_resolution=from_resolution, \
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
                                 nknots=nknots, degree=degree, \
                                 median_wave_range=median_wave_range, \
                                 max_wave_range=max_wave_range, \
@@ -1576,50 +2127,84 @@ def determine_abundances_from_ew(code="spectrum", use_ares=False):
                                 strong_line_probability=0.5, \
                                 use_errors_for_fitting=True)
     #--- Normalize -------------------------------------------------------------
-    normalized_sun_spectrum = ispec.normalize_spectrum(sun_spectrum, sun_continuum_model, consider_continuum_errors=False)
+    normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
-    sun_continuum_model = ispec.fit_continuum(sun_spectrum, fixed_value=1.0, model="Fixed value")
-    #--- Fit lines -----------------------------------------------------------------
-    logging.info("Fitting lines...")
+    star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
 
-    atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
-    #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
+    #telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
+    #telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
+    #vel_telluric = 17.79 # km/s
+    #telluric_linelist = None
+    #vel_telluric = None
 
-    telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
-
-    # Load chemical information and linelist
-    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(sun_spectrum['waveobs']), wave_top=np.max(sun_spectrum['waveobs']))
-    telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
-
-    # To reduce bad cross-matches, we reduce the linelist to those elements we are going to analyse
-    efilter = None
-    for element in np.unique(line_regions['note']):
-        if efilter is None:
-            efilter = atomic_linelist['element'] == element
+    if use_lines_already_crossmatched_with_atomic_data:
+        #--- Read lines and adjust them ------------------------------------------------
+        if code in ['width', 'moog']:
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/custom/moog_ew_ispec_width_ew_ispec_extended.txt")
         else:
-            efilter = np.logical_or(efilter, atomic_linelist['element'] == element)
-    atomic_linelist = atomic_linelist[efilter]
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_extended.txt")
+
+        # Select only iron lines
+        line_regions_with_atomic_data = line_regions_with_atomic_data[np.logical_or(line_regions_with_atomic_data['note'] == "Fe 1", line_regions_with_atomic_data['note'] == "Fe 2")]
+
+        smoothed_star_spectrum = ispec.convolve_spectrum(star_spectrum, 2*to_resolution)
+        line_regions_with_atomic_data = ispec.adjust_linemasks(smoothed_star_spectrum, line_regions_with_atomic_data, max_margin=0.5)
+
+        #--- Fit the lines but do NOT cross-match with any atomic linelist since they already have that information
+        linemasks = ispec.fit_lines(line_regions_with_atomic_data, normalized_star_spectrum, star_continuum_model, \
+                                    atomic_linelist = None, \
+                                    max_atomic_wave_diff = 0.005, \
+                                    telluric_linelist = telluric_linelist, \
+                                    check_derivatives = False, \
+                                    vel_telluric = vel_telluric, discard_gaussian=False, \
+                                    smoothed_spectrum=None, \
+                                    discard_voigt=True, \
+                                    free_mu=True, crossmatch_with_mu=False, closest_match=True)
+    else:
+        #--- Fit lines -----------------------------------------------------------------
+        logging.info("Fitting lines...")
+        atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
+        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
+        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
+        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
+
+        # Read
+        atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(star_spectrum['waveobs']), wave_top=np.max(star_spectrum['waveobs']))
+
+        if code in ['width', 'moog']:
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/moog_ew_ispec_width_ew_ispec.txt")
+        else:
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
+
+        line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
+
+        linemasks = ispec.fit_lines(line_regions, normalized_star_spectrum, star_continuum_model, \
+                                    atomic_linelist = atomic_linelist, \
+                                    #max_atomic_wave_diff = 0.005, \
+                                    max_atomic_wave_diff = 0.00, \
+                                    telluric_linelist = telluric_linelist, \
+                                    smoothed_spectrum = None, \
+                                    check_derivatives = False, \
+                                    vel_telluric = vel_telluric, discard_gaussian=False, \
+                                    discard_voigt=True, \
+                                    free_mu=True, crossmatch_with_mu=False, closest_match=True)
+        # Discard lines that are not cross matched with the same original element stored in the note
+        linemasks = linemasks[linemasks['element'] == line_regions['note']]
+
+        # Exclude lines that have not been successfully cross matched with the atomic data
+        # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
+        rejected_by_atomic_line_not_found = (linemasks['wave_nm'] == 0)
+        linemasks = linemasks[~rejected_by_atomic_line_not_found]
 
 
-    vel_telluric = 17.79 # km/s
-    # Spectrum should be already radial velocity corrected
-    linemasks = ispec.fit_lines(line_regions, normalized_sun_spectrum, sun_continuum_model, \
-                                atomic_linelist = atomic_linelist, \
-                                max_atomic_wave_diff = 0.005, \
-                                telluric_linelist = telluric_linelist, \
-                                smoothed_spectrum = None, \
-                                check_derivatives = False, \
-                                vel_telluric = vel_telluric, discard_gaussian=False, \
-                                discard_voigt=True, \
-                                free_mu=True, crossmatch_with_mu=False, closest_match=True)
-    # Discard lines that are not cross matched with the same original element stored in the note
-    linemasks = linemasks[linemasks['element'] == line_regions['note']]
-
-    # Exclude lines that have not been successfully cross matched with the atomic data
-    # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
-    rejected_by_atomic_line_not_found = (linemasks['wave_nm'] == 0)
-    linemasks = linemasks[~rejected_by_atomic_line_not_found]
+    # Discard bad masks
+    flux_peak = normalized_star_spectrum['flux'][linemasks['peak']]
+    flux_base = normalized_star_spectrum['flux'][linemasks['base']]
+    flux_top = normalized_star_spectrum['flux'][linemasks['top']]
+    bad_mask = np.logical_or(linemasks['wave_peak'] <= linemasks['wave_base'], linemasks['wave_peak'] >= linemasks['wave_top'])
+    bad_mask = np.logical_or(bad_mask, flux_peak >= flux_base)
+    bad_mask = np.logical_or(bad_mask, flux_peak >= flux_top)
+    linemasks = linemasks[~bad_mask]
 
     # Exclude lines with EW equal to zero
     rejected_by_zero_ew = (linemasks['ew'] == 0)
@@ -1635,10 +2220,10 @@ def determine_abundances_from_ew(code="spectrum", use_ares=False):
         ### Different rejection parameters (check ARES papers):
         ##   - http://adsabs.harvard.edu/abs/2007A%26A...469..783S
         ##   - http://adsabs.harvard.edu/abs/2015A%26A...577A..67S
-        #linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="0.995", tmp_dir=None, verbose=0)
-        #linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="3;5764,5766,6047,6052,6068,6076", tmp_dir=None, verbose=0)
+        #linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="0.995", tmp_dir=None, verbose=0)
+        #linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="3;5764,5766,6047,6052,6068,6076", tmp_dir=None, verbose=0)
         snr = 50
-        linemasks = ispec.update_ew_with_ares(normalized_sun_spectrum, linemasks, rejt="%s" % (snr), tmp_dir=None, verbose=0)
+        linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="%s" % (snr), tmp_dir=None, verbose=0)
 
 
     #--- Determining abundances by EW of the previously fitted lines ---------------
@@ -1708,6 +2293,7 @@ def calculate_theoretical_ew_and_depth(code="spectrum"):
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
@@ -1721,7 +2307,7 @@ def calculate_theoretical_ew_and_depth(code="spectrum"):
 
     # Load chemical information and linelist
     atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file)
-    atomic_linelist = atomic_linelist[:100] # Select only the first 100 lines (just to reduce execution time)
+    atomic_linelist = atomic_linelist[:100] # Select only the first 100 lines (just to reduce execution time, don't do it in a real analysis)
 
     isotopes = ispec.read_isotope_data(isotope_file)
 
@@ -1861,15 +2447,17 @@ if __name__ == '__main__':
     merge_spectra()
     normalize_spectrum_using_continuum_regions()
     normalize_spectrum_in_segments()
-    normalize_whole_spectrum_strategy2()
-    normalize_whole_spectrum_strategy1()
-    normalize_whole_spectrum_strategy1_ignoring_prefixed_strong_lines()
+    normalize_whole_spectrum()
+    normalize_whole_spectrum_ignoring_prefixed_strong_lines()
+    normalize_whole_spectrum_with_template()
     filter_cosmic_rays()
     find_continuum_regions()
     find_continuum_regions_in_segments()
     find_linemasks()
-    fit_lines_and_determine_ew(use_ares=False)
-    fit_lines_and_determine_ew(use_ares=True)
+    fit_lines_determine_ew_and_crossmatch_with_atomic_data(use_ares=False)
+    fit_lines_determine_ew_and_crossmatch_with_atomic_data(use_ares=True)
+    fit_lines_already_crossmatched_with_atomic_data_and_determine_ew(use_ares=False)
+    fit_lines_already_crossmatched_with_atomic_data_and_determine_ew(use_ares=True)
     calculate_barycentric_velocity()
     estimate_snr_from_flux()
     estimate_snr_from_err()
@@ -1880,42 +2468,58 @@ if __name__ == '__main__':
     create_segments_around_linemasks()
     synthesize_spectrum(code="spectrum")
     synthesize_spectrum(code="turbospectrum")
+    synthesize_spectrum(code="sme")
     synthesize_spectrum(code="moog")
     synthesize_spectrum(code="synthe")
     add_noise_to_spectrum()
     generate_new_random_realizations_from_spectrum()
     #precompute_synthetic_grid(code="spectrum")
     #precompute_synthetic_grid(code="turbospectrum")
+    #precompute_synthetic_grid(code="sme")
     #precompute_synthetic_grid(code="moog")
     #precompute_synthetic_grid(code="synthe")
     determine_astrophysical_parameters_using_synth_spectra(code="spectrum")
     determine_astrophysical_parameters_using_synth_spectra(code="turbospectrum")
+    determine_astrophysical_parameters_using_synth_spectra(code="sme")
     determine_astrophysical_parameters_using_synth_spectra(code="moog")
     determine_astrophysical_parameters_using_synth_spectra(code="synthe")
     #determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(code="spectrum")
     #determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(code="turbospectrum")
+    #determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(code="sme")
     #determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(code="moog")
     #determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(code="synthe")
     determine_abundances_using_synth_spectra(code="spectrum")
     determine_abundances_using_synth_spectra(code="turbospectrum")
+    determine_abundances_using_synth_spectra(code="sme")
     determine_abundances_using_synth_spectra(code="moog")
     determine_abundances_using_synth_spectra(code="synthe")
-    determine_astrophysical_parameters_from_ew(code="spectrum", use_ares=False)
-    determine_astrophysical_parameters_from_ew(code="turbospectrum", use_ares=False)
-    determine_astrophysical_parameters_from_ew(code="moog", use_ares=False)
-    determine_astrophysical_parameters_from_ew(code="width", use_ares=False)
-    #determine_astrophysical_parameters_from_ew(code="spectrum", use_ares=True)
-    #determine_astrophysical_parameters_from_ew(code="turbospectrum", use_ares=True)
-    determine_astrophysical_parameters_from_ew(code="moog", use_ares=True)
-    determine_astrophysical_parameters_from_ew(code="width", use_ares=True)
-    determine_abundances_from_ew(code="spectrum", use_ares=False)
-    determine_abundances_from_ew(code="turbospectrum", use_ares=False)
-    determine_abundances_from_ew(code="moog", use_ares=False)
-    determine_abundances_from_ew(code="width", use_ares=False)
-    #determine_abundances_from_ew(code="spectrum", use_ares=True)
-    #determine_abundances_from_ew(code="turbospectrum", use_ares=True)
-    determine_abundances_from_ew(code="moog", use_ares=True)
-    determine_abundances_from_ew(code="width", use_ares=True)
+    determine_abundances_line_by_line_using_synth_spectra(code="spectrum")
+    determine_abundances_line_by_line_using_synth_spectra(code="turbospectrum")
+    determine_abundances_line_by_line_using_synth_spectra(code="sme")
+    determine_abundances_line_by_line_using_synth_spectra(code="moog")
+    determine_abundances_line_by_line_using_synth_spectra(code="synthe")
+    determine_astrophysical_parameters_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False)
+    determine_astrophysical_parameters_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=False, use_ares=False)
+    determine_astrophysical_parameters_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False)
+    determine_astrophysical_parameters_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False)
+    determine_astrophysical_parameters_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=False, use_ares=False)
+    determine_astrophysical_parameters_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False)
+    #determine_astrophysical_parameters_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False)
+    #determine_astrophysical_parameters_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=False, use_ares=False)
+    #determine_astrophysical_parameters_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False)
+    #determine_astrophysical_parameters_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False)
+    #determine_astrophysical_parameters_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=False, use_ares=False)
+    #determine_astrophysical_parameters_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False)
+    #determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False)
+    #determine_abundances_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False)
+    #determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=True, use_ares=True)
+    #determine_abundances_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=True, use_ares=True)
+    determine_abundances_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False)
+    determine_abundances_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False)
+    determine_abundances_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=False, use_ares=False)
+    determine_abundances_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=False, use_ares=False)
+    determine_abundances_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=True, use_ares=True)
+    determine_abundances_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=True, use_ares=True)
     calculate_theoretical_ew_and_depth()
     paralelize_code()
     estimate_vmic_from_empirical_relation()

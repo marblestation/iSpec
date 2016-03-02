@@ -240,7 +240,7 @@ def enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enh
     abundances['Abund'][o] += o_enhancement
     abundances['Abund'][alpha] += alpha_enhancement
 
-    logging.info("alpha += %.2f; c += %.2f; n += %.2f; o += %.2f" % (alpha_enhancement, c_enhancement, n_enhancement, o_enhancement))
+    #logging.info("alpha += %.2f; c += %.2f; n += %.2f; o += %.2f" % (alpha_enhancement, c_enhancement, n_enhancement, o_enhancement))
     return abundances
 
 
@@ -376,8 +376,7 @@ def __spectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks
     if ignore == None:
         ignore = np.ones(num_measures) # Compute fluxes for all the wavelengths
     # Filter out lines not supported by turbospectrum:
-    lcode = np.logical_or(linemasks['spectrum_support'] == "True", linemasks['spectrum_support'] == True)
-    lcode = np.logical_or(lcode, linemasks['spectrum_support'] == "T")
+    lcode = linemasks['spectrum_support'] == "T"
     ignore[~lcode] = 0 # Ignore also lines not supported by spectrum
 
     # Generate spectrum should be run in a separate process in order
@@ -527,8 +526,7 @@ def __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, line
 
     linemasks = linemasks.copy()
     # Filter out lines not supported by turbospectrum:
-    lcode = np.logical_or(linemasks['turbospectrum_support'] == "True", linemasks['turbospectrum_support'] == True)
-    lcode = np.logical_or(lcode, linemasks['turbospectrum_support'] == "T")
+    lcode = linemasks['turbospectrum_support'] == "T"
     if ignore is not None:
         # Add specific lines to be ignored
         ignore = np.logical_or(np.logical_not(lcode), ignore == 0)
@@ -697,8 +695,7 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
     tmp_linemasks = linemasks.copy()
 
     # Filter out lines not supported by turbospectrum:
-    lcode = np.logical_or(tmp_linemasks['moog_support'] == "True", tmp_linemasks['moog_support'] == True)
-    lcode = np.logical_or(lcode, linemasks['moog_support'] == "T")
+    lcode = linemasks['moog_support'] == "T"
     if ignore is not None:
         # Add specific lines to be ignored
         ignore = np.logical_or(np.logical_not(lcode), ignore == 0)
@@ -870,8 +867,7 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
 
     linemasks = linemasks.copy()
     # Filter out lines not supported by width:
-    lcode = np.logical_or(linemasks['width_support'] == "True", linemasks['width_support'] == True)
-    lcode = np.logical_or(lcode, linemasks['width_support'] == "T")
+    lcode = linemasks['width_support'] == "T"
     if ignore is not None:
         # Add specific lines to be ignored
         ignore = np.logical_or(np.logical_not(lcode), ignore == 0)
@@ -889,9 +885,7 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
     filtered = []
     for line in linemasks:
         ew_picometer = line['ew'] / 10.
-        # TODO: Mark not compatible with WIDTH the lines that have stark/waals set to zero
-        if line['width_support'] == "False" or np.isnan(line['ew']) or line['ew'] < 1e-9 \
-                or line['stark'] == 0 or line['waals'] == 0:
+        if line['width_support'] == "False" or np.isnan(line['ew']) or line['ew'] < 1e-9:
             filtered.append(True)
             continue
         else:

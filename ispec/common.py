@@ -84,6 +84,7 @@ def is_width_support_enabled():
     else:
         return True
 
+
 def is_ares_support_enabled():
     ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
     ares_dir = ispec_dir + "/synthesizer/ARES/"
@@ -131,6 +132,23 @@ def is_synthe_support_enabled():
             or not os.path.exists(spectrv_executable) \
             or not os.path.exists(rotate_executable) \
             or not os.path.exists(syntoascanga_executable):
+        return False
+    else:
+        return True
+
+def is_sme_support_enabled():
+    from sys import platform as _platform
+    if "linux" not in _platform:
+        return False
+    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
+    sme_dir = ispec_dir + "/synthesizer/sme/"
+    system_64bits = sys.maxsize > 2**32
+    if system_64bits:
+        sme_lib = sme_dir + "/sme_synth.so.linux.x86_64.64"
+    else:
+        sme_lib = sme_dir + "/sme_synth.so.linux.x86.32"
+
+    if not os.path.exists(sme_lib):
         return False
     else:
         return True
@@ -959,4 +977,18 @@ def estimate_vmac(teff, logg, feh):
     vmac = float("%.2f" % vmac)
     return vmac
 
+def which(program):
+    def is_exe(fpath):
+        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
 
+    fpath, fname = os.path.split(program)
+    if fpath:
+        if is_exe(program):
+            return program
+    else:
+        for path in os.environ["PATH"].split(os.pathsep):
+            path = path.strip('""')
+            exe_file = os.path.join(path, program)
+            if is_exe(exe_file):
+                return exe_file
+    return None

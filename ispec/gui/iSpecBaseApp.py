@@ -129,6 +129,8 @@ class iSpecBaseApp(Tkinter.Tk):
         if ispec.is_turbospectrum_support_enabled():
             self.lists['synth_code'].append("Turbospectrum")
             self.lists['ew_code'].append("Turbospectrum")
+        if ispec.is_sme_support_enabled():
+            self.lists['synth_code'].append("SME")
         if ispec.is_moog_support_enabled():
             self.lists['synth_code'].append("MOOG")
             self.lists['ew_code'].append("MOOG")
@@ -2305,6 +2307,10 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
         if not selected_linelist in self.atomic_linelist.keys():
             self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file)
+            logging.warn("Limiting linelist to lines that have at least 0.01 depth in the Sun")
+            solar = self.atomic_linelist[selected_linelist]['theoretical_depth'] >= 0.01
+            self.atomic_linelist[selected_linelist] = self.atomic_linelist[selected_linelist][solar]
+
         if self.telluric_linelist is None:
             self.telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
 
@@ -2710,6 +2716,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
         if not selected_linelist in self.atomic_linelist.keys():
             self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file)
+            logging.warn("Limiting linelist to lines that have at least 0.01 depth in the Sun")
+            solar = self.atomic_linelist[selected_linelist]['theoretical_depth'] >= 0.01
+            self.atomic_linelist[selected_linelist] = self.atomic_linelist[selected_linelist][solar]
         if self.telluric_linelist is None:
             self.telluric_linelist = ispec.read_telluric_linelist(telluric_linelist_file, minimum_depth=0.01)
 
@@ -3989,6 +3998,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
             if not selected_linelist in self.atomic_linelist.keys():
                 self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file)
+                logging.warn("Limiting linelist to lines that have at least 0.01 depth in the Sun")
+                solar = self.atomic_linelist[selected_linelist]['theoretical_depth'] >= 0.01
+                self.atomic_linelist[selected_linelist] = self.atomic_linelist[selected_linelist][solar]
             isotopes = ispec.read_isotope_data(isotope_file)
             linelist = self.atomic_linelist[selected_linelist]
 
@@ -4020,7 +4032,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                 regions = self.regions[elements_type]
 
             # If wavelength out of the linelist file are used, SPECTRUM starts to generate flat spectrum
-            if np.min(waveobs) < 300.0 or np.max(waveobs) > 1100.0:
+            if np.min(waveobs) < 300.0 or np.max(waveobs) > 2400.0:
                 # luke.300_1000nm.lst
                 msg = "Wavelength range is outside line list for spectrum generation."
                 title = 'Wavelength range'
@@ -4067,9 +4079,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
         synth_spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
 
         # Remove atmosphere model temporary file
-        self.queue.put((self.on_synthesize_finnish, [synth_spectrum, teff, logg, MH, microturbulence_vel, error_message], {}))
+        self.queue.put((self.on_synthesize_finnish, [code, synth_spectrum, teff, logg, MH, microturbulence_vel, error_message], {}))
 
-    def on_synthesize_finnish(self, synth_spectrum, teff, logg, MH, microturbulence_vel, error_message):
+    def on_synthesize_finnish(self, code, synth_spectrum, teff, logg, MH, microturbulence_vel, error_message):
         if error_message is not None:
             msg = error_message
             title = 'Problem synthesizing spectrum'
@@ -4094,7 +4106,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
 
         # Name: If it already exists, add a suffix
-        name = self.get_name("Synth_" + str(teff) + "_" + str(logg) + "_"  + str(MH) + "_" + str(microturbulence_vel))
+        name = self.get_name(code + "_" + str(teff) + "_" + str(logg) + "_"  + str(MH) + "_" + str(microturbulence_vel))
         color = self.get_color()
         self.active_spectrum = Spectrum(synth_spectrum, name, color=color)
 
@@ -4239,8 +4251,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
         limb_darkening_coeff = 0.0
         microturbulence_vel = 1.0
         #resolution = 47000
-        #resolution = 300000
-        resolution = 100000
+        resolution = 300000
+        #resolution = 100000
 
         key = "SolverDialog"
         if not self.active_spectrum.dialog.has_key(key):
@@ -4341,6 +4353,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
             self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
         if not selected_linelist in self.atomic_linelist.keys():
             self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file)
+            logging.warn("Limiting linelist to lines that have at least 0.01 depth in the Sun")
+            solar = self.atomic_linelist[selected_linelist]['theoretical_depth'] >= 0.01
+            self.atomic_linelist[selected_linelist] = self.atomic_linelist[selected_linelist][solar]
         linelist = self.atomic_linelist[selected_linelist]
         isotopes = ispec.read_isotope_data(isotope_file)
 
@@ -4368,7 +4383,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         waveobs = self.active_spectrum.data['waveobs']
         # If wavelength out of the linelist file are used, SPECTRUM starts to generate flat spectrum
-        if np.min(waveobs) < 300.0 or np.max(waveobs) > 1100.0:
+        if np.min(waveobs) < 300.0 or np.max(waveobs) > 2400.0:
             # luke.300_1000nm.lst
             msg = "Wavelength range is outside line list for spectrum generation."
             title = 'Wavelength range'
@@ -4398,8 +4413,12 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         error_message = None
         try:
-            obs_spectrum, synth_spectrum, params, errors, free_abundances, status, stats_linemasks = ispec.model_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations, code=code)
+            obs_spectrum, synth_spectrum, params, errors, free_abundances, status, stats_linemasks = ispec.model_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations, code=code, \
+            vmic_from_empirical_relation=False, \
+            vmac_from_empirical_relation=False, \
+            )
         except Exception, e:
+            raise
             obs_spectrum = None
             synth_spectrum = None
             params = None
@@ -4434,14 +4453,14 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if self.active_spectrum is not None and self.active_spectrum.plot_id is not None:
             self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
 
-        ######### Observed
-        name = self.get_name(base_name + "_obs")
-        color = self.get_color()
-        ### Add a new spectrum but do not make it active to avoid confusions
-        self.active_spectrum = Spectrum(obs_spectrum, name, color=color)
-        self.spectra.append(self.active_spectrum)
-        self.active_spectrum.not_saved = True
-        self.draw_active_spectrum()
+        ########## Observed
+        #name = self.get_name(base_name + "_obs")
+        #color = self.get_color()
+        #### Add a new spectrum but do not make it active to avoid confusions
+        #self.active_spectrum = Spectrum(obs_spectrum, name, color=color)
+        #self.spectra.append(self.active_spectrum)
+        #self.active_spectrum.not_saved = True
+        #self.draw_active_spectrum()
 
         # Remove "[A]  " from spectrum name (legend) if it exists
         if self.active_spectrum is not None and self.active_spectrum.plot_id is not None:

@@ -224,7 +224,15 @@ def __determine_continuum_base_points(spectrum, discard_outliers=True, median_wa
 
     return continuum_base_points
 
-def fit_continuum(spectrum, from_resolution=None, independent_regions=None, continuum_regions=None, ignore=None, nknots=None, degree=3, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy', order='median+max', automatic_strong_line_detection=True, strong_line_probability=0.50, use_errors_for_fitting=True):
+class IndependentContinuum:
+    def __init__(self, continuum, placement_errors):
+        self.continuum = continuum
+        self.placement_errors = placement_errors
+
+    def __call__(self, x):
+        return self.continuum(x)
+
+def fit_continuum(spectrum, from_resolution=None, independent_regions=None, continuum_regions=None, ignore=None, nknots=None, degree=3, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy', order='median+max', automatic_strong_line_detection=True, strong_line_probability=0.50, use_errors_for_fitting=True, template=None):
     """
     Determine the level of the continuum and fit a model (uniformly spaced splines or single polynomy):
         * If model is 'Fixed', the continuum will be fixed to the fixed_value and no continuum search or fitting will be performed
@@ -258,7 +266,11 @@ def fit_continuum(spectrum, from_resolution=None, independent_regions=None, cont
             wfilter = np.logical_and(spectrum['waveobs'] >= region['wave_base'], spectrum['waveobs'] <= region['wave_top'])
             try:
                 if len(spectrum[wfilter]) > 10:
-                    continuum = __fit_continuum(spectrum[wfilter], from_resolution=from_resolution, continuum_regions=continuum_regions, ignore=ignore, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection, strong_line_probability=strong_line_probability, use_errors_for_fitting=use_errors_for_fitting)
+                    if template is not None:
+                        template_tmp = template[wfilter]
+                    else:
+                        template_tmp = None
+                    continuum = __fit_continuum(spectrum[wfilter], from_resolution=from_resolution, continuum_regions=continuum_regions, ignore=ignore, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection, strong_line_probability=strong_line_probability, use_errors_for_fitting=use_errors_for_fitting, template=template_tmp)
                     # Save
                     wfilter = np.logical_and(xaxis >= region['wave_base'], xaxis <= region['wave_top'])
                     fluxes[np.where(wfilter)[0]] = continuum(xaxis[wfilter])
@@ -270,21 +282,13 @@ def fit_continuum(spectrum, from_resolution=None, independent_regions=None, cont
         if num_success == 0:
             raise Exception("Impossible to fit continuum to any of the segments")
 
-        class IndependentContinuum:
-            def __init__(self, continuum, placement_errors):
-                self.continuum = continuum
-                self.placement_errors = placement_errors
-
-            def __call__(self, x):
-                return self.continuum(x)
-
         #continuum = interpolate.InterpolatedUnivariateSpline(xaxis, fluxes, k=3)
         continuum = interpolate.interp1d(xaxis, fluxes, kind='linear', bounds_error=False, fill_value=0.0)
         placement_errors = interpolate.interp1d(xaxis, errors, kind='linear', bounds_error=False, fill_value=0.0)
 
         continuum = IndependentContinuum(continuum, placement_errors)
     else:
-        continuum = __fit_continuum(spectrum, from_resolution=from_resolution, continuum_regions=continuum_regions, ignore=ignore, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection, strong_line_probability=strong_line_probability, use_errors_for_fitting=use_errors_for_fitting)
+        continuum = __fit_continuum(spectrum, from_resolution=from_resolution, continuum_regions=continuum_regions, ignore=ignore, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection, strong_line_probability=strong_line_probability, use_errors_for_fitting=use_errors_for_fitting, template=template)
     return continuum
 
 
@@ -506,12 +510,13 @@ def __create_gap_regions(spectrum):
     return gap_regions
 
 
-def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regions=None, median_wave_range=0.1,  max_wave_range=1.0, nknots=None, degree=3, order="median+max", automatic_strong_line_detection=True, strong_line_probability=0.50, fixed_value=None, use_errors_for_fitting=True, model='Splines'):
+
+def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regions=None, median_wave_range=0.1,  max_wave_range=1.0, nknots=None, degree=3, order="median+max", automatic_strong_line_detection=True, strong_line_probability=0.50, fixed_value=None, use_errors_for_fitting=True, model='Splines', template=None):
     """
     Spectrum should be homogeneously sampled if resolution is not specified.
     Spectrum errors will be used unless they are all set to zero
     """
-    if not model in ['Splines', 'Polynomy', 'Fixed value']:
+    if not model in ['Splines', 'Polynomy', 'Fixed value', 'Template']:
         raise Exception("Wrong model name!")
 
     if model == 'Fixed value' and fixed_value is None:
@@ -540,6 +545,11 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
 
     if model == 'Fixed value':
         return ConstantValue(fixed_value)
+
+    if model in ['Splines', 'Template'] and nknots is None:
+        # One each 5 nm
+        nknots = np.max([1, int((np.max(spectrum['waveobs']) - np.min(spectrum['waveobs'])) / 5.)])
+
 
     if order == "max+median" and median_wave_range <= max_wave_range:
         raise Exception("For 'max+median' order, median_wave_range should be greater than max_wave_rage!")
@@ -587,10 +597,34 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
         wavelengths = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), wave_step)
         logging.info("Resampling spectrum to wave_step: %.5f nm (R ~ %i)" % (wave_step, infered_resolution))
 
+
+    if model == 'Template':
+        if template is None:
+            raise Exception("Missing template")
+
+        # Ensure same sampling
+        template = resample_spectrum(template, spectrum['waveobs'], method="linear")
+
+        # Avoid zero points (e.g. gaps or regions to be ignored)
+        useful = spectrum['flux'] > 0.
+
+        # Divide the observed spectrum by the template and smooth the result
+        wave_step = np.median(np.abs(spectrum['waveobs'][1:] - spectrum['waveobs'][:-1]))
+        med_filter_step = int(np.round(median_wave_range / wave_step))
+        smoothed_continuum_tmp1 = median_filter(spectrum['flux'][useful] / template['flux'][useful], med_filter_step)
+        smoothed_continuum_tmp2 = np.interp(template['waveobs'], template['waveobs'][useful], smoothed_continuum_tmp1)
+        continuum_flux = gaussian_filter(smoothed_continuum_tmp2, 2*nknots)
+
+        continuum = interpolate.interp1d(template['waveobs'], continuum_flux, kind='linear', bounds_error=False, fill_value=0.0)
+        placement_errors = interpolate.interp1d(template['waveobs'], np.zeros(len(template['waveobs'])), kind='linear', bounds_error=False, fill_value=0.0)
+
+        continuum = IndependentContinuum(continuum, placement_errors)
+        return continuum
+
+
     zeros = spectrum['flux'] <= 0
     # Resample avoiding zeros and repating the last good value in the borders (not zeros!)
     resampled_spectrum = resample_spectrum(spectrum[~zeros], wavelengths, method="bessel", zero_edges=False)
-
 
     # Filter the spectrum to get the continuum
     if order == "max+median":
@@ -665,9 +699,6 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
     continuum = resample_spectrum(smooth3, spectrum['waveobs'], method="bessel", zero_edges=False)
     ignore1 = create_wavelength_filter(continuum, regions=ignored_regions)
     if model == "Splines":
-        if nknots is None:
-            # One each 5 nm
-            nknots = np.max([1, int((np.max(spectrum['waveobs']) - np.min(spectrum['waveobs'])) / 5.)])
 
         # If no CDF is used, We cannot directly filter or there will be some knots without data
         continuum_model = KnotSplineModel(nknots=nknots, degree=degree, CDF=True)

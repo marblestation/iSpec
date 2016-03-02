@@ -480,6 +480,8 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
     else:
         nvalues = 7 # Only use the 7 first values
 
+    built_from_spherical_models = None
+    built_from_spherical_models_same_metallicity = [] # Useful to know if the models used are spherical or plane parallel
     proximity_atm_same_metallicity = [] # Useful to know how close it is a teff-logg combination to a real atmosphere
     models_atm_same_metallicity = []
     values_atm_same_metallicity = [] # Useful only for plotting
@@ -503,7 +505,8 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
                     # and the radius is equal to 1.0 cm (which means that it is plane parallel in reality)
                     # This will help us to ignore intepolations in the border between
                     # plane parallel and spherical models
-                    if value_num != 10 or (value_num == 10 and single_value != 1.0):
+                    #if value_num != 10 or (value_num == 10 and single_value != 1.0):
+                    if value_num != 10 or (value_num == 10 and single_value > 2.0): # Use 2.0 to avoid floating precision problems
                         max_value[value_num] = np.max([single_value, max_value[value_num]])
                         min_value[value_num] = np.min([single_value, min_value[value_num]])
 
@@ -704,6 +707,11 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
                         proximity_atmospheres_model = interpolate.RectBivariateSpline(teff_range, logg_range, real_atmospheres, kx=1, ky=1, s=0) # Linear
                         #proximity_atmospheres_model = interpolate.RectBivariateSpline(teff_range, logg_range, real_atmospheres, kx=2, ky=2, s=0) # Quadratic
                         #proximity_atmospheres_model = interpolate.RectBivariateSpline(teff_range, logg_range, real_atmospheres, kx=3, ky=3, s=0) # Cubic (Default)
+                    if value_num == 10: # Radius
+                        spherical = np.zeros(processed_values.data.shape)
+                        spherical[processed_values.data > 2.] = 1.0 # It's a spherical model
+                        built_from_spherical_models = interpolate.RectBivariateSpline(teff_range, logg_range, spherical, kx=1, ky=1, s=0) # Linear
+
                 # Add to current model and used values
                 models_single_layer.append(single_model)
                 values_single_layer.append(single_values)
@@ -714,12 +722,13 @@ def build_modeled_interpolated_layer_values(atmospheres_params, atmospheres, tef
             structured_values_atm.append(structured_values_single_layer)
         #
         proximity_atm_same_metallicity.append(proximity_atmospheres_model)
+        built_from_spherical_models_same_metallicity.append(built_from_spherical_models)
         models_atm_same_metallicity.append(models_atm)
         values_atm_same_metallicity.append(values_atm)
         structured_values_atm_same_metallicity.append(structured_values_atm)
         params_atm_same_metallicity.append(params_atm)
 
-    return models_atm_same_metallicity, structured_values_atm_same_metallicity, proximity_atm_same_metallicity
+    return models_atm_same_metallicity, structured_values_atm_same_metallicity, proximity_atm_same_metallicity, built_from_spherical_models_same_metallicity
 
 
 def valid_atmosphere_target(modeled_layers_pack, teff_target, logg_target, MH_target):
@@ -734,7 +743,7 @@ def valid_atmosphere_target(modeled_layers_pack, teff_target, logg_target, MH_ta
         True if the target teff, logg and metallicity can be obtained with the
         models
     """
-    modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
+    modeled_layers, used_values_for_layers, proximity, spherical, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
 
     nteff = len(teff_range)
     nlogg = len(logg_range)
@@ -766,19 +775,11 @@ def valid_atmosphere_target(modeled_layers_pack, teff_target, logg_target, MH_ta
 
     return True
 
-def estimate_proximity_to_real_atmospheres(modeled_layers_pack, teff_target, logg_target, MH_target):
+def extrapolated_model_atmosphere_were_used(modeled_layers_pack, teff_target, logg_target, MH_target):
     """
-    Checks if the objectif teff, logg and metallicity can be obtained by using the loaded model
-
-    :param modeled_layers_pack:
-        Output from load_modeled_layers_pack
-    :type modeled_layers_pack: array
-
-    :returns:
-        True if the target teff, logg and metallicity can be obtained with the
-        models
+        Returns True if extrapolated model atmospheres are used for the construction of a given model
     """
-    modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
+    modeled_layers, used_values_for_layers, proximity, spherical, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
 
     nMH  = len(MH_range)
 
@@ -792,7 +793,7 @@ def estimate_proximity_to_real_atmospheres(modeled_layers_pack, teff_target, log
     p = np.interp(MH_target, MH_range, proximity_distance)
     p = np.max([p, 0.])
 
-    return p
+    return p > 1
 
 
 def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target, MH_target, code="spectrum"):
@@ -807,10 +808,10 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
         Interpolated model atmosphere
     """
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog', 'width', 'synthe']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'width', 'synthe', 'sme']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
-    modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
+    modeled_layers, used_values_for_layers, proximity, spherical, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
 
     nMH  = len(MH_range)
     nvalues = len(modeled_layers[0][0])
@@ -831,14 +832,29 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
     structured_single_values = np.ma.array(np.array([np.nan]*total), mask=[i<0 for i in xrange(total)])
     structured_single_values = structured_single_values.reshape(nMH, nlayers)
 
+    # Check if the interpolation uses spherical models, if one or more models are not
+    # spherical, then the radius should be zero (value num == 10). This control is needed
+    # to avoid radius interpolation in the limit between plane parallel and spherical models
+    built_from_spherical_models_values = []
+    built_from_spherical_models = False
+    if spherical is not None:
+        # Calculate this value for all metallicities and layers
+        for metal_num in np.arange(nMH):
+            built_from_spherical_models_values.append(spherical[metal_num](teff_target, logg_target)[0][0])
+        value = np.interp(MH_target, MH_range, built_from_spherical_models_values)
+        built_from_spherical_models = value == 1.
+
     values = []
     for value_num in np.arange(nvalues):
         # Calculate this value for all metallicities and layers
         for metal_num in np.arange(nMH):
             for layer_num in np.arange(nlayers):
-                model_val = modeled_layers[metal_num][layer_num][value_num]
-                val = model_val(teff_target, logg_target)
-                structured_single_values[metal_num][layer_num] = val
+                if value_num == 10 and not built_from_spherical_models: # Radius
+                    structured_single_values[metal_num][layer_num] = 1.0 # cm (to indicate plane parallel)
+                else:
+                    model_val = modeled_layers[metal_num][layer_num][value_num]
+                    val = model_val(teff_target, logg_target)
+                    structured_single_values[metal_num][layer_num] = val
         # Fit Bivariate Spline to consider not only variation in metallicity but also in layers
         # http://www.derivative.ca/wiki088/index.php?title=Spline
         model_val = interpolate.RectBivariateSpline(MH_range, np.arange(nlayers), structured_single_values.data, kx=1, ky=1, s=0) # Linear
@@ -848,6 +864,9 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
         values.append(model_val(MH_target, np.arange(nlayers))[0])
     # Transpose to have a layer in each position instead than value (easier to write to disk later)
     layers = np.array(values).T
+
+    if extrapolated_model_atmosphere_were_used(modeled_layers_pack, teff_target, logg_target, MH_target):
+        logging.warn("Extrapolated model atmospheres were used in the construction of this model [%.0f %.2f %.2f]" % (teff_target, logg_target, MH_target))
 
     return layers
 
@@ -945,7 +964,7 @@ def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None
 
 
 # Serialize modeled layers and stats
-def dump_modeled_layers_pack(modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, filename, required_layers=56):
+def dump_modeled_layers_pack(modeled_layers, used_values_for_layers, proximity, spherical, teff_range, logg_range, MH_range, filename, required_layers=56):
     """
     Build a list of modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range and nlayers
     in order to serialize it to disk for easier later recovery.
@@ -957,7 +976,7 @@ def dump_modeled_layers_pack(modeled_layers, used_values_for_layers, proximity, 
     """
     nlayers = required_layers
 
-    modeled_layers_pack = (modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, nlayers)
+    modeled_layers_pack = (modeled_layers, used_values_for_layers, proximity, spherical, teff_range, logg_range, MH_range, nlayers)
     pickle.dump(modeled_layers_pack, open(filename, 'w'))
 
 def load_modeled_layers_pack(filename):
@@ -975,7 +994,13 @@ def load_modeled_layers_pack(filename):
     """
     sys.modules['__main__'].ConstantValue = ConstantValue
     modeled_layers_pack = pickle.load(open(filename))
-    return modeled_layers_pack
+    if len(modeled_layers_pack) == 7:
+        # TODO: Only MARCS model have spherical variable
+        spherical = None
+        modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, nlayers = modeled_layers_pack
+        return modeled_layers, used_values_for_layers, proximity, spherical, teff_range, logg_range, MH_range, nlayers
+    else:
+        return modeled_layers_pack
 
 
 def calculate_opacities(atmosphere_layers_file, abundances, MH, microturbulence_vel, wave_base, wave_top, wave_step, verbose=0, opacities_filename=None, tmp_dir=None):

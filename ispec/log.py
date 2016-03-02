@@ -36,7 +36,8 @@ if CONSOLE:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
-handler = logging.handlers.RotatingFileHandler(LOG_FILE, 'a', maxBytes=1048576, backupCount=5)
+megabyte = 1048576
+handler = logging.handlers.RotatingFileHandler(LOG_FILE, 'a', maxBytes=50*megabyte, backupCount=5)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 # It is accessible via import logging; logging.warn("x")

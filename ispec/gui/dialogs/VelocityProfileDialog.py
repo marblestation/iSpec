@@ -29,8 +29,8 @@ class VelocityProfileDialog(CustomDialog):
         self.__models = models
         # The default values have been previously updated with the user selected values
         self.__velocity_step = float(self.__components[4]["default"])
-        if len(self.__components) == 8 and self.__components[7]["text"] == "Cross-correlate with":
-            self.__template = self.__components[7]["default"]
+        if len(self.__components) == 9 and self.__components[8]["text"] == "Cross-correlate with":
+            self.__template = self.__components[8]["default"]
         else:
             self.__template = None
 
@@ -161,13 +161,13 @@ class VelocityProfileDialog(CustomDialog):
     def show(self, updated_templates=None):
         self.results = None
         if updated_templates is not None:
-            self.__components[7]["options"] = updated_templates
+            self.__components[8]["options"] = updated_templates
             # Validate that the default value (previous user selected value) exists in the new template list
             default_ok = False
             for template in updated_templates:
-                if template == self.__components[7]["default"]:
+                if template == self.__components[8]["default"]:
                     default_ok = True
             if not default_ok:
-                self.__components[7]["default"] = updated_templates[0]
+                self.__components[8]["default"] = updated_templates[0]
         CustomDialog.__init__(self, self.__parent, self.__title, self.__components)
 

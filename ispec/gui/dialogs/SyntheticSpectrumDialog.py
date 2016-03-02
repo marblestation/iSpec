@@ -100,7 +100,7 @@ class SyntheticSpectrumDialog(CustomDialog):
         component["text-type"] = "float" # float, int or str
         component["default"] = wave_base
         component["minvalue"] = 300
-        component["maxvalue"] = 1100
+        component["maxvalue"] = 2400
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
@@ -108,7 +108,7 @@ class SyntheticSpectrumDialog(CustomDialog):
         component["text-type"] = "float" # float, int or str
         component["default"] = wave_top
         component["minvalue"] = 300
-        component["maxvalue"] = 1100
+        component["maxvalue"] = 2400
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"

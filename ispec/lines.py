@@ -709,7 +709,7 @@ def __create_linemasks_structure(num_peaks):
     linemasks['width_species'] = ""
     linemasks['reference_code'] = ""
     #linemasks['reference'] = ""
-    for key in ['spectrum_support', 'turbospectrum_support', 'moog_support', 'width_support', 'synthe_support']:
+    for key in ['spectrum_support', 'turbospectrum_support', 'moog_support', 'width_support', 'synthe_support', 'sme_support']:
         linemasks[key] = "False"
     return linemasks
 
@@ -820,7 +820,8 @@ def __get_atomic_linelist_definition():
      ('turbospectrum_support', '|S1'),
      ('moog_support', '|S1'),
      ('width_support', '|S1'),
-     ('synthe_support', '|S1')]
+     ('synthe_support', '|S1'),
+     ('sme_support', '|S1')]
      #('spectrum_support', '|S5'),
      #('turbospectrum_support', '|S5'),
      #('moog_support', '|S5'),
@@ -928,7 +929,8 @@ def __generic_write_atomic_linelist_element(out, data, include_fit):
     out.write("%s\t" % (str(data['turbospectrum_support'])[0]))
     out.write("%s\t" % (str(data['moog_support'])[0]))
     out.write("%s\t" % (str(data['width_support'])[0]))
-    out.write("%s" % (str(data['synthe_support'])[0]))
+    out.write("%s\t" % (str(data['synthe_support'])[0]))
+    out.write("%s" % (str(data['sme_support'])[0]))
     if include_fit:
         out.write("\t%.4f\t" % (data['wave_peak']))
         out.write("%.4f\t" % (data['wave_base']))
@@ -978,15 +980,13 @@ def __spectrum_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=N
     Saves a SPECTRUM linelist for spectral synthesis.
     If filename is not specified, a temporary file is created and the name is returned.
     """
-    supported = np.logical_or(linelist['spectrum_support'] == "True", linelist['spectrum_support'] == True)
-    supported = np.logical_or(supported, linelist['spectrum_support'] == "T")
+    supported = linelist['spectrum_support'] == "T"
     linelist = linelist[supported]
     linelist = linelist.copy()
     # http://www.appstate.edu/~grayro/spectrum/spectrum276/node14.html
     #  Since only the energy of the lower state is used in molecular calculations,
     #  this entry (upper state) is sometimes used to encode the molecular band information
-    molecules = np.logical_or(linelist['molecule'] == "True", linelist['molecule'] == True)
-    molecules = np.logical_or(molecules, linelist['molecule'] == "T")
+    molecules = linelist['molecule'] == "T"
     linelist['upper_state_cm1'][molecules] = 0.
 
     if linelist_filename is not None:
@@ -2316,18 +2316,6 @@ def __model_velocity_profile(ccf, nbins, only_one_peak=False, peak_probability=0
         if mu < xcoord[peaks[i]-1] or mu > xcoord[peaks[i]+1]:
             mu = xcoord[peaks[i]]
             poly_step = xcoord[peaks[i]+1] - xcoord[peaks[i]] # Temporary just to the next iteration
-        #########################################################
-        ## TODO: REMOVE Ivyes code
-        #from ccanalyzer import analyzer
-
-        ##rv = xcoord[base[i]:top[i]+1]
-        ##cc = fluxes[base[i]:top[i]+1]
-        #rv = xcoord
-        ##depth = np.abs(np.max(template['flux']) - template['flux'])
-        #cc = np.min(fluxes) - fluxes
-        #aa = analyzer(rv, cc, rv.shape[0])
-        ##print mu, aa.getResult(),aa.getError()
-        #mu = aa.getResult()
 
         #########################################################
         ####### Gaussian/Voigt fit to determine other params.
@@ -2537,8 +2525,7 @@ def __moog_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=None)
     linelist['waals'] ares spected to be in single gamma damping coefficient
     ABO theory is not supported and if waals is bigger than 0, it won't be considered
     """
-    supported = np.logical_or(linelist['moog_support'] == "True", linelist['moog_support'] == True)
-    supported = np.logical_or(supported, linelist['moog_support'] == "T")
+    supported = linelist['moog_support'] == "T"
     linelist = linelist[supported]
 
     if linelist_filename is not None:
@@ -2547,17 +2534,37 @@ def __moog_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=None)
         # Temporary file
         out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
 
+    d0 = {} # dissociation energies from Turbospectrum's DATA/IRWIN_molecules_v15.1.dat
+    # Molecule list from VALD linelist 300 - 1100 nm
+    d0['C2 1'] = 6.210 # eV
+    d0['CH 1'] = 3.465 # eV
+    d0['CN 1'] = 7.724 # eV
+    d0['CO 1'] = 11.092 # eV
+    d0['MgH '] = 1.285 # eV
+    d0['OH 1'] = 6.220 # eV
+    d0['SiH '] = 4.337 # eV
+    d0['TiO '] = 6.87 # eV
+
     with_ew = 'ew' in linelist.dtype.names
     line_ew = 0.
     out.write("wavelength species lower_state_eV loggf damping d0 equivalent_width comment\n")
     for line in linelist:
         #6690.261  24.0   3.888    -2.442  2.0    0.0    0.0    vald0.016 CrI may2008
         #6690.269  607.0  0.542    -3.334  0.00  7.73    0.0  ( 7, 2)Q12 12.5
-        d0 = 0 # Dissociation energy [eV] (only for molecules)
         if with_ew:
             line_ew = line['ew']
+        if line['molecule'] == 'T':
+            if line['element'] in d0.keys():
+                d0_value = d0[line['element']]
+                waals = 0.
+            else:
+                logging.warn("Unknown dissociation energy for molecule '%s'" % (line['element']))
+                continue
+        else:
+            d0_value = 0 # Dissociation energy [eV] (only for molecules)
+            waals = line['waals_single_gamma_format']
         out.write("%10.3f%10s%10.3f%10.3f%10.2f%10.2f%10.2f %10s\n" \
-                % (line['wave_A'], line['spectrum_moog_species'], line['lower_state_eV'], line['loggf'], line['waals_single_gamma_format'], d0, line_ew, ""))
+                % (line['wave_A'], line['spectrum_moog_species'], line['lower_state_eV'], line['loggf'], waals, d0_value, line_ew, ""))
     out.close()
     return out.name
 
@@ -2569,9 +2576,12 @@ def __moog_barklem_write_atomic_linelist(linelist, linelist_filename=None, tmp_d
     linelist['waals'] ares spected to be in single gamma damping coefficient
     ABO theory is not supported and if waals is bigger than 0, it won't be considered
     """
-    supported = np.logical_or(linelist['moog_support'] == "True", linelist['moog_support'] == True)
-    supported = np.logical_or(supported, linelist['moog_support'] == "T")
+    supported = linelist['moog_support'] == "T"
     linelist = linelist[supported]
+    # Do not include molecules in Barklem.dat
+    # - I tested it and MOOG does not use it for anything
+    molecules = linelist['molecule'] == "T"
+    linelist = linelist[~molecules]
 
     if linelist_filename is not None:
         out = open(linelist_filename, "w")
@@ -2595,17 +2605,14 @@ def __synthe_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=Non
     Saves a Synthe linelist for spectral synthesis.
     If filename is not specified, a temporary file is created and the name is returned.
     """
-    supported = np.logical_or(linelist['synthe_support'] == "True", linelist['synthe_support'] == True)
-    supported = np.logical_or(supported, linelist['synthe_support'] == "T")
+    supported = linelist['synthe_support'] == "T"
     #supported = np.logical_and(supported, linelist['spectrum_support'] == "T")
     #supported = np.logical_and(supported, linelist['width_support'] == "T")
     linelist = linelist[supported]
     #linelist = linelist[linelist['spectrum_support'] == 'True']
-    molecules = np.logical_or(linelist['molecule'] == "True", linelist['molecule'] == True)
-    molecules = np.logical_or(molecules, linelist['molecule'] == "T")
+    molecules = linelist['molecule'] == "T"
 
     there_are_molecules = len(np.where(molecules)[0]) > 0
-    there_are_molecules = False
 
     if linelist_filename is not None:
         atomic_out = open(linelist_filename[0], "w")
@@ -2630,17 +2637,30 @@ def __synthe_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=Non
         if line['spectrum_transition_type'] == "AO":
             alpha = line['waals'] % 1 # Decimal part
 
-        atomic_out.write("%11.4f%7.3f%6s%12.3f%5.2f %10s%12.3f%5.2f %10s%6.2f%6.2f%6.2f%4s 0 0%3i 0.000%3i 0.000    0    %5i          %5i    0    %.3f\n" % \
+        if line['element'] == 'H 1':
+            stark = 0.0
+            waals = 0.0
+            nonLTE_first_level_index = line['stark'] # 14 non-LTE level index for first level   I2
+            nonLTE_second_level_index = line['waals'] # 15 non-LTE level index for second level   I2
+        else:
+            stark = line['stark']
+            waals = line['waals_single_gamma_format']
+            nonLTE_first_level_index = 0.
+            nonLTE_second_level_index = 0.
+
+        atomic_out.write("%11.4f%7.3f%6s%12.3f%5.2f %10s%12.3f%5.2f %10s%6.2f%6.2f%6.2f%4s%2.0f%2.0f%3i 0.000%3i 0.000    0    %5i          %5i    0    %.3f\n" % \
                         (line['wave_nm'], line['loggf'], line['width_species'], \
                             line['lower_state_cm1'], line['lower_j'], "X", \
                             line['upper_state_cm1'], line['upper_j'], "X", \
-                            line['rad'], line['stark'], line['waals_single_gamma_format'], \
+                            line['rad'], stark, waals, \
                             line['reference_code'][:4], \
+                            nonLTE_first_level_index, nonLTE_second_level_index, \
                             line['spectrum_synthe_isotope'], line['spectrum_synthe_isotope'], \
                             int(line['lande_lower']*1000), int(line['lande_upper']*1000), \
                             alpha, \
                         )
                     )
+
     atomic_out.close()
     if not there_are_molecules:
         return (atomic_out.name, None)
@@ -2671,8 +2691,7 @@ def __turbospectrum_write_atomic_linelist(linelist, linelist_filename=None, tmp_
     Saves a TurboSpectrum linelist for spectral synthesis.
     If filename is not specified, a temporary file is created and the name is returned.
     """
-    supported = np.logical_or(linelist['turbospectrum_support'] == "True", linelist['turbospectrum_support'] == True)
-    supported = np.logical_or(supported, linelist['turbospectrum_support'] == "T")
+    supported = linelist['turbospectrum_support'] == "T"
     linelist = linelist[supported]
 
     if linelist_filename is not None:
@@ -2693,8 +2712,7 @@ def __turbospectrum_write_atomic_linelist(linelist, linelist_filename=None, tmp_
         for element in np.unique(sublinelist['element']):
             #print element
             subsublinelist = sublinelist[sublinelist['element'] == element]
-            molecule = np.logical_or(subsublinelist['molecule'][0] == "True", subsublinelist['molecule'][0] == True)
-            molecule = np.logical_or(molecule, subsublinelist['molecule'][0] == "T")
+            molecule = subsublinelist['molecule'][0] == "T"
             # '   3.000            '    1        28
             # 'Li I   '
             out.write("'%20s' %4s %9i\n" % (species, subsublinelist['ion'][0], len(subsublinelist)))
