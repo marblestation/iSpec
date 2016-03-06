@@ -104,16 +104,30 @@ class CustomDialog(Dialog):
                 ### configuration tool in the navigation toolbar wouldn't
                 ### work.
                 ###
-                self.axes = self.fig.add_subplot(1, 1, 1)
-                #### Avoid using special notation that are not easy to understand in axis for big zoom
-                myyfmt = ScalarFormatter(useOffset=False)
-                self.axes.get_xaxis().set_major_formatter(myyfmt)
-                self.axes.get_yaxis().set_major_formatter(myyfmt)
+                if component["axes"] == 1:
+                    self.axes = self.fig.add_subplot(1, 1, 1)
+                    #### Avoid using special notation that are not easy to understand in axis for big zoom
+                    myyfmt = ScalarFormatter(useOffset=False)
+                    self.axes.get_xaxis().set_major_formatter(myyfmt)
+                    self.axes.get_yaxis().set_major_formatter(myyfmt)
 
-                self.toolbar = NavigationToolbar(self.canvas, plot_frame)
-                self.toolbar.update()
+                    self.toolbar = NavigationToolbar(self.canvas, plot_frame)
+                    self.toolbar.update()
 
-                self.canvas._tkcanvas.pack(side=Tkinter.TOP, fill=Tkinter.BOTH, expand=1)
+                    self.canvas._tkcanvas.pack(side=Tkinter.TOP, fill=Tkinter.BOTH, expand=1)
+                elif component["axes"] > 1:
+                    self.axes = []
+                    for i in xrange(component["axes"]):
+                        self.axes.append(self.fig.add_subplot(2, 1, i+1))
+                        #### Avoid using special notation that are not easy to understand in axis for big zoom
+                        myyfmt = ScalarFormatter(useOffset=False)
+                        self.axes[i].get_xaxis().set_major_formatter(myyfmt)
+                        self.axes[i].get_yaxis().set_major_formatter(myyfmt)
+
+                    self.toolbar = NavigationToolbar(self.canvas, plot_frame)
+                    self.toolbar.update()
+
+                    self.canvas._tkcanvas.pack(side=Tkinter.TOP, fill=Tkinter.BOTH, expand=1)
 
                 # Plotting function
                 apply(component["function"], (self.axes, component))

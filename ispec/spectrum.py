@@ -571,7 +571,7 @@ except:
             current_work_progress = np.min([(i*1.0 / new_total_points) * 100, 90.0])
             if report_progress(current_work_progress, last_reported_progress):
                 last_reported_progress = current_work_progress
-                logging.info("%.2f%%" % current_work_progress)
+                #logging.info("%.2f%%" % current_work_progress)
                 if frame is not None:
                     frame.update_progress(current_work_progress)
 
@@ -812,7 +812,7 @@ def resample_spectrum(spectrum, xaxis, method="bessel", zero_edges=True, frame=N
     last_reported_progress = -1
 
     current_work_progress = 10.0
-    logging.info("%.2f%%" % current_work_progress)
+    #logging.info("%.2f%%" % current_work_progress)
     if frame is not None:
         frame.update_progress(current_work_progress)
 
@@ -837,7 +837,7 @@ def resample_spectrum(spectrum, xaxis, method="bessel", zero_edges=True, frame=N
         flux = f(xaxis)
         err = e(xaxis)
         current_work_progress = 90.0
-        logging.info("%.2f%%" % current_work_progress)
+        #logging.info("%.2f%%" % current_work_progress)
         if frame is not None:
             frame.update_progress(current_work_progress)
     elif method.lower() == "bessel":
@@ -848,7 +848,7 @@ def resample_spectrum(spectrum, xaxis, method="bessel", zero_edges=True, frame=N
     resampled_spectrum = create_spectrum_structure(xaxis, flux, err)
     return resampled_spectrum
 
-def correct_velocity(spectrum, velocity):
+def correct_velocity(spectrum, velocity, segments=None):
     """
     Correct velocity in km/s.
     """

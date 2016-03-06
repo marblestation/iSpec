@@ -46,14 +46,12 @@ def read_write_spectrum():
     ##--- Save spectrum ------------------------------------------------------------
     logging.info("Saving spectrum...")
     ispec.write_spectrum(star_spectrum, "example_sun.fits")
-    return star_spectrum
 
 def convert_air_to_vacuum():
     star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Converting wavelengths from air to vacuum and viceversa -------------------
     star_spectrum_vacuum = ispec.air_to_vacuum(star_spectrum)
     star_spectrum_air = ispec.vacuum_to_air(star_spectrum_vacuum)
-    return star_spectrum_vacuum, star_spectrum_air
 
 def plot():
     star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -71,7 +69,6 @@ def cut_spectrum_from_range():
     # - Keep points between two given wavelengths
     wfilter = ispec.create_wavelength_filter(star_spectrum, wave_base=470.0, wave_top=680.0)
     cutted_star_spectrum = star_spectrum[wfilter]
-    return cutted_star_spectrum
 
 def cut_spectrum_from_segments():
     star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -81,7 +78,6 @@ def cut_spectrum_from_segments():
     segments = ispec.read_segment_regions(ispec_dir + "/input/regions/fe_lines_segments.txt")
     wfilter = ispec.create_wavelength_filter(star_spectrum, regions=segments)
     cutted_star_spectrum = star_spectrum[wfilter]
-    return cutted_star_spectrum
 
 
 def determine_radial_velocity_with_mask():
@@ -112,7 +108,6 @@ def determine_radial_velocity_with_mask():
     # First component:
     rv = np.round(models[0].mu(), 2) # km/s
     rv_err = np.round(models[0].emu(), 2) # km/s
-    return rv, rv_err, components
 
 
 def determine_radial_velocity_with_template():
@@ -134,7 +129,6 @@ def determine_radial_velocity_with_template():
     # First component:
     rv = np.round(models[0].mu(), 2) # km/s
     rv_err = np.round(models[0].emu(), 2) # km/s
-    return rv, rv_err, components
 
 def correct_radial_velocity():
     mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_muCas.txt.gz")
@@ -160,7 +154,6 @@ def determine_tellurics_shift_with_mask():
 
     bv = np.round(models[0].mu(), 2) # km/s
     bv_err = np.round(models[0].emu(), 2) # km/s
-    return bv, bv_err
 
 def determine_tellurics_shift_with_template():
     star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -176,7 +169,6 @@ def determine_tellurics_shift_with_template():
 
     bv = np.round(models[0].mu(), 2) # km/s
     bv_err = np.round(models[0].emu(), 2) # km/s
-    return bv, bv_err
 
 def degrade_resolution():
     star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -186,7 +178,6 @@ def degrade_resolution():
     to_resolution = 47000
     convolved_star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, \
                                                     from_resolution=from_resolution)
-    return convolved_star_spectrum
 
 def smooth_spectrum():
     star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -194,7 +185,6 @@ def smooth_spectrum():
     logging.info("Smoothing spectrum...")
     resolution = 80000
     smoothed_star_spectrum = ispec.convolve_spectrum(star_spectrum, resolution)
-    return smoothed_star_spectrum
 
 def resample_spectrum():
     star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -203,7 +193,6 @@ def resample_spectrum():
     wavelengths = np.arange(470.0, 680.0, 0.001)
     resampled_star_spectrum = ispec.resample_spectrum(star_spectrum, wavelengths, method="bessel", zero_edges=True)
     #resampled_star_spectrum = ispec.resample_spectrum(star_spectrum, wavelengths, method="linear", zero_edges=True)
-    return resampled_star_spectrum
 
 def coadd_spectra():
     # WARNING: This example co-adds spectra from different stars, in a real life situation
@@ -220,7 +209,6 @@ def coadd_spectra():
     coadded_spectrum['flux'] = resampled_star_spectrum['flux'] + resampled_mu_cas_spectrum['flux']
     coadded_spectrum['err'] = np.sqrt(np.power(resampled_star_spectrum['err'],2) + \
                                     np.power(resampled_mu_cas_spectrum['err'],2))
-    return coadded_spectrum
 
 
 def merge_spectra():
@@ -232,7 +220,6 @@ def merge_spectra():
     left_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     right_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_muCas.txt.gz")
     merged_spectrum = np.hstack((left_spectrum, right_spectrum))
-    return merged_spectrum
 
 
 def normalize_spectrum_using_continuum_regions():
@@ -267,7 +254,6 @@ def normalize_spectrum_using_continuum_regions():
     normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
     star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
-    return normalized_star_spectrum, star_continuum_model
 
 
 def normalize_spectrum_in_segments():
@@ -302,7 +288,6 @@ def normalize_spectrum_in_segments():
     normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
     star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
-    return normalized_star_spectrum, star_continuum_model
 
 def normalize_whole_spectrum_with_template():
     """
@@ -313,9 +298,9 @@ def normalize_whole_spectrum_with_template():
 
     #--- Continuum fit -------------------------------------------------------------
     model = "Template"
-    nknots = None # Automatic: 1 spline every 5 nm
+    nknots = None # Automatic: 1 spline every 5 nm (in this case, used to apply a gaussian filter)
     from_resolution = 80000
-    median_wave_range=0.05
+    median_wave_range=5.0
 
     #strong_lines = ispec.read_line_regions(ispec_dir + "/input/regions/strong_lines/absorption_lines.txt")
     strong_lines = ispec.read_line_regions(ispec_dir + "/input/regions/relevant/relevant_line_masks.txt")
@@ -333,7 +318,6 @@ def normalize_whole_spectrum_with_template():
     normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
     star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
-    return normalized_star_spectrum, star_continuum_model
 
 def normalize_whole_spectrum():
     """
@@ -366,7 +350,6 @@ def normalize_whole_spectrum():
     normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
     star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
-    return normalized_star_spectrum, star_continuum_model
 
 
 def normalize_whole_spectrum_ignoring_prefixed_strong_lines():
@@ -402,7 +385,6 @@ def normalize_whole_spectrum_ignoring_prefixed_strong_lines():
     normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
     # Use a fixed value because the spectrum is already normalized
     star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
-    return normalized_star_spectrum, star_continuum_model
 
 
 def filter_cosmic_rays():
@@ -432,7 +414,6 @@ def filter_cosmic_rays():
                                             resampling_wave_step=0.001, window_size=15, \
                                             variation_limit=0.01)
     clean_star_spectrum = star_spectrum[~cosmics]
-    return clean_star_spectrum
 
 
 def find_continuum_regions():
@@ -645,7 +626,6 @@ def calculate_barycentric_velocity():
                                     ra_seconds, dec_degrees, dec_minutes, dec_seconds))
     #--- Correcting barycentric velocity -------------------------------------------
     corrected_spectrum = ispec.correct_velocity(mu_cas_spectrum, barycentric_vel)
-    return corrected_spectrum
 
 def estimate_snr_from_flux():
     star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -655,7 +635,6 @@ def estimate_snr_from_flux():
     logging.info("Estimating SNR from fluxes...")
     num_points = 10
     estimated_snr = ispec.estimate_snr(star_spectrum['flux'], num_points=num_points)
-    return estimated_snr
 
 def estimate_snr_from_err():
     star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -668,7 +647,6 @@ def estimate_snr_from_err():
     else:
         # All the errors are set to zero and we cannot calculate SNR using them
         estimated_snr = 0
-    return estimated_snr
 
 
 def estimate_errors_from_snr():
@@ -676,7 +654,6 @@ def estimate_errors_from_snr():
     #--- Calculate errors based on SNR ---------------------------------------------
     snr = 100
     star_spectrum['err'] = star_spectrum['flux'] / snr
-    return star_spectrum
 
 
 def clean_spectrum():
@@ -691,7 +668,6 @@ def clean_spectrum():
     efilter = (star_spectrum['err'] > err_base) & (star_spectrum['err'] <= err_top)
     wfilter = np.logical_and(ffilter, efilter)
     clean_star_spectrum = star_spectrum[wfilter]
-    return clean_star_spectrum
 
 
 def clean_telluric_regions():
@@ -727,7 +703,6 @@ def clean_telluric_regions():
                                 telluric_linelist[dfilter], min_velocity=-bv+min_vel, \
                                 max_velocity=-bv+max_vel)
     clean_star_spectrum = star_spectrum[~tfilter]
-    return clean_star_spectrum
 
 
 def adjust_line_masks():
@@ -737,13 +712,11 @@ def adjust_line_masks():
     smoothed_star_spectrum = ispec.convolve_spectrum(star_spectrum, resolution)
     line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines.txt")
     linemasks = ispec.adjust_linemasks(smoothed_star_spectrum, line_regions, max_margin=0.5)
-    return linemasks
 
 def create_segments_around_linemasks():
     #---Create segments around linemasks -------------------------------------------
     line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines.txt")
     segments = ispec.create_segments_around_lines(line_regions, margin=0.25)
-    return segments
 
 def fit_lines_determine_ew_and_crossmatch_with_atomic_data(use_ares=False):
     star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -875,7 +848,6 @@ def fit_lines_determine_ew_and_crossmatch_with_atomic_data(use_ares=False):
     # Save linemasks (line masks + atomic cross-matched information + fit information)
     ispec.write_line_regions(linemasks, "example_fitted_atomic_linemask.txt", extended=True)
 
-    return linemasks, ew, ew_err
 
 def fit_lines_already_crossmatched_with_atomic_data_and_determine_ew(use_ares=False):
     star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -1074,7 +1046,6 @@ def synthesize_spectrum(code="spectrum"):
     logging.info("Saving spectrum...")
     synth_filename = "example_synth_%s.fits" % (code)
     ispec.write_spectrum(synth_spectrum, synth_filename)
-    return synth_spectrum
 
 
 def add_noise_to_spectrum():
@@ -1086,7 +1057,6 @@ def add_noise_to_spectrum():
     snr = 100
     distribution = "poisson" # "gaussian"
     noisy_star_spectrum = ispec.add_noise(star_spectrum, snr, distribution)
-    return noisy_star_spectrum
 
 def generate_new_random_realizations_from_spectrum():
     """
@@ -1097,7 +1067,6 @@ def generate_new_random_realizations_from_spectrum():
 
     number = 10
     spectra = ispec.random_realizations(star_spectrum, number, distribution="poisson")
-    return spectra
 
 def precompute_synthetic_grid(code="spectrum"):
     precomputed_grid_dir = "example_grid_%s/" % (code)
@@ -1225,6 +1194,7 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     initial_vsini = 0.0
     initial_limb_darkening_coeff = 0.0
     initial_R = to_resolution
+    initial_vrad = 0
     max_iterations = 6
 
     # Selected model amtosphere, linelist and solar abundances
@@ -1263,11 +1233,12 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     solar_abundances = ispec.read_solar_abundances(solar_abundances_file)
 
     # Free parameters
-    #free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "limb_darkening_coeff"]
+    #free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "vrad", "limb_darkening_coeff"]
     free_params = ["teff", "logg", "MH", "vmic", "R"]
 
     # Free individual element abundance
     free_abundances = None
+    linelist_free_loggf = None
 
     # Line regions
     line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
@@ -1296,11 +1267,11 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     #line_regions = np.hstack((line_regions, mgtriplet_lines))
     #segments = np.hstack((segments, mgtriplet_segments))
 
-    obs_spec, modeled_synth_spectrum, params, errors, abundances_found, status, stats_linemasks = \
+    obs_spec, modeled_synth_spectrum, params, errors, abundances_found, loggf_found, status, stats_linemasks = \
             ispec.model_spectrum(normalized_star_spectrum, star_continuum_model, \
-            modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, initial_teff, \
+            modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, linelist_free_loggf, initial_teff, \
             initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
-            initial_limb_darkening_coeff, initial_R, free_params, segments=segments, \
+            initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=segments, \
             linemasks=line_regions, \
             enhance_abundances=True, \
             use_errors = True, \
@@ -1313,15 +1284,14 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     logging.info("Saving results...")
     dump_file = "example_results_synth_%s.dump" % (code)
     logging.info("Saving results...")
-    ispec.save_results(dump_file, (params, errors, abundances_found, status, stats_linemasks))
+    ispec.save_results(dump_file, (params, errors, abundances_found, loggf_found, status, stats_linemasks))
     # If we need to restore the results from another script:
-    params, errors, abundances_found, status, stats_linemasks = ispec.restore_results(dump_file)
+    params, errors, abundances_found, loggf_found, status, stats_linemasks = ispec.restore_results(dump_file)
 
     logging.info("Saving synthetic spectrum...")
     synth_filename = "example_modeled_synth_%s.fits" % (code)
     ispec.write_spectrum(modeled_synth_spectrum, synth_filename)
 
-    return obs_spec, modeled_synth_spectrum, params, errors, free_abundances, status, stats_linemasks
 
 
 def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(code="spectrum"):
@@ -1424,11 +1394,12 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     solar_abundances = ispec.read_solar_abundances(solar_abundances_file)
 
     # Free parameters
-    #free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "limb_darkening_coeff"]
+    #free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "vrad", "limb_darkening_coeff"]
     free_params = ["teff", "logg", "MH", "vmic", "R"]
 
     # Free individual element abundance
     free_abundances = None
+    linelist_free_loggf = None
 
     # Line regions
     line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
@@ -1457,6 +1428,7 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     line_regions = np.hstack((line_regions, mgtriplet_lines))
     segments = np.hstack((segments, mgtriplet_segments))
 
+    initial_vrad = 0
     initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff = \
             ispec.estimate_initial_ap(normalized_star_spectrum, precomputed_grid_dir, initial_R, line_regions)
     print "Initial estimation:", initial_teff, initial_logg, initial_MH, \
@@ -1468,11 +1440,11 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     logger = logging.getLogger() # root logger, common for all
     logger.setLevel(logging.getLevelName(LOG_LEVEL.upper()))
 
-    obs_spec, modeled_synth_spectrum, params, errors, abundances_found, status, stats_linemasks = \
+    obs_spec, modeled_synth_spectrum, params, errors, abundances_found, loggf_found, status, stats_linemasks = \
             ispec.model_spectrum(normalized_star_spectrum, star_continuum_model, \
-            modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, initial_teff, \
+            modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, linelist_free_loggf, initial_teff, \
             initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
-            initial_limb_darkening_coeff, initial_R, free_params, segments=segments, \
+            initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=segments, \
             linemasks=line_regions, \
             enhance_abundances=True, \
             precomputed_grid_dir = precomputed_grid_dir, \
@@ -1493,14 +1465,13 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     logging.info("Saving results...")
     dump_file = "example_results_synth_precomputed_%s.dump" % (code)
     logging.info("Saving results...")
-    ispec.save_results(dump_file, (params, errors, abundances_found, status, stats_linemasks))
+    ispec.save_results(dump_file, (params, errors, abundances_found, loggf_found, status, stats_linemasks))
     # If we need to restore the results from another script:
-    params, errors, abundances_found, status, stats_linemasks = ispec.restore_results(dump_file)
+    params, errors, abundances_found, loggf_found, status, stats_linemasks = ispec.restore_results(dump_file)
 
     logging.info("Saving synthetic spectrum...")
     synth_filename = "example_modeled_synth_precomputed_%s.fits" % (code)
     ispec.write_spectrum(modeled_synth_spectrum, synth_filename)
-    return obs_spec, modeled_synth_spectrum, params, errors, free_abundances, status, stats_linemasks
 
 
 
@@ -1567,6 +1538,7 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     initial_vsini = 2.0
     initial_limb_darkening_coeff = 0.0
     initial_R = to_resolution
+    initial_vrad = 0
     max_iterations = 6
 
     # Selected model amtosphere, linelist and solar abundances
@@ -1607,8 +1579,9 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
 
 
     # Free parameters
-    #free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "limb_darkening_coeff"]
-    free_params = []
+    #free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "vrad", "limb_darkening_coeff"]
+    free_params = ["vrad"]
+    #free_params = []
 
     # Free individual element abundance (WARNING: it should be coherent with the selected line regions!)
     chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
@@ -1617,6 +1590,8 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     element_name = "Ca"
     free_abundances = ispec.create_free_abundances_structure([element_name], chemical_elements, solar_abundances)
     free_abundances['Abund'] += initial_MH # Scale to metallicity
+
+    linelist_free_loggf = None
 
     # Line regions
     line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
@@ -1629,11 +1604,11 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     # ... or we can create the segments on the fly:
     segments = ispec.create_segments_around_lines(line_regions, margin=0.25)
 
-    obs_spec, modeled_synth_spectrum, params, errors, abundances_found, status, stats_linemasks = \
+    obs_spec, modeled_synth_spectrum, params, errors, abundances_found, loggf_found, status, stats_linemasks = \
             ispec.model_spectrum(normalized_star_spectrum, star_continuum_model, \
-            modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, initial_teff, \
+            modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, linelist_free_loggf, initial_teff, \
             initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
-            initial_limb_darkening_coeff, initial_R, free_params, segments=segments, \
+            initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=segments, \
             linemasks=line_regions, \
             enhance_abundances=True, \
             use_errors = True, \
@@ -1646,15 +1621,14 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     ##--- Save results -------------------------------------------------------------
     dump_file = "example_results_synth_abundances_%s.dump" % (code)
     logging.info("Saving results...")
-    ispec.save_results(dump_file, (params, errors, abundances_found, status, stats_linemasks))
+    ispec.save_results(dump_file, (params, errors, abundances_found, loggf_found, status, stats_linemasks))
     # If we need to restore the results from another script:
-    params, errors, abundances_found, status, stats_linemasks = ispec.restore_results(dump_file)
+    params, errors, abundances_found, loggf_found, status, stats_linemasks = ispec.restore_results(dump_file)
 
     logging.info("Saving synthetic spectrum...")
     synth_filename = "example_modeled_synth_abundances_%s.fits" % (code)
     ispec.write_spectrum(modeled_synth_spectrum, synth_filename)
 
-    return obs_spec, modeled_synth_spectrum, params, errors, free_abundances, status, stats_linemasks
 
 def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
     star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -1718,6 +1692,7 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
     initial_vsini = 2.0
     initial_limb_darkening_coeff = 0.0
     initial_R = to_resolution
+    initial_vrad = 0
     max_iterations = 6
 
     # Selected model amtosphere, linelist and solar abundances
@@ -1758,8 +1733,9 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
 
 
     # Free parameters
-    #free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "limb_darkening_coeff"]
-    free_params = []
+    #free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "vrad", "limb_darkening_coeff"]
+    free_params = ["vrad"]
+    #free_params = []
 
     # Free individual element abundance (WARNING: it should be coherent with the selected line regions!)
     chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
@@ -1784,6 +1760,8 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
         free_abundances = ispec.create_free_abundances_structure([line['note'].split()[0]], chemical_elements, solar_abundances)
         free_abundances['Abund'] += initial_MH # Scale to metallicity
 
+        linelist_free_loggf = None
+
         # Line by line
         individual_line_regions = line_regions[i:i+1] # Keep recarray structure
 
@@ -1791,11 +1769,11 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
         segments = ispec.create_segments_around_lines(individual_line_regions, margin=0.25)
         wfilter = ispec.create_wavelength_filter(normalized_star_spectrum, regions=segments) # Only use the segment
 
-        obs_spec, modeled_synth_spectrum, params, errors, abundances_found, status, stats_linemasks = \
+        obs_spec, modeled_synth_spectrum, params, errors, abundances_found, loggf_found, status, stats_linemasks = \
                 ispec.model_spectrum(normalized_star_spectrum[wfilter], star_continuum_model, \
-                modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, initial_teff, \
+                modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, linelist_free_loggf, initial_teff, \
                 initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
-                initial_limb_darkening_coeff, initial_R, free_params, segments=segments, \
+                initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=segments, \
                 linemasks=individual_line_regions, \
                 enhance_abundances=True, \
                 use_errors = True, \
@@ -1805,19 +1783,197 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
                 tmp_dir = None, \
                 code=code)
 
+
         ##--- Save results -------------------------------------------------------------
         dump_file = output_dirname + "/" + common_filename + ".dump"
         logging.info("Saving results...")
-        ispec.save_results(dump_file, (params, errors, abundances_found, status, stats_linemasks))
+        ispec.save_results(dump_file, (params, errors, abundances_found, loggf_found, status, stats_linemasks))
         # If we need to restore the results from another script:
-        #params, errors, abundances_found, status, stats_linemasks = ispec.restore_results(dump_file)
+        #params, errors, abundances_found, loggf_found, status, stats_linemasks = ispec.restore_results(dump_file)
 
         logging.info("Saving synthetic spectrum...")
         synth_filename = output_dirname + "/" + common_filename + ".fits"
         ispec.write_spectrum(modeled_synth_spectrum, synth_filename)
         #ispec.write_line_regions(individual_line_regions, output_dirname + "/" + common_filename + "_linemask.txt")
 
-    return obs_spec, modeled_synth_spectrum, params, errors, free_abundances, status, stats_linemasks
+
+def determine_loggf_line_by_line_using_synth_spectra(code="spectrum"):
+    star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
+    #--- Radial Velocity determination with template -------------------------------
+    logging.info("Radial velocity determination with template...")
+    # - Read synthetic template
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
+    template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+
+    models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
+                            lower_velocity_limit=-200, upper_velocity_limit=200, \
+                            velocity_step=1.0, fourier=False)
+
+    # Number of models represent the number of components
+    components = len(models)
+    # First component:
+    rv = np.round(models[0].mu(), 2) # km/s
+    rv_err = np.round(models[0].emu(), 2) # km/s
+    #--- Radial Velocity correction ------------------------------------------------
+    logging.info("Radial velocity correction... %.2f +/- %.2f" % (rv, rv_err))
+    star_spectrum = ispec.correct_velocity(star_spectrum, rv)
+
+    #--- Resolution degradation ----------------------------------------------------
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and VALD atomic linelist.
+    from_resolution = 80000
+    to_resolution = 47000
+    star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
+
+    #--- Continuum fit -------------------------------------------------------------
+    model = "Splines" # "Polynomy"
+    degree = 2
+    nknots = None # Automatic: 1 spline every 5 nm
+    from_resolution = to_resolution
+
+    # Strategy: Filter first median values and secondly MAXIMUMs in order to find the continuum
+    order='median+max'
+    median_wave_range=0.05
+    max_wave_range=1.0
+
+    star_continuum_model = ispec.fit_continuum(star_spectrum, from_resolution=from_resolution, \
+                                nknots=nknots, degree=degree, \
+                                median_wave_range=median_wave_range, \
+                                max_wave_range=max_wave_range, \
+                                model=model, order=order, \
+                                automatic_strong_line_detection=True, \
+                                strong_line_probability=0.5, \
+                                use_errors_for_fitting=True)
+    #--- Normalize -------------------------------------------------------------
+    normalized_star_spectrum = ispec.normalize_spectrum(star_spectrum, star_continuum_model, consider_continuum_errors=False)
+    # Use a fixed value because the spectrum is already normalized
+    star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
+    #--- Model spectra ----------------------------------------------------------
+    # Parameters
+    initial_teff = 5777.0
+    initial_logg = 4.43
+    initial_MH = 0.00
+    initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
+    initial_vmac = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH)
+    initial_vsini = 2.0
+    initial_limb_darkening_coeff = 0.0
+    initial_R = to_resolution
+    initial_vrad = 0
+    max_iterations = 6
+
+    # Selected model amtosphere, linelist and solar abundances
+    #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
+    model = ispec_dir + "/input/atmospheres/MARCS.GES/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
+
+    atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
+    #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
+
+    solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
+    #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
+    #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2009/stdatom.dat"
+    #solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
+    #solar_abundances_file = ispec_dir + "/input/abundances/Anders.1989/stdatom.dat"
+
+    isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
+
+    # Load chemical information and linelist
+    atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(star_spectrum['waveobs']), wave_top=np.max(star_spectrum['waveobs']))
+    atomic_linelist = atomic_linelist[atomic_linelist['theoretical_depth'] >= 0.01] # Select lines that have some minimal contribution in the sun
+
+    isotopes = ispec.read_isotope_data(isotope_file)
+
+
+
+    # Load model atmospheres
+    modeled_layers_pack = ispec.load_modeled_layers_pack(model)
+
+    # Load SPECTRUM abundances
+    solar_abundances = ispec.read_solar_abundances(solar_abundances_file)
+
+
+    # Free parameters
+    #free_params = ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "vrad", "limb_darkening_coeff"]
+    #free_params = ["vrad"]
+    free_params = []
+
+    # Free individual element abundance (WARNING: it should be coherent with the selected line regions!)
+    chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
+    chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
+
+    # Line regions
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_extended.txt")
+    # Select only the lines to get abundances from
+    line_regions = line_regions[:5]
+    line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
+
+    output_dirname = "example_loggf_line_by_line_%s" % (code,)
+    ispec.mkdir_p(output_dirname)
+    for i, line in enumerate(line_regions):
+        # Directory and file names
+        #element_name = "_".join(line['element'].split())
+        element_name = "_".join(line['note'].split())
+        common_filename = "example_" + code + "_individual_" + element_name + "_%.4f" % line['wave_peak']
+
+        # Free individual element abundance (WARNING: it should be coherent with the selected line regions!)
+        free_abundances = None
+
+        # Line by line
+        individual_line_regions = line_regions[i:i+1] # Keep recarray structure
+        linelist_free_loggf = line_regions[i:i+1] # Keep recarray structure
+
+        # Filter the line that we want to determine the loggf from the global atomic linelist
+        lfilter = atomic_linelist['element'] == linelist_free_loggf['element'][0]
+        for key in ['wave_nm', 'lower_state_eV', 'loggf', 'stark', 'rad', 'waals']:
+            lfilter = np.logical_and(lfilter, np.abs(atomic_linelist[key] - linelist_free_loggf[key][0]) < 1e-9)
+        if len(atomic_linelist[lfilter]) > 1:
+            logging.warn("Filtering more than one line!")
+        if len(atomic_linelist[lfilter]) == 1:
+            logging.warn("No line filtered!")
+
+        # Segment
+        segments = ispec.create_segments_around_lines(individual_line_regions, margin=0.25)
+        wfilter = ispec.create_wavelength_filter(normalized_star_spectrum, regions=segments) # Only use the segment
+
+        obs_spec, modeled_synth_spectrum, params, errors, abundances_found, loggf_found, status, stats_linemasks = \
+                ispec.model_spectrum(normalized_star_spectrum[wfilter], star_continuum_model, \
+                modeled_layers_pack, atomic_linelist[~lfilter], isotopes, solar_abundances, free_abundances, linelist_free_loggf, initial_teff, \
+                initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
+                initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=segments, \
+                linemasks=individual_line_regions, \
+                enhance_abundances=True, \
+                use_errors = True, \
+                vmic_from_empirical_relation = False, \
+                vmac_from_empirical_relation = False, \
+                max_iterations=max_iterations, \
+                tmp_dir = None, \
+                code=code)
+
+
+
+        ##--- Save results -------------------------------------------------------------
+        dump_file = output_dirname + "/" + common_filename + ".dump"
+        logging.info("Saving results...")
+        ispec.save_results(dump_file, (params, errors, abundances_found, loggf_found, status, stats_linemasks))
+        # If we need to restore the results from another script:
+        #params, errors, abundances_found, loggf_found, status, stats_linemasks = ispec.restore_results(dump_file)
+
+        logging.info("Saving synthetic spectrum...")
+        synth_filename = output_dirname + "/" + common_filename + ".fits"
+        ispec.write_spectrum(modeled_synth_spectrum, synth_filename)
+        #ispec.write_line_regions(individual_line_regions, output_dirname + "/" + common_filename + "_linemask.txt")
+
+        linelist_file = output_dirname + "/" + common_filename + ".txt"
+        ispec.write_atomic_linelist(loggf_found['linelist'], linelist_filename=linelist_file)
+
+
 
 
 def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False):
@@ -2052,7 +2208,7 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
                         #sigma_level = 3, \
                         tmp_dir = None, \
                         code=code)
-    params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params = results
+    params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params, used_linemasks = results
 
     ##--- Save results -------------------------------------------------------------
     logging.info("Saving results...")
@@ -2062,7 +2218,6 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
     # If we need to restore the results from another script:
     params, errors, status, x_over_h, selected_x_over_h, fitted_lines_param = ispec.restore_results(dump_file)
 
-    return params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params
 
 
 def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False):
@@ -2337,7 +2492,6 @@ def calculate_theoretical_ew_and_depth(code="spectrum"):
             atomic_linelist[:10], isotopes, abundances, microturbulence_vel=microturbulence_vel, \
             verbose=1, gui_queue=None, timeout=900)
     ispec.write_atomic_linelist(new_atomic_linelist, linelist_filename="example_linelist.txt")
-    return new_atomic_linelist
 
 
 
@@ -2498,6 +2652,11 @@ if __name__ == '__main__':
     determine_abundances_line_by_line_using_synth_spectra(code="sme")
     determine_abundances_line_by_line_using_synth_spectra(code="moog")
     determine_abundances_line_by_line_using_synth_spectra(code="synthe")
+    determine_loggf_line_by_line_using_synth_spectra(code="spectrum")
+    determine_loggf_line_by_line_using_synth_spectra(code="turbospectrum")
+    determine_loggf_line_by_line_using_synth_spectra(code="sme")
+    determine_loggf_line_by_line_using_synth_spectra(code="moog")
+    determine_loggf_line_by_line_using_synth_spectra(code="synthe")
     determine_astrophysical_parameters_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False)
     determine_astrophysical_parameters_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=False, use_ares=False)
     determine_astrophysical_parameters_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=True, use_ares=False)
@@ -2528,4 +2687,4 @@ if __name__ == '__main__':
     interpolate_atmosphere(code="spectrum")
     interpolate_atmosphere(code="turbospectrum")
     interpolate_atmosphere(code="moog")
-    pass
+    #pass

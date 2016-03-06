@@ -39,7 +39,7 @@ class FitLinesDialog(CustomDialog):
         component = {}
         component["type"] = "Checkbutton"
         component["text"] = "Allow peak position adjustment"
-        component["default"] = True
+        component["default"] = False
         self.__components.append(component)
         component = {}
         component["type"] = "Checkbutton"

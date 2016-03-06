@@ -63,6 +63,7 @@ from dialogs import OperateSpectrumDialog
 from dialogs import ResampleSpectrumDialog
 from dialogs import SendSpectrumDialog
 from dialogs import SolverDialog
+from dialogs import SolverEWDialog
 from dialogs import SyntheticSpectrumDialog
 from dialogs import VelocityProfileDialog
 
@@ -338,11 +339,13 @@ class iSpecBaseApp(Tkinter.Tk):
             self.filenames = {}
             self.filenames['continuum'] = None
             self.filenames['lines'] = None
+            self.filenames['fitted_lines'] = None
             self.filenames['segments'] = None
         else:
             self.filenames = {}
             self.filenames['continuum'] = filenames['continuum']
             self.filenames['lines'] = filenames['lines']
+            self.filenames['fitted_lines'] = None
             self.filenames['segments'] = filenames['segments']
 
 
@@ -409,12 +412,23 @@ class iSpecBaseApp(Tkinter.Tk):
         filemenu.add_command(label="Save line regions as...", command=self.on_save_line_regions)
         filemenu.add_command(label="Save segment as...", command=self.on_save_segments)
         filemenu.add_separator()
+        filemenu.add_command(label="Export fitted lines as...", command=self.on_save_fitted_line_regions)
+        filemenu.add_separator()
         filemenu.add_command(label="Exit", command=self.on_close)
 
         operationmenu = Tkinter.Menu(menu)
         menu.add_cascade(label="Operations", menu=operationmenu)
-        operationmenu.add_command(label="Fit continuum", command=self.on_fit_continuum)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+
+        continuummenu = Tkinter.Menu(operationmenu)
+        operationmenu.add_cascade(label="Fit continuum...", menu=continuummenu)
+        continuummenu.add_command(label="Splines", command=self.on_fit_continuum)
+        self.spectrum_function_items.append((continuummenu, continuummenu.entrycget(Tkinter.END, "label")))
+        continuummenu.add_command(label="Polynomy", command=self.on_fit_continuum_polynomy)
+        self.spectrum_function_items.append((continuummenu, continuummenu.entrycget(Tkinter.END, "label")))
+        continuummenu.add_command(label="Template", command=self.on_fit_continuum_template)
+        self.spectrum_function_items.append((continuummenu, continuummenu.entrycget(Tkinter.END, "label")))
+        continuummenu.add_command(label="Fixed value", command=self.on_fit_continuum_fixed_value)
+        self.spectrum_function_items.append((continuummenu, continuummenu.entrycget(Tkinter.END, "label")))
 
         if len(self.lists['atomic_lines']) > 0:
             operationmenu.add_command(label="Fit lines", command=self.on_fit_lines)
@@ -500,9 +514,11 @@ class iSpecBaseApp(Tkinter.Tk):
         parametersmenu.add_separator()
         if "determine_abundances" in dir(ispec) and "model_spectrum" in dir(ispec) and \
                 len(self.lists['atmospheres']) > 0 and len(self.lists['abundances']) > 0 and len(self.lists['atomic_lines']) > 0:
-            parametersmenu.add_command(label="Determine astrophysical parameters", command=self.on_determine_parameters)
+            parametersmenu.add_command(label="Determine parameters and abundances with synthesis", command=self.on_determine_parameters)
             self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
-            parametersmenu.add_command(label="Determine abundances with fitted lines", command=self.on_determine_abundances)
+            parametersmenu.add_command(label="Determine abundances with equivalent widths", command=self.on_determine_abundances_from_ew)
+            self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
+            parametersmenu.add_command(label="Determine parameters with equivalent widths", command=self.on_determine_parameters_from_ew)
             self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
 
         self.menu_active_spectrum_num = Tkinter.IntVar()
@@ -727,14 +743,17 @@ www.gnu.org/licenses/"""
         self.info("iSpec License", license)
 
     def on_about(self):
-        description = """the Integrated Spectroscopic Framework is a tool for the treatment of spectrum files in order to identify lines, continuum regions and determine radial velocities among other options.
+        description = """iSpec is a tool for the treatment and analysis of high-resolution and high singal-to-noise stellar spectra (mainly FGK stars) developed by Sergi Blanco-Cuaresma.
 """
         if ispec.is_spectrum_support_enabled():
             description += """
-The generation of synthetic spectrum is done thanks to:
+iSpec uses the following radiative transfer codes:
 
-SPECTRUM a Stellar Spectral Synthesis Program
-(C) Richard O. Gray 1992 - 2010 Version 2.76e
+1) SPECTRUM - Richard O. Gray - Version 2.76e
+2) Turbospectrum - Bertrand Plez - v15.1
+3) MOOG - Chris Sneden - July 2014
+4) SYNTHE/WIDTH9 - R. L. Kurucz / Atmos port - 2015
+5) SME - Valenti & Piskunov - 4.23
 """
         self.info("About iSpec", description)
 
@@ -1135,11 +1154,18 @@ SPECTRUM a Stellar Spectral Synthesis Program
         saved = False
         elements = elements.lower()
 
-        if len(self.region_widgets[elements]) == 0:
-            msg = "There is no regions to be saved"
-            title = 'Empty regions'
-            self.error(title, msg)
-            return
+        if elements == "fitted_lines":
+            if self.active_spectrum.linemasks is None:
+                msg = "There is no fitted lines to be exported"
+                title = 'No fitted lines'
+                self.error(title, msg)
+                return
+        else:
+            if len(self.region_widgets[elements]) == 0:
+                msg = "There is no regions to be saved"
+                title = 'Empty regions'
+                self.error(title, msg)
+                return
 
         if self.filenames[elements] is not None:
             filename = self.filenames[elements].split('/')[-1]
@@ -1148,6 +1174,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         else:
             filename = elements + ".txt"
             dirname = os.getcwd()
+
 
         action_ended = False
         while not action_ended:
@@ -1169,28 +1196,32 @@ SPECTRUM a Stellar Spectral Synthesis Program
                     #if not self.question(title, msg):
                         #continue # Give the oportunity to select a new file name
                 self.filenames[elements] = path
-                output = open(path, "w")
-                # Write header
-                if elements == "lines":
-                    output.write("wave_peak\twave_base\twave_top\tnote\n")
+
+                if elements == "fitted_lines":
+                    ispec.write_line_regions(self.active_spectrum.linemasks, path, extended=True)
                 else:
-                    output.write("wave_base\twave_top\n")
+                    output = open(path, "w")
+                    # Write header
+                    if elements == "lines":
+                        output.write("wave_peak\twave_base\twave_top\tnote\n")
+                    else:
+                        output.write("wave_base\twave_top\n")
 
-                ## Visible regions: maybe they have been modified, removed or created
-                for region in self.region_widgets[elements]:
-                    # If the widget is not visible, it has been deleted by the user
-                    if region.axvspan.get_visible():
-                        if elements == "lines":
-                            if region.note is not None:
-                                note = region.note.get_text()
+                    ## Visible regions: maybe they have been modified, removed or created
+                    for region in self.region_widgets[elements]:
+                        # If the widget is not visible, it has been deleted by the user
+                        if region.axvspan.get_visible():
+                            if elements == "lines":
+                                if region.note is not None:
+                                    note = region.note.get_text()
+                                else:
+                                    note = ""
+                                output.write("%.5f" % region.get_wave_peak() + "\t" + "%.5f" % region.get_wave_base() + "\t" + "%.5f" % region.get_wave_top() + "\t" + note + "\n")
                             else:
-                                note = ""
-                            output.write("%.5f" % region.get_wave_peak() + "\t" + "%.5f" % region.get_wave_base() + "\t" + "%.5f" % region.get_wave_top() + "\t" + note + "\n")
-                        else:
-                            output.write("%.5f" % region.get_wave_base() + "\t" + "%.5f" % region.get_wave_top() + "\n")
+                                output.write("%.5f" % region.get_wave_base() + "\t" + "%.5f" % region.get_wave_top() + "\n")
 
-                output.close()
-                self.regions_saved(elements)
+                    output.close()
+                    self.regions_saved(elements)
                 saved = True
                 self.flash_status_message("Saved to %s" % path)
                 action_ended = True
@@ -1211,6 +1242,11 @@ SPECTRUM a Stellar Spectral Synthesis Program
         if self.check_operation_in_progress():
             return
         self.save_regions("lines")
+
+    def on_save_fitted_line_regions(self):
+        if self.check_operation_in_progress():
+            return
+        self.save_regions("fitted_lines")
 
     def on_save_segments(self):
         if self.check_operation_in_progress():
@@ -1878,7 +1914,14 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.canvas.draw()
 
 
-    def on_fit_continuum(self):
+    def on_fit_continuum_polynomy(self):
+        self.on_fit_continuum(fit_type="Polynomy")
+    def on_fit_continuum_template(self):
+        self.on_fit_continuum(fit_type="Template")
+    def on_fit_continuum_fixed_value(self):
+        self.on_fit_continuum(fit_type="Fixed value")
+
+    def on_fit_continuum(self, fit_type="Splines"):
         if not self.check_active_spectrum_exists():
             return
         if self.check_operation_in_progress():
@@ -1890,19 +1933,29 @@ SPECTRUM a Stellar Spectral Synthesis Program
         else:
             R = self.active_spectrum.resolution_telluric
 
+        templates = self.lists['templates']['name'].tolist()
+        templates = ["i:"+t for t in templates]
+        # Add as many options as spectra
+        for i in np.arange(len(self.spectra)):
+            if self.spectra[i] is None:
+                continue
+            templates.append(self.spectra[i].name)
 
-        key = "FitContinuumDialog"
-        # Initial recommendation: 1 knot every 1 nm
-        nknots = np.max([1, int((np.max(self.active_spectrum.data['waveobs']) - np.min(self.active_spectrum.data['waveobs'])) / 1.)])
+        key = "FitContinuumDialog"+fit_type
+        # Initial recommendation: 1 knot every 5 nm
+        nknots = np.max([1, int((np.max(self.active_spectrum.data['waveobs']) - np.min(self.active_spectrum.data['waveobs'])) / 5.)])
         degree = 2
         if not self.active_spectrum.dialog.has_key(key):
-            median_wave_range=0.01
-            max_wave_range=1
+            if fit_type == "Template":
+                median_wave_range=5.0
+            else:
+                median_wave_range=0.05
+            max_wave_range=1.0
             #median_wave_range=0.5
             #max_wave_range=0.1
             strong_line_probability = 0.50
-            self.active_spectrum.dialog[key] = FitContinuumDialog(self, "Properties for fitting continuum", R, nknots, degree, median_wave_range, max_wave_range, strong_line_probability)
-        self.active_spectrum.dialog[key].show(suggested_nknots=nknots)
+            self.active_spectrum.dialog[key] = FitContinuumDialog(self, "Properties for fitting continuum", R, nknots, degree, median_wave_range, max_wave_range, strong_line_probability, templates, fit_type)
+        self.active_spectrum.dialog[key].show(suggested_nknots=nknots, updated_templates=templates)
 
         if self.active_spectrum.dialog[key].results is None:
             self.active_spectrum.dialog[key].destroy()
@@ -1911,24 +1964,41 @@ SPECTRUM a Stellar Spectral Synthesis Program
         model = self.active_spectrum.dialog[key].results["Fitting model"]
         if model != "Fixed value":
             fixed_value = None
-            nknots = self.active_spectrum.dialog[key].results["Number of splines"]
-            degree = self.active_spectrum.dialog[key].results["Degree"]
+            if model == "Splines":
+                nknots = self.active_spectrum.dialog[key].results["Number of splines"]
+            else:
+                nknots = None # In Template mode, used to apply a gaussian filter and the default estimation is good enough
+            median_wave_range = self.active_spectrum.dialog[key].results["Wavelength step for median selection"]
+            if model in ['Splines', 'Polynomy']:
+                degree = self.active_spectrum.dialog[key].results["Degree"]
+                max_wave_range = self.active_spectrum.dialog[key].results["Wavelength step for max selection"]
+                order = self.active_spectrum.dialog[key].results["Filtering order"]
+                use_errors_for_fitting = self.active_spectrum.dialog[key].results["Use spectrum's errors as weights for the fitting process"] == 1
+                automatic_strong_line_detection = self.active_spectrum.dialog[key].results["Automatically find and ignore strong lines"] == 1
+                strong_line_probability = self.active_spectrum.dialog[key].results["Strong line probability threshold"]
+            else:
+                degree = 0
+                max_wave_range = median_wave_range + 0.001
+                order='median+max'
+                use_errors_for_fitting = True
+                automatic_strong_line_detection = True
+                strong_line_probability = 0
+
             R = self.active_spectrum.dialog[key].results["Resolution"]
             if R <= 0:
                 R = None
             else:
                 self.active_spectrum.resolution_telluric = R
                 self.active_spectrum.resolution_atomic = R
-            median_wave_range = self.active_spectrum.dialog[key].results["Wavelength step for median selection"]
-            max_wave_range = self.active_spectrum.dialog[key].results["Wavelength step for max selection"]
             in_continuum = self.active_spectrum.dialog[key].results["Consider only continuum regions"] == 1
             ignore_lines = self.active_spectrum.dialog[key].results["Ignore line regions"] == 1
             each_segment = self.active_spectrum.dialog[key].results["Treat each segment independently"] == 1
-            order = self.active_spectrum.dialog[key].results["Filtering order"]
-            use_errors_for_fitting = self.active_spectrum.dialog[key].results["Use spectrum's errors as weights for the fitting process"]
-            automatic_strong_line_detection = self.active_spectrum.dialog[key].results["Automatically find and ignore strong lines"]
-            strong_line_probability = self.active_spectrum.dialog[key].results["Strong line probability threshold"]
-            if nknots is None or median_wave_range < 0 or max_wave_range < 0:
+            if model == "Template":
+                template = self.active_spectrum.dialog[key].results["Use as a template"]
+            else:
+                template = None
+
+            if median_wave_range < 0 or max_wave_range < 0:
                 self.flash_status_message("Bad value.")
                 return
 
@@ -1975,17 +2045,18 @@ SPECTRUM a Stellar Spectral Synthesis Program
             order='median+max'
             automatic_strong_line_detection = False
             strong_line_probability = 0
+            template = None
         self.active_spectrum.dialog[key].destroy()
 
 
         self.operation_in_progress = True
         self.status_message("Fitting continuum...")
         self.update_progress(10)
-        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'ignore_lines':ignore_lines, 'in_continuum':in_continuum, 'each_segment': each_segment, 'median_wave_range':median_wave_range, 'max_wave_range':max_wave_range, 'fixed_value':fixed_value, 'model':model, 'degree':degree, 'R':R, 'order':order, 'use_errors_for_fitting': use_errors_for_fitting, 'automatic_strong_line_detection':automatic_strong_line_detection, 'strong_line_probability': strong_line_probability})
+        thread = threading.Thread(target=self.on_fit_continuum_thread, args=(nknots,), kwargs={'ignore_lines':ignore_lines, 'in_continuum':in_continuum, 'each_segment': each_segment, 'median_wave_range':median_wave_range, 'max_wave_range':max_wave_range, 'fixed_value':fixed_value, 'model':model, 'degree':degree, 'R':R, 'order':order, 'use_errors_for_fitting': use_errors_for_fitting, 'automatic_strong_line_detection':automatic_strong_line_detection, 'strong_line_probability': strong_line_probability, 'template': template})
         thread.setDaemon(True)
         thread.start()
 
-    def on_fit_continuum_thread(self, nknots, ignore_lines=False, in_continuum=False, each_segment=False, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model="Polynomy", degree=3, R=None, order='median+max', use_errors_for_fitting=True, automatic_strong_line_detection=True, strong_line_probability=0.50):
+    def on_fit_continuum_thread(self, nknots, ignore_lines=False, in_continuum=False, each_segment=False, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model="Polynomy", degree=3, R=None, order='median+max', use_errors_for_fitting=True, automatic_strong_line_detection=True, strong_line_probability=0.50, template=None):
         try:
             if each_segment:
                 self.__update_numpy_arrays_from_widgets("segments")
@@ -2005,7 +2076,25 @@ SPECTRUM a Stellar Spectral Synthesis Program
             else:
                 ignore_lines = None
 
-            self.active_spectrum.continuum_model = ispec.fit_continuum(self.active_spectrum.data, from_resolution=None, independent_regions=independent_regions, continuum_regions=continuum_regions, ignore=ignore_lines, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection, strong_line_probability=strong_line_probability, use_errors_for_fitting=use_errors_for_fitting)
+            if template is not None:
+                if template.startswith("i:"):
+                    # Internal template (solar type)
+                    if not template in self.ccf_template.keys():
+                        i = np.where(self.lists['templates']['name'] == template[2:])[0][0]
+                        self.ccf_template[template] = ispec.read_spectrum(self.lists['templates']['path'][i])
+                    template_spectrum = self.ccf_template[template]
+                else:
+                    # Search template to be used by its name
+                    for i in np.arange(len(self.spectra)):
+                        if self.spectra[i] is None:
+                            continue
+                        if self.spectra[i].name == template:
+                            template_spectrum = self.spectra[i].data
+                            break
+            else:
+                template_spectrum = None
+
+            self.active_spectrum.continuum_model = ispec.fit_continuum(self.active_spectrum.data, from_resolution=None, independent_regions=independent_regions, continuum_regions=continuum_regions, ignore=ignore_lines, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection, strong_line_probability=strong_line_probability, use_errors_for_fitting=use_errors_for_fitting, template=template_spectrum)
             waveobs = self.active_spectrum.data['waveobs']
             self.active_spectrum.continuum_data = ispec.create_spectrum_structure(waveobs, self.active_spectrum.continuum_model(waveobs))
 
@@ -2354,7 +2443,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
                             telluric_linelist=self.telluric_linelist, vel_telluric=vel_telluric, \
                             discard_gaussian=False, discard_voigt=True, \
                             check_derivatives=check_derivatives, smoothed_spectrum=smoothed_spectrum, \
-                            free_mu=free_mu, crossmatch_with_mu=free_mu, closest_match=False)
+                            free_mu=free_mu, crossmatch_with_mu=free_mu, closest_match=True)
         # Exclude lines that have not been successfully cross matched with the atomic data
         # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
         rejected_by_atomic_line_not_found = (linemasks['wave_nm'] == 0)
@@ -2864,7 +2953,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
 
         key = "FindSegmentsDialog"
         if not self.dialog.has_key(key):
-            self.dialog[key] = FindSegmentsDialog(self, "Properties for finding segments", margin=0.5)
+            self.dialog[key] = FindSegmentsDialog(self, "Properties for finding segments", margin=0.25)
         self.dialog[key].show()
 
         if self.dialog[key].results is None:
@@ -4123,7 +4212,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.operation_in_progress = False
         self.flash_status_message("Synthetic spectrum generated!")
 
-    def on_determine_abundances(self, show_previous_results=True):
+    def on_determine_abundances_from_ew(self, show_previous_results=True):
         if self.check_operation_in_progress():
             return
 
@@ -4140,7 +4229,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
             logg = 4.44
             MH = 0.00
             microturbulence_vel = 1.0
-            self.active_spectrum.dialog[key] = AbundancesDialog(self, "Abundances determination", teff, logg, MH, microturbulence_vel, self.lists, self.default_lists)
+            self.active_spectrum.dialog[key] = AbundancesDialog(self, "Abundances determination from EW", teff, logg, MH, microturbulence_vel, self.lists, self.default_lists)
             self.active_spectrum.dialog[key].show()
         elif show_previous_results:
             self.active_spectrum.dialog[key].show()
@@ -4189,12 +4278,12 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.operation_in_progress = True
         self.status_message("Determining abundances...")
 
-        thread = threading.Thread(target=self.on_determine_abundances_thread, args=(code, atmosphere_layers, teff, logg, MH, abundances, microturbulence_vel,))
+        thread = threading.Thread(target=self.on_determine_abundances_from_ew_thread, args=(code, atmosphere_layers, teff, logg, MH, abundances, microturbulence_vel,))
         thread.setDaemon(True)
         thread.start()
 
 
-    def on_determine_abundances_thread(self, code, atmosphere_layers, teff, logg, MH, abundances, microturbulence_vel):
+    def on_determine_abundances_from_ew_thread(self, code, atmosphere_layers, teff, logg, MH, abundances, microturbulence_vel):
         linemasks = self.active_spectrum.linemasks
         error_message = None
         try:
@@ -4206,9 +4295,9 @@ SPECTRUM a Stellar Spectral Synthesis Program
             x_over_fe = None
             error_message = str(e)
 
-        self.queue.put((self.on_determine_abundances_finnish, [spec_abund, normal_abund, x_over_h, x_over_fe, error_message], {}))
+        self.queue.put((self.on_determine_abundances_from_ew_finnish, [spec_abund, normal_abund, x_over_h, x_over_fe, error_message], {}))
 
-    def on_determine_abundances_finnish(self, spec_abund, normal_abund, x_over_h, x_over_fe, error_message):
+    def on_determine_abundances_from_ew_finnish(self, spec_abund, normal_abund, x_over_h, x_over_fe, error_message):
         if error_message is not None:
             msg = error_message
             title = 'Problem determining abundances'
@@ -4232,7 +4321,166 @@ SPECTRUM a Stellar Spectral Synthesis Program
         else:
             # Recalculate
             self.active_spectrum.dialog[key].destroy()
-            self.on_determine_abundances(show_previous_results=False)
+            self.on_determine_abundances_from_ew(show_previous_results=False)
+
+
+    def on_determine_parameters_from_ew(self, show_previous_results=True):
+        if self.check_operation_in_progress():
+            return
+
+        if self.active_spectrum.linemasks is None:
+            msg = "Lines should be fitted first."
+            title = 'Lines not fitted'
+            self.error(title, msg)
+            self.flash_status_message("Not previous fitted lines available.")
+            return
+
+        key = "SolverEWDialog"
+        if not self.active_spectrum.dialog.has_key(key):
+            teff = 5777.0
+            logg = 4.44
+            MH = 0.00
+            microturbulence_vel = 1.0
+            self.active_spectrum.dialog[key] = SolverEWDialog(self, "Parameters determination from EW", teff, logg, MH, microturbulence_vel, self.lists, self.default_lists)
+            self.active_spectrum.dialog[key].show()
+        elif show_previous_results:
+            self.active_spectrum.dialog[key].show()
+
+        if self.active_spectrum.dialog[key].results is None:
+            # Cancel
+            self.active_spectrum.dialog[key].destroy()
+            return
+
+        code = self.active_spectrum.dialog[key].results["Code"].lower()
+        teff = self.active_spectrum.dialog[key].results["Effective temperature (K)"]
+        logg = self.active_spectrum.dialog[key].results["Surface gravity (log g)"]
+        MH = self.active_spectrum.dialog[key].results["Metallicity [Fe/H]"]
+        microturbulence_vel = self.active_spectrum.dialog[key].results["Microturbulence velocity (km/s)"]
+        max_iterations = self.active_spectrum.dialog[key].results["Maximum number of iterations"]
+        free_teff = self.active_spectrum.dialog[key].results["Free Teff"] == 1
+        free_logg = self.active_spectrum.dialog[key].results["Free Log(g)"] == 1
+        free_microturbulence = self.active_spectrum.dialog[key].results["Free Vmic"] == 1
+        free_params = []
+        if free_teff:
+            free_params.append("teff")
+        if free_logg:
+            free_params.append("logg")
+        if free_microturbulence:
+            free_params.append("vmic")
+
+        if len(free_params) == 0:
+            msg = "At least one parameter should be let free"
+            title = 'No free parameters'
+            self.error(title, msg)
+            return
+
+        selected_atmosphere_models = self.active_spectrum.dialog[key].results["Model atmosphere"]
+        selected_abundances = self.active_spectrum.dialog[key].results["Solar abundances"]
+        abundances_file = resource_path("input/abundances/" + selected_abundances + "/stdatom.dat")
+        self.active_spectrum.dialog[key].destroy()
+
+        if teff is None or logg is None or MH is None or microturbulence_vel is None:
+            self.flash_status_message("Bad value.")
+            return
+
+
+        if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
+            logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
+            self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
+            self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/modeled_layers_pack.dump'))
+
+        if not ispec.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
+            msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of theatmospheric models."
+            title = 'Out of the atmospheric models'
+            self.error(title, msg)
+            self.flash_status_message("Bad values.")
+            return
+
+        # Load SPECTRUM abundances
+        if not abundances_file in self.solar_abundances.keys():
+            self.solar_abundances[abundances_file] = ispec.read_solar_abundances(abundances_file)
+        abundances = self.solar_abundances[abundances_file]
+
+        self.operation_in_progress = True
+        self.status_message("Determining abundances...")
+
+        thread = threading.Thread(target=self.on_determine_parameters_from_ew_thread, args=(code, self.modeled_layers_pack[selected_atmosphere_models], abundances,  teff, logg, MH, microturbulence_vel, free_params, max_iterations))
+        thread.setDaemon(True)
+        thread.start()
+
+
+    def on_determine_parameters_from_ew_thread(self, code, modeled_layers_pack, solar_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, free_params, max_iterations):
+        linemasks = self.active_spectrum.linemasks
+        # Reduced equivalent width
+        # Filter too weak/strong lines
+        # * Criteria presented in paper of GALA
+        #efilter = np.logical_and(linemasks['ewr'] >= -5.8, linemasks['ewr'] <= -4.65)
+        efilter = np.logical_and(linemasks['ewr'] >= -6.0, linemasks['ewr'] <= -4.3)
+        # Filter high excitation potential lines
+        # * Criteria from Eric J. Bubar "Equivalent Width Abundance Analysis In Moog"
+        efilter = np.logical_and(efilter, linemasks['lower_state_eV'] <= 5.0)
+        efilter = np.logical_and(efilter, linemasks['lower_state_eV'] >= 0.5)
+        ## Filter also bad fits
+        efilter = np.logical_and(efilter, linemasks['rms'] < 1.00)
+        # no flux
+        noflux = self.active_spectrum.data['flux'][linemasks['peak']] < 1.0e-10
+        efilter = np.logical_and(efilter, np.logical_not(noflux))
+        unfitted = linemasks['fwhm'] == 0
+        efilter = np.logical_and(efilter, np.logical_not(unfitted))
+
+        iron = np.logical_or(linemasks['element'] == "Fe 1", linemasks['element'] == "Fe 2")
+        efilter = np.logical_and(efilter, iron)
+
+        error_message = None
+        try:
+            results = ispec.model_spectrum_from_ew(linemasks[efilter], modeled_layers_pack, \
+                                solar_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, \
+                                free_params=free_params, \
+                                adjust_model_metalicity=True, \
+                                max_iterations=max_iterations, \
+                                enhance_abundances=True, \
+                                #outliers_detection = "robust", \
+                                #outliers_weight_limit = 0.90, \
+                                outliers_detection = "sigma_clipping", \
+                                #sigma_level = 3, \
+                                tmp_dir = None, \
+                                code=code)
+            params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params, used_linemasks = results
+        except Exception, e:
+            params = None
+            errors = None
+            status = None
+            x_over_h = None
+            selected_x_over_h = None
+            fitted_lines_params = None
+            used_linemasks = None
+            error_message = str(e)
+
+
+        self.queue.put((self.on_determine_parameters_from_ew_finnish, [params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params, used_linemasks, error_message], {}))
+
+    def on_determine_parameters_from_ew_finnish(self, params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params, used_linemasks, error_message):
+        if error_message is not None:
+            msg = error_message
+            title = 'Problem determining abundances'
+            self.error(title, msg)
+            self.operation_in_progress = False
+            return
+
+        self.flash_status_message("Parameters determined!")
+        self.operation_in_progress = False
+
+        key = "SolverEWDialog"
+        self.active_spectrum.dialog[key].register(used_linemasks, params, x_over_h, selected_x_over_h, fitted_lines_params)
+        self.active_spectrum.dialog[key].show()
+
+        if self.active_spectrum.dialog[key].results is None:
+            self.active_spectrum.dialog[key].destroy()
+            return
+        else:
+            # Recalculate
+            self.active_spectrum.dialog[key].destroy()
+            self.on_determine_parameters_from_ew(show_previous_results=False)
 
 
     def on_determine_parameters(self):
@@ -4273,6 +4521,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         initial_vsini = self.active_spectrum.dialog[key].results["Rotation (v sin(i)) (km/s)"]
         initial_limb_darkening_coeff = self.active_spectrum.dialog[key].results["Limb darkening coefficient"]
         initial_R = self.active_spectrum.dialog[key].results["Resolution"]
+        initial_vrad = self.active_spectrum.dialog[key].results["Radial velocity"]
         selected_atmosphere_models = self.active_spectrum.dialog[key].results["Model atmosphere"]
         selected_abundances = self.active_spectrum.dialog[key].results["Solar abundances"]
         selected_linelist = self.active_spectrum.dialog[key].results["Line list"]
@@ -4288,6 +4537,7 @@ SPECTRUM a Stellar Spectral Synthesis Program
         free_vsini = self.active_spectrum.dialog[key].results["Free vsin(i)"] == 1
         free_limb_darkening_coeff = self.active_spectrum.dialog[key].results["Free limb dark. coeff."] == 1
         free_resolution = self.active_spectrum.dialog[key].results["Free resolution"] == 1
+        free_vrad = self.active_spectrum.dialog[key].results["Free radial velocity"] == 1
         free_element_abundance = self.active_spectrum.dialog[key].results["Free individual abundance"] == 1
 
         free_params = []
@@ -4307,6 +4557,8 @@ SPECTRUM a Stellar Spectral Synthesis Program
             free_params.append("limb_darkening_coef")
         if free_resolution:
             free_params.append("R")
+        if free_vrad:
+            free_params.append("vrad")
         if free_element_abundance:
             free_params.append(str(element_abundance))
 
@@ -4403,17 +4655,18 @@ SPECTRUM a Stellar Spectral Synthesis Program
         self.operation_in_progress = True
         self.status_message("Determining parameters...")
         self.update_progress(10)
-        thread = threading.Thread(target=self.on_determine_parameters_thread, args=(code, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, max_iterations))
+        thread = threading.Thread(target=self.on_determine_parameters_thread, args=(code, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, max_iterations))
         thread.setDaemon(True)
         thread.start()
 
-    def on_determine_parameters_thread(self, code, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, max_iterations):
+    def on_determine_parameters_thread(self, code, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, max_iterations):
         self.__update_numpy_arrays_from_widgets("lines")
         self.__update_numpy_arrays_from_widgets("segments")
 
         error_message = None
+        linelist_free_loggf = None
         try:
-            obs_spectrum, synth_spectrum, params, errors, free_abundances, status, stats_linemasks = ispec.model_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations, code=code, \
+            obs_spectrum, synth_spectrum, params, errors, free_abundances, loggf_found, status, stats_linemasks = ispec.model_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations, code=code, \
             vmic_from_empirical_relation=False, \
             vmac_from_empirical_relation=False, \
             )

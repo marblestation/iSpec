@@ -78,6 +78,7 @@ class VelocityProfileDialog(CustomDialog):
         component = {}
         component["type"] = "Plot"
         component["function"] = self.__plot
+        component["axes"] = 1
         self.__components.append(component)
         component = {}
         component["type"] = "Listbox"

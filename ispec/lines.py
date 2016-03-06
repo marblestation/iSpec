@@ -211,7 +211,7 @@ def read_line_regions(line_regions_filename):
     write_line_regions(..., extended=True), which contains more fields corresponding
     to atomic cross-match and line fits.
     """
-    atomic_dtype = __get_atomic_linelist_definition()
+    atomic_dtype = _get_atomic_linelist_definition()
     fitted_dtype = __get_fitted_lines_definition()
     try:
         num_cols = len(open(line_regions_filename, "r").readline().split("\t"))
@@ -623,7 +623,7 @@ def __create_linemasks_structure(num_peaks):
     Creates a linemasks structure compatible with SPECTRUM, Turbospectrum and
     several iSpec functions
     """
-    dtype = __get_atomic_linelist_definition() + __get_fitted_lines_definition()
+    dtype = _get_atomic_linelist_definition() + __get_fitted_lines_definition()
     linemasks = np.recarray((num_peaks, ), dtype=dtype)
     # Initialization
     linemasks['grouped'] = False # Lines that share the same mask (i.e. HFS and isotopes)
@@ -721,7 +721,7 @@ def read_atomic_linelist(linelist_filename, wave_base=None, wave_top=None):
     The linelist can be filtered by wave_base and wave_top (in nm) to reduce
     memory consumption.
     """
-    atomic_dtype = __get_atomic_linelist_definition()
+    atomic_dtype = _get_atomic_linelist_definition()
     fitted_dtype = __get_fitted_lines_definition()
     try:
         num_cols = len(open(linelist_filename, "r").readline().split("\t"))
@@ -769,7 +769,7 @@ def __get_fitted_lines_definition():
             ('discarded', '|S5'), \
             ]
 
-def __get_atomic_linelist_definition():
+def _get_atomic_linelist_definition():
     return [('element', '|S4'),
      #('turbospectrum_element', '|S6'),
      ('wave_A', '<f8'),
@@ -841,19 +841,19 @@ def write_atomic_linelist(linelist, linelist_filename=None, code=None, tmp_dir=N
             raise Exception("Unknown radiative transfer code: %s" % (code))
 
         if code == "moog":
-            logging.info("MOOG file format")
+            #logging.info("MOOG file format")
             return __moog_write_atomic_linelist(linelist, linelist_filename=linelist_filename, tmp_dir=tmp_dir)
         elif code == "moog_barklem":
-            logging.info("MOOG Barklem.dat file format")
+            #logging.info("MOOG Barklem.dat file format")
             return __moog_barklem_write_atomic_linelist(linelist, linelist_filename=linelist_filename, tmp_dir=tmp_dir)
         elif code == "turbospectrum":
-            logging.info("Turbospectrum file format")
+            #logging.info("Turbospectrum file format")
             return __turbospectrum_write_atomic_linelist(linelist, linelist_filename=linelist_filename, tmp_dir=tmp_dir)
         elif code == "synthe":
-            logging.info("Synthe file format")
+            #logging.info("Synthe file format")
             return __synthe_write_atomic_linelist(linelist, linelist_filename=linelist_filename, tmp_dir=tmp_dir)
         else:
-            logging.info("SPECTRUM file format")
+            #logging.info("SPECTRUM file format")
             return __spectrum_write_atomic_linelist(linelist, linelist_filename=linelist_filename, tmp_dir=tmp_dir)
     else:
         if linelist_filename is not None:
@@ -868,7 +868,7 @@ def write_atomic_linelist(linelist, linelist_filename=None, code=None, tmp_dir=N
         return out.name
 
 def __generic_write_atomic_linelist_header(out, include_fit):
-    for i, (key, dtype) in enumerate(__get_atomic_linelist_definition()):
+    for i, (key, dtype) in enumerate(_get_atomic_linelist_definition()):
         if i == 0:
             out.write("%s" % (key))
         else:
@@ -1238,7 +1238,7 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
 
     logging.info("Fitting line models...")
 
-    atomic_data_dtype = __get_atomic_linelist_definition()
+    atomic_data_dtype = _get_atomic_linelist_definition()
     fitted_lines_dtype = __get_fitted_lines_definition()
     if regions.dtype == atomic_data_dtype+fitted_lines_dtype:
         regions = reset_fitted_data_fields(regions)
@@ -1564,7 +1564,7 @@ def __fill_linemasks_with_atomic_data(linemasks, atomic_linelist, diff_limit=0.0
                         i = imin_diff[ii]
 
                 # Copy atomic information
-                for key, dtype in __get_atomic_linelist_definition():
+                for key, dtype in _get_atomic_linelist_definition():
                     linemasks[key][j] = atomic_linelist[key][i]
 
     if vel_atomic != 0:

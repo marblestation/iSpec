@@ -2,19 +2,25 @@ import numpy as np
 import matplotlib.pyplot as plt
 from CustomDialog import *
 
-class AbundancesDialog(CustomDialog):
+class SolverEWDialog(CustomDialog):
     def plot(self, axes, component):
         for i, ax in enumerate(axes):
             ## Draw
-            elements = np.unique(self.__linemasks['element'])
-            for element in elements:
-                flines = self.__linemasks['element'] == element
-                element_linemasks = self.__linemasks[flines]
-                element_abundances = self.__x_over_h[flines]
+            for j, element in enumerate(["Fe 1", "Fe 2"]):
+                element_linemasks = self.__linemasks[self.__linemasks['element'] == element]
+                element_abundances = self.__x_over_h[self.__selected_x_over_h[j]]
+                if len(element_abundances) == 0:
+                    continue
                 if i == 0:
-                    ax.plot(element_linemasks['lower_state_eV'], element_abundances, linestyle='', marker='o', markersize=5, zorder=1, label=element)
+                    m = self.__fitted_lines_params[0]
+                    c = self.__fitted_lines_params[1]
+                    x = element_linemasks['lower_state_eV']
                 else:
-                    ax.plot(element_linemasks['ewr'], element_abundances, linestyle='', marker='o', markersize=5, zorder=1, label=element)
+                    m = self.__fitted_lines_params[2]
+                    c = self.__fitted_lines_params[3]
+                    x = element_linemasks['ewr']
+                ax.plot(x, element_abundances, linestyle='', marker='o', markersize=5, zorder=1, label=element)
+                ax.plot(x, m*x + c, color="red")
 
             leg = ax.legend(loc='upper right', shadow=False, numpoints=1)
             ltext  = leg.get_texts()
@@ -31,18 +37,20 @@ class AbundancesDialog(CustomDialog):
         #fig.set_tight_layout(True)
         fig.subplots_adjust(hspace = 0.5, bottom=0.2)
 
-    def register(self, linemasks, x_over_h, x_over_fe):
-        self.__x_over_h = x_over_h
-        self.__x_over_fe = x_over_fe
+    def register(self, linemasks, params, x_over_h, selected_x_over_h, fitted_lines_params):
         self.__linemasks = linemasks
+        self.__params = params
+        self.__x_over_h = x_over_h
+        self.__selected_x_over_h = selected_x_over_h
+        self.__fitted_lines_params = fitted_lines_params
 
         # We have data, we can assign the plotting function
         self.__components[0]["function"] = self.plot
 
-        teff = float(self.__components[5]["default"])
-        logg = float(self.__components[6]["default"])
-        feh = float(self.__components[7]["default"])
-        vmic = float(self.__components[8]["default"])
+        teff = params['teff']
+        logg = params['logg']
+        feh = params['MH']
+        vmic = params['vmic']
 
         ## Stats
         for i in xrange(len(self.__stats)):
@@ -51,27 +59,32 @@ class AbundancesDialog(CustomDialog):
         self.__stats.append("%-50s: %10.2f" % ("Surface gravity (log g)", np.round(logg, 2)))
         self.__stats.append("%-50s: %10.2f" % ("Metallicity [Fe/H]", np.round(feh, 2)))
         self.__stats.append("%-50s: %10.2f" % ("Microturbulence velocity (km/s)", np.round(vmic, 2)))
-        self.__stats.append("%-50s: %10.2f" % ("Total number of lines", np.round(len(x_over_h), 2)))
 
-        elements = np.unique(linemasks['element'])
-        for element in elements:
-            flines = linemasks['element'] == element
-            element_linemasks = linemasks[flines]
-            element_abundances_over_h = x_over_h[flines]
-            element_abundances_over_fe = x_over_fe[flines]
+        self.__stats.append("%-50s: %10.4f" % ("Excitation potential slope", np.round(self.__fitted_lines_params[0], 2)))
+        self.__stats.append("%-50s: %10.4f" % ("Reduced equivalent width slope", np.round(self.__fitted_lines_params[2], 2)))
+        diff = np.nanmedian(self.__x_over_h[self.__selected_x_over_h[0]]) - np.nanmedian(self.__x_over_h[self.__selected_x_over_h[1]])
+        self.__stats.append("%-50s: %10.2f" % ("Fe I - Fe II abundance difference", np.round(diff, 2)))
+
+        self.__stats.append("%-50s: %10.0f" % ("Total number of lines", np.round(len(x_over_h), 2)))
+
+        for i, element in enumerate(["Fe 1", "Fe 2"]):
+            element_abundances_over_h = x_over_h[selected_x_over_h[i]]
+            if len(element_abundances_over_h) == 0:
+                continue
             self.__stats.append("%-50s: %10.2f" % ( element + " median abundance in [X/H] (dex)", np.round(np.nanmedian(element_abundances_over_h), 2)))
             self.__stats.append("%-50s: %10.2f" % ( element + " mean abundance in [X/H] (dex)", np.round(np.nanmean(element_abundances_over_h), 2)))
             self.__stats.append("%-50s: %10.2f" % ( element + " standard deviation in [X/H] (dex)", np.round(np.nanstd(element_abundances_over_h), 2)))
-            self.__stats.append("%-50s: %10.2f" % ( element + " median abundance in [X/Fe] (dex)", np.round(np.nanmedian(element_abundances_over_fe), 2)))
-            self.__stats.append("%-50s: %10.2f" % ( element + " mean abundance in [X/Fe] (dex)", np.round(np.nanmean(element_abundances_over_fe), 2)))
-            self.__stats.append("%-50s: %10.2f" % ( element + " standard deviation in [X/Fe] (dex)", np.round(np.nanstd(element_abundances_over_fe), 2)))
-            self.__stats.append("%-50s: %10.2f" % ( element + " lines number", np.round(len(element_abundances_over_h), 0)))
+            self.__stats.append("%-50s: %10.0f" % ( element + " lines number", np.round(len(element_abundances_over_h), 0)))
 
 
     def __init__(self, parent, title, teff, logg, feh, vmic, lists, default_lists):
         self.__parent = parent
         self.__title = title
         self.__plot = None
+        self.__params = None
+        self.__x_over_h = None
+        self.__selected_x_over_h = None
+        self.__fitted_lines_params = None
         self.__stats = []
         self.__components = []
         component = {}
@@ -110,12 +123,22 @@ class AbundancesDialog(CustomDialog):
         component["maxvalue"] = 8000
         self.__components.append(component)
         component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Free Teff"
+        component["default"] = True
+        self.__components.append(component)
+        component = {}
         component["type"] = "Entry"
         component["text"] = "Surface gravity (log g)"
         component["text-type"] = "float" # float, int or str
         component["default"] = logg
         component["minvalue"] = 0
         component["maxvalue"] = 5
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Free Log(g)"
+        component["default"] = True
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
@@ -130,6 +153,19 @@ class AbundancesDialog(CustomDialog):
         component["text"] = "Microturbulence velocity (km/s)"
         component["text-type"] = "float" # float, int or str
         component["default"] = vmic
+        component["minvalue"] = 0
+        component["maxvalue"] = np.inf
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Free Vmic"
+        component["default"] = True
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Entry"
+        component["text"] = "Maximum number of iterations"
+        component["text-type"] = "int" # float, int or str
+        component["default"] = "10"
         component["minvalue"] = 0
         component["maxvalue"] = np.inf
         self.__components.append(component)

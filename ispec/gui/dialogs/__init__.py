@@ -48,4 +48,5 @@ from SendSpectrumDialog import *
 from SyntheticSpectrumDialog import *
 from VelocityProfileDialog import *
 from SolverDialog import *
+from SolverEWDialog import *
 

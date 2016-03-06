@@ -275,7 +275,7 @@ def interpolation(np.ndarray[np.double_t,ndim=1] waveobs, np.ndarray[np.double_t
         current_work_progress = (i*1.0 / new_total_points) * 100
         if (int(current_work_progress) % 10 == 0 and current_work_progress - last_reported_progress > 10) or last_reported_progress < 0 or current_work_progress == 100:
             last_reported_progress = current_work_progress
-            logging.info("%.2f%%" % current_work_progress)
+            #logging.info("%.2f%%" % current_work_progress)
             if frame != None:
                 frame.update_progress(current_work_progress)
 

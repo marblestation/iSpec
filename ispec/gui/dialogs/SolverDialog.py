@@ -135,6 +135,19 @@ class SolverDialog(CustomDialog):
         component["default"] = False
         self.__components.append(component)
         component = {}
+        component["type"] = "Entry"
+        component["text"] = "Radial velocity"
+        component["text-type"] = "float" # float, int or str
+        component["default"] = 0.
+        component["minvalue"] = -np.inf
+        component["maxvalue"] = np.inf
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Free radial velocity"
+        component["default"] = False
+        self.__components.append(component)
+        component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Individual abundance"
         component["options"] = []
@@ -248,7 +261,7 @@ class SolverDialog(CustomDialog):
         component["type"] = "Entry"
         component["text"] = "Maximum number of iterations"
         component["text-type"] = "int" # float, int or str
-        component["default"] = "20"
+        component["default"] = "6"
         component["minvalue"] = 0
         component["maxvalue"] = np.inf
         self.__components.append(component)

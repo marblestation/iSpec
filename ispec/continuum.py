@@ -267,7 +267,8 @@ def fit_continuum(spectrum, from_resolution=None, independent_regions=None, cont
             try:
                 if len(spectrum[wfilter]) > 10:
                     if template is not None:
-                        template_tmp = template[wfilter]
+                        tfilter = np.logical_and(template['waveobs'] >= region['wave_base'], template['waveobs'] <= region['wave_top'])
+                        template_tmp = template[tfilter]
                     else:
                         template_tmp = None
                     continuum = __fit_continuum(spectrum[wfilter], from_resolution=from_resolution, continuum_regions=continuum_regions, ignore=ignore, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection, strong_line_probability=strong_line_probability, use_errors_for_fitting=use_errors_for_fitting, template=template_tmp)
@@ -610,7 +611,7 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
 
         # Divide the observed spectrum by the template and smooth the result
         wave_step = np.median(np.abs(spectrum['waveobs'][1:] - spectrum['waveobs'][:-1]))
-        med_filter_step = int(np.round(median_wave_range / wave_step))
+        med_filter_step = np.max((int(np.round(median_wave_range / wave_step)), 3))
         smoothed_continuum_tmp1 = median_filter(spectrum['flux'][useful] / template['flux'][useful], med_filter_step)
         smoothed_continuum_tmp2 = np.interp(template['waveobs'], template['waveobs'][useful], smoothed_continuum_tmp1)
         continuum_flux = gaussian_filter(smoothed_continuum_tmp2, 2*nknots)
