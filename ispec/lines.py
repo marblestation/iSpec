@@ -1807,7 +1807,7 @@ def __cross_correlation_function_template(spectrum, template, lower_velocity_lim
     return velocity, ccf, ccf_err
 
 
-def __sampling_uniform_in_velocity(wave_base, wave_top, velocity_step):
+def _sampling_uniform_in_velocity(wave_base, wave_top, velocity_step):
     """
     Create a uniformly spaced grid in terms of velocity:
 
@@ -1819,9 +1819,9 @@ def __sampling_uniform_in_velocity(wave_base, wave_top, velocity_step):
       The last term is constant when dealing with wavelenght in log10.
     - Useful for building the cross correlate function used for determining the radial velocity of a star.
     """
-    # Speed of light in km/s
-    c = 299792.4580
-    #c = 299792458.0
+    # Speed of light
+    c = 299792.4580 # km/s
+    #c = 299792458.0 # m/s
 
     ### Numpy optimized:
     # number of elements to go from wave_base to wave_top in increments of velocity_step
@@ -1875,7 +1875,7 @@ def __cross_correlation_function_uniform_in_velocity(spectrum, mask, lower_veloc
     shifts = np.arange(np.int32(np.floor(lower_velocity_limit)/velocity_step), np.int32(np.ceil(upper_velocity_limit)/velocity_step)+1)
     velocity = shifts * velocity_step
 
-    waveobs = __sampling_uniform_in_velocity(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), velocity_step)
+    waveobs = _sampling_uniform_in_velocity(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), velocity_step)
     flux = np.interp(waveobs, spectrum['waveobs'], spectrum['flux'], left=0.0, right=0.0)
     err = np.interp(waveobs, spectrum['waveobs'], spectrum['err'], left=0.0, right=0.0)
 
@@ -2769,7 +2769,7 @@ def update_ew_with_ares(spectrum, linelist, rejt="0.995", tmp_dir=None, verbose=
     tmp_spectrum.sort(order=['waveobs'])
     tmp_spectrum['waveobs'] *= 10. # Ares requires Amstrongs and not nm
     wavelengths = np.arange(np.min(tmp_spectrum['waveobs']), np.max(tmp_spectrum['waveobs']), 0.01)
-    tmp_spectrum = resample_spectrum(tmp_spectrum, wavelengths, method="bessel", zero_edges=True)
+    tmp_spectrum = resample_spectrum(tmp_spectrum, wavelengths, method="linear", zero_edges=True)
     tmp_spectrum['err'] = 0.
     write_spectrum(tmp_spectrum, spectrum_file)
 

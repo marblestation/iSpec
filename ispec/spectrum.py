@@ -782,7 +782,7 @@ def create_spectrum_structure(waveobs, flux=None, err=None):
     return spectrum
 
 
-def resample_spectrum(spectrum, xaxis, method="bessel", zero_edges=True, frame=None):
+def resample_spectrum(spectrum, xaxis, method="linear", zero_edges=True, frame=None):
     """
     Returns a new spectrum with measures at the given xaxis wavelength
     Interpolation method can be:

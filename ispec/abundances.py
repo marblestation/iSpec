@@ -921,26 +921,42 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
     #   helium_number_atom_fraction = 0.07837
     # Fraction in mass from MARCS model (X=Hydrogen, Y=Helium, Z=Metals):
     #   0.74732 0.25260 7.81E-05 are X, Y and Z, 12C/13C=89 (=solar)
-    # Transfor to number fraction:
+    # Transform to number fraction:
     #   Y = 0.25260 / (4-3*0.25260) = 0.07791
     #   X = 1 - Y = 0.92209
-    hydrogen_number_atom_fraction = 0.92209
-    helium_number_atom_fraction = 0.07791
+    #hydrogen_number_atom_fraction = 0.92209
+    #helium_number_atom_fraction = 0.07791
+    hydrogen_number_atom_fraction = 0.92080 # It does not seem to have any effect on synthesis
+    helium_number_atom_fraction = 0.07837   # It does not seem to have any effect on synthesis
 
     command_input += "ABUNDANCE SCALE   %.5f ABUNDANCE CHANGE 1 %.5f 2 %.5f\n" % (abundance_scale, hydrogen_number_atom_fraction, helium_number_atom_fraction)
     # command_input += " ABUNDANCE CHANGE  3 -10.99  4 -10.66  5  -9.34  6  -3.65  7  -4.26  8  -3.38\n"
     # command_input += " ABUNDANCE CHANGE  9  -7.48 10  -4.20 11  -5.87 12  -4.51 13  -5.67 14  -4.53\n"
-    atom_abundances = abundances[abundances['code'] <= 92]
+    atom_abundances = abundances[np.logical_and(abundances['code'] > 2, abundances['code'] <= 92)]
+    num_added_abundances = 0
     for atom_abundance in atom_abundances:
         # abund = 12.036 + atom_abundance['Abund'] # From SPECTRUM format to Turbospectrum
+        #command_input += " ABUNDANCE CHANGE  %i  %.2f\n" % (atom_abundance['code'], abund)
+        if num_added_abundances == 0:
+            command_input += " ABUNDANCE CHANGE"
+
         abund = atom_abundance['Abund']
-        command_input += " ABUNDANCE CHANGE  %i  %.2f\n" % (atom_abundance['code'], abund)
+        command_input += " %2i %6.2f" % (atom_abundance['code'], abund)
+        num_added_abundances += 1
+
+        if num_added_abundances == 6:
+            command_input += "\n"
+            num_added_abundances = 0
+    command_input += " ABUNDANCE CHANGE 93 -20.00 94 -20.00 95 -20.00 96 -20.00 97 -20.00 98 -20.00    \n"
+    command_input += " ABUNDANCE CHANGE 99 -20.00                                                      \n"
 
     command_input += "READ DECK6 %i RHOX,T,P,XNE,ABROSS,ACCRAD,VTURB\n" % (len(atmosphere_layers))
     #command_input += " 6.12960183E-04   3686.1 1.679E+01 2.580E+09 2.175E-04 4.386E-02 1.000E+05\n"
     #atm_kurucz.write("%.8e   %.1f %.3e %.3e %.3e %.3e %.3e" % (rhox[i], temperature[i], pgas[i], xne[i], abross[i], accrad[i], vturb[i]) )
-    command_input += "\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]))) for layer in atmosphere_layers])
-    #command_input += "\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], 1.0))) for layer in atmosphere_layers])
+    #command_input += "\n".join([" %.8E %8.1f %.3E %.3E %.3E %.3E %.3E" % (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]) for layer in atmosphere_layers])
+    #command_input += "\n".join([" %.8E %8.1f %.3E %.3E %.3E %.3E %.3E" % (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], 1.0e5) for layer in atmosphere_layers])
+    # Force microturbulence in model to zero because later it will be used to add to the real microturbulence that we want:
+    command_input += "\n".join([" %.8E %8.1f %.3E %.3E %.3E %.3E %.3E" % (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], 0.0e5) for layer in atmosphere_layers])
     command_input += "\nPRADK 1.4878E+00\n"
     command_input += "READ MOLECULES\n"
     command_input += "MOLECULES ON\n"

@@ -4287,7 +4287,7 @@ iSpec uses the following radiative transfer codes:
         linemasks = self.active_spectrum.linemasks
         error_message = None
         try:
-            spec_abund, normal_abund, x_over_h, x_over_fe = ispec.determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 1.0, verbose=1, gui_queue=self.queue, code=code)
+            spec_abund, normal_abund, x_over_h, x_over_fe = ispec.determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel=microturbulence_vel, verbose=1, gui_queue=self.queue, code=code)
         except Exception, e:
             spec_abund = None
             normal_abund = None

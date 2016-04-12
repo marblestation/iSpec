@@ -552,9 +552,9 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
         nknots = np.max([1, int((np.max(spectrum['waveobs']) - np.min(spectrum['waveobs'])) / 5.)])
 
 
-    if order == "max+median" and median_wave_range <= max_wave_range:
+    if model not in ["Template", "Fixed value"] and order == "max+median" and median_wave_range <= max_wave_range:
         raise Exception("For 'max+median' order, median_wave_range should be greater than max_wave_rage!")
-    if order == "median+max" and median_wave_range >= max_wave_range:
+    if model not in ["Template", "Fixed value"] and order == "median+max" and median_wave_range >= max_wave_range:
         raise Exception("For 'median+max' order, median_wave_range should be smaller than max_wave_rage!")
 
 
@@ -625,7 +625,7 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
 
     zeros = spectrum['flux'] <= 0
     # Resample avoiding zeros and repating the last good value in the borders (not zeros!)
-    resampled_spectrum = resample_spectrum(spectrum[~zeros], wavelengths, method="bessel", zero_edges=False)
+    resampled_spectrum = resample_spectrum(spectrum[~zeros], wavelengths, method="linear", zero_edges=False)
 
     # Filter the spectrum to get the continuum
     if order == "max+median":
@@ -697,7 +697,7 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
 
     ##### Fit the continuum
     # Resample avoiding zeros and repating the last good value in the borders (not zeros!)
-    continuum = resample_spectrum(smooth3, spectrum['waveobs'], method="bessel", zero_edges=False)
+    continuum = resample_spectrum(smooth3, spectrum['waveobs'], method="linear", zero_edges=False)
     ignore1 = create_wavelength_filter(continuum, regions=ignored_regions)
     if model == "Splines":
 
@@ -739,90 +739,6 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
     return continuum_model
 
 
-
-def __fit_continuum_old(spectrum, continuum_regions=None, nknots=None, median_wave_range=0.1, max_wave_range=1, fixed_value=None, model='Polynomy'):
-    """
-    If fixed_value is specified, the continuum is fixed to the given value (always
-    the same for any wavelength). If not, fit the continuum by following these steps:
-
-    1) Determine continuum base points:
-        a. Find base points by selecting local max. values (3 points).
-        b. Find the median value per each 0.1 nm (avoid noisy peaks).
-        c. Find the max. value per each 1 nm (avoid blended base points).
-        d. Discard outliers considering the median +/- 3 x sigma.
-    2) Fitting (depending model value):
-        1. Fixed value
-        2. Spline fitting:
-            a. The number of splines can be specified, if not it will use 1 spline every 10 nm.
-            b. The algorithm automatically distributes and assigns more splines to regions more populated with base points.
-            c. If there are not enough data points to fit, the whole process is repeated but without discarding outliers.
-        3. Polynomial fitting
-    3) Returns the fitted model.
-    """
-    if not model in ['Splines', 'Polynomy', 'Fixed value']:
-        raise Exception("Wrong model name!")
-
-    if model == 'Fixed value' and fixed_value is None:
-        raise Exception("Fixed value needed!")
-
-    class ConstantValue:
-        def __init__(self, value):
-            self.value = value
-
-        def __call__(self, x):
-            try:
-                return np.asarray([self.value] * len(x))
-            except TypeError:
-                # It's not an array, return a single value
-                return self.value
-
-    if model == 'Fixed value':
-        return ConstantValue(fixed_value)
-
-    if continuum_regions is not None:
-        spectrum_regions = None
-        for region in continuum_regions:
-            wave_filter = (spectrum['waveobs'] >= region['wave_base']) & (spectrum['waveobs'] <= region['wave_top'])
-            new_spectrum_region = spectrum[wave_filter]
-            if spectrum_regions is None:
-                spectrum_regions = new_spectrum_region
-            else:
-                spectrum_regions = np.hstack((spectrum_regions, new_spectrum_region))
-        spectrum = spectrum_regions
-
-    continuum_base_points = __determine_continuum_base_points(spectrum, discard_outliers=True, median_wave_range=median_wave_range, max_wave_range=max_wave_range)
-
-    if nknots is None:
-        # * 1 knot every 10 nm in average
-        nknots = np.max([1, int((np.max(spectrum['waveobs']) - np.min(spectrum['waveobs'])) / 10)])
-
-    if len(spectrum['waveobs'][continuum_base_points]) == 0:
-        raise Exception("Not enough points to fit")
-
-    continuum_model = KnotSplineModel(nknots=nknots, degree=2, CDF=True)
-    fitting_error = False
-    try:
-        if model == "Splines":
-            continuum_model.fitData(spectrum['waveobs'][continuum_base_points], spectrum['flux'][continuum_base_points])
-        else:
-            continuum_model = np.poly1d(np.polyfit(spectrum['waveobs'][continuum_base_points], spectrum['flux'][continuum_base_points], nknots))
-    except Exception, e:
-        ipdb.set_trace()
-        fitting_error = True
-
-    # If there is no fit (because too few points)
-    if fitting_error or ("residuals" in dir(continuum_model) and np.any(np.isnan(continuum_model.residuals()))):
-        # Try without discarding outliers:
-        continuum_base_points = __determine_continuum_base_points(spectrum, discard_outliers=False, median_wave_range=median_wave_range,
-max_wave_range=max_wave_range)
-        if model == "Splines":
-            continuum_model.fitData(spectrum['waveobs'][continuum_base_points], spectrum['flux'][continuum_base_points])
-        else:
-            continuum_model = np.poly1d(np.polyfit(spectrum['waveobs'][continuum_base_points], spectrum['flux'][continuum_base_points], nknots))
-        if np.any(np.isnan(continuum_model.residuals())):
-            raise Exception("Not enough points to fit")
-
-    return continuum_model
 
 
 def find_continuum(spectrum, resolution, segments=None, max_std_continuum = 0.002, continuum_model = 0.95, max_continuum_diff=0.01, fixed_wave_step=None, frame=None):

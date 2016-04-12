@@ -42,7 +42,7 @@ class ResampleSpectrumDialog(CustomDialog):
         component = {}
         component["type"] = "OptionMenu"
         component["text"] = "Method"
-        component["options"] = ["Bessel", "Linear", "Spline"]
+        component["options"] = ["Linear", "Bessel", "Spline"]
         component["default"] = component["options"][0]
         self.__components.append(component)
 

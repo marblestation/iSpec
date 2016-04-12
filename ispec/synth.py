@@ -27,7 +27,7 @@ from abundances import write_solar_abundances, write_fixed_abundances, determine
 from abundances import determine_abundance_enchancements, enhance_solar_abundances
 from segments import create_segments_around_lines
 from atmospheres import write_atmosphere, interpolate_atmosphere_layers, valid_atmosphere_target, calculate_opacities, extrapolated_model_atmosphere_were_used
-from lines import write_atomic_linelist, write_isotope_data, _get_atomic_linelist_definition
+from lines import write_atomic_linelist, write_isotope_data, _get_atomic_linelist_definition, _sampling_uniform_in_velocity
 from common import mkdir_p, estimate_vmic, estimate_vmac, which
 from common import is_turbospectrum_support_enabled, is_spectrum_support_enabled, is_moog_support_enabled, is_synthe_support_enabled
 from common import is_sme_support_enabled
@@ -43,6 +43,7 @@ import shutil
 import re
 import glob
 
+from scipy.signal import fftconvolve
 from astropy.io import fits
 from astropy.io import ascii
 from astropy.table import Table, Column
@@ -89,7 +90,9 @@ def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, li
     lcode = linelist[code+'_support'] == "T"
     linelist = linelist[lcode]
     # Limit linelist to the region asked to be synthesized
-    wfilter = np.logical_and(linelist['wave_nm'] >= np.min(waveobs), linelist['wave_nm'] <= np.max(waveobs))
+    # Provide some margin or near-by deep lines might be omitted
+    margin = 2. # 2 nm
+    wfilter = np.logical_and(linelist['wave_nm'] >= np.min(waveobs)-margin, linelist['wave_nm'] <= np.max(waveobs)+margin)
     linelist = linelist[wfilter]
 
     if code == "turbospectrum":
@@ -120,7 +123,7 @@ def __spectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, l
 
     Fixed abundances can be set to 'None'.
     """
-    return __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence = 0.0, vsini = 0.0, limb_darkening_coeff = 0.20, R=0, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions)
+    return __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions)
 
 
 def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.20, R=500000, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, waveobs_mask=None, code="spectrum", use_molecules=False, tmp_dir=None):
@@ -136,22 +139,24 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isot
     lcode = linelist[code+'_support'] == "T"
     linelist = linelist[lcode]
     # Limit linelist to the region asked to be synthesized
-    wfilter = np.logical_and(linelist['wave_nm'] >= np.min(waveobs), linelist['wave_nm'] <= np.max(waveobs))
+    # Provide some margin or near-by deep lines might be omitted
+    margin = 2. # 2 nm
+    wfilter = np.logical_and(linelist['wave_nm'] >= np.min(waveobs)-margin, linelist['wave_nm'] <= np.max(waveobs)+margin)
     linelist = linelist[wfilter]
 
     if code == "turbospectrum":
-        return __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
+        return __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
     elif code == "moog":
-        return __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
+        return __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
     elif code == "synthe":
-        return __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
+        return __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
     elif code == "sme":
-        return __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, verbose=verbose, regions=regions)
+        return __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose, regions=regions)
     elif code == "spectrum":
         return __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions, waveobs_mask=waveobs_mask)
 
 
-def __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.20, R=500000, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None, tmp_dir=None):
+def __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=0., vsini=0., limb_darkening_coeff=0., R=0, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None, tmp_dir=None):
     """
     Generates a synthetic spectrum for the wavelength specified in waveobs.
     In case regions is specified (recarray with 'wave_base' and 'wave_top'),
@@ -176,7 +181,9 @@ def __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, lin
             # Limit linelist
             wave_base = np.min(waveobs)
             wave_top = np.max(waveobs)
-            lfilter = np.logical_and(linelist['wave_A'] >= wave_base*10., linelist['wave_A'] <= wave_top*10.)
+            # Provide some margin or near-by deep lines might be omitted
+            margin = 2. # 2 nm
+            lfilter = np.logical_and(linelist['wave_A'] >= (wave_base-margin)*10., linelist['wave_A'] <= (wave_top+margin)*10.)
             linelist = linelist[lfilter]
         else:
             waveobs_mask = _create_waveobs_mask(waveobs, regions)
@@ -215,7 +222,7 @@ def __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, lin
     #process_communication_queue = Queue()
     process_communication_queue = JoinableQueue()
 
-    p = Process(target=__spectrum_true_generate_spectrum, args=(process_communication_queue, waveobs, waveobs_mask, atmosphere_layers_file, linelist_file, isotope_file, abundances_file, fixed_abundances_file), kwargs={'microturbulence_vel': microturbulence_vel, 'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'nlayers': nlayers, 'verbose': verbose})
+    p = Process(target=__spectrum_true_generate_spectrum, args=(process_communication_queue, waveobs, waveobs_mask, atmosphere_layers_file, linelist_file, isotope_file, abundances_file, fixed_abundances_file, microturbulence_vel), kwargs={'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'nlayers': nlayers, 'verbose': verbose})
     p.start()
     fluxes = np.zeros(len(waveobs))
     num_seconds = 0
@@ -350,7 +357,7 @@ def __enqueue_progress(process_communication_queue, v):
     process_communication_queue.put(("self.update_progress(%i)" % v))
     process_communication_queue.join()
 
-def __spectrum_true_generate_spectrum(process_communication_queue, waveobs, waveobs_mask, atmosphere_model_file, linelist_file, isotope_file, abundances_file, fixed_abundances_file, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.20, R=500000, nlayers=56, verbose=0):
+def __spectrum_true_generate_spectrum(process_communication_queue, waveobs, waveobs_mask, atmosphere_model_file, linelist_file, isotope_file, abundances_file, fixed_abundances_file, microturbulence_vel, macroturbulence=0., vsini=0., limb_darkening_coeff=0., R=0, nlayers=56, verbose=0):
     """
     Generate synthetic spectrum and apply macroturbulence, rotation (visini), limb darkening coeff and resolution except
     if all those parameters are set to zero, in that case the fundamental synthetic spectrum is returned.
@@ -365,22 +372,14 @@ def __spectrum_true_generate_spectrum(process_communication_queue, waveobs, wave
     ## The convolution (R), rotation broadening (vsini) and macroturbulence broadening (vmac),
     ## do not seem to work as expected in the SPECTRUM code, thus we set them to zero and
     ## we use a python implementation
-    #fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, 0, nlayers, verbose, update_progress_func)
-    fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, isotope_file, abundances_file, fixed_abundances_file, microturbulence_vel, 0, 0, limb_darkening_coeff, 0, nlayers, verbose, update_progress_func)
+    #fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, R, nlayers, verbose, update_progress_func)
+    fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, isotope_file, abundances_file, fixed_abundances_file, microturbulence_vel, 0, 0, 0, 0, nlayers, verbose, update_progress_func)
 
-    # Avoid zero fluxes, set a minimum value so that when it is convolved it
-    # changes. This way we reduce the impact of the following problem:
-    # SPECTRUM + MARCS makes some strong lines to have zero fluxes (i.e. 854.21nm)
-    zeros = np.where(fluxes <= 1.0e-10)[0]
-    fluxes[zeros] = 1.0e-10
-    if R > 0:
-        # Use iSpec convolution routine instead of SPECTRUM one, since iSpec is more reliable
-        spectrum = create_spectrum_structure(waveobs, fluxes)
-        fluxes = convolve_spectrum(spectrum, R, from_resolution=None, frame=None)['flux']
-    if macroturbulence > 0:
-        fluxes = __broadening_macroturbulent(waveobs, fluxes, macroturbulence, return_kernel=False)
-    if vsini > 0:
-        fluxes = __broadening_rotational(waveobs, fluxes, vsini)
+    segments = None
+    vrad = (0,)
+    fluxes = apply_post_fundamental_effects(waveobs, fluxes, segments, \
+                macroturbulence=macroturbulence, vsini=vsini, \
+                limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
 
     process_communication_queue.put(fluxes)
 
@@ -399,81 +398,45 @@ def __calculate_ew_and_depth(process_communication_queue, atmosphere_model_file,
     process_communication_queue.put((output_wave, output_code, output_ew, output_depth))
 
 
-def apply_post_fundamental_effects(waveobs, fluxes, segments, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.20, R=500000, vrad=(0,), verbose=0, gui_queue=None, timeout=1800):
-    """
-    Apply macroturbulence, rotation (vsini), limb darkening coefficient and/or resolution
-    """
-
-    # Generate spectrum should be run in a separate process in order
-    # to force the reload of the "synthesizer" module which
-    # contains C code with static variables in functions that should
-    # be reinitialized to work properly
-    # * The best solution would be to improve the C code but since it is too complex
-    #   this hack has been implemented
-    process_communication_queue = Queue()
-
-    p = Process(target=__apply_post_fundamental_effects, args=(process_communication_queue, waveobs, fluxes, segments), kwargs={'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'verbose': verbose, 'vrad': vrad})
-    p.start()
-    num_seconds = 0
-    # Constantly check that the process has not died without returning any result and blocking the queue call
-    while p.is_alive() and num_seconds < timeout:
-        try:
-            data = process_communication_queue.get(timeout=1)
-            if type(data) == np.ndarray:
-                # Results received!
-                fluxes = data
-                break
-            elif gui_queue is not None:
-                # GUI update
-                # It allows communications between process in order to update the GUI progress bar
-                gui_queue.put(data)
-        except Empty:
-            # No results, continue waiting
-            pass
-        num_seconds += 1
-    if num_seconds >= timeout:
-        logging.error("A timeout has occurred in the application of post fundamental effects.")
-        p.terminate()
-    elif np.all(fluxes == 0):
-        logging.error("The application of post fundamental effects has failed.")
-        p.terminate()
-    else:
-        p.join()
-
-    return fluxes
-
-
-def __apply_post_fundamental_effects(process_communication_queue, waveobs, fluxes, segments, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.20, R=500000, vrad=(0,), verbose=0):
+def apply_post_fundamental_effects(waveobs, fluxes, segments, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.20, R=500000, vrad=(0,), verbose=0):
     """
     Apply macroturbulence, rotation (visini), limb darkening coeff and resolution to already generated fundamental synthetic spectrum.
     """
-    if is_spectrum_support_enabled() and limb_darkening_coeff > 0.:
-        import synthesizer
-        #update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
-        update_progress_func = lambda v: __enqueue_progress(process_communication_queue, v)
-        ## The convolution (R), rotation broadening (vsini) and macroturbulence broadening (vmac),
-        ## do not seem to work as expected in the SPECTRUM code, thus we set them to zero and
-        ## we use a python implementation
-        #fluxes = synthesizer.apply_post_fundamental_effects(waveobs*10., fluxes, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, 0, verbose, update_progress_func)
-        fluxes = synthesizer.apply_post_fundamental_effects(waveobs*10., fluxes, microturbulence_vel, 0., 0., limb_darkening_coeff, 0, verbose, update_progress_func)
-    elif limb_darkening_coeff != 0:
-        logging.warn("SPECTRUM support is not enabled, thus no limb darkenning is being applied")
-
     # Avoid zero fluxes, set a minimum value so that when it is convolved it
     # changes. This way we reduce the impact of the following problem:
     # SPECTRUM + MARCS makes some strong lines to have zero fluxes (i.e. 854.21nm)
     zeros = np.where(fluxes <= 1.0e-10)[0]
     fluxes[zeros] = 1.0e-10
-    if R > 0:
-        # Use iSpec convolution routine instead of SPECTRUM one, since iSpec is more reliable
-        spectrum = create_spectrum_structure(waveobs, fluxes)
+
+    spectrum = create_spectrum_structure(waveobs, fluxes)
+    spectrum.sort(order=['waveobs'])
+
+    if (macroturbulence is not None and macroturbulence > 0) or (vsini is not None and vsini > 0):
+        # Build spectrum with sampling uniform in velocity (required by vmac and vsini broadening):
+        wave_base = spectrum['waveobs'][0]
+        wave_top = spectrum['waveobs'][-1]
+        velocity_step = __determine_velocity_step(spectrum)
+        waveobs_uniform_in_velocity = _sampling_uniform_in_velocity(wave_base, wave_top, velocity_step)
+        fluxes_uniform_in_velocity = np.interp(waveobs_uniform_in_velocity, spectrum['waveobs'], spectrum['flux'], left=0.0, right=0.0)
+
+        # Apply broadening
+        fluxes_uniform_in_velocity = __vsini_broadening_limbdarkening(fluxes_uniform_in_velocity, velocity_step, vsini, limb_darkening_coeff)
+        fluxes_uniform_in_velocity = __vmac_broadening(fluxes_uniform_in_velocity, velocity_step, macroturbulence)
+
+        # Resample to origin wavelength grid
+        fluxes = np.interp(spectrum['waveobs'], waveobs_uniform_in_velocity, fluxes_uniform_in_velocity, left=0.0, right=0.0)
+        spectrum['flux'] = fluxes
+
+    if R is not None and R > 0:
+        # Convolve (here it is not needed to be with a sampling uniform in velocity, the function is capable of dealing with that)
         fluxes = convolve_spectrum(spectrum, R, from_resolution=None, frame=None)['flux']
-    if macroturbulence > 0:
-        fluxes = __broadening_macroturbulent(waveobs, fluxes, macroturbulence, return_kernel=False)
-    if vsini > 0:
-        fluxes = __broadening_rotational(waveobs, fluxes, vsini)
+
+    # Make sure original zeros are set to 1.0 and not modified by the previous broadening operations
+    fluxes[zeros] = 1.0e-10
+
     if type(vrad) not in (tuple, list, np.ndarray):
         raise Exception("Velocity should be an array")
+
     if np.any(np.asarray(vrad) > 0):
         if len(vrad) != len(segments):
             raise Exception("Velocity should be an array with as many numbers as segments when segments are provided")
@@ -485,10 +448,10 @@ def __apply_post_fundamental_effects(process_communication_queue, waveobs, fluxe
             modified = np.logical_or(modified, wfilter)
             spectrum = create_spectrum_structure(waveobs[wfilter], fluxes[wfilter])
             spectrum = correct_velocity(spectrum, velocity)
-            spectrum = resample_spectrum(spectrum, waveobs[wfilter], method="bessel", zero_edges=True)
+            spectrum = resample_spectrum(spectrum, waveobs[wfilter], method="linear", zero_edges=True)
             fluxes[wfilter] = spectrum['flux']
         fluxes[~modified] = 1.
-    process_communication_queue.put(fluxes)
+    return fluxes
 
 
 class SynthModel(MPFitModel):
@@ -660,7 +623,7 @@ class SynthModel(MPFitModel):
             precomputed = read_spectrum(precomputed_file)
             convolved_precomputed = convolve_spectrum(precomputed, self.R())
 
-            convolved_precomputed = resample_spectrum(convolved_precomputed, self.waveobs, method="bessel", zero_edges=True)
+            convolved_precomputed = resample_spectrum(convolved_precomputed, self.waveobs, method="linear", zero_edges=True)
             convolved_precomputed['flux'][self.waveobs_mask == 0] = 1.
             self.last_fluxes = convolved_precomputed['flux'].copy()
             self.last_final_fluxes = convolved_precomputed['flux'].copy()
@@ -669,7 +632,7 @@ class SynthModel(MPFitModel):
             if not self.quiet:
                 print "Pre-computed (fundamental):", complete_key
             fundamental_precomputed = read_spectrum(fundamental_precomputed_file)
-            fundamental_precomputed = resample_spectrum(fundamental_precomputed, self.waveobs, method="bessel", zero_edges=True)
+            fundamental_precomputed = resample_spectrum(fundamental_precomputed, self.waveobs, method="linear", zero_edges=True)
             fundamental_precomputed['flux'][self.waveobs_mask == 0] = 1.
             self.last_fluxes = fundamental_precomputed['flux']
             # Optimization to avoid too small changes in parameters or repetition
@@ -697,17 +660,17 @@ class SynthModel(MPFitModel):
                 atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH(), code=self.code)
                 # Fundamental synthetic fluxes
                 if self.code == "turbospectrum":
-                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, microturbulence_vel=self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, use_molecules=self.use_molecules, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, use_molecules=self.use_molecules, tmp_dir=self.tmp_dir, timeout=self.timeout)
                 elif self.code == "moog":
-                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, microturbulence_vel=self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
                 elif self.code == "synthe":
-                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, microturbulence_vel=self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, molecules_files=self.molecules_files, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, molecules_files=self.molecules_files, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
                 elif self.code == "sme":
-                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, microturbulence_vel=self.vmic(), regions=self.segments, verbose=0, code=self.code, timeout=self.timeout)
+                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), regions=self.segments, verbose=0, code=self.code, timeout=self.timeout)
                     if np.all(self.last_fluxes == 0):
                         raise Exception("SME has failed.")
                 elif self.code == "spectrum":
-                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, microturbulence_vel=self.vmic(),  atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, waveobs_mask=self.waveobs_mask, verbose=0, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(),  atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, waveobs_mask=self.waveobs_mask, verbose=0, tmp_dir=self.tmp_dir, timeout=self.timeout)
                     if np.all(self.last_fluxes == 0):
                         raise Exception("SPECTRUM has failed.")
                 else:
@@ -858,9 +821,9 @@ class SynthModel(MPFitModel):
         base += len(self.linelist_free_loggf)
         fixed_abundances = np.recarray((len(self._parinfo)-base, ), dtype=[('code', int),('Abund', float), ('element', '|S30')])
         for i in xrange(len(self._parinfo)-base):
-            fixed_abundances['code'] = int(self._parinfo[base+i]['parname'])
-            fixed_abundances['Abund'] = self._parinfo[base+i]['value']
-            fixed_abundances['element'] = ""
+            fixed_abundances['code'][i] = int(self._parinfo[base+i]['parname'])
+            fixed_abundances['Abund'][i] = self._parinfo[base+i]['value']
+            fixed_abundances['element'][i] = ""
         return fixed_abundances
 
     def eteff(self): return self.m.perror[0]
@@ -988,7 +951,7 @@ class SynthModel(MPFitModel):
             abundances_solution += "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (x, x_absolute, x_over_h, x_over_fe)
             abundances_errors += "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (ex, ex_absolute, ex_over_h, ex_over_fe)
 
-        if len(self.vrad()) > 1:
+        if len(self.vrad()) >= 1:
             vrad_header = "          %8s\t%8s\t%8s\t%8s" % ("wave_base","wave_top","vrad","error")
             vrad_stats = ""
             for i, (vrad, evrad, segment) in enumerate(zip(self.vrad(), self.evrad(), self.segments)):
@@ -1043,7 +1006,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     """
     base = 8
     free_params = [param.lower() for param in free_params]
-    if "vrad" in free_params:
+    if "vrad" in free_params or np.any(initial_vrad != 0):
         parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base+len(initial_vrad)+len(free_abundances)+len(linelist_free_loggf))]
     else:
         parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base+len(free_abundances)+len(linelist_free_loggf))]
@@ -1149,7 +1112,10 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
             parinfo[base+i]['limited'] = [True, True]
             parinfo[base+i]['limits'] = [-30., 30]
     # ABUNDANCES
-    base = 8 + len(initial_vrad)
+    if "vrad" in free_params:
+        base = 8 + len(initial_vrad)
+    else:
+        base = 8
     for i in xrange(len(free_abundances)):
         parinfo[base+i]['parname'] = str(free_abundances['code'][i])
         parinfo[base+i]['value'] = free_abundances['Abund'][i]
@@ -1253,11 +1219,13 @@ def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_
 
 
 def __filter_linelist(linelist, segments):
+    # Provide some margin or near-by deep lines might be omitted
+    margin = 2. # 2 nm
     # Build wavelength points from regions
     lfilter = None
     for region in segments:
-        wave_base = region['wave_base']
-        wave_top = region['wave_top']
+        wave_base = region['wave_base'] - margin
+        wave_top = region['wave_top'] + margin
 
         if lfilter is None:
             lfilter = np.logical_and(linelist['wave_A'] >= wave_base*10., linelist['wave_A'] <= wave_top*10.)
@@ -1384,7 +1352,7 @@ def __get_stats_per_linemask(waveobs, fluxes, synthetic_fluxes, weights, free_pa
 
     return results
 
-def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=None, linemasks=None, enhance_abundances=True, scale=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1, code="spectrum", use_molecules=False, vmic_from_empirical_relation=True, vmac_from_empirical_relation=True, tmp_dir=None, timeout=1800):
+def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=None, linemasks=None, enhance_abundances=True, scale=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1, code="spectrum", use_molecules=False, vmic_from_empirical_relation=False, vmac_from_empirical_relation=False, tmp_dir=None, timeout=1800):
     """
     It matches synthetic spectrum to observed spectrum by applying a least
     square algorithm.
@@ -1459,13 +1427,13 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
         logging.warn("'vmac_from_empirical_relation' changed to False because vmac is a free parameter")
 
     if segments is None:
-        wave_base = np.min(waveobs)
-        wave_top = np.max(waveobs)
         segments = np.recarray((1,),  dtype=[('wave_base', float), ('wave_top', float)])
         segments['wave_base'][0] = wave_base
         segments['wave_top'][0] = wave_top
         # Limit linelist
-        lfilter = np.logical_and(linelist['wave_A'] >= wave_base*10., linelist['wave_A'] <= wave_top*10.)
+        # Provide some margin or near-by deep lines might be omitted
+        margin = 2. # 2 nm
+        lfilter = np.logical_and(linelist['wave_A'] >= (wave_base-margin)*10., linelist['wave_A'] <= (wave_top+margin)*10.)
         linelist = linelist[lfilter]
     else:
         # Limit linelist
@@ -2549,7 +2517,7 @@ def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks):
         try:
             grid = fits.open(reference_grid_filename)
             grid_waveobs = np.asarray(grid['WAVELENGTHS'].data, dtype=float)
-            resampled_spectrum = resample_spectrum(spectrum, grid_waveobs, method="bessel")
+            resampled_spectrum = resample_spectrum(spectrum, grid_waveobs, method="linear")
 
             fsegment = create_wavelength_filter(resampled_spectrum, regions=linemasks)
             fsegment = np.logical_and(fsegment, resampled_spectrum['flux'] > 0.0)
@@ -2571,422 +2539,10 @@ def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks):
     return initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff
 
 
-################################################################################
-# Code from:
-#   http://www.phoebe-project.org/2.0/
-################################################################################
-
-from scipy.signal import fftconvolve
-from scipy.integrate import quad
-
-#cc     = 299792458.        # speed of light              m/s
-
-
-def __broadening_rotational(wave, flux, vrot, epsilon=0.6, return_kernel=False):
-    r"""
-    Apply rotational broadening to a spectrum assuming a linear limb darkening
-    law.
-
-    The adopted limb darkening law is the linear one, parameterize by the linear
-    limb darkening parameter :envvar:`epsilon`. The default value is
-    :math:`\varepsilon = 0.6`.
-
-    The rotational kernel is defined in velocity space :math:`v` and is given by
-
-    .. math::
-
-        y = 1 - \left(\frac{v}{v_\mathrm{rot}}\right)^2 \\
-
-        K_\mathrm{rot} = 2 (1-\varepsilon)\sqrt{y} + \frac{\pi}{2} \left(\frac{\varepsilon y}{\pi v_\mathrm{rot}(1-\varepsilon/3)}\right)
-
-    **Construct a simple Gaussian line profile and convolve with vsini=65 km/s**
-
-
-    >>> sigma = 0.5
-    >>> wave = np.linspace(3995, 4005, 1001)
-    >>> flux = 1.0 - 0.5*np.exp( - (wave-4000)**2/(2*sigma**2))
-
-    Convolve it with a rotational velocity of :math:`v_\mathrm{rot}=65 \mathrm{km}\,\mathrm{s}^{-1}`:
-
-    >>> vrot = 65.
-    >>> flux_broad = tools.broadening_rotational(wave, flux, vrot)
-    >>> flux_broad, (wave_kernel, kernel) = tools.broadening_rotational(wave, flux, vrot, return_kernel=True)
-
-    ::
-
-        plt.figure()
-        plt.plot(wave, flux, 'k-')
-        plt.plot(wave, flux_broad, 'r-', lw=2)
-        plt.xlabel("Wavelength [$\AA$]")
-        plt.ylabel("Normalised flux")
-
-        plt.figure()
-        plt.plot(wave_kernel, kernel, 'r-', lw=2)
-        plt.xlabel("Wavelength [$\AA$]")
-        plt.ylabel("Normalised flux")
-
-
-    .. +----------------------------------------------------------------------+----------------------------------------------------------------------+
-    .. | .. image:: ../../images/api/spectra/tools/broaden_rotational01.png   | .. image:: ../../images/api/spectra/tools/broaden_rotational02.png   |
-    .. |   :scale: 50 %                                                       |   :scale: 50 %                                                       |
-    .. +----------------------------------------------------------------------+----------------------------------------------------------------------+
-
-
-    :parameter wave: Wavelength of the spectrum
-    :type wave: array
-    :parameter flux: Flux of the spectrum
-    :type flux: array
-    :parameter vrot: Rotational broadening
-    :type vrot: float
-    :parameter epsilon: linear limbdarkening parameter
-    :type epsilon: float
-    :parameter return_kernel: return kernel
-    :type return_kernel: bool
-    :return: broadened flux [, (wavelength, kernel)]
-    :rtype: array [,(array, array)]
-    """
-
-    # if there is no rotational velocity, don't bother
-    if vrot == 0:
-        return flux
-
-    # convert wavelength array into velocity space, this is easier. We also
-    # need to make it equidistant
-    velo = np.log(wave)
-    delta_velo = np.diff(velo).min()
-    range_velo = velo.ptp()
-    n_velo = int(range_velo/delta_velo) + 1
-    velo_ = np.linspace(velo[0], velo[-1], n_velo)
-    flux_ = np.interp(velo_, velo, flux)
-    dvelo = velo_[1]-velo_[0]
-    vrot = vrot / (299792458.*1e-3)
-    n_kernel = int(2*vrot/dvelo) + 1
-
-    # The kernel might be of too low resolution, or the the wavelength range
-    # might be too narrow. In both cases, raise an appropriate error
-    if n_kernel == 0:
-        raise ValueError(("Spectrum resolution too low for "
-                          "rotational broadening"))
-    elif n_kernel > n_velo:
-        raise ValueError(("Spectrum range too narrow for "
-                          "rotational broadening"))
-
-    # Construct the domain of the kernel
-    velo_k = np.arange(n_kernel)*dvelo
-    velo_k -= velo_k[-1]/2.
-
-    # transform the velocity array, construct and normalise the broadening
-    # kernel
-    y = 1 - (velo_k/vrot)**2
-    kernel = (2*(1-epsilon)*np.sqrt(y) + \
-                       np.pi*epsilon/2.*y) / (np.pi*vrot*(1-epsilon/3.0))
-    kernel /= kernel.sum()
-
-    # Convolve the flux with the kernel
-    flux_conv = fftconvolve(1-flux_, kernel, mode='same')
-
-    # And interpolate the results back on to the original wavelength array,
-    # taking care of even vs. odd-length kernels
-    if n_kernel % 2 == 1:
-        offset = 0.0
-    else:
-        offset = dvelo / 2.0
-
-    flux = np.interp(velo+offset, velo_, 1-flux_conv, left=1, right=1)
-
-    # Return the results
-    if return_kernel:
-        lambda0 = (wave[-1]+wave[0]) / 2.0
-        return flux, (velo_k*lambda0, kernel)
-    else:
-        return flux
-
-
-
-def __vmacro_kernel(dlam, Ar, At, Zr, Zt):
-    r"""
-    Macroturbulent velocity kernel.
-
-    See :py:func:`broadening_macroturbulent` for more information.
-    """
-    dlam[dlam == 0] = 1e-8
-    if Zr != Zt:
-        return np.array([(2*Ar*idlam/(np.sqrt(np.pi)*Zr**2) * quad(lambda u: np.exp(-1/u**2),0,Zr/idlam)[0] + \
-                          2*At*idlam/(np.sqrt(np.pi)*Zt**2) * quad(lambda u: np.exp(-1/u**2),0,Zt/idlam)[0])
-                             for idlam in dlam])
-    else:
-        return np.array([(2*Ar*idlam/(np.sqrt(np.pi)*Zr**2) + 2*At*idlam/(np.sqrt(np.pi)*Zt**2))\
-                           * quad(lambda u: np.exp(-1/u**2),0,Zr/idlam)[0]\
-                             for idlam in dlam])
-
-
-def __broadening_macroturbulent(wave, flux, vmacro_rad, vmacro_tan=None,
-                              return_kernel=False):
-    r"""
-    Apply macroturbulent broadening.
-
-    The macroturbulent kernel is defined as in [Gray2005]_:
-
-    .. math::
-
-        K_\mathrm{macro}(\Delta\lambda) = \frac{2A_R\Delta\lambda}{\sqrt{\pi}\zeta_R^2}\int_0^{\zeta_R/\Delta\lambda}e^{-1/u^2}du
-
-         & + \frac{2A_T\Delta\lambda}{\sqrt{\pi}\zeta_T^2}\int_0^{\zeta_T/\Delta\lambda}e^{-1/u^2}du
-
-    If :envvar:`vmacro_tan` is :envvar:`None`, then the value will be put equal
-    to the radial component :envvar:`vmacro_rad`.
-
-    **Example usage**: Construct a simple Gaussian line profile and convolve with vmacro=65km/s
-
-    Construct a simple Gaussian line profile:
-
-    >>> sigma = 0.5
-    >>> wave = np.linspace(3995, 4005, 1001)
-    >>> flux = 1.0 - 0.5*np.exp( - (wave-4000)**2/(2*sigma**2))
-
-    Convolve it with a macroturbulent velocity of :math:`v_\mathrm{macro}=65 \mathrm{km}\,\mathrm{s}^{-1}`:
-
-    >>> vmac = 65.
-    >>> flux_broad = tools.broadening_macroturbulent(wave, flux, vmac)
-    >>> flux_broad, (wave_kernel, kernel) = tools.broadening_macroturbulent(wave, flux, vmac, return_kernel=True)
-
-    ::
-
-        plt.figure()
-        plt.plot(wave, flux, 'k-')
-        plt.plot(wave, flux_broad, 'r-', lw=2)
-        plt.xlabel("Wavelength [$\AA$]")
-        plt.ylabel("Normalised flux")
-
-        plt.figure()
-        plt.plot(wave_kernel, kernel, 'r-', lw=2)
-        plt.xlabel("Wavelength [$\AA$]")
-        plt.ylabel("Normalised flux")
-
-
-    .. +--------------------------------------------------------------------------+-------------------------------------------------------------------------+
-    .. | .. image:: ../../images/api/spectra/tools/broaden_macroturbulent01.png   | .. image:: ../../images/api/spectra/tools/broaden_macroturbulent02.png  |
-    .. |   :scale: 50 %                                                           |   :scale: 50 %                                                          |
-    .. +--------------------------------------------------------------------------+-------------------------------------------------------------------------+
-
-    :parameter wave: Wavelength of the spectrum
-    :type wave: array
-    :parameter flux: Flux of the spectrum
-    :type flux: array
-    :parameter vmacro_rad: macroturbulent broadening, radial component
-    :type vmacro_rad: float
-    :parameter vmacro_tan: macroturbulent broadening, tangential component
-    :type vmacro_tan: float
-    :parameter return_kernel: return kernel
-    :type return_kernel: bool
-    :return: broadened flux [, (wavelength, kernel)]
-    :rtype: array [,(array, array)]
-    """
-    if vmacro_tan is None:
-        vmacro_tan = vmacro_rad
-
-    if vmacro_rad == vmacro_tan == 0:
-        return flux
-
-    # Define central wavelength
-    lambda0 = (wave[0] + wave[-1]) / 2.0
-
-    vmac_rad = vmacro_rad/(299792458.*1e-3)*lambda0
-    vmac_tan = vmacro_tan/(299792458.*1e-3)*lambda0
-
-    # Make sure the wavelength range is equidistant before applying the
-    # convolution
-    delta_wave = np.diff(wave).min()
-    range_wave = wave.ptp()
-    n_wave = int(range_wave/delta_wave)+1
-    wave_ = np.linspace(wave[0], wave[-1], n_wave)
-    flux_ = np.interp(wave_, wave, flux)
-    dwave = wave_[1]-wave_[0]
-    n_kernel = int(5*max(vmac_rad, vmac_tan)/dwave)
-    if n_kernel % 2 == 0:
-        n_kernel += 1
-
-    # The kernel might be of too low resolution, or the the wavelength range
-    # might be too narrow. In both cases, raise an appropriate error
-    if n_kernel == 0:
-        raise ValueError(("Spectrum resolution too low for "
-                          "macroturbulent broadening"))
-    elif n_kernel > n_wave:
-        raise ValueError(("Spectrum range too narrow for "
-                          "macroturbulent broadening"))
-
-    # Construct the broadening kernel
-    wave_k = np.arange(n_kernel)*dwave
-    wave_k -= wave_k[-1]/2.
-    kernel = __vmacro_kernel(wave_k, 1.0, 1.0, vmac_rad, vmac_tan)
-    kernel /= sum(kernel)
-
-    flux_conv = fftconvolve(1-flux_, kernel, mode='same')
-
-    # And interpolate the results back on to the original wavelength array,
-    # taking care of even vs. odd-length kernels
-    if n_kernel % 2 == 1:
-        offset = 0.0
-    else:
-        offset = dwave / 2.0
-    flux = np.interp(wave+offset, wave_, 1-flux_conv)
-
-    # Return the results.
-    if return_kernel:
-        return flux, (wave_k, kernel)
-    else:
-        return flux
-
-
-
-
-
-def __rotational_broadening(wave_spec,flux_spec,vrot,vmac=0.,fwhm=0.25,epsilon=0.6,
-                         chard=None,stepr=0,stepi=0,alam0=None,alam1=None,
-                         irel=0,cont=None,method='fortran'):
-    """
-    Apply rotational broadening to a spectrum assuming a linear limb darkening
-    law.
-
-    Limb darkening law is linear, default value is epsilon=0.6
-
-    Possibility to normalize as well by giving continuum in 'cont' parameter.
-
-    **Parameters for rotational convolution**
-
-    C{VROT}: v sin i (in km/s):
-
-        -  if ``VROT=0`` - rotational convolution is
-
-                 - either not calculated,
-                 - or, if simultaneously FWHM is rather large
-                   (:math:`v_\mathrm{rot}\lambda/c < \mathrm{FWHM}/20.`),
-                   :math:`v_\mathrm{rot}` is set to  :math:`\mathrm{FWHM}/20\cdot c/\lambda`;
-
-        -  if ``VROT >0`` but the previous condition b) applies, the
-           value of VROT is changed as  in the previous case
-
-        -  if ``VROT<0`` - the value of abs(VROT) is used regardless of
-           how small compared to FWHM it is
-
-    C{CHARD}: characteristic scale of the variations of unconvolved stellar
-    spectrum (basically, characteristic distance between two neighbouring
-    wavelength points) - in A:
-
-        - if =0 - program sets up default (0.01 A)
-
-    C{STEPR}: wavelength step for evaluation rotational convolution;
-
-        - if =0, the program sets up default (the wavelength
-          interval corresponding to the rotational velocity
-          devided by 3.)
-
-        - if <0, convolved spectrum calculated on the original
-          (detailed) SYNSPEC wavelength mesh
-
-
-    **Parameters for instrumental convolution**
-
-    C{FWHM}: WARNING: this is not the full width at half maximum for Gaussian
-    instrumental profile, but the sigma (FWHM = 2.3548 sigma).
-
-    C{STEPI}: wavelength step for evaluating instrumental convolution
-
-          - if STEPI=0, the program sets up default (FWHM/10.)
-
-          - if STEPI<0, convolved spectrum calculated with the previous
-            wavelength mesh:
-            either the original (SYNSPEC) one if vrot=0,
-            or the one used in rotational convolution (vrot > 0)
-
-    **Parameters for macroturbulent convolution**
-
-    C{vmac}: macroturbulent velocity.
-
-    **Wavelength interval and normalization of spectra**
-
-    C{ALAM0}: initial wavelength
-    C{ALAM1}: final wavelength
-    C{IREL}: for =1 relative spectrum, =0 absolute spectrum
-
-    @return: wavelength,flux
-    @rtype: array, array
-    """
-    logger.info("Rot.broad with vrot={:.3f}km/s (epsilon={:.2f}), sigma={:.2f}AA, vmacro={:.3f}km/s".format(vrot,epsilon,fwhm,vmac))
-    #-- first a wavelength Gaussian convolution:
-    if fwhm>0:
-        fwhm /= 2.3548
-        #-- make sure it's equidistant
-        wave_ = np.linspace(wave_spec[0],wave_spec[-1],len(wave_spec))
-        flux_ = np.interp(wave_,wave_spec,flux_spec)
-        dwave = wave_[1]-wave_[0]
-        n = int(2*4*fwhm/dwave)
-        if n==0:
-            logger.info("Resolution too large, cannot broaden with instrumental profile")
-        else:
-            wave_k = np.arange(n)*dwave
-            wave_k-= wave_k[-1]/2.
-            kernel = np.exp(- (wave_k)**2/(2*fwhm**2))
-            kernel /= sum(kernel)
-            flux_conv = fftconvolve(1-flux_,kernel,mode='same')
-            #-- this little tweak is necessary to keep the profiles at the right
-            #   location
-            if n%2==1:
-                flux_spec = np.interp(wave_spec,wave_,1-flux_conv)
-            else:
-                flux_spec = np.interp(wave_spec+dwave/2,wave_,1-flux_conv)
-    #-- macroturbulent profile
-    if vmac>0:
-        vmac = vmac/(299792458.*1e-3)*(wave_spec[0]+wave_spec[-1])/2.0
-        #-- make sure it's equidistant
-        wave_ = np.linspace(wave_spec[0],wave_spec[-1],len(wave_spec))
-        flux_ = np.interp(wave_,wave_spec,flux_spec)
-        dwave = wave_[1]-wave_[0]
-        n = int(6*vmac/dwave/5)
-        if n==0:
-            logger.error("Resolution too large, cannot broaden with instrumental profile")
-        else:
-            wave_k = np.arange(n)*dwave
-            wave_k-= wave_k[-1]/2.
-            kernel = __vmacro_kernel(wave_k,1.,1.,vmac,vmac)
-            kernel /= sum(kernel)
-            flux_conv = fftconvolve(1-flux_,kernel,mode='same')
-            if n%2==1:
-                flux_spec = np.interp(wave_spec,wave_,1-flux_conv)
-            else:
-                flux_spec = np.interp(wave_spec+dwave/2,wave_,1-flux_conv)
-    if vrot>0:
-        #-- convert wavelength array into velocity space, this is easier
-        #   we also need to make it equidistant!
-        wave_ = np.log(wave_spec)
-        velo_ = np.linspace(wave_[0],wave_[-1],len(wave_))
-        flux_ = np.interp(velo_,wave_,flux_spec)
-        dvelo = velo_[1]-velo_[0]
-        vrot = vrot/(299792458.*1e-3)
-        #-- compute the convolution kernel and normalise it
-        n = int(2*vrot/dvelo)
-        velo_k = np.arange(n)*dvelo
-        velo_k -= velo_k[-1]/2.
-        y = 1 - (velo_k/vrot)**2 # transformation of velocity
-        G = (2*(1-epsilon)*np.sqrt(y)+np.pi*epsilon/2.*y)/(np.pi*vrot*(1-epsilon/3.0))  # the kernel
-        G /= G.sum()
-        #-- convolve the flux with the kernel
-        flux_conv = fftconvolve(1-flux_,G,mode='same')
-        if n%2==1:
-            velo_ = np.arange(len(flux_conv))*dvelo+velo_[0]
-        else:
-            velo_ = np.arange(len(flux_conv))*dvelo+velo_[0]-dvelo/2.
-        wave_conv = np.exp(velo_)
-        return wave_conv,1-flux_conv
-
-
-    return wave_spec,flux_spec
-################################################################################
-
 def __turbospectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, regions=None, use_molecules=False, tmp_dir=None, timeout=1800):
-    return __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, R=0, macroturbulence=0, vsini=0, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
+    return __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
 
-def __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, regions=None, R=None, macroturbulence=None, vsini=None, use_molecules=False, tmp_dir=None, timeout=1800):
+def __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, use_molecules=False, tmp_dir=None, timeout=1800):
     if not is_turbospectrum_support_enabled():
         raise Exception("Turbospectrum support is not enabled")
 
@@ -3192,30 +2748,26 @@ def __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH
     if remove_tmp_linelist_file:
         os.remove(linelist_filename)
 
+    segments = None
+    vrad = (0,)
+    synth_fluxes = apply_post_fundamental_effects(synth_waveobs, synth_fluxes, segments, \
+                    macroturbulence=macroturbulence, vsini=vsini, \
+                    limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
+
     synth_spectrum = create_spectrum_structure(synth_waveobs, synth_fluxes)
     synth_spectrum.sort(order=['waveobs'])
 
     # Make sure we return the number of expected fluxes
-    if np.any(synth_spectrum['waveobs'] != waveobs):
-        synth_spectrum = resample_spectrum(synth_spectrum, waveobs, method="bessel", zero_edges=True)
-
-    if R is not None and R > 0:
-        ## Use iSpec convolution routine instead of SPECTRUM one, since iSpec is more reliable
-        synth_spectrum['flux'] = convolve_spectrum(synth_spectrum, R, from_resolution=None, frame=None)['flux']
-
-    if macroturbulence is not None and macroturbulence > 0:
-        synth_spectrum['flux'] = __broadening_macroturbulent(waveobs, synth_spectrum['flux'], macroturbulence, return_kernel=False)
-
-    if vsini is not None and vsini > 0:
-        synth_spectrum['flux'] = __broadening_rotational(waveobs, synth_spectrum['flux'], vsini)
+    if not np.array_equal(synth_spectrum['waveobs'], waveobs):
+        synth_spectrum = resample_spectrum(synth_spectrum, waveobs, method="linear", zero_edges=True)
 
     return synth_spectrum['flux']
 
 
 def __moog_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, regions=None, tmp_dir=None, timeout=1800):
-    return __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, R=0, macroturbulence=0, vsini=0, tmp_dir=tmp_dir, timeout=timeout)
+    return __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0, tmp_dir=tmp_dir, timeout=timeout)
 
-def __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, regions=None, R=None, macroturbulence=None, vsini=None, tmp_dir=None, timeout=1800):
+def __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, tmp_dir=None, timeout=1800):
     if not is_moog_support_enabled():
         raise Exception("MOOG support is not enabled")
 
@@ -3333,7 +2885,9 @@ def __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelis
             moog_atmosphere.close()
 
             # Add hydrogen lines
-            wfilter = np.logical_and(hydrogen_lines['wave_A'] >= wave_base*10., hydrogen_lines['wave_A'] <= wave_top*10.)
+            # Provide some margin or near-by deep lines might be omitted
+            margin = 2. # 2 nm
+            wfilter = np.logical_and(hydrogen_lines['wave_A'] >= (wave_base-margin)*10., hydrogen_lines['wave_A'] <= (wave_top+margin)*10.)
             selected_hydrogen_lines = hydrogen_lines[wfilter]
             if len(selected_hydrogen_lines) > 40:
                 # TODO: Find a work around to this
@@ -3421,30 +2975,26 @@ def __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelis
 
             shutil.rmtree(tmp_execution_dir)
 
+    segments = None
+    vrad = (0,)
+    synth_fluxes = apply_post_fundamental_effects(synth_waveobs, synth_fluxes, segments, \
+                    macroturbulence=macroturbulence, vsini=vsini, \
+                    limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
+
     synth_spectrum = create_spectrum_structure(synth_waveobs, synth_fluxes)
     synth_spectrum.sort(order=['waveobs'])
 
     # Make sure we return the number of expected fluxes
-    if np.any(synth_spectrum['waveobs'] != waveobs):
-        synth_spectrum = resample_spectrum(synth_spectrum, waveobs, method="bessel", zero_edges=True)
-
-    if R is not None and R > 0:
-        ## Use iSpec convolution routine instead of SPECTRUM one, since iSpec is more reliable
-        synth_spectrum['flux'] = convolve_spectrum(synth_spectrum, R, from_resolution=None, frame=None)['flux']
-
-    if macroturbulence is not None and macroturbulence > 0:
-        synth_spectrum['flux'] = __broadening_macroturbulent(waveobs, synth_spectrum['flux'], macroturbulence, return_kernel=False)
-
-    if vsini is not None and vsini > 0:
-        synth_spectrum['flux'] = __broadening_rotational(waveobs, synth_spectrum['flux'], vsini)
+    if not np.array_equal(synth_spectrum['waveobs'], waveobs):
+        synth_spectrum = resample_spectrum(synth_spectrum, waveobs, method="linear", zero_edges=True)
 
     return synth_spectrum['flux']
 
 
 def __synthe_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, molecules_files=None, regions=None, tmp_dir=None, timeout=1800):
-    return __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, R=0, macroturbulence=0, vsini=0, tmp_dir=tmp_dir, timeout=timeout)
+    return __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0, tmp_dir=tmp_dir, timeout=timeout)
 
-def __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, molecules_files=None, regions=None, R=None, macroturbulence=None, vsini=None, tmp_dir=None, timeout=1800):
+def __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, molecules_files=None, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, tmp_dir=None, timeout=1800):
     if not is_synthe_support_enabled():
         raise Exception("Synthe support is not enabled")
 
@@ -3561,27 +3111,43 @@ def __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linel
             #   helium_number_atom_fraction = 0.07837
             # Fraction in mass from MARCS model (X=Hydrogen, Y=Helium, Z=Metals):
             #   0.74732 0.25260 7.81E-05 are X, Y and Z, 12C/13C=89 (=solar)
-            # Transfor to number fraction:
+            # Transform to number fraction:
             #   Y = 0.25260 / (4-3*0.25260) = 0.07791
             #   X = 1 - Y = 0.92209
-            hydrogen_number_atom_fraction = 0.92209
-            helium_number_atom_fraction = 0.07791
+            #hydrogen_number_atom_fraction = 0.92209
+            #helium_number_atom_fraction = 0.07791
+            hydrogen_number_atom_fraction = 0.92080 # It does not seem to have any effect on synthesis
+            helium_number_atom_fraction = 0.07837   # It does not seem to have any effect on synthesis
 
             command_input += "ABUNDANCE SCALE   %.5f ABUNDANCE CHANGE 1 %.5f 2 %.5f\n" % (abundance_scale, hydrogen_number_atom_fraction, helium_number_atom_fraction)
             # command_input += " ABUNDANCE CHANGE  3 -10.99  4 -10.66  5  -9.34  6  -3.65  7  -4.26  8  -3.38\n"
             # command_input += " ABUNDANCE CHANGE  9  -7.48 10  -4.20 11  -5.87 12  -4.51 13  -5.67 14  -4.53\n"
-            atom_abundances = abundances[abundances['code'] <= 92]
-            #atom_abundances = abundances[abundances['code'] > 1] # Contrary to other codes, Synthe needs the hydrogen or helium abundances to be specified here
+            atom_abundances = abundances[np.logical_and(abundances['code'] > 2, abundances['code'] <= 92)]
+            num_added_abundances = 0
             for atom_abundance in atom_abundances:
                 # abund = 12.036 + atom_abundance['Abund'] # From SPECTRUM format to Turbospectrum
+                #command_input += " ABUNDANCE CHANGE  %i  %.2f\n" % (atom_abundance['code'], abund)
+                if num_added_abundances == 0:
+                    command_input += " ABUNDANCE CHANGE"
+
                 abund = atom_abundance['Abund']
-                command_input += " ABUNDANCE CHANGE  %i  %.2f\n" % (atom_abundance['code'], abund)
+                command_input += " %2i %6.2f" % (atom_abundance['code'], abund)
+                num_added_abundances += 1
+
+                if num_added_abundances == 6:
+                    command_input += "\n"
+                    num_added_abundances = 0
+            command_input += " ABUNDANCE CHANGE 93 -20.00 94 -20.00 95 -20.00 96 -20.00 97 -20.00 98 -20.00    \n"
+            command_input += " ABUNDANCE CHANGE 99 -20.00                                                      \n"
+
 
             command_input += "READ DECK6 %i RHOX,T,P,XNE,ABROSS,ACCRAD,VTURB\n" % (len(atmosphere_layers))
             #command_input += " 6.12960183E-04   3686.1 1.679E+01 2.580E+09 2.175E-04 4.386E-02 1.000E+05\n"
             #atm_kurucz.write("%.8e   %.1f %.3e %.3e %.3e %.3e %.3e" % (rhox[i], temperature[i], pgas[i], xne[i], abross[i], accrad[i], vturb[i]) )
-            #command_input += "\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]))) for layer in atmosphere_layers])
-            command_input += "\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], 1.0))) for layer in atmosphere_layers])
+            #command_input += "\n".join([" %.8E %8.1f %.3E %.3E %.3E %.3E %.3E" % (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]) for layer in atmosphere_layers])
+            #command_input += "\n".join([" %.8E %8.1f %.3E %.3E %.3E %.3E %.3E" % (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], 1.0e5) for layer in atmosphere_layers])
+            # Force microturbulence in model to zero because later it will be used to add to the real microturbulence that we want:
+            command_input += "\n".join([" %.8E %8.1f %.3E %.3E %.3E %.3E %.3E" % (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], 0.0e5) for layer in atmosphere_layers])
             command_input += "\nPRADK 1.4878E+00\n"
             command_input += "READ MOLECULES\n"
             command_input += "MOLECULES ON\n"
@@ -3617,17 +3183,22 @@ def __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linel
             if which_timeout is not None:
                 command = "timeout %i " % (timeout) + command
 
-            if microturbulence_vel**2 >= 1:
-                turbv = np.sqrt(microturbulence_vel**2 - 1) # microturbulence is added by summing the squares, and we have a VTURB=1 model
-            else:
-                turbv = 0.
-            command_input =  "AIR        %-9.1f %-9.1f 600000. %9.2f    0     30    .0001     1    0\n" % (wave_base, wave_top, turbv)
+            # microturbulence is added by summing the squares to the microturbulence indicated in the mode atmosphere, which we have forced to zero before
+            turbv = microturbulence_vel
+            # NOTE: For the wavelength range, it does not work as other codes... it will ignore any lines outside the provided range
+            # even if they are strong near-by lines that will affect the region of interest. So we increase the region to synthesize
+            # and we will cut later.
+            # Provide some margin or near-by deep lines might be omitted
+            margin = 2. # 2 nm
+            #command_input =  "AIR        %-9.1f %-9.1f 600000. %9.2f    0     30    .0001     1    0\n" % (wave_base-margin, wave_top+margin, turbv)
+            command_input =  "AIR        %-9.1f %-9.1f 600000. %9.2f    0     10    .001      0    0\n" % (wave_base-margin, wave_top+margin, turbv)
             command_input += "AIRorVAC  WLBEG     WLEND     RESOLU    TURBV  IFNLTE LINOUT CUTOFF        NREAD\n"
             #AIR indicates that the wavelengths are in AIR. VAC would provide vacuum wavelengths
             #WLBEG and WLEND are the starting and ending points of the synthesis, in nanometers
             #RESOLU is the resolution at which the calculation is performed. Practically, SYNTHE calculates the transfer through the atmosphere at wavelength intervals with such spacing. Of course, reducing the resolution will lead to a faster calculation, but also to a poorer sampling of the radiative transfer through the atmosphere. We thus suggest not to go below a resolution of 100000. This value is adequate for comparison with high resolution observed spectra.
             #TURBV is the microturbulence we want SYNTHE to add to the one in the atmosphere model. Since microturbulence is added by summing the squares, and we have a VTURB=1 model, we need to add 1.67 to obtain the final 1.95 km/s.
             #IFNLTE is set to 0 because we want a LTE calculation
+            #LINOUT if it is negative, line data are not saved and it speeds up the process
             #CUTOFF is used to keep the weakest transitions out of the output files. With this setting, any absorption subtracting at its center less than 1/10000 of the intensity will be cut off.
 
             proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -3642,7 +3213,9 @@ def __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linel
 
 
             if linelist_file is None:
-                wfilter = np.logical_and(linelist['wave_nm'] >= wave_base, linelist['wave_nm'] <= wave_top)
+                # Provide some margin or near-by deep lines might be omitted
+                margin = 2. # 2 nm
+                wfilter = np.logical_and(linelist['wave_nm'] >= wave_base-margin, linelist['wave_nm'] <= wave_top+margin)
                 linelist_filename, molecules_filenames = write_atomic_linelist(linelist[wfilter], code="synthe", tmp_dir=tmp_execution_dir)
             else:
                 linelist_filename = linelist_file
@@ -3793,30 +3366,29 @@ def __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linel
                 sys.stdout.flush()
                 raise Exception("Synthesis failed!")
             synth_waveobs_tmp = data[:,0] / 10. # Armstrong to nm
-            synth_waveobs = np.hstack((synth_waveobs, synth_waveobs_tmp))
+            # NOTE: We provided an artificially bigger wavelength range, so that synthe will consider near-by deep lines
+            # Now we correct that and we reduce the wavelength range to the correct one:
+            wfilter = np.logical_and(synth_waveobs_tmp >= wave_base, synth_waveobs_tmp <= wave_top)
+            synth_waveobs = np.hstack((synth_waveobs, synth_waveobs_tmp[wfilter]))
 
             synth_fluxes_tmp = data[:,3]
-            synth_fluxes = np.hstack((synth_fluxes, synth_fluxes_tmp))
+            synth_fluxes = np.hstack((synth_fluxes, synth_fluxes_tmp[wfilter]))
 
             os.chdir(previous_cwd)
             shutil.rmtree(tmp_execution_dir)
+
+    segments = None
+    vrad = (0,)
+    synth_fluxes = apply_post_fundamental_effects(synth_waveobs, synth_fluxes, segments, \
+                    macroturbulence=macroturbulence, vsini=vsini, \
+                    limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
 
     synth_spectrum = create_spectrum_structure(synth_waveobs, synth_fluxes)
     synth_spectrum.sort(order=['waveobs'])
 
     # Make sure we return the number of expected fluxes
-    if np.any(synth_spectrum['waveobs'] != waveobs):
-        synth_spectrum = resample_spectrum(synth_spectrum, waveobs, method="bessel", zero_edges=True)
-
-    if R is not None and R > 0:
-        ## Use iSpec convolution routine instead of SPECTRUM one, since iSpec is more reliable
-        synth_spectrum['flux'] = convolve_spectrum(synth_spectrum, R, from_resolution=None, frame=None)['flux']
-
-    if macroturbulence is not None and macroturbulence > 0:
-        synth_spectrum['flux'] = __broadening_macroturbulent(waveobs, synth_spectrum['flux'], macroturbulence, return_kernel=False)
-
-    if vsini is not None and vsini > 0:
-        synth_spectrum['flux'] = __broadening_rotational(waveobs, synth_spectrum['flux'], vsini)
+    if not np.array_equal(synth_spectrum['waveobs'], waveobs):
+        synth_spectrum = resample_spectrum(synth_spectrum, waveobs, method="linear", zero_edges=True)
 
     return synth_spectrum['flux']
 
@@ -3824,10 +3396,10 @@ def __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linel
 
 
 def __sme_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, timeout=1800):
-    return __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  regions=regions, timeout=timeout, R=0, macroturbulence=0, vsini=0)
+    return __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose, regions=regions, timeout=timeout, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0)
 
 
-def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, R=None, macroturbulence=None, vsini=None):
+def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None):
     if not is_sme_support_enabled():
         raise Exception("SME support is not enabled")
 
@@ -3980,28 +3552,24 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
             synth_waveobs = np.hstack((synth_waveobs, synth_waveobs_tmp))
             synth_fluxes = np.hstack((synth_fluxes, synth_fluxes_tmp))
 
+    segments = None
+    vrad = (0,)
+    synth_fluxes = apply_post_fundamental_effects(synth_waveobs, synth_fluxes, segments, \
+                    macroturbulence=macroturbulence, vsini=vsini, \
+                    limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
+
     synth_spectrum = create_spectrum_structure(synth_waveobs/10., synth_fluxes)
     synth_spectrum.sort(order=['waveobs'])
 
     # Make sure we return the number of expected fluxes
     if not np.array_equal(synth_spectrum['waveobs'], waveobs):
-        synth_spectrum = resample_spectrum(synth_spectrum, waveobs, method="bessel", zero_edges=True)
-
-    if R is not None and R > 0:
-        ## Use iSpec convolution routine instead of SPECTRUM one, since iSpec is more reliable
-        synth_spectrum['flux'] = convolve_spectrum(synth_spectrum, R, from_resolution=None, frame=None)['flux']
-
-    if macroturbulence is not None and macroturbulence > 0:
-        synth_spectrum['flux'] = __broadening_macroturbulent(waveobs, synth_spectrum['flux'], macroturbulence, return_kernel=False)
-
-    if vsini is not None and vsini > 0:
-        synth_spectrum['flux'] = __broadening_rotational(waveobs, synth_spectrum['flux'], vsini)
+        synth_spectrum = resample_spectrum(synth_spectrum, waveobs, method="linear", zero_edges=True)
 
     process_communication_queue.put(synth_spectrum['flux'])
 
 
 
-def __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, R=None, macroturbulence=None, vsini=None, timeout=1800):
+def __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, timeout=1800):
     if not is_sme_support_enabled():
         raise Exception("SME support is not enabled")
 
@@ -4011,7 +3579,7 @@ def __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist
     # aborts the full process because unknown reasons
     process_communication_queue = Queue()
 
-    p = Process(target=__sme_true_generate_spectrum, args=(process_communication_queue, waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel), kwargs={'regions': regions, 'macroturbulence': macroturbulence, 'vsini': vsini, 'R': R, 'verbose': verbose})
+    p = Process(target=__sme_true_generate_spectrum, args=(process_communication_queue, waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel), kwargs={'regions': regions, 'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'verbose': verbose})
     p.start()
     num_seconds = 0
     # Constantly check that the process has not died without returning any result and blocking the queue call
@@ -4043,4 +3611,146 @@ def __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist
     return fluxes
 
 
+#-------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
+# Functions for vsini and vmac broadening
+#-------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 
+def __lsf_rotate(deltav,vsini,epsilon=0.6):
+    # Based on lsf_rotate.pro:
+    #  http://idlastro.gsfc.nasa.gov/ftp/pro/astro/lsf_rotate.pro
+    #
+    # Adapted from rotin3.f in the SYNSPEC software of Hubeny & Lanz
+    # http://nova.astro.umd.edu/index.html    Also see Eq. 17.12 in
+    # "The Observation and Analysis of Stellar Photospheres" by D. Gray (1992)
+    e1 = 2.0*(1.0 - epsilon)
+    e2 = np.pi*epsilon/2.0
+    e3 = np.pi*(1.0 - epsilon/3.0)
+
+    npts = np.ceil(2*vsini/deltav)
+    if npts % 2 == 0:
+        npts += 1
+    nwid = np.floor(npts/2)
+    x = np.arange(npts) - nwid
+    x = x*deltav/vsini
+    x1 = np.abs(1.0 - x**2)
+
+    velgrid = x*vsini
+    return velgrid, (e1*np.sqrt(x1) + e2*x1)/e3
+
+
+def __vmac_broadening(flux, velocity_step, vmac):
+    """
+        velocity_step: fluxes should correspond to a spectrum homogeneously sampled in velocity space
+                    with a fixed velocity step [km/s]
+        vmac   : macroturbulence velocity [km/s]
+
+        Based on SME's rtint
+        It uses radial-tangential instead of isotropic Gaussian macroturbulence.
+    """
+    if vmac is not None and vmac > 0:
+        # mu represent angles that divide the star into equal area annuli,
+        # ordered from disk center (mu=1) to the limb (mu=0).
+        # But since we don't have intensity profiles at various viewing (mu) angles
+        # at this point, we just take a middle point:
+        m = 0.5
+        # Calc projected simga for radial and tangential velocity distributions.
+        sigma = vmac/np.sqrt(2.0) / velocity_step
+        sigr = sigma * m
+        sigt = sigma * np.sqrt(1.0 - m**2.)
+        # Figure out how many points to use in macroturbulence kernel
+        nmk = max(min(round(sigma*10), (len(flux)-3)/2), 3)
+        # Construct radial macroturbulence kernel w/ sigma of mu*vmac/sqrt(2)
+        if sigr > 0:
+            xarg = (np.arange(2*nmk+1)-nmk) / sigr   # exponential arg
+            #mrkern = np.exp(max((-0.5*(xarg**2)),-20.0))
+            mrkern = np.exp(-0.5*(xarg**2))
+            mrkern = mrkern/mrkern.sum()
+        else:
+            mrkern = np.zeros(2*nmk+1)
+            mrkern[nmk] = 1.0    #delta function
+
+        # Construct tangential kernel w/ sigma of sqrt(1-mu**2)*vmac/sqrt(2.)
+        if sigt > 0:
+            xarg = (np.arange(2*nmk+1)-nmk) /sigt
+            mtkern = np.exp(-0.5*(xarg**2))
+            mtkern = mtkern/mtkern.sum()
+        else:
+            mtkern = np.zeros(2*nmk+1)
+            mtkern[nmk] = 1.0
+
+        ## Sum the radial and tangential components, weighted by surface area
+        area_r = 0.5
+        area_t = 0.5
+        mkern = area_r*mrkern + area_t*mtkern
+
+        # Convolve the flux with the kernel
+        flux_conv = 1 - fftconvolve(1-flux, mkern, mode='same') # Fastest
+        #import scipy
+        #flux_conv = scipy.convolve(flux, mkern, mode='same') # Equivalent but slower
+
+        return flux_conv
+    else:
+        return flux
+
+def __vsini_broadening_limbdarkening(flux, velocity_step, vsini, epsilon):
+    """
+        velocity_step: fluxes should correspond to a spectrum homogeneously sampled in velocity space
+                    with a fixed velocity step [km/s]
+        vsini   : rotation velocity [km/s]
+        epsilon : numeric scalar giving the limb-darkening coefficient,
+               default = 0.6 which is typical for  photospheric lines.
+
+        Based on lsf_rotate.pro:
+        http://idlastro.gsfc.nasa.gov/ftp/pro/astro/lsf_rotate.pro
+
+        Adapted from rotin3.f in the SYNSPEC software of Hubeny & Lanz
+        http://nova.astro.umd.edu/index.html    Also see Eq. 17.12 in
+        "The Observation and Analysis of Stellar Photospheres" by D. Gray (1992)
+    """
+    if vsini is not None and vsini > 0:
+        if epsilon is None:
+            epsilon = 0.
+        kernel_x, kernel_y = __lsf_rotate(velocity_step, vsini, epsilon=epsilon)
+        kernel_y /= kernel_y.sum()
+
+        #-- convolve the flux with the kernel
+        flux_conv = 1 - fftconvolve(1-flux, kernel_y, mode='same') # Fastest
+        #import scipy
+        #flux_conv = 1 - scipy.convolve(1-flux, kernel_y, mode='same') # Equivalent but slower
+        return flux_conv
+    else:
+        return flux
+
+def __determine_velocity_step(spectrum):
+    # Determine step size for a new model wavelength scale, which must be uniform
+    # in velocity to facilitate convolution with broadening kernels. The uniform
+    # step size is the largest of:
+    wave_base = spectrum['waveobs'][0]
+    wave_top = spectrum['waveobs'][-1]
+    wmid = (wave_top + wave_base) / 2. # midpoint
+    wspan = wave_top - wave_base # width
+    # Light speed in vacuum
+    #c = 299792458.0 # m/s
+    c = 299792.4580 # km/s
+
+
+    # [1] smallest wavelength step considering the wavelength sampling
+    wave_diff = spectrum['waveobs'][1:] - spectrum['waveobs'][:-1]
+    min_wave_step = np.min(wave_diff)
+    min_wave_step_index = np.argmin(wave_diff)
+    vstep1 = min_wave_step / (spectrum['waveobs'][min_wave_step_index] * c)
+
+    # [2] 10% the mean dispersion
+    vstep2 = 0.1 * wspan / len(spectrum) / (wmid * c)
+
+    # [3] 0.05 km/s, which is 1% the width of solar line profiles
+    vstep3 = 0.05e0
+
+    # Select the largest between 1, 2 and 3:
+    velocity_step = np.max((vstep1, vstep2, vstep3))
+
+    return velocity_step
+#-------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------

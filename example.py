@@ -310,7 +310,6 @@ def normalize_whole_spectrum_with_template():
                                 nknots=nknots, \
                                 median_wave_range=median_wave_range, \
                                 model=model, \
-                                automatic_strong_line_detection=True, \
                                 template=synth_spectrum)
 
     #--- Continuum normalization ---------------------------------------------------
@@ -2214,9 +2213,9 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
     logging.info("Saving results...")
     dump_file = "example_results_ew_%s.dump" % (code)
 
-    ispec.save_results(dump_file, (params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params))
+    ispec.save_results(dump_file, (params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params, used_linemasks))
     # If we need to restore the results from another script:
-    params, errors, status, x_over_h, selected_x_over_h, fitted_lines_param = ispec.restore_results(dump_file)
+    params, errors, status, x_over_h, selected_x_over_h, fitted_lines_param, used_linemasks = ispec.restore_results(dump_file)
 
 
 
