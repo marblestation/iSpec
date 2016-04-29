@@ -969,13 +969,13 @@ def fit_lines_already_crossmatched_with_atomic_data_and_determine_ew(use_ares=Fa
 def synthesize_spectrum(code="spectrum"):
     #--- Synthesizing spectrum -----------------------------------------------------
     # Parameters
-    teff = 5777.0
+    teff = 5771.0
     logg = 4.44
     MH = 0.00
-    microturbulence_vel = 1.0
-    macroturbulence = 0.0
-    vsini = 2.0
-    limb_darkening_coeff = 0.0
+    microturbulence_vel = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH) # 1.07
+    macroturbulence = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH) # 4.21
+    vsini = 1.60 # Sun
+    limb_darkening_coeff = 0.6
     resolution = 300000
     wave_step = 0.001
 
@@ -1190,8 +1190,8 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     initial_MH = 0.00
     initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
     initial_vmac = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH)
-    initial_vsini = 0.0
-    initial_limb_darkening_coeff = 0.0
+    initial_vsini = 2.0
+    initial_limb_darkening_coeff = 0.6
     initial_R = to_resolution
     initial_vrad = 0
     max_iterations = 6
@@ -1529,13 +1529,13 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
     #--- Model spectra ----------------------------------------------------------
     # Parameters
-    initial_teff = 5777.0
-    initial_logg = 4.43
+    initial_teff = 5771.0
+    initial_logg = 4.44
     initial_MH = 0.00
     initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
     initial_vmac = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH)
-    initial_vsini = 2.0
-    initial_limb_darkening_coeff = 0.0
+    initial_vsini = 1.60 # Sun
+    initial_limb_darkening_coeff = 0.6
     initial_R = to_resolution
     initial_vrad = 0
     max_iterations = 6
@@ -1683,13 +1683,13 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
     star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
     #--- Model spectra ----------------------------------------------------------
     # Parameters
-    initial_teff = 5777.0
-    initial_logg = 4.43
+    initial_teff = 5771.0
+    initial_logg = 4.44
     initial_MH = 0.00
     initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
     initial_vmac = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH)
-    initial_vsini = 2.0
-    initial_limb_darkening_coeff = 0.0
+    initial_vsini = 1.60 # Sun
+    initial_limb_darkening_coeff = 0.6
     initial_R = to_resolution
     initial_vrad = 0
     max_iterations = 6
@@ -1850,13 +1850,13 @@ def determine_loggf_line_by_line_using_synth_spectra(code="spectrum"):
     star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
     #--- Model spectra ----------------------------------------------------------
     # Parameters
-    initial_teff = 5777.0
-    initial_logg = 4.43
+    initial_teff = 5771.0
+    initial_logg = 4.44
     initial_MH = 0.00
     initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
     initial_vmac = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH)
-    initial_vsini = 2.0
-    initial_limb_darkening_coeff = 0.0
+    initial_vsini = 1.60 # Sun
+    initial_limb_darkening_coeff = 0.6
     initial_R = to_resolution
     initial_vrad = 0
     max_iterations = 6

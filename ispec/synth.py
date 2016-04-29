@@ -65,9 +65,9 @@ class Constants:
     SYNTH_STEP_VMIC = 0.5
     SYNTH_STEP_VMAC = 2.0
     SYNTH_STEP_VSINI = 2.0
-    SYNTH_STEP_LIMB_DARKENING_COEFF = 0.20
+    SYNTH_STEP_LIMB_DARKENING_COEFF = 0.05
     SYNTH_STEP_R = 100
-    SYNTH_STEP_VRAD = 5
+    SYNTH_STEP_VRAD = 2
     SYNTH_STEP_ABUNDANCES = 0.05
     SYNTH_STEP_LOGGF = 0.01
     ###################################
@@ -126,7 +126,7 @@ def __spectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, l
     return __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions)
 
 
-def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.20, R=500000, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, waveobs_mask=None, code="spectrum", use_molecules=False, tmp_dir=None):
+def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.60, R=500000, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, waveobs_mask=None, code="spectrum", use_molecules=False, tmp_dir=None):
     """
     waveobs_mask is for SPECTRUM
     regions is for Turbospectrum, moog and synthe
@@ -375,6 +375,9 @@ def __spectrum_true_generate_spectrum(process_communication_queue, waveobs, wave
     #fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, R, nlayers, verbose, update_progress_func)
     fluxes = synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, isotope_file, abundances_file, fixed_abundances_file, microturbulence_vel, 0, 0, 0, 0, nlayers, verbose, update_progress_func)
 
+    # Zero values, when convolved, remain zero so we give a very tiny flux to avoid this problem
+    fluxes[fluxes <= 0] = 10e-9
+
     segments = None
     vrad = (0,)
     fluxes = apply_post_fundamental_effects(waveobs, fluxes, segments, \
@@ -398,7 +401,7 @@ def __calculate_ew_and_depth(process_communication_queue, atmosphere_model_file,
     process_communication_queue.put((output_wave, output_code, output_ew, output_depth))
 
 
-def apply_post_fundamental_effects(waveobs, fluxes, segments, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.20, R=500000, vrad=(0,), verbose=0):
+def apply_post_fundamental_effects(waveobs, fluxes, segments, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.60, R=500000, vrad=(0,), verbose=0):
     """
     Apply macroturbulence, rotation (visini), limb darkening coeff and resolution to already generated fundamental synthetic spectrum.
     """
@@ -437,7 +440,7 @@ def apply_post_fundamental_effects(waveobs, fluxes, segments, macroturbulence = 
     if type(vrad) not in (tuple, list, np.ndarray):
         raise Exception("Velocity should be an array")
 
-    if np.any(np.asarray(vrad) > 0):
+    if np.any(np.asarray(vrad) != 0):
         if len(vrad) != len(segments):
             raise Exception("Velocity should be an array with as many numbers as segments when segments are provided")
         modified = waveobs < 0 # All to false
@@ -592,13 +595,13 @@ class SynthModel(MPFitModel):
                 self._parinfo[i]['value'] = p[i]
 
         key = "%.0f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.vmic())
-        complete_key = "%.0f %.2f %.2f %.2f %.2f %.2f %.2f %i " % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
+        complete_key = "%.0f %.2f %.2f %.2f %.2f %.2f %.2f %i" % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
 
         # Consider new loggf
         linelist_free_loggf = self.generate_linelist_free_loggf()
 
         loggf_key = " ".join(map(lambda x: "%.3f" % (x), linelist_free_loggf['loggf']))
-        complete_key += loggf_key
+        complete_key += " loggf [" + loggf_key + "]"
         key += loggf_key
 
         if len(linelist_free_loggf) > 0:
@@ -611,8 +614,13 @@ class SynthModel(MPFitModel):
         fixed_abundances = self.free_abundances()
 
         abundances_key = " ".join(map(lambda x: "%.2f" % (x), fixed_abundances['Abund']))
-        complete_key += abundances_key
+        complete_key += " abund [" + abundances_key + "]"
         key += abundances_key
+
+        # vrad
+        vrad = self.vrad()
+        vrad_key = " ".join(map(lambda x: "%.2f" % (x), vrad))
+        complete_key += " vrad [" + vrad_key + "]"
 
         ##### [start] Check precomputed (solar abundance)
         precomputed_file = str(self.precomputed_grid_dir) + "/unconvolved_steps/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}.fits".format(int(self.teff()), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff())
@@ -1110,12 +1118,12 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
             parinfo[base+i]['fixed'] = not "vrad" in free_params
             parinfo[base+i]['step'] = Constants.SYNTH_STEP_VRAD # For auto-derivatives
             parinfo[base+i]['limited'] = [True, True]
-            parinfo[base+i]['limits'] = [-30., 30]
-    # ABUNDANCES
-    if "vrad" in free_params:
+            parinfo[base+i]['limits'] = [-5., 5]
+    if "vrad" in free_params or np.any(initial_vrad != 0):
         base = 8 + len(initial_vrad)
     else:
         base = 8
+    # ABUNDANCES
     for i in xrange(len(free_abundances)):
         parinfo[base+i]['parname'] = str(free_abundances['code'][i])
         parinfo[base+i]['value'] = free_abundances['Abund'][i]
@@ -1124,7 +1132,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
         parinfo[base+i]['limited'] = [True, True]
         parinfo[base+i]['limits'] = [-30., 0.]
     # log(gf)
-    if "vrad" in free_params:
+    if "vrad" in free_params or np.any(initial_vrad != 0):
         base = 8 + len(initial_vrad) + len(free_abundances)
     else:
         base = 8 + len(free_abundances)
@@ -2369,7 +2377,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
     i = 0
     for teff, logg, MH in ranges:
         vmic = estimate_vmic(teff, logg, MH)
-        vmac = estimate_vmac(teff, logg, MH)
+        vmac = 0.0 # This can be modified after synthesis if needed
         vsini = 0.0 # This can be modified after synthesis if needed
         limb_darkening_coeff = 0.00 # This can be modified after synthesis if needed
         resolution = 0 # This can be modified after synthesis if needed
@@ -2380,24 +2388,11 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                     (teff, logg+Constants.SYNTH_STEP_LOGG, MH, vmic, vmac, vsini, limb_darkening_coeff),
                     (teff, logg, MH+Constants.SYNTH_STEP_MH, vmic, vmac, vsini, limb_darkening_coeff),
                     (teff, logg, MH, vmic+Constants.SYNTH_STEP_VMIC, vmac, vsini, limb_darkening_coeff),
-                    (teff, logg, MH, vmic, vmac+Constants.SYNTH_STEP_VMAC, vsini, limb_darkening_coeff),
-                    (teff, logg, MH, vmic, vmac, vsini+Constants.SYNTH_STEP_VSINI, limb_darkening_coeff),
-                    (teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff+Constants.SYNTH_STEP_LIMB_DARKENING_COEFF),
-                    # Final unconvolved spectra where vmic/vmac are not free and do follow vmic/vmac empirical relations
-                    (teff+Constants.SYNTH_STEP_TEFF, logg, MH, estimate_vmic(teff+Constants.SYNTH_STEP_TEFF, logg, MH), estimate_vmac(teff+Constants.SYNTH_STEP_TEFF, logg, MH), vsini, limb_darkening_coeff),
-                    (teff, logg+Constants.SYNTH_STEP_LOGG, MH, estimate_vmic(teff, logg+Constants.SYNTH_STEP_LOGG, MH), estimate_vmac(teff, logg+Constants.SYNTH_STEP_LOGG, MH), vsini, limb_darkening_coeff),
-                    (teff, logg, MH+Constants.SYNTH_STEP_MH, estimate_vmic(teff, logg, MH+Constants.SYNTH_STEP_MH), estimate_vmac(teff, logg, MH+Constants.SYNTH_STEP_MH), vsini, limb_darkening_coeff),
-                    # Fundamental spectra when vmic is free
-                    (teff, logg, MH, vmic, 0., 0., 0.),
-                    (teff+Constants.SYNTH_STEP_TEFF, logg, MH, vmic, 0., 0., 0.),
-                    (teff, logg+Constants.SYNTH_STEP_LOGG, MH, vmic, 0., 0., 0.),
-                    (teff, logg, MH+Constants.SYNTH_STEP_MH, vmic, 0., 0., 0.),
-                    (teff, logg, MH, vmic+Constants.SYNTH_STEP_VMIC, 0., 0., 0.),
-                    # Fundamental spectra when vmic is fixed and follows vmic empirical relation
-                    (teff, logg, MH, estimate_vmic(teff, logg, MH), 0., 0., 0.),
-                    (teff+Constants.SYNTH_STEP_TEFF, logg, MH, estimate_vmic(teff+Constants.SYNTH_STEP_TEFF, logg, MH), 0., 0., 0.),
-                    (teff, logg+Constants.SYNTH_STEP_LOGG, MH, estimate_vmic(teff, logg+Constants.SYNTH_STEP_LOGG, MH), 0., 0., 0.),
-                    (teff, logg, MH+Constants.SYNTH_STEP_MH, estimate_vmic(teff, logg, MH+Constants.SYNTH_STEP_MH), 0., 0., 0.))
+                    # Final unconvolved spectra where vmic is not free and does follow vmic empirical relations
+                    (teff+Constants.SYNTH_STEP_TEFF, logg, MH, estimate_vmic(teff+Constants.SYNTH_STEP_TEFF, logg, MH), vmac, vsini, limb_darkening_coeff),
+                    (teff, logg+Constants.SYNTH_STEP_LOGG, MH, estimate_vmic(teff, logg+Constants.SYNTH_STEP_LOGG, MH), vmac, vsini, limb_darkening_coeff),
+                    (teff, logg, MH+Constants.SYNTH_STEP_MH, estimate_vmic(teff, logg, MH+Constants.SYNTH_STEP_MH), vmac, vsini, limb_darkening_coeff),
+                    )
 
         for j, (teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff) in enumerate(steps):
             filename_out = fits_dir + "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}".format(int(teff), logg, MH, vmic, vmac, vsini, limb_darkening_coeff) + ".fits"
@@ -2469,23 +2464,32 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
     reference_list.add_column(Column(name='limb_darkening_coeff', dtype=float))
     for teff, logg, MH in ranges:
         # Only use the first spectra generated for each combination
+        zero_vmac = 0.0
+        zero_vsini = 0.0
+        zero_limb_darkening_coeff = 0.00
+        zero_resolution = 0
         vmic = estimate_vmic(teff, logg, MH)
         vmac = estimate_vmac(teff, logg, MH)
-        vsini = 0.0
-        limb_darkening_coeff = 0.00
-        resolution = 0
-        reference_filename_out = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}".format(int(teff), logg, MH, vmic, vmac, vsini, limb_darkening_coeff) + ".fits"
+        vsini = 1.6 # Sun
+        limb_darkening_coeff = 0.6
+        reference_filename_out = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}".format(int(teff), logg, MH, vmic, zero_vmac, zero_vsini, zero_limb_darkening_coeff) + ".fits"
         reference_list.add_row((reference_filename_out, int(teff), logg, MH, vmic, vmac, vsini, limb_darkening_coeff))
+
 
         # Spectra in the grid is convolved to the specified resolution for fast comparison
         print "Quick grid:", reference_filename_out
         spectrum = read_spectrum(fits_dir + reference_filename_out)
-        convolved_spectrum = convolve_spectrum(spectrum, to_resolution)
+
+        segments = None
+        vrad = (0,)
+        spectrum['flux'] = apply_post_fundamental_effects(spectrum['waveobs'], spectrum['flux'], segments, \
+                    macroturbulence=vmac, vsini=vsini, \
+                    limb_darkening_coeff=limb_darkening_coeff, R=to_resolution, vrad=vrad)
 
         if reference_grid is None:
-            reference_grid = convolved_spectrum['flux']
+            reference_grid = spectrum['flux']
         else:
-            reference_grid = np.vstack((reference_grid, convolved_spectrum['flux']))
+            reference_grid = np.vstack((reference_grid, spectrum['flux']))
 
     ascii.write(reference_list, reference_list_filename, delimiter='\t')
     # Generate FITS file with grid for fast comparison
@@ -2974,6 +2978,9 @@ def __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelis
             synth_fluxes = np.hstack((synth_fluxes, synth_fluxes_tmp))
 
             shutil.rmtree(tmp_execution_dir)
+
+    # Zero values, when convolved, remain zero so we give a very tiny flux to avoid this problem
+    synth_fluxes[synth_fluxes <= 0] = 10e-9
 
     segments = None
     vrad = (0,)

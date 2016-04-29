@@ -321,6 +321,10 @@ def __gauss_filter(spectrum, gauss_filter_step):
 def __clean_outliers(spectrum, min_wave, max_wave, wave_step, ignored_regions, probability=0.50):
     # Resample to have 1 point for each max window instead of N
     wavelengths = np.arange(min_wave, max_wave, wave_step/2.)
+    if len(wavelengths) < 5:
+        # For instance, with only 2 points this function will crash so we avoid to do anything
+        sfilter = spectrum['waveobs'] < 0 # All to false
+        return spectrum, sfilter
     # Resample only fluxes using directly interp instead of ispec.resample_spectrum and
     # choosing NOT to have zeros in the borders
     smooth1 = create_spectrum_structure(wavelengths)

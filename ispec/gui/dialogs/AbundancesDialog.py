@@ -119,7 +119,7 @@ class AbundancesDialog(CustomDialog):
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
-        component["text"] = "Metallicity [Fe/H]"
+        component["text"] = "Metallicity [M/H]"
         component["text-type"] = "float" # float, int or str
         component["default"] = feh
         component["minvalue"] = -5

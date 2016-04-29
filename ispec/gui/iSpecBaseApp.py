@@ -512,7 +512,11 @@ class iSpecBaseApp(Tkinter.Tk):
         parametersmenu.add_command(label="Estimate SNR", command=self.on_estimate_snr)
         self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
         parametersmenu.add_separator()
-        if "determine_abundances" in dir(ispec) and "model_spectrum" in dir(ispec) and \
+        if (ispec.is_spectrum_support_enabled() \
+                #or ispec.is_turbospectrum_support_enabled() \
+                #or ispec.is_moog_support_enabled() \
+                #or ispec.is_width_support_enabled() \
+                ) and \
                 len(self.lists['atmospheres']) > 0 and len(self.lists['abundances']) > 0 and len(self.lists['atomic_lines']) > 0:
             parametersmenu.add_command(label="Determine parameters and abundances with synthesis", command=self.on_determine_parameters)
             self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
@@ -537,8 +541,12 @@ class iSpecBaseApp(Tkinter.Tk):
         self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(Tkinter.END, "label")))
         self.menu_active_spectrum.add_separator()
 
-
-        if ispec.is_spectrum_support_enabled() and \
+        if (ispec.is_spectrum_support_enabled() \
+                #or ispec.is_turbospectrum_support_enabled() \
+                #or ispec.is_sme_support_enabled() \
+                #or ispec.is_moog_support_enabled() \
+                #or ispec.is_synthe_support_enabled() \
+                ) and \
                 len(self.lists['atmospheres']) > 0 and len(self.lists['abundances']) > 0 and len(self.lists['atomic_lines']) > 0:
                 self.menu_active_spectrum.add_command(label="Synthesize spectrum", command=self.on_synthesize)
 
@@ -745,7 +753,12 @@ www.gnu.org/licenses/"""
     def on_about(self):
         description = """iSpec is a tool for the treatment and analysis of high-resolution and high singal-to-noise stellar spectra (mainly FGK stars) developed by Sergi Blanco-Cuaresma.
 """
-        if ispec.is_spectrum_support_enabled():
+        if (ispec.is_spectrum_support_enabled() \
+                or ispec.is_turbospectrum_support_enabled() \
+                or ispec.is_sme_support_enabled() \
+                or ispec.is_moog_support_enabled() \
+                or ispec.is_width_support_enabled() \
+                or ispec.is_synthe_support_enabled()):
             description += """
 iSpec uses the following radiative transfer codes:
 
@@ -3994,7 +4007,14 @@ iSpec uses the following radiative transfer codes:
         if self.check_operation_in_progress():
             return
 
-        if ispec.is_spectrum_support_enabled():
+        if (ispec.is_spectrum_support_enabled() \
+                #or ispec.is_turbospectrum_support_enabled() \
+                #or ispec.is_sme_support_enabled() \
+                #or ispec.is_moog_support_enabled() \
+                #or ispec.is_synthe_support_enabled() \
+                ) and \
+                len(self.lists['atmospheres']) > 0 and len(self.lists['abundances']) > 0 and len(self.lists['atomic_lines']) > 0:
+
             if self.active_spectrum is not None:
                 wave_base = np.round(np.min(self.active_spectrum.data['waveobs']), 2)
                 wave_top = np.round(np.max(self.active_spectrum.data['waveobs']), 2)
@@ -4002,13 +4022,13 @@ iSpec uses the following radiative transfer codes:
                 wave_base = 515.0 # Magnesium triplet region
                 wave_top = 525.0
                 #wave_top = 517.0
-            teff = 5777.0
+            teff = 5771.0
             logg = 4.44
             MH = 0.00
-            macroturbulence = 0.0
-            vsini = 2.0
-            limb_darkening_coeff = 0.0
-            microturbulence_vel = 1.0
+            macroturbulence = 4.21
+            vsini = 1.6
+            limb_darkening_coeff = 0.6
+            microturbulence_vel = 1.07
             #resolution = 47000
             #resolution = 0
             resolution = 300000
@@ -4027,7 +4047,7 @@ iSpec uses the following radiative transfer codes:
             code = self.dialog[key].results["Code"].lower()
             teff = self.dialog[key].results["Effective temperature (K)"]
             logg = self.dialog[key].results["Surface gravity (log g)"]
-            MH = self.dialog[key].results["Metallicity [Fe/H]"]
+            MH = self.dialog[key].results["Metallicity [M/H]"]
             microturbulence_vel = self.dialog[key].results["Microturbulence velocity (km/s)"]
             macroturbulence = self.dialog[key].results["Macroturbulence velocity (km/s)"]
             vsini = self.dialog[key].results["Rotation (v sin(i)) (km/s)"]
@@ -4102,13 +4122,6 @@ iSpec uses the following radiative transfer codes:
             self.status_message("Interpolating atmosphere model...")
             atmosphere_layers = ispec.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH)
 
-            if wave_base >= wave_top:
-                msg = "Bad wavelength range definition, maximum value cannot be lower than minimum value."
-                title = 'Wavelength range'
-                self.error(title, msg)
-                self.flash_status_message("Bad values.")
-                return
-            waveobs = np.arange(wave_base, wave_top, wave_step)
 
             if not in_segments and not in_lines:
                 regions = None # Compute fluxes for all the wavelengths
@@ -4119,6 +4132,16 @@ iSpec uses the following radiative transfer codes:
                     return
                 self.__update_numpy_arrays_from_widgets(elements_type)
                 regions = self.regions[elements_type]
+                wave_base = np.min(regions['wave_base'])
+                wave_top = np.max(regions['wave_top'])
+
+            if wave_base >= wave_top:
+                msg = "Bad wavelength range definition, maximum value cannot be lower than minimum value."
+                title = 'Wavelength range'
+                self.error(title, msg)
+                self.flash_status_message("Bad values.")
+                return
+            waveobs = np.arange(wave_base, wave_top, wave_step)
 
             # If wavelength out of the linelist file are used, SPECTRUM starts to generate flat spectrum
             if np.min(waveobs) < 300.0 or np.max(waveobs) > 2400.0:
@@ -4225,10 +4248,10 @@ iSpec uses the following radiative transfer codes:
 
         key = "AbundancesDialog"
         if not self.active_spectrum.dialog.has_key(key):
-            teff = 5777.0
+            teff = 5771.0
             logg = 4.44
             MH = 0.00
-            microturbulence_vel = 1.0
+            microturbulence_vel = 1.07
             self.active_spectrum.dialog[key] = AbundancesDialog(self, "Abundances determination from EW", teff, logg, MH, microturbulence_vel, self.lists, self.default_lists)
             self.active_spectrum.dialog[key].show()
         elif show_previous_results:
@@ -4242,7 +4265,7 @@ iSpec uses the following radiative transfer codes:
         code = self.active_spectrum.dialog[key].results["Code"].lower()
         teff = self.active_spectrum.dialog[key].results["Effective temperature (K)"]
         logg = self.active_spectrum.dialog[key].results["Surface gravity (log g)"]
-        MH = self.active_spectrum.dialog[key].results["Metallicity [Fe/H]"]
+        MH = self.active_spectrum.dialog[key].results["Metallicity [M/H]"]
         microturbulence_vel = self.active_spectrum.dialog[key].results["Microturbulence velocity (km/s)"]
         selected_atmosphere_models = self.active_spectrum.dialog[key].results["Model atmosphere"]
         selected_abundances = self.active_spectrum.dialog[key].results["Solar abundances"]
@@ -4337,10 +4360,10 @@ iSpec uses the following radiative transfer codes:
 
         key = "SolverEWDialog"
         if not self.active_spectrum.dialog.has_key(key):
-            teff = 5777.0
+            teff = 5771.0
             logg = 4.44
             MH = 0.00
-            microturbulence_vel = 1.0
+            microturbulence_vel = 1.07
             self.active_spectrum.dialog[key] = SolverEWDialog(self, "Parameters determination from EW", teff, logg, MH, microturbulence_vel, self.lists, self.default_lists)
             self.active_spectrum.dialog[key].show()
         elif show_previous_results:
@@ -4354,7 +4377,7 @@ iSpec uses the following radiative transfer codes:
         code = self.active_spectrum.dialog[key].results["Code"].lower()
         teff = self.active_spectrum.dialog[key].results["Effective temperature (K)"]
         logg = self.active_spectrum.dialog[key].results["Surface gravity (log g)"]
-        MH = self.active_spectrum.dialog[key].results["Metallicity [Fe/H]"]
+        MH = self.active_spectrum.dialog[key].results["Metallicity [M/H]"]
         microturbulence_vel = self.active_spectrum.dialog[key].results["Microturbulence velocity (km/s)"]
         max_iterations = self.active_spectrum.dialog[key].results["Maximum number of iterations"]
         free_teff = self.active_spectrum.dialog[key].results["Free Teff"] == 1
@@ -4491,13 +4514,13 @@ iSpec uses the following radiative transfer codes:
         if not self.check_continuum_model_exists():
             return
 
-        teff = 5777.0
+        teff = 5771.0
         logg = 4.44
         MH = 0.00
-        macroturbulence = 0.0
-        vsini = 2.0
-        limb_darkening_coeff = 0.0
-        microturbulence_vel = 1.0
+        macroturbulence = 4.21
+        vsini = 1.6
+        limb_darkening_coeff = 0.6
+        microturbulence_vel = 4.21
         #resolution = 47000
         resolution = 300000
         #resolution = 100000
@@ -4515,13 +4538,13 @@ iSpec uses the following radiative transfer codes:
         code = self.active_spectrum.dialog[key].results["Code"].lower()
         initial_teff = self.active_spectrum.dialog[key].results["Effective temperature (K)"]
         initial_logg = self.active_spectrum.dialog[key].results["Surface gravity (log g)"]
-        initial_MH = self.active_spectrum.dialog[key].results["Metallicity [Fe/H]"]
+        initial_MH = self.active_spectrum.dialog[key].results["Metallicity [M/H]"]
         initial_vmic = self.active_spectrum.dialog[key].results["Microturbulence velocity (km/s)"]
         initial_vmac = self.active_spectrum.dialog[key].results["Macroturbulence velocity (km/s)"]
         initial_vsini = self.active_spectrum.dialog[key].results["Rotation (v sin(i)) (km/s)"]
         initial_limb_darkening_coeff = self.active_spectrum.dialog[key].results["Limb darkening coefficient"]
         initial_R = self.active_spectrum.dialog[key].results["Resolution"]
-        initial_vrad = self.active_spectrum.dialog[key].results["Radial velocity"]
+        initial_vrad = (self.active_spectrum.dialog[key].results["Radial velocity"],)
         selected_atmosphere_models = self.active_spectrum.dialog[key].results["Model atmosphere"]
         selected_abundances = self.active_spectrum.dialog[key].results["Solar abundances"]
         selected_linelist = self.active_spectrum.dialog[key].results["Line list"]

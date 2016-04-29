@@ -58,7 +58,7 @@ class SolverDialog(CustomDialog):
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
-        component["text"] = "Metallicity [Fe/H]"
+        component["text"] = "Metallicity [M/H]"
         component["text-type"] = "float" # float, int or str
         component["default"] = feh
         component["minvalue"] = -5
@@ -139,8 +139,8 @@ class SolverDialog(CustomDialog):
         component["text"] = "Radial velocity"
         component["text-type"] = "float" # float, int or str
         component["default"] = 0.
-        component["minvalue"] = -np.inf
-        component["maxvalue"] = np.inf
+        component["minvalue"] = -5
+        component["maxvalue"] = 5
         self.__components.append(component)
         component = {}
         component["type"] = "Checkbutton"
