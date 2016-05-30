@@ -118,7 +118,7 @@ def determine_radial_velocity_with_template():
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
     template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
-    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.300_1100nm/template.txt.gz")
 
     models, ccf = ispec.cross_correlate_with_template(mu_cas_spectrum, template, \
                             lower_velocity_limit=-200, upper_velocity_limit=200, \
@@ -294,7 +294,7 @@ def normalize_whole_spectrum_with_template():
     Use a template to normalize the whole spectrum
     """
     star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
-    synth_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+    synth_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.300_1100nm/template.txt.gz")
 
     #--- Continuum fit -------------------------------------------------------------
     model = "Template"
@@ -496,7 +496,7 @@ def find_linemasks(code = "spectrum"):
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
     template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
-    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.300_1100nm/template.txt.gz")
 
     models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
                             lower_velocity_limit=-200, upper_velocity_limit=200, \
@@ -725,7 +725,7 @@ def fit_lines_determine_ew_and_crossmatch_with_atomic_data(use_ares=False):
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
     template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
-    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.300_1100nm/template.txt.gz")
 
     models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
                             lower_velocity_limit=-200, upper_velocity_limit=200, \
@@ -799,9 +799,8 @@ def fit_lines_determine_ew_and_crossmatch_with_atomic_data(use_ares=False):
     #telluric_linelist = None
     #vel_telluric = None
 
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/moog_ew_ispec_width_ew_ispec.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
-
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_iron.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_all.txt")
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
 
     linemasks = ispec.fit_lines(line_regions, normalized_star_spectrum, star_continuum_model, \
@@ -856,7 +855,7 @@ def fit_lines_already_crossmatched_with_atomic_data_and_determine_ew(use_ares=Fa
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
     template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
-    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.300_1100nm/template.txt.gz")
 
     models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
                             lower_velocity_limit=-200, upper_velocity_limit=200, \
@@ -914,8 +913,8 @@ def fit_lines_already_crossmatched_with_atomic_data_and_determine_ew(use_ares=Fa
     star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
 
     #--- Read lines with atomic data ------------------------------------------------
-    line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/custom/moog_ew_ispec_width_ew_ispec_extended.txt")
-    #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_extended.txt")
+    line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_iron_extended.txt")
+    #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_all_extended.txt")
 
     smoothed_star_spectrum = ispec.convolve_spectrum(star_spectrum, 2*to_resolution)
     line_regions_with_atomic_data = ispec.adjust_linemasks(smoothed_star_spectrum, line_regions_with_atomic_data, max_margin=0.5)
@@ -972,8 +971,8 @@ def synthesize_spectrum(code="spectrum"):
     teff = 5771.0
     logg = 4.44
     MH = 0.00
-    microturbulence_vel = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH) # 1.07
-    macroturbulence = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH) # 4.21
+    microturbulence_vel = ispec.estimate_vmic(teff, logg, MH) # 1.07
+    macroturbulence = ispec.estimate_vmac(teff, logg, MH) # 4.21
     vsini = 1.60 # Sun
     limb_darkening_coeff = 0.6
     resolution = 300000
@@ -1141,7 +1140,7 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
     template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
-    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.300_1100nm/template.txt.gz")
 
     models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
                             lower_velocity_limit=-200, upper_velocity_limit=200, \
@@ -1240,8 +1239,8 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     linelist_free_loggf = None
 
     # Line regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
-    # Select only some lines to speed up the execution (in a real analysis is better not to do this)
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_all.txt")
+    # Select only some lines to speed up the execution (in a real analysis it is better not to do this)
     line_regions = line_regions[np.logical_or(line_regions['note'] == 'Ti 1', line_regions['note'] == 'Ti 2')]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
     # Read segments if we have them or...
@@ -1307,7 +1306,7 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
     template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
-    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.300_1100nm/template.txt.gz")
 
     models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
                             lower_velocity_limit=-200, upper_velocity_limit=200, \
@@ -1401,8 +1400,8 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     linelist_free_loggf = None
 
     # Line regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
-    # Select only some lines to speed up the execution (in a real analysis is better not to do this)
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_all.txt")
+    # Select only some lines to speed up the execution (in a real analysis it is better not to do this)
     line_regions = line_regions[np.logical_or(line_regions['note'] == 'Ti 1', line_regions['note'] == 'Ti 2')]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
     # Read segments if we have them or...
@@ -1483,7 +1482,7 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
     template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
-    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.300_1100nm/template.txt.gz")
 
     models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
                             lower_velocity_limit=-200, upper_velocity_limit=200, \
@@ -1593,7 +1592,12 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     linelist_free_loggf = None
 
     # Line regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_all.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_spectrum_synth_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_turbospectrum_synth_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_sme_synth_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_moog_synth_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_synthe_synth_all_extended.txt")
     # Select only the lines to get abundances from
     line_regions = line_regions[np.logical_or(line_regions['note'] == element_name+' 1', line_regions['note'] == element_name+' 2')]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -1637,7 +1641,7 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
     template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
-    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.300_1100nm/template.txt.gz")
 
     models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
                             lower_velocity_limit=-200, upper_velocity_limit=200, \
@@ -1741,7 +1745,12 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
     chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
 
     # Line regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_all.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_spectrum_synth_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_turbospectrum_synth_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_sme_synth_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_moog_synth_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_synthe_synth_all_extended.txt")
     # Select only the lines to get abundances from
     line_regions = line_regions[:5]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -1804,7 +1813,7 @@ def determine_loggf_line_by_line_using_synth_spectra(code="spectrum"):
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
     template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
-    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.300_1100nm/template.txt.gz")
 
     models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
                             lower_velocity_limit=-200, upper_velocity_limit=200, \
@@ -1908,7 +1917,7 @@ def determine_loggf_line_by_line_using_synth_spectra(code="spectrum"):
     chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
 
     # Line regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_extended.txt")
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_all_extended.txt")
     # Select only the lines to get abundances from
     line_regions = line_regions[:5]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -1983,7 +1992,7 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
     template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
-    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.300_1100nm/template.txt.gz")
 
     models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
                             lower_velocity_limit=-200, upper_velocity_limit=200, \
@@ -2050,9 +2059,9 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
     if use_lines_already_crossmatched_with_atomic_data:
         #--- Read lines and adjust them ------------------------------------------------
         if code in ['width', 'moog']:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/custom/moog_ew_ispec_width_ew_ispec_extended.txt")
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_iron_extended.txt")
         else:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_extended.txt")
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_ew_ispec_turbospectrum_ew_ispec_iron_extended.txt")
 
         # Select only iron lines
         line_regions_with_atomic_data = line_regions_with_atomic_data[np.logical_or(line_regions_with_atomic_data['note'] == "Fe 1", line_regions_with_atomic_data['note'] == "Fe 2")]
@@ -2082,9 +2091,9 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
         atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(star_spectrum['waveobs']), wave_top=np.max(star_spectrum['waveobs']))
 
         if code in ['width', 'moog']:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/moog_ew_ispec_width_ew_ispec.txt")
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_iron.txt")
         else:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_ew_ispec_turbospectrum_ew_ispec_iron.txt")
 
         line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
 
@@ -2227,7 +2236,7 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Arcturus.372_926nm/template.txt.gz")
     #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Atlas.Sun.372_926nm/template.txt.gz")
     template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
-    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.350_1100nm/template.txt.gz")
+    #template = ispec.read_spectrum(ispec_dir + "/input/spectra/templates/Synth.Sun.300_1100nm/template.txt.gz")
 
     models, ccf = ispec.cross_correlate_with_template(star_spectrum, template, \
                             lower_velocity_limit=-200, upper_velocity_limit=200, \
@@ -2294,9 +2303,9 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
     if use_lines_already_crossmatched_with_atomic_data:
         #--- Read lines and adjust them ------------------------------------------------
         if code in ['width', 'moog']:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/custom/moog_ew_ispec_width_ew_ispec_extended.txt")
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_iron_extended.txt")
         else:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_extended.txt")
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_ew_ispec_turbospectrum_ew_ispec_iron_extended.txt")
 
         # Select only iron lines
         line_regions_with_atomic_data = line_regions_with_atomic_data[np.logical_or(line_regions_with_atomic_data['note'] == "Fe 1", line_regions_with_atomic_data['note'] == "Fe 2")]
@@ -2326,9 +2335,9 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
         atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(star_spectrum['waveobs']), wave_top=np.max(star_spectrum['waveobs']))
 
         if code in ['width', 'moog']:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/moog_ew_ispec_width_ew_ispec.txt")
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_iron.txt")
         else:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/custom/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth.txt")
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_ew_ispec_turbospectrum_ew_ispec_iron.txt")
 
         line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
 
