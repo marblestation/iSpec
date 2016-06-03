@@ -1,5 +1,15 @@
 
-all: synthesizer/moog/MOOGSILENT synthesizer/turbospectrum/bin/babsma_lu synthesizer/turbospectrum/bin/bsyn_lu synthesizer/turbospectrum/bin/eqwidt_lu ispec/synthesizer.so isochrones/YYmix2 synthesizer/ARES/bin/ARES
+all: spectrum turbospectrum moog isochrones ares
+
+spectrum: ispec/synthesizer.so
+
+turbospectrum: synthesizer/turbospectrum/bin/babsma_lu synthesizer/turbospectrum/bin/bsyn_lu synthesizer/turbospectrum/bin/eqwidt_lu
+
+moog: synthesizer/moog/MOOGSILENT
+
+ares: synthesizer/ARES/bin/ARES
+
+isochrones: isochrones/YYmix2
 
 
 ispec/synthesizer.so: synthesizer/synthesizer.pyx synthesizer/synthesizer_func.c synthesizer/spectrum276e/*.c

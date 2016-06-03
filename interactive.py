@@ -20,6 +20,8 @@ import sys
 import os
 import getopt
 import numpy as np
+import matplotlib
+matplotlib.use('TkAgg')
 
 #--- iSpec directory --------------------------------------------------------
 #ispec_dir = '/home/marble/shared/ispec/'
