@@ -2844,7 +2844,7 @@ def update_ew_with_ares(spectrum, linelist, rejt="0.995", tmp_dir=None, verbose=
     ew_err = np.asarray(ew_err_tmp)
     linelist = linelist.copy()
     linelist['ew'] = ew
-    linelist['ew_err'] = ew
+    linelist['ew_err'] = ew_err
     linelist['ewr'] = np.log10(linelist['ew'] / (1000.*linelist['wave_A']))
 
     return linelist
