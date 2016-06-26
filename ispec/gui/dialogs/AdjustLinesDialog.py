@@ -22,6 +22,11 @@ class AdjustLinesDialog(CustomDialog):
         component["minvalue"] = 0.0
         component["maxvalue"] = np.inf
         self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Check derivatives before fitting"
+        component["default"] = False
+        self.__components.append(component)
 
     def show(self):
         self.results = None

@@ -199,7 +199,8 @@ def read_spectrum(spectrum_filename, apply_filters=True, sort=True):
     with wavelengths, fluxes and errors.
     """
     # If it is not compressed
-    if os.path.exists(spectrum_filename) and (spectrum_filename[-4:].lower() == ".fit" or spectrum_filename[-5:].lower() == ".fits") :
+    if os.path.exists(spectrum_filename) and (spectrum_filename[-4:].lower() == ".fit" or spectrum_filename[-5:].lower() == ".fits" or \
+            spectrum_filename[-7:].lower() == ".fit.gz" or spectrum_filename[-8:].lower() == ".fits.gz"):
         spectrum = __read_fits_spectrum(spectrum_filename)
     elif os.path.exists(spectrum_filename) and spectrum_filename[-3:].lower() != ".gz":
         spectrum = __read_spectrum(spectrum_filename)
@@ -265,7 +266,8 @@ def write_spectrum(spectrum, spectrum_filename):
     the flux and the wavelengths as a matrix in the primary HDU. If the errors
     are different from zero, they will be saved as an extension.
     """
-    if spectrum_filename[-4:].lower() == ".fit" or spectrum_filename[-5:].lower() == ".fits":
+    if spectrum_filename[-4:].lower() == ".fit" or spectrum_filename[-5:].lower() == ".fits" or \
+            spectrum_filename[-7:].lower() == ".fit.gz" or spectrum_filename[-8:].lower() == ".fits.gz":
         header = pyfits.Header()
         header.set('ORIGIN', "iSpec")
         #header.set('VERSION', "iSpec")

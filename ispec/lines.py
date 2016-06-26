@@ -1681,13 +1681,17 @@ def __improve_linemask_edges(xcoord, yvalues, base, top, peak):
 
     return new_base, new_top
 
-def adjust_linemasks(spectrum, linemasks, max_margin=0.5, min_margin=0.0):
+def adjust_linemasks(spectrum, linemasks, max_margin=0.5, min_margin=0.0, check_derivatives=False, first_derivative_limit = 1e-0):
     """
     Adjust the line masks borders to the shape of the line in the specified spectrum.
     It will consider by default 0.5 nm around the wave peak.
 
     It tries to respect the min_margin around the peak but in case of overlapping
     regions, it might not be respected.
+
+    If check_derivatives then a different approach is executed using the first
+    and second derivative, which might be more convenient for spectra with high SNR
+    or synthetic spectra without noise.
 
     It returns a new linemasks structure.
     """
@@ -1698,37 +1702,72 @@ def adjust_linemasks(spectrum, linemasks, max_margin=0.5, min_margin=0.0):
         spectrum_window = spectrum[wfilter]
         if len(spectrum_window) < 3:
             continue
-        peaks, base_points = __find_peaks_and_base_points(spectrum_window['waveobs'], spectrum_window['flux'])
         ipeak = spectrum_window['waveobs'].searchsorted(wave_peak)
+        peaks, base_points = __find_peaks_and_base_points(spectrum_window['waveobs'], spectrum_window['flux'])
         if len(base_points) > 0:
             # wave_peak could not be exactly in a peak, so consider the nearest peak
             # to have only in consideration the maximum values that are after/before it
             nearest_peak = peaks[np.argmin(np.abs(peaks - ipeak))]
-            left_base_points = base_points[base_points < nearest_peak]
-            if len(left_base_points) > 0:
-                wave_base = spectrum_window['waveobs'][left_base_points[-1]] # nearest to the peak
-                # Make sure that the wave_base is smaller than the wave_peak
-                i = -2
-                while wave_base > wave_peak and -1*i <= len(left_base_points):
-                    wave_base = spectrum_window['waveobs'][left_base_points[i]] # nearest to the peak
-                    i -= 1
-                if wave_base < wave_peak:
-                    line['wave_base'] =  wave_base
 
-            right_base_points = base_points[base_points > nearest_peak]
-            if len(right_base_points) > 0:
-                wave_top = spectrum_window['waveobs'][right_base_points[0]] # nearest to the peak
-                # Make sure that the wave_top is bigger than the wave_peak
-                i = 1
-                while wave_top < wave_peak and i < len(right_base_points):
-                    wave_top = spectrum_window['waveobs'][right_base_points[i]] # nearest to the peak
-                    i += 1
-                if wave_top > wave_peak:
-                    line['wave_top'] =  wave_top
+            if check_derivatives:
+                # To the left of the peak:
+                y = spectrum_window['flux'][:nearest_peak+1]
+                x = spectrum_window['waveobs'][:nearest_peak+1]
+                # First derivative (positive => flux increases, negative => flux decreases)
+                dy_dx = (y[:-1] - y[1:]) / (x[:-1] - x[1:])
+                # Second derivative (positive => convex, negative => concave)
+                d2y_dx2 = (dy_dx[:-1] - dy_dx[1:])  / (x[:-2] - x[2:])
+                positions = np.where(np.logical_and(dy_dx[1:] > -1*first_derivative_limit, d2y_dx2 < 0)[::-1])[0]
+                if len(positions) > 0:
+                    new_base = len(dy_dx) - positions[0]-1
+                else:
+                    new_base = 0
 
-            if min_margin > 0:
+                # To the right of the peak
+                y = spectrum_window['flux'][nearest_peak:]
+                x = spectrum_window['waveobs'][nearest_peak:]
+                # First derivative (positive => flux increases, negative => flux decreases)
+                dy_dx = (y[:-1] - y[1:]) / (x[:-1] - x[1:])
+                # Second derivative (positive => convex, negative => concave)
+                d2y_dx2 = (dy_dx[:-1] - dy_dx[1:])  / (x[:-2] - x[2:])
+                positions = np.where(np.logical_and(dy_dx[:-1] < first_derivative_limit, d2y_dx2 < 0))[0]
+                if len(positions) > 0:
+                    new_top = nearest_peak + positions[0]
+                else:
+                    new_top = len(spectrum_window) - 1
+
+                #new_base = np.where((spectrum_window['flux'][:ipeak-1] - spectrum_window['flux'][1:ipeak]) < limit)[0][-1]
+                #new_top = ipeak + np.where((spectrum_window['flux'][ipeak+1:] - spectrum_window['flux'][ipeak:-1]) < limit)[0][0]
+                line['wave_base'] = spectrum_window['waveobs'][new_base]
+                line['wave_top'] = spectrum_window['waveobs'][new_top]
                 line['wave_base'] = np.min((line['wave_peak']-min_margin, line['wave_base']))
                 line['wave_top'] = np.max((line['wave_peak']+min_margin, line['wave_top']))
+            else:
+                left_base_points = base_points[base_points < nearest_peak]
+                if len(left_base_points) > 0:
+                    wave_base = spectrum_window['waveobs'][left_base_points[-1]] # nearest to the peak
+                    # Make sure that the wave_base is smaller than the wave_peak
+                    i = -2
+                    while wave_base > wave_peak and -1*i <= len(left_base_points):
+                        wave_base = spectrum_window['waveobs'][left_base_points[i]] # nearest to the peak
+                        i -= 1
+                    if wave_base < wave_peak:
+                        line['wave_base'] =  wave_base
+
+                right_base_points = base_points[base_points > nearest_peak]
+                if len(right_base_points) > 0:
+                    wave_top = spectrum_window['waveobs'][right_base_points[0]] # nearest to the peak
+                    # Make sure that the wave_top is bigger than the wave_peak
+                    i = 1
+                    while wave_top < wave_peak and i < len(right_base_points):
+                        wave_top = spectrum_window['waveobs'][right_base_points[i]] # nearest to the peak
+                        i += 1
+                    if wave_top > wave_peak:
+                        line['wave_top'] =  wave_top
+
+                if min_margin > 0:
+                    line['wave_base'] = np.min((line['wave_peak']-min_margin, line['wave_base']))
+                    line['wave_top'] = np.max((line['wave_peak']+min_margin, line['wave_top']))
 
     # Correct potential overlapping between line masks
     # except if their base and top wave are exactly the same, those cases could

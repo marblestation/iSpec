@@ -2730,6 +2730,7 @@ iSpec uses the following radiative transfer codes:
 
         margin = self.active_spectrum.dialog[key].results["Margin around lines"]
         resolution = self.active_spectrum.dialog[key].results["Resolution"]
+        check_derivatives = self.active_spectrum.dialog[key].results["Check derivatives before fitting"] == 1
         self.active_spectrum.dialog[key].destroy()
 
         if resolution <= 0:
@@ -2749,7 +2750,7 @@ iSpec uses the following radiative transfer codes:
             smoothed_spectrum = self.active_spectrum.data
 
         logging.info("Adjusting line masks...")
-        linemasks = ispec.adjust_linemasks(smoothed_spectrum, linemasks, max_margin=margin)
+        linemasks = ispec.adjust_linemasks(smoothed_spectrum, linemasks, max_margin=margin, check_derivatives=check_derivatives)
 
         self.remove_fitted_lines() # If they exist
         self.remove_regions(elements, check_not_saved=False)
