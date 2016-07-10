@@ -799,8 +799,7 @@ def fit_lines_determine_ew_and_crossmatch_with_atomic_data(use_ares=False):
     #telluric_linelist = None
     #vel_telluric = None
 
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_iron.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_all.txt")
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_moog_ew_ispec_width_ew_ispec_good_for_params_all.txt")
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
 
     linemasks = ispec.fit_lines(line_regions, normalized_star_spectrum, star_continuum_model, \
@@ -913,8 +912,7 @@ def fit_lines_already_crossmatched_with_atomic_data_and_determine_ew(use_ares=Fa
     star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
 
     #--- Read lines with atomic data ------------------------------------------------
-    line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_iron_extended.txt")
-    #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_all_extended.txt")
+    line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_moog_ew_ispec_width_ew_ispec_good_for_params_all_extended.txt")
 
     smoothed_star_spectrum = ispec.convolve_spectrum(star_spectrum, 2*to_resolution)
     line_regions_with_atomic_data = ispec.adjust_linemasks(smoothed_star_spectrum, line_regions_with_atomic_data, max_margin=0.5)
@@ -1239,7 +1237,8 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     linelist_free_loggf = None
 
     # Line regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_all.txt")
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_good_for_params_all.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_good_for_params_all_extended.txt")
     # Select only some lines to speed up the execution (in a real analysis it is better not to do this)
     line_regions = line_regions[np.logical_or(line_regions['note'] == 'Ti 1', line_regions['note'] == 'Ti 2')]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -1400,7 +1399,8 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     linelist_free_loggf = None
 
     # Line regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_all.txt")
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_good_for_params_all.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_good_for_params_all_extended.txt")
     # Select only some lines to speed up the execution (in a real analysis it is better not to do this)
     line_regions = line_regions[np.logical_or(line_regions['note'] == 'Ti 1', line_regions['note'] == 'Ti 2')]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -1592,12 +1592,12 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     linelist_free_loggf = None
 
     # Line regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_all.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_spectrum_synth_all_extended.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_turbospectrum_synth_all_extended.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_sme_synth_all_extended.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_moog_synth_all_extended.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_synthe_synth_all_extended.txt")
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/limited_but_with_missing_elements_%s_synth_good_for_abundances_all_extended.txt" % (code,))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/limited_but_with_missing_elements_spectrum_synth_good_for_abundances_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/limited_but_with_missing_elements_turobspectrum_synth_good_for_abundances_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/limited_but_with_missing_elements_sme_synth_good_for_abundances_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/limited_but_with_missing_elements_moog_synth_good_for_abundances_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/limited_but_with_missing_elements_synthe_synth_good_for_abundances_all_extended.txt")
     # Select only the lines to get abundances from
     line_regions = line_regions[np.logical_or(line_regions['note'] == element_name+' 1', line_regions['note'] == element_name+' 2')]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -1745,12 +1745,12 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
     chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
 
     # Line regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_all.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_spectrum_synth_all_extended.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_turbospectrum_synth_all_extended.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_sme_synth_all_extended.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_moog_synth_all_extended.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/reference_synthe_synth_all_extended.txt")
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/limited_but_with_missing_elements_%s_synth_good_for_abundances_all_extended.txt" % (code,))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/limited_but_with_missing_elements_spectrum_synth_good_for_abundances_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/limited_but_with_missing_elements_turobspectrum_synth_good_for_abundances_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/limited_but_with_missing_elements_sme_synth_good_for_abundances_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/limited_but_with_missing_elements_moog_synth_good_for_abundances_all_extended.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/limited_but_with_missing_elements_synthe_synth_good_for_abundances_all_extended.txt")
     # Select only the lines to get abundances from
     line_regions = line_regions[:5]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -1917,7 +1917,7 @@ def determine_loggf_line_by_line_using_synth_spectra(code="spectrum"):
     chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
 
     # Line regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_all_extended.txt")
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_good_for_params_all_extended.txt")
     # Select only the lines to get abundances from
     line_regions = line_regions[:5]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -2059,9 +2059,9 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
     if use_lines_already_crossmatched_with_atomic_data:
         #--- Read lines and adjust them ------------------------------------------------
         if code in ['width', 'moog']:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_iron_extended.txt")
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_good_for_params_all_extended.txt")
         else:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_ew_ispec_turbospectrum_ew_ispec_iron_extended.txt")
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_moog_ew_ispec_width_ew_ispec_good_for_params_all_extended.txt")
 
         # Select only iron lines
         line_regions_with_atomic_data = line_regions_with_atomic_data[np.logical_or(line_regions_with_atomic_data['note'] == "Fe 1", line_regions_with_atomic_data['note'] == "Fe 2")]
@@ -2091,9 +2091,9 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
         atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(star_spectrum['waveobs']), wave_top=np.max(star_spectrum['waveobs']))
 
         if code in ['width', 'moog']:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_iron.txt")
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_good_for_params_all.txt")
         else:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_ew_ispec_turbospectrum_ew_ispec_iron.txt")
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_moog_ew_ispec_width_ew_ispec_good_for_params_all.txt")
 
         line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
 
@@ -2303,9 +2303,9 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
     if use_lines_already_crossmatched_with_atomic_data:
         #--- Read lines and adjust them ------------------------------------------------
         if code in ['width', 'moog']:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_iron_extended.txt")
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_good_for_params_all_extended.txt")
         else:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_ew_ispec_turbospectrum_ew_ispec_iron_extended.txt")
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_moog_ew_ispec_width_ew_ispec_good_for_params_all_extended.txt")
 
         # Select only iron lines
         line_regions_with_atomic_data = line_regions_with_atomic_data[np.logical_or(line_regions_with_atomic_data['note'] == "Fe 1", line_regions_with_atomic_data['note'] == "Fe 2")]
@@ -2335,9 +2335,9 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
         atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(star_spectrum['waveobs']), wave_top=np.max(star_spectrum['waveobs']))
 
         if code in ['width', 'moog']:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_iron.txt")
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_ew_ispec_width_ew_ispec_good_for_params_all.txt")
         else:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_ew_ispec_turbospectrum_ew_ispec_iron.txt")
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_moog_ew_ispec_width_ew_ispec_good_for_params_all.txt")
 
         line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
 
