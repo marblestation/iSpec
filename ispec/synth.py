@@ -3413,11 +3413,26 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
 
     ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
     sme_dir = ispec_dir + "/synthesizer/sme/"
+    from sys import platform as _platform
     system_64bits = sys.maxsize > 2**32
-    if system_64bits:
-        sme = ctypes.CDLL(sme_dir + "/sme_synth.so.linux.x86_64.64")
+    if _platform == "linux" or _platform == "linux2":
+        # linux
+        if system_64bits:
+            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.linux.x86_64.64")
+        else:
+            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.linux.x86.32")
+    elif _platform == "darwin":
+        # OS X
+        if system_64bits:
+            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.darwin.x86_64.64")
+        else:
+            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.darwin.i386.32")
     else:
-        sme = ctypes.CDLL(sme_dir + "/sme_synth.so.linux.x86.32")
+        # Windows
+        if system_64bits:
+            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.Win32.x86_64.64")
+        else:
+            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.Win32.x86.32")
 
     #logging.warn("SME does not support isotope modifications")
 

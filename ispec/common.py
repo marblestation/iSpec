@@ -138,15 +138,28 @@ def is_synthe_support_enabled():
 
 def is_sme_support_enabled():
     from sys import platform as _platform
-    if "linux" not in _platform:
-        return False
     ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
     sme_dir = ispec_dir + "/synthesizer/sme/"
     system_64bits = sys.maxsize > 2**32
-    if system_64bits:
-        sme_lib = sme_dir + "/sme_synth.so.linux.x86_64.64"
+
+    if _platform == "linux" or _platform == "linux2":
+        # linux
+        if system_64bits:
+            sme_lib = sme_dir + "/sme_synth.so.linux.x86_64.64"
+        else:
+            sme_lib = sme_dir + "/sme_synth.so.linux.x86.32"
+    elif _platform == "darwin":
+        # OS X
+        if system_64bits:
+            sme_lib = sme_dir + "/sme_synth.so.darwin.x86_64.64"
+        else:
+            sme_lib = sme_dir + "/sme_synth.so.darwin.i386.32"
     else:
-        sme_lib = sme_dir + "/sme_synth.so.linux.x86.32"
+        # Windows
+        if system_64bits:
+            sme_lib = sme_dir + "/sme_synth.so.Win32.x86_64.64"
+        else:
+            sme_lib = sme_dir + "/sme_synth.so.Win32.x86.32"
 
     if not os.path.exists(sme_lib):
         return False
