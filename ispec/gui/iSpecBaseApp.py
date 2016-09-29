@@ -2311,7 +2311,7 @@ iSpec uses the following radiative transfer codes:
             velocity = 0.0
             self.flash_status_message("Velocity could not be determined!")
         else:
-            # Resolving power
+            # Resolution
             c = 299792458.0 # m/s
             fwhm = models[0].fwhm()[0] # km/s (because xcoord is already velocity)
             if relative_to_atomic_data or relative_to_template:

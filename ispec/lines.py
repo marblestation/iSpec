@@ -659,7 +659,7 @@ def __create_linemasks_structure(num_peaks):
     linemasks['gamma'] = 0.0
     linemasks['fwhm'] = 0.0
     linemasks['fwhm_kms'] = 0.0
-    linemasks['R'] = 0.0 # Resolving power
+    linemasks['R'] = 0.0 # Resolution
     linemasks['depth_fit'] = 0.0
     linemasks['relative_depth_fit'] = 0.0
     linemasks['integrated_flux'] = 0.0
@@ -1348,7 +1348,7 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                     regions['gamma'][i] = 9999.0
 
                 regions['fwhm'][i], regions['fwhm_kms'][i] = line_model.fwhm()
-                regions['R'][i] = regions['mu'][i] / regions['fwhm'][i] # Resolving power
+                regions['R'][i] = regions['mu'][i] / regions['fwhm'][i] # Resolution
 
                 # Depth of the peak with respect to the total continuum in % over the total continuum
                 # - In case that the peak is higher than the continuum, depth < 0
@@ -1488,7 +1488,7 @@ def __fill_linemasks_with_telluric_info(linemasks, telluric_linelist, vel_tellur
                 linemasks["telluric_wave_peak"][j] = telluric_linelist['wave_peak'][i]
                 linemasks["telluric_depth"][j] = telluric_linelist["depth"][i]
                 linemasks["telluric_fwhm"][j] = telluric_linelist["fwhm"][i]
-                linemasks['telluric_R'][j] = linemasks['mu'][j] / (linemasks['fwhm'][j] - linemasks['telluric_fwhm'][j]) # Resolving power
+                linemasks['telluric_R'][j] = linemasks['mu'][j] / (linemasks['fwhm'][j] - linemasks['telluric_fwhm'][j]) # Resolution
 
     if vel_telluric != 0:
         linemasks['wave_peak'] = original_wave_peak
