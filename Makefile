@@ -1,5 +1,5 @@
 
-all: spectrum turbospectrum moog isochrones ares
+all: spectrum turbospectrum moog isochrones
 
 spectrum: ispec/synthesizer.so
 
