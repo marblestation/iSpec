@@ -664,15 +664,17 @@ def calculate_barycentric_velocity_correction(datetime, coordinates, deq=0):
     Calculates barycentric velocity correction for a given star.
     The code is based on: `astrolib <http://code.google.com/p/astrolibpy/source/browse/astrolib/baryvel.py>`_
     """
+    datetime = map(float, datetime)
+    coordinates = map(float, coordinates)
     dvelh, dvelb = __baryvel(datetime, deq=2000) # J2000.0
 
     # Calculate velocity toward a star in a given position
     ra_hours, ra_minutes, ra_seconds, dec_degrees,  dec_minutes, dec_seconds = coordinates
-    ra = (ra_hours + ra_minutes/60 + ra_seconds/(60*60)) # hours
-    ra = ra * 360/24 # degrees
-    ra = ra * ((2*np.pi) / 360) # radians
-    dec = (dec_degrees + dec_minutes/60 + dec_seconds/(60*60)) # degrees
-    dec = dec * ((2*np.pi) / 360) # radians
+    ra = (ra_hours + ra_minutes/60. + ra_seconds/(60.*60)) # hours
+    ra = ra * 360./24 # degrees
+    ra = ra * ((2*np.pi) / 360.) # radians
+    dec = (dec_degrees + dec_minutes/60. + dec_seconds/(60.*60)) # degrees
+    dec = dec * ((2*np.pi) / 360.) # radians
 
     # Project velocity toward star
     barycentric_vel = dvelb[0]*np.cos(dec)*np.cos(ra) + dvelb[1]*np.cos(dec)*np.sin(ra) + dvelb[2]*np.sin(dec) # km/s

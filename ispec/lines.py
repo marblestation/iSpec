@@ -1000,7 +1000,7 @@ def __spectrum_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=N
     return out.name
 
 
-def find_linemasks(spectrum, continuum_model, atomic_linelist=None, max_atomic_wave_diff=0.0005, telluric_linelist=None, vel_telluric=0.0, minimum_depth=None, maximum_depth=None, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, consider_omara=False, frame=None):
+def find_linemasks(spectrum, continuum_model, atomic_linelist=None, max_atomic_wave_diff=0.0005, telluric_linelist=None, vel_telluric=0.0, minimum_depth=None, maximum_depth=None, discard_gaussian = False, discard_voigt = False, check_derivatives=False, smoothed_spectrum=None, accepted_for_fitting=None, consider_omara=False, closest_match=False, frame=None):
     """
     Generate a line masks for a spectrum by finding peaks and base points.
 
@@ -1098,7 +1098,8 @@ def find_linemasks(spectrum, continuum_model, atomic_linelist=None, max_atomic_w
                                 smoothed_spectrum = smoothed_spectrum, \
                                 check_derivatives = check_derivatives, \
                                 free_mu=True, crossmatch_with_mu=True, \
-                                accepted_for_fitting=accepted_for_fitting)
+                                accepted_for_fitting=accepted_for_fitting, \
+                                closest_match=closest_match)
 
     # Identify peaks higher than continuum
     # - Depth is negative if the peak is higher than the continuum

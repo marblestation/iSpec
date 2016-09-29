@@ -2456,7 +2456,7 @@ iSpec uses the following radiative transfer codes:
                             telluric_linelist=self.telluric_linelist, vel_telluric=vel_telluric, \
                             discard_gaussian=False, discard_voigt=True, \
                             check_derivatives=check_derivatives, smoothed_spectrum=smoothed_spectrum, \
-                            free_mu=free_mu, crossmatch_with_mu=free_mu, closest_match=True)
+                            free_mu=free_mu, crossmatch_with_mu=free_mu, closest_match=False)
         # Exclude lines that have not been successfully cross matched with the atomic data
         # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
         rejected_by_atomic_line_not_found = (linemasks['wave_nm'] == 0)
@@ -2883,6 +2883,7 @@ iSpec uses the following radiative transfer codes:
                                 smoothed_spectrum=smoothed_spectrum, \
                                 check_derivatives=check_derivatives, \
                                 discard_gaussian=False, discard_voigt=True, \
+                                closest_match=False, \
                                 frame=self)
 
         # If no peaks found, just finnish

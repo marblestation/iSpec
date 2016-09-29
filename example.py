@@ -572,7 +572,8 @@ def find_linemasks(code = "spectrum"):
                             minimum_depth=min_depth, maximum_depth=max_depth, \
                             smoothed_spectrum=smoothed_star_spectrum, \
                             check_derivatives=False, \
-                            discard_gaussian=False, discard_voigt=True )
+                            discard_gaussian=False, discard_voigt=True, \
+                            closest_match=False)
     # Exclude lines that have not been successfully cross matched with the atomic data
     # because we cannot calculate the chemical abundance (it will crash the corresponding routines)
     rejected_by_atomic_line_not_found = (star_linemasks['wave_nm'] == 0)
@@ -811,7 +812,7 @@ def fit_lines_determine_ew_and_crossmatch_with_atomic_data(use_ares=False):
                                 check_derivatives = False, \
                                 vel_telluric = vel_telluric, discard_gaussian=False, \
                                 discard_voigt=True, \
-                                free_mu=True, crossmatch_with_mu=False, closest_match=True)
+                                free_mu=True, crossmatch_with_mu=False, closest_match=False)
     # Discard lines that are not cross matched with the same original element stored in the note
     linemasks = linemasks[linemasks['element'] == line_regions['note']]
 
@@ -932,7 +933,7 @@ def fit_lines_already_crossmatched_with_atomic_data_and_determine_ew(use_ares=Fa
                                 vel_telluric = vel_telluric, discard_gaussian=False, \
                                 smoothed_spectrum=None, \
                                 discard_voigt=True, \
-                                free_mu=True, crossmatch_with_mu=False, closest_match=True)
+                                free_mu=True, crossmatch_with_mu=False, closest_match=False)
 
     # Discard bad masks
     flux_peak = normalized_star_spectrum['flux'][linemasks['peak']]
@@ -2078,7 +2079,7 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
                                     vel_telluric = vel_telluric, discard_gaussian=False, \
                                     smoothed_spectrum=None, \
                                     discard_voigt=True, \
-                                    free_mu=True, crossmatch_with_mu=False, closest_match=True)
+                                    free_mu=True, crossmatch_with_mu=False, closest_match=False)
     else:
         #--- Fit lines -----------------------------------------------------------------
         logging.info("Fitting lines...")
@@ -2106,7 +2107,7 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
                                     check_derivatives = False, \
                                     vel_telluric = vel_telluric, discard_gaussian=False, \
                                     discard_voigt=True, \
-                                    free_mu=True, crossmatch_with_mu=False, closest_match=True)
+                                    free_mu=True, crossmatch_with_mu=False, closest_match=False)
         # Discard lines that are not cross matched with the same original element stored in the note
         linemasks = linemasks[linemasks['element'] == line_regions['note']]
 
@@ -2322,7 +2323,7 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
                                     vel_telluric = vel_telluric, discard_gaussian=False, \
                                     smoothed_spectrum=None, \
                                     discard_voigt=True, \
-                                    free_mu=True, crossmatch_with_mu=False, closest_match=True)
+                                    free_mu=True, crossmatch_with_mu=False, closest_match=False)
     else:
         #--- Fit lines -----------------------------------------------------------------
         logging.info("Fitting lines...")
@@ -2350,7 +2351,7 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
                                     check_derivatives = False, \
                                     vel_telluric = vel_telluric, discard_gaussian=False, \
                                     discard_voigt=True, \
-                                    free_mu=True, crossmatch_with_mu=False, closest_match=True)
+                                    free_mu=True, crossmatch_with_mu=False, closest_match=False)
         # Discard lines that are not cross matched with the same original element stored in the note
         linemasks = linemasks[linemasks['element'] == line_regions['note']]
 
