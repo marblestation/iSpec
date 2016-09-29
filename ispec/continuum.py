@@ -368,41 +368,41 @@ def __clean_outliers(spectrum, min_wave, max_wave, wave_step, ignored_regions, p
             huber_t = sm.RLM(y[wfilter], x_c, M=sm.robust.norms.HuberT())
             linear_model = huber_t.fit()
             # Accept only if always has been accepted
-            sfilter1a[wfilter] = np.logical_and(sfilter1a[wfilter], linear_model.weights > 1.-probability) # True equals to "accept region"
+            sfilter1a[wfilter] = np.logical_and(sfilter1a[wfilter], linear_model.weights > probability) # True equals to "accept region"
             if np.abs(wave_top - max_wave) < 1.0e-10:
                 break
             else:
                 wave_top = np.min((wave_top+chunk_size, max_wave))
 
-    # RLM (Robust least squares)
-    # Huber's T norm with the (default) median absolute deviation scaling
-    # - http://en.wikipedia.org/wiki/Huber_loss_function
-    # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
-    x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
-    huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
-    linear_model = huber_t.fit()
-    sfilter1 = linear_model.weights > 1.-probability
-    #import matplotlib.pyplot as plt
-    #plt.scatter(x, y)
-    #plt.scatter(x[sfilter1], y[sfilter1], color="red")
-    #plt.show()
-
-
-    import statsmodels.api as sm
-    x = np.arange(len(diff2))
-    y = diff2
-    # RLM (Robust least squares)
-    # Huber's T norm with the (default) median absolute deviation scaling
-    # - http://en.wikipedia.org/wiki/Huber_loss_function
-    # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
+    ## RLM (Robust least squares)
+    ## Huber's T norm with the (default) median absolute deviation scaling
+    ## - http://en.wikipedia.org/wiki/Huber_loss_function
+    ## - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
     #x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
-    huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
-    linear_model = huber_t.fit()
-    sfilter2 = linear_model.weights > 1.-probability
-    #import matplotlib.pyplot as plt
-    #plt.scatter(x, y)
-    #plt.scatter(x[sfilter2], y[sfilter2], color="red")
-    #plt.show()
+    #huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
+    #linear_model = huber_t.fit()
+    #sfilter1 = linear_model.weights > probability
+    ##import matplotlib.pyplot as plt
+    ##plt.scatter(x, y)
+    ##plt.scatter(x[sfilter1], y[sfilter1], color="red")
+    ##plt.show()
+
+
+    #import statsmodels.api as sm
+    #x = np.arange(len(diff2))
+    #y = diff2
+    ## RLM (Robust least squares)
+    ## Huber's T norm with the (default) median absolute deviation scaling
+    ## - http://en.wikipedia.org/wiki/Huber_loss_function
+    ## - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
+    ##x_c = sm.add_constant(x, prepend=False) # Add a constant (1.0) to have a parameter base
+    #huber_t = sm.RLM(y, x_c, M=sm.robust.norms.HuberT())
+    #linear_model = huber_t.fit()
+    #sfilter2 = linear_model.weights > probability
+    ##import matplotlib.pyplot as plt
+    ##plt.scatter(x, y)
+    ##plt.scatter(x[sfilter2], y[sfilter2], color="red")
+    ##plt.show()
 
     wave_top = min_wave + chunk_size
     sfilter2a = smooth1['waveobs'] < 0
@@ -418,7 +418,7 @@ def __clean_outliers(spectrum, min_wave, max_wave, wave_step, ignored_regions, p
             huber_t = sm.RLM(y[wfilter], x_c, M=sm.robust.norms.HuberT())
             linear_model = huber_t.fit()
             # Accept only if always has been accepted
-            sfilter2a[wfilter] = np.logical_and(sfilter2a[wfilter], linear_model.weights > 1.-probability) # True equals to "accept region"
+            sfilter2a[wfilter] = np.logical_and(sfilter2a[wfilter], linear_model.weights > probability) # True equals to "accept region"
             if np.abs(wave_top - max_wave) < 1.0e-10:
                 break
             else:
@@ -436,12 +436,12 @@ def __clean_outliers(spectrum, min_wave, max_wave, wave_step, ignored_regions, p
 
 
 
-    # The extremes cannot be evaluated (we have added artificially in the diff1/2 vector)
-    # so by default we accept them
-    sfilter1[-1] = True
-    sfilter2[0] = True
-    #sfilter2[-1] = True
-    #sfilter1[0] = True
+    ## The extremes cannot be evaluated (we have added artificially in the diff1/2 vector)
+    ## so by default we accept them
+    #sfilter1[-1] = True
+    #sfilter2[0] = True
+    ##sfilter2[-1] = True
+    ##sfilter1[0] = True
 
     #sfilter = np.logical_and(sfilter1, sfilter2)
     sfilter = np.logical_and(sfilter1a, sfilter2a)
