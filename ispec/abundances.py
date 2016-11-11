@@ -735,13 +735,14 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
     for atom_abundance in atom_abundances:
         abund = 12.036 + atom_abundance['Abund'] # From SPECTRUM format to Turbospectrum
         moog_atmosphere.write("%i  %.2f\n" % (atom_abundance['code'], abund))
-    moog_atmosphere.write("NMOL      22\n")
+    # Molecule list as used by Jorge Melendez (private communication)
+    moog_atmosphere.write("NMOL      28\n")
     moog_atmosphere.write("  101.0   106.0   107.0   108.0   112.0  126.0\n")
     moog_atmosphere.write("  606.0   607.0   608.0\n")
     moog_atmosphere.write("  707.0   708.0\n")
-    moog_atmosphere.write("  808.0   812.0   822.0\n")
-    moog_atmosphere.write("  10108.0 60808.0\n")
-    moog_atmosphere.write("  6.1     7.1     8.1   12.1  22.1  26.1")
+    moog_atmosphere.write("  808.0   812.0   822.0   823.0   840.0\n")
+    moog_atmosphere.write("  10108.0 10820.0 60808.0\n")
+    moog_atmosphere.write("  6.1     7.1     8.1   12.1  20.1  22.1  23.1  26.1  40.1\n")
     moog_atmosphere.close()
 
     par_file = open(tmp_execution_dir + "/batch.par", "w")

@@ -423,6 +423,7 @@ def apply_post_fundamental_effects(waveobs, fluxes, segments, macroturbulence = 
         fluxes_uniform_in_velocity = np.interp(waveobs_uniform_in_velocity, spectrum['waveobs'], spectrum['flux'], left=0.0, right=0.0)
 
         # Apply broadening
+        #fluxes_uniform_in_velocity = __vsini_broadening_limbdarkening2(waveobs_uniform_in_velocity, fluxes_uniform_in_velocity, velocity_step, vsini, limb_darkening_coeff)
         fluxes_uniform_in_velocity = __vsini_broadening_limbdarkening(fluxes_uniform_in_velocity, velocity_step, vsini, limb_darkening_coeff)
         fluxes_uniform_in_velocity = __vmac_broadening(fluxes_uniform_in_velocity, velocity_step, macroturbulence)
 
@@ -1108,7 +1109,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[7]['fixed'] = not parinfo[7]['parname'].lower() in free_params
     parinfo[7]['step'] = Constants.SYNTH_STEP_R # For auto-derivatives
     parinfo[7]['limited'] = [True, True]
-    parinfo[7]['limits'] = [500.0, 300000.0]
+    parinfo[7]['limits'] = [100.0, 900000.0]
     # VRAD
     if "vrad" in free_params or np.any(initial_vrad != 0):
         base = 8
@@ -1502,6 +1503,8 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
             initial_vrad = np.ones(len(segments))*initial_vrad
         else:
             initial_vrad = np.ones(1)*initial_vrad
+    elif type(initial_vrad) in (list, tuple):
+        initial_vrad = np.asarray(initial_vrad)
 
     parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, vmic_from_empirical_relation, vmac_from_empirical_relation)
 
@@ -2752,18 +2755,18 @@ def __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH
     if remove_tmp_linelist_file:
         os.remove(linelist_filename)
 
-    segments = None
-    vrad = (0,)
-    synth_fluxes = apply_post_fundamental_effects(synth_waveobs, synth_fluxes, segments, \
-                    macroturbulence=macroturbulence, vsini=vsini, \
-                    limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
-
     synth_spectrum = create_spectrum_structure(synth_waveobs, synth_fluxes)
     synth_spectrum.sort(order=['waveobs'])
 
     # Make sure we return the number of expected fluxes
     if not np.array_equal(synth_spectrum['waveobs'], waveobs):
         synth_spectrum = resample_spectrum(synth_spectrum, waveobs, method="linear", zero_edges=True)
+
+    segments = None
+    vrad = (0,)
+    synth_spectrum['flux'] = apply_post_fundamental_effects(synth_spectrum['waveobs'], synth_spectrum['flux'], segments, \
+                    macroturbulence=macroturbulence, vsini=vsini, \
+                    limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
 
     return synth_spectrum['flux']
 
@@ -2874,18 +2877,23 @@ def __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelis
             for atom_abundance in atom_abundances:
                 abund = 12.036 + atom_abundance['Abund'] # From SPECTRUM format to Turbospectrum
                 moog_atmosphere.write("%i  %.2f\n" % (atom_abundance['code'], abund))
-            if num_molecules > 0:
-                unique_molecules = np.unique(linelist['spectrum_moog_species'][wfilter][molecules])
-                moog_atmosphere.write("NMOL      %i\n" % (len(unique_molecules)))
-                for specie in unique_molecules:
-                    moog_atmosphere.write("  %s\n" % (specie))
-                #moog_atmosphere.write("NMOL      22\n")
-                #moog_atmosphere.write("  101.0   106.0   107.0   108.0   112.0  126.0\n")
-                #moog_atmosphere.write("  606.0   607.0   608.0\n")
-                #moog_atmosphere.write("  707.0   708.0\n")
-                #moog_atmosphere.write("  808.0   812.0   822.0\n")
-                #moog_atmosphere.write("  10108.0 60808.0\n")
-                #moog_atmosphere.write("  6.1     7.1     8.1   12.1  22.1  26.1")
+
+            # Molecules are required always, even if it is a linelist without molecules,
+            # or MOOG will not compute molecular equilibrium which might affect other internal calculations
+            #if num_molecules > 0:
+                #unique_molecules = np.unique(linelist['spectrum_moog_species'][wfilter][molecules])
+                #moog_atmosphere.write("NMOL      %i\n" % (len(unique_molecules)))
+                #for specie in unique_molecules:
+                    #moog_atmosphere.write("  %s\n" % (specie))
+
+            # Molecule list as used by Jorge Melendez (private communication)
+            moog_atmosphere.write("NMOL      28\n")
+            moog_atmosphere.write("  101.0   106.0   107.0   108.0   112.0  126.0\n")
+            moog_atmosphere.write("  606.0   607.0   608.0\n")
+            moog_atmosphere.write("  707.0   708.0\n")
+            moog_atmosphere.write("  808.0   812.0   822.0   823.0   840.0\n")
+            moog_atmosphere.write("  10108.0 10820.0 60808.0\n")
+            moog_atmosphere.write("  6.1     7.1     8.1   12.1  20.1  22.1  23.1  26.1  40.1\n")
             moog_atmosphere.close()
 
             # Add hydrogen lines
@@ -2982,18 +2990,18 @@ def __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelis
     # Zero values, when convolved, remain zero so we give a very tiny flux to avoid this problem
     synth_fluxes[synth_fluxes <= 0] = 10e-9
 
-    segments = None
-    vrad = (0,)
-    synth_fluxes = apply_post_fundamental_effects(synth_waveobs, synth_fluxes, segments, \
-                    macroturbulence=macroturbulence, vsini=vsini, \
-                    limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
-
     synth_spectrum = create_spectrum_structure(synth_waveobs, synth_fluxes)
     synth_spectrum.sort(order=['waveobs'])
 
     # Make sure we return the number of expected fluxes
     if not np.array_equal(synth_spectrum['waveobs'], waveobs):
         synth_spectrum = resample_spectrum(synth_spectrum, waveobs, method="linear", zero_edges=True)
+
+    segments = None
+    vrad = (0,)
+    synth_spectrum['flux'] = apply_post_fundamental_effects(synth_spectrum['waveobs'], synth_spectrum['flux'], segments, \
+                    macroturbulence=macroturbulence, vsini=vsini, \
+                    limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
 
     return synth_spectrum['flux']
 
@@ -3384,18 +3392,18 @@ def __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linel
             os.chdir(previous_cwd)
             shutil.rmtree(tmp_execution_dir)
 
-    segments = None
-    vrad = (0,)
-    synth_fluxes = apply_post_fundamental_effects(synth_waveobs, synth_fluxes, segments, \
-                    macroturbulence=macroturbulence, vsini=vsini, \
-                    limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
-
     synth_spectrum = create_spectrum_structure(synth_waveobs, synth_fluxes)
     synth_spectrum.sort(order=['waveobs'])
 
     # Make sure we return the number of expected fluxes
     if not np.array_equal(synth_spectrum['waveobs'], waveobs):
         synth_spectrum = resample_spectrum(synth_spectrum, waveobs, method="linear", zero_edges=True)
+
+    segments = None
+    vrad = (0,)
+    synth_spectrum['flux'] = apply_post_fundamental_effects(synth_spectrum['waveobs'], synth_spectrum['flux'], segments, \
+                    macroturbulence=macroturbulence, vsini=vsini, \
+                    limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
 
     return synth_spectrum['flux']
 
@@ -3574,18 +3582,18 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
             synth_waveobs = np.hstack((synth_waveobs, synth_waveobs_tmp))
             synth_fluxes = np.hstack((synth_fluxes, synth_fluxes_tmp))
 
-    segments = None
-    vrad = (0,)
-    synth_fluxes = apply_post_fundamental_effects(synth_waveobs, synth_fluxes, segments, \
-                    macroturbulence=macroturbulence, vsini=vsini, \
-                    limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
-
     synth_spectrum = create_spectrum_structure(synth_waveobs/10., synth_fluxes)
     synth_spectrum.sort(order=['waveobs'])
 
     # Make sure we return the number of expected fluxes
     if not np.array_equal(synth_spectrum['waveobs'], waveobs):
         synth_spectrum = resample_spectrum(synth_spectrum, waveobs, method="linear", zero_edges=True)
+
+    segments = None
+    vrad = (0,)
+    synth_spectrum['flux'] = apply_post_fundamental_effects(synth_spectrum['waveobs'], synth_spectrum['flux'], segments, \
+                    macroturbulence=macroturbulence, vsini=vsini, \
+                    limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
 
     process_communication_queue.put(synth_spectrum['flux'])
 
@@ -3712,6 +3720,99 @@ def __vmac_broadening(flux, velocity_step, vmac):
         #import scipy
         #flux_conv = scipy.convolve(flux, mkern, mode='same') # Equivalent but slower
 
+        return flux_conv
+    else:
+        return flux
+
+def __vsini_broadening_limbdarkening2(waveobs_uniform_in_velocity, flux, velocity_step, vsini, epsilon):
+    """
+        waveobs_uniform_in_velocity: wavelength
+        velocity_step: fluxes should correspond to a spectrum homogeneously sampled in velocity space
+                    with a fixed velocity step [km/s]
+        vsini   : rotation velocity [km/s]
+        epsilon : numeric scalar giving the limb-darkening coefficient,
+               default = 0.6 which is typical for  photospheric lines.
+
+        NOTE: The correction is negligible and the new implementation issues a warning
+              due to a NaN in the edge of the kernel, that later on is corrected. Thus,
+              by default we use the original lsf_rotate function translated to python.
+
+        Bug in lsf_rotate Corrected by Dr. J.I. Bailey (private communication):
+            "The crux of the issue was that for small kernels (e.g. on  a small
+            multiple of the resolution element) the fractional effects of
+            quantization were not taken into account. I used Grey's equation as
+            in the Astro rotbrod function but integrated it and made it work
+            properly all the way down to 2 pixels/samples (though at that level
+             you really don't have much traction on what the vsini is!)
+
+            I initially discovered this via noticing discontinuities in
+            chi-square space as I fit for vsini."
+
+        Based on lsf_rotate.pro:
+        http://idlastro.gsfc.nasa.gov/ftp/pro/astro/lsf_rotate.pro
+
+        Adapted from rotin3.f in the SYNSPEC software of Hubeny & Lanz
+        http://nova.astro.umd.edu/index.html    Also see Eq. 17.12 in
+        "The Observation and Analysis of Stellar Photospheres" by D. Gray (1992)
+    """
+    if vsini is not None and vsini > 0:
+        if epsilon is None:
+            epsilon = 0.
+
+        dl = waveobs_uniform_in_velocity[1]-waveobs_uniform_in_velocity[0]
+        l0 = (waveobs_uniform_in_velocity[1]+waveobs_uniform_in_velocity[0])*0.5
+
+        dlL = l0*(vsini/2.99792458e5)
+
+        # Nondimensional grid spacing
+        dx = dl/dlL
+
+        # Make sure vsini isn't too small to do anything ~.2 for my data
+        if dx/2. >= 1.:
+            return flux
+
+        # Go out to the the grid point in which dl/dlL=1 falls
+        n = np.ceil((2. - dx)/2./dx)*2. + 1.
+
+        # The wavelength grid
+        k = np.abs(np.arange(n)- np.floor(n/2))
+
+        kernel_x = (np.arange(n)-np.floor(n/2))*dx
+
+        # Useful constants
+        dx2 = dx**2.
+        c1 =2.*(1. -epsilon)/np.pi/dlL/(1. - epsilon/3.)
+        c2 = 0.5*epsilon/dlL/(1. - epsilon/3.)
+
+        # Compute bulk of kernel
+        kernel_y = c2 - c2*dx2/12. - c2*dx2*k**2. + \
+                c1/8. * (     np.sqrt(4. - dx2*(1. - 2.*k)**2.) - \
+                         2.*k*np.sqrt(4. - dx2*(1. - 2.*k)**2.) + \
+                              np.sqrt(4. - dx2*(1. + 2.*k)**2.) + \
+                         2.*k*np.sqrt(4. - dx2*(1. + 2.*k)**2.) - \
+                         4.*np.arcsin(dx*(k-0.5))/dx + 4.*np.arcsin(dx*(k+0.5))/dx)
+
+        ## Central point
+        kernel_y[np.floor(n/2.)] = c2 - (c2*dx2)/12. + \
+                       c1*np.sqrt(4. - dx2)/4. + c1*np.arcsin(dx/2.)/dx
+
+        # Edge points
+        kernel_y[0] = 1./24./dx*(3.*c1*dx*np.sqrt(4. - dx2*(1. -2.*k[0])**2.)*(1. -2.*k[0]) + \
+                          c2*(2. + dx - 2.*dx*k[0])**2.*(4. + dx*(2.*k[0]-1.)) + \
+                          12.*c1*np.arccos(dx*(k[0]-.5)))
+        kernel_y[0] *= (1. - (k[0]-0.5)*dx)/dx  # Edge point flux compensation
+        kernel_y[n-1] = kernel_y[0] # Mirror last point last
+
+        # Integrals done as the average, compensate
+        kernel_y *= dx
+
+        # Normalize
+        kernel_y /= kernel_y.sum()
+
+        #-- convolve the flux with the kernel
+        flux_conv = 1 - fftconvolve(1-flux, kernel_y, mode='same') # Fastest
+        #import scipy
+        #flux_conv = 1 - scipy.convolve(1-flux, kernel_y, mode='same') # Equivalent but slower
         return flux_conv
     else:
         return flux
