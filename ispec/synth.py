@@ -1506,6 +1506,9 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     elif type(initial_vrad) in (list, tuple):
         initial_vrad = np.asarray(initial_vrad)
 
+    if len(initial_vrad) != len(segments) and "vrad" in free_params:
+        raise Exception("Number of Vrad should be equal to number of segments.")
+
     parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, vmic_from_empirical_relation, vmac_from_empirical_relation)
 
     synth_model = SynthModel(modeled_layers_pack, linelist, isotopes, linelist_free_loggf, abundances, enhance_abundances=enhance_abundances, scale=scale, precomputed_grid_dir=precomputed_grid_dir)

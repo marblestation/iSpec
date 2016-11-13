@@ -4546,7 +4546,7 @@ iSpec uses the following radiative transfer codes:
         initial_vsini = self.active_spectrum.dialog[key].results["Rotation (v sin(i)) (km/s)"]
         initial_limb_darkening_coeff = self.active_spectrum.dialog[key].results["Limb darkening coefficient"]
         initial_R = self.active_spectrum.dialog[key].results["Resolution"]
-        initial_vrad = (self.active_spectrum.dialog[key].results["Radial velocity"],)
+        initial_vrad = self.active_spectrum.dialog[key].results["Radial velocity"]
         selected_atmosphere_models = self.active_spectrum.dialog[key].results["Model atmosphere"]
         selected_abundances = self.active_spectrum.dialog[key].results["Solar abundances"]
         selected_linelist = self.active_spectrum.dialog[key].results["Line list"]
