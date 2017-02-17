@@ -2574,17 +2574,8 @@ def __moog_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=None)
         # Temporary file
         out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
 
-    d0 = {} # dissociation energies from Turbospectrum's DATA/IRWIN_molecules_v15.1.dat
-    # Molecule list from VALD linelist 300 - 1100 nm
-    d0['C2 1'] = 6.210 # eV
-    d0['CH 1'] = 3.465 # eV
-    d0['CN 1'] = 7.724 # eV
-    d0['CO 1'] = 11.092 # eV
-    d0['MgH '] = 1.285 # eV
-    d0['OH 1'] = 6.220 # eV
-    d0['SiH '] = 4.337 # eV
-    d0['TiO '] = 6.87 # eV
-
+    # Dissociation energy [eV] (only for molecules)
+    d0_value = 0. # MOOG uses an internal dissociation energy for molecules if we set it to zero
     with_ew = 'ew' in linelist.dtype.names
     line_ew = 0.
     out.write("wavelength species lower_state_eV loggf damping d0 equivalent_width comment\n")
@@ -2594,14 +2585,8 @@ def __moog_write_atomic_linelist(linelist, linelist_filename=None, tmp_dir=None)
         if with_ew:
             line_ew = line['ew']
         if line['molecule'] == 'T':
-            if line['element'] in d0.keys():
-                d0_value = d0[line['element']]
-                waals = 0.
-            else:
-                logging.warn("Unknown dissociation energy for molecule '%s'" % (line['element']))
-                continue
+            waals = 0.
         else:
-            d0_value = 0 # Dissociation energy [eV] (only for molecules)
             waals = line['waals_single_gamma_format']
         out.write("%10.3f%10s%10.3f%10.3f%10.2f%10.2f%10.2f %10s\n" \
                 % (line['wave_A'], line['spectrum_moog_species'], line['lower_state_eV'], line['loggf'], waals, d0_value, line_ew, ""))
