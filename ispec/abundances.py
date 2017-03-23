@@ -124,13 +124,13 @@ def create_free_abundances_structure(free_abundance_elements, chemical_elements,
     list of elements (i.e. ["Fe"] or ["Fe", "Mg", "Ca"]).
     """
     free_abundances = np.recarray((len(free_abundance_elements), ), dtype=[('code', int),('Abund', float), ('element', '|S30')])
-    for element_name in free_abundance_elements:
+    for i, element_name in enumerate(free_abundance_elements):
         specie = __get_element_specie(element_name, chemical_elements, molecules=None)
         if "." in specie:
             raise Exception("Bad format '%s'" % element_name)
-        free_abundances['code'] = int(specie)
-        free_abundances['Abund'] = solar_abundances['Abund'][solar_abundances['code'] == int(specie)]
-        free_abundances['element'] = element_name
+        free_abundances['code'][i] = int(specie)
+        free_abundances['Abund'][i] = solar_abundances['Abund'][solar_abundances['code'] == int(specie)]
+        free_abundances['element'][i] = element_name
     return free_abundances
 
 def write_fixed_abundances(fixed_abundances, filename=None, tmp_dir=None):
