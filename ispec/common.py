@@ -992,6 +992,40 @@ def estimate_vmac(teff, logg, feh):
     vmac = float("%.2f" % vmac)
     return vmac
 
+def estimate_mass_radius(teff, logg, feh):
+    """
+    Uses the Torres relation[1] to determine the star mass and radius from
+    the effective temperature, surface gravity and metallicity.
+
+    NOTE: The errors in the empirical calibration are of ulog M = 0.027 and
+    ulog R = 0.014 (6.4 and 3.2%, respectively) for main-sequence and evolved
+    stars above 0.6 M_SUN.
+
+    [1] http://adsabs.harvard.edu/abs/2010A%26ARv..18...67T
+    """
+
+    # Torres et al. 2010: Table 4 (Page 110) Coefficients for the calibration equations
+    a = (1.5689, 1.3787, 0.4243, 1.139, -0.14250, 0.01969, 0.10100)
+    b = (2.4427, 0.6679, 0.1771, 0.705, -0.21415, 0.02306, 0.04173)
+
+    # Teff and logg: http://vizier.cfa.harvard.edu/viz-bin/VizieR-3?-source=J/other/A%2bARV/18.67/table1
+    if teff > 38000 or teff < 3120:
+        logging.warn("Teff {} is out of the Teff range used to derive the empirical relation".format(teff))
+    if logg > 5.009 or logg < 2.122:
+        logging.warn("logg {} is out of the logg range used to derive the empirical relation".format(logg))
+    # Metallicities: http://vizier.cfa.harvard.edu/viz-bin/VizieR-3?-source=J/other/A%2bARV/18.67/table2
+    if feh > 0.40 or feh < -0.60:
+        logging.warn("Metallicity {} is out of the metallicity range used to derive the empirical relation".format(feh))
+
+    X = np.log10(teff) - 4.1
+
+    log_mass = a[0] + a[1]*X + a[2]*X**2 + a[3]*X**3 + a[4]*logg**2 + a[5]*logg**3 + a[6]*feh
+    log_radius = b[0] + b[1]*X + b[2]*X**2 + b[3]*X**3 + b[4]*logg**2 + b[5]*logg**3 + b[6]*feh
+    mass = 10**log_mass # M_SUN
+    radius = 10**log_radius # R_SUN
+    return mass, radius
+
+
 def which(program):
     def is_exe(fpath):
         return os.path.isfile(fpath) and os.access(fpath, os.X_OK)

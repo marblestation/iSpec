@@ -47,7 +47,7 @@ from atmospheres import write_atmosphere
 from common import is_turbospectrum_support_enabled, is_spectrum_support_enabled, is_moog_support_enabled, is_width_support_enabled, is_ares_support_enabled, is_synthe_support_enabled, is_sme_support_enabled
 from synth import generate_spectrum
 from synth import model_spectrum, precompute_synthetic_grid, estimate_initial_ap
-from common import estimate_vmic, estimate_vmac
+from common import estimate_vmic, estimate_vmac, estimate_mass_radius
 from synth import model_spectrum_from_ew
 from synth import calculate_theoretical_ew_and_depth
 
