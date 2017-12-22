@@ -1015,8 +1015,13 @@ def synthesize_spectrum(code="spectrum"):
     # Load model atmospheres
     modeled_layers_pack = ispec.load_modeled_layers_pack(model)
     # Load SPECTRUM abundances
-    fixed_abundances = None # No fixed abundances
     solar_abundances = ispec.read_solar_abundances(solar_abundances_file)
+
+    ## Custom fixed abundances
+    #fixed_abundances = ispec.create_free_abundances_structure(["C", "N", "O"], chemical_elements, solar_abundances)
+    #fixed_abundances['Abund'] = [-3.49, -3.71, -3.54] # Abundances in SPECTRUM scale (i.e., x - 12.0 - 0.036) and in the same order ["C", "N", "O"]
+    ## No fixed abundances
+    fixed_abundances = None
 
     # Validate parameters
     if not ispec.valid_atmosphere_target(modeled_layers_pack, teff, logg, MH):
@@ -1121,8 +1126,13 @@ def precompute_synthetic_grid(code="spectrum"):
     # Load model atmospheres
     modeled_layers_pack = ispec.load_modeled_layers_pack(model)
     # Load SPECTRUM abundances
-    fixed_abundances = None # No fixed abundances
     solar_abundances = ispec.read_solar_abundances(solar_abundances_file)
+
+    ## Custom fixed abundances
+    #fixed_abundances = ispec.create_free_abundances_structure(["C", "N", "O"], chemical_elements, solar_abundances)
+    #fixed_abundances['Abund'] = [-3.49, -3.71, -3.54] # Abundances in SPECTRUM scale (i.e., x - 12.0 - 0.036) and in the same order ["C", "N", "O"]
+    ## No fixed abundances
+    fixed_abundances = None
 
 
     ispec.precompute_synthetic_grid(precomputed_grid_dir, ranges, wavelengths, to_resolution, \

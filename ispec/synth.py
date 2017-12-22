@@ -624,8 +624,8 @@ class SynthModel(MPFitModel):
         complete_key += " vrad [" + vrad_key + "]"
 
         ##### [start] Check precomputed (solar abundance)
-        precomputed_file = str(self.precomputed_grid_dir) + "/unconvolved_steps/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}.fits".format(int(self.teff()), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff())
-        fundamental_precomputed_file = str(self.precomputed_grid_dir) + "/unconvolved_steps/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}.fits".format(int(self.teff()), self.logg(), self.MH(), self.vmic(), 0., 0., 0.)
+        precomputed_file = str(self.precomputed_grid_dir) + "/unconvolved_steps/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff())
+        fundamental_precomputed_file = str(self.precomputed_grid_dir) + "/unconvolved_steps/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.vmic(), 0., 0., 0.)
         if self.precomputed_grid_dir is not None and abundances_key == "" and os.path.exists(precomputed_file):
             if not self.quiet:
                 print "Pre-computed:", complete_key
@@ -2364,7 +2364,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
     reference_list_filename = output_dirname + "/reference.txt"
-    reference_grid_filename = output_dirname + "/reference_grid_%i.fits" % to_resolution
+    reference_grid_filename = output_dirname + "/reference_grid_%i.fits.gz" % to_resolution
     fits_dir = output_dirname + "unconvolved_steps/"
     mkdir_p(fits_dir)
 
@@ -2401,7 +2401,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                     )
 
         for j, (teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff) in enumerate(steps):
-            filename_out = fits_dir + "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}".format(int(teff), logg, MH, vmic, vmac, vsini, limb_darkening_coeff) + ".fits"
+            filename_out = fits_dir + "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}".format(int(teff), logg, MH, vmic, vmac, vsini, limb_darkening_coeff) + ".fits.gz"
 
             if os.path.exists(filename_out):
                 print "Skipping", teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, "already computed"
@@ -2478,7 +2478,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
         vmac = estimate_vmac(teff, logg, MH)
         vsini = 1.6 # Sun
         limb_darkening_coeff = 0.6
-        reference_filename_out = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}".format(int(teff), logg, MH, vmic, zero_vmac, zero_vsini, zero_limb_darkening_coeff) + ".fits"
+        reference_filename_out = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}".format(int(teff), logg, MH, vmic, zero_vmac, zero_vsini, zero_limb_darkening_coeff) + ".fits.gz"
         reference_list.add_row((reference_filename_out, int(teff), logg, MH, vmic, vmac, vsini, limb_darkening_coeff))
 
 
@@ -2520,7 +2520,7 @@ def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks):
     initial_vsini = 0.0
     initial_limb_darkening_coeff = 0.00
 
-    reference_grid_filename = precomputed_dir + "/reference_grid_%i.fits" % resolution
+    reference_grid_filename = precomputed_dir + "/reference_grid_%i.fits.gz" % resolution
     if not os.path.exists(reference_grid_filename):
         logging.warn("Pre-computed grid does not exists for R = %i" % resolution)
     else:
