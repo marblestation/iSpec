@@ -26,7 +26,7 @@ from mpfitmodels import MPFitModel
 from abundances import write_solar_abundances, write_fixed_abundances, determine_abundances, create_free_abundances_structure
 from abundances import determine_abundance_enchancements, enhance_solar_abundances
 from segments import create_segments_around_lines
-from atmospheres import write_atmosphere, interpolate_atmosphere_layers, valid_atmosphere_target, calculate_opacities, extrapolated_model_atmosphere_were_used
+from atmospheres import write_atmosphere, interpolate_atmosphere_layers, valid_atmosphere_target, calculate_opacities, model_atmosphere_is_closest_copy
 from lines import write_atomic_linelist, write_isotope_data, _get_atomic_linelist_definition, _sampling_uniform_in_velocity
 from common import mkdir_p, estimate_vmic, estimate_vmac, which
 from common import is_turbospectrum_support_enabled, is_spectrum_support_enabled, is_moog_support_enabled, is_synthe_support_enabled
@@ -624,8 +624,8 @@ class SynthModel(MPFitModel):
         complete_key += " vrad [" + vrad_key + "]"
 
         ##### [start] Check precomputed (solar abundance)
-        precomputed_file = str(self.precomputed_grid_dir) + "/unconvolved_steps/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff())
-        fundamental_precomputed_file = str(self.precomputed_grid_dir) + "/unconvolved_steps/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.vmic(), 0., 0., 0.)
+        precomputed_file = str(self.precomputed_grid_dir) + "/grid/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff())
+        fundamental_precomputed_file = str(self.precomputed_grid_dir) + "/grid/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.vmic(), 0., 0., 0.)
         if self.precomputed_grid_dir is not None and abundances_key == "" and os.path.exists(precomputed_file):
             if not self.quiet:
                 print "Pre-computed:", complete_key
@@ -998,9 +998,9 @@ class SynthModel(MPFitModel):
         print "Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second)
         header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","wchisq","rwchisq","chisq","rchisq","rms")
         stats = "%8i\t%8i\t%8i\t%8.2f\t%8.4f\t%8.2f\t%8.4f\t%8.4f" % (self.m.dof, self.m.niter, self.m.nfev, self.wchisq, self.reduced_wchisq, self.chisq, self.reduced_chisq, self.rms)
-        if extrapolated_model_atmosphere_were_used(self.modeled_layers_pack, self.teff(), self.logg(), self.MH()):
+        if model_atmosphere_is_closest_copy(self.modeled_layers_pack, self.teff(), self.logg(), self.MH()):
             print ""
-            print "WARNING: Extrapolated model atmospheres were used for the final solution"
+            print "WARNING: Model atmosphere used for the final solution was not interpolated, it is a copy of the closest model."
         print ""
         print "         ", header
         print "Stats:   ", stats
@@ -1494,9 +1494,9 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     weights = np.sqrt(weights)  # When squaring the flux errors, we get more reasonable parameter's errors (empirically validated)
 
 
-    teff_range = modeled_layers_pack[4]
-    logg_range = modeled_layers_pack[5]
-    MH_range = modeled_layers_pack[6]
+    teff_range = modeled_layers_pack[6]
+    logg_range = modeled_layers_pack[7]
+    MH_range = modeled_layers_pack[8]
 
     if type(initial_vrad) not in (np.ndarray, list, tuple):
         if segments is not None:
@@ -1744,8 +1744,8 @@ class EquivalentWidthModel(MPFitModel):
         self._MH = MH
         self._eMH = 0.0
 
-        self.min_MH = np.min(modeled_layers_pack[6])
-        self.max_MH = np.max(modeled_layers_pack[6])
+        self.min_MH = np.min(modeled_layers_pack[8])
+        self.max_MH = np.max(modeled_layers_pack[8])
         #
         super(EquivalentWidthModel, self).__init__(p)
 
@@ -2214,9 +2214,9 @@ class EquivalentWidthModel(MPFitModel):
         print "Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second)
         header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","wchisq","rwchisq","chisq","rchisq","rms")
         stats = "%8i\t%8i\t%8i\t%8.6f\t%8.6f\t%8.6f\t%8.6f\t%8.6f" % (self.m.dof, self.m.niter, self.m.nfev, self.wchisq, self.reduced_wchisq, self.chisq, self.reduced_chisq, self.rms)
-        if extrapolated_model_atmosphere_were_used(self.modeled_layers_pack, self.teff(), self.logg(), MH):
+        if model_atmosphere_is_closest_copy(self.modeled_layers_pack, self.teff(), self.logg(), MH):
             print ""
-            print "WARNING: Extrapolated model atmospheres were used for the final solution"
+            print "WARNING: Model atmosphere used for the final solution was not interpolated, it is a copy of the closest model."
         print ""
         print "         ", header
         print "Stats:   ", stats
@@ -2235,9 +2235,9 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, abundances, initial_t
     if code not in ['spectrum', 'turbospectrum', 'moog', 'width']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
-    teff_range = modeled_layers_pack[4]
-    logg_range = modeled_layers_pack[5]
-    MH_range = modeled_layers_pack[6]
+    teff_range = modeled_layers_pack[5]
+    logg_range = modeled_layers_pack[6]
+    MH_range = modeled_layers_pack[7]
 
     # Do not allow users to set free MH in free_params to avoid confusions
     # because metallicity is always free in this method, what we make by including MH in free_params
@@ -2346,7 +2346,7 @@ def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, M
 
 
 
-def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, enhance_abundances=True, scale=None, segments=None, number_of_processes=1, code="spectrum", use_molecules=False, tmp_dir=None):
+def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, enhance_abundances=True, scale=None, segments=None, number_of_processes=1, code="spectrum", use_molecules=False, steps=False, tmp_dir=None):
     """
     Pre-compute a synthetic grid with some reference ranges (Teff, log(g) and
     MH combinations) and all the steps that iSpec will perform in the
@@ -2363,9 +2363,10 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
     if code not in ['spectrum', 'turbospectrum', 'moog', 'synthe', 'sme']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
-    reference_list_filename = output_dirname + "/reference.txt"
-    reference_grid_filename = output_dirname + "/reference_grid_%i.fits.gz" % to_resolution
-    fits_dir = output_dirname + "unconvolved_steps/"
+    reference_list_filename = output_dirname + "/parameters.tsv"
+    if to_resolution is not None:
+        reference_grid_filename = output_dirname + "/convolved_grid_%i.fits.gz" % to_resolution
+    fits_dir = os.path.join(output_dirname, "grid/")
     mkdir_p(fits_dir)
 
     # Parallelization pool
@@ -2381,26 +2382,32 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
     num_spec = num_ref_spec * 8 # Reference + 7 variations in Teff, logg, MH, vmic, vmac, vsini, limb darkening coeff
 
     i = 0
-    for teff, logg, MH in ranges:
-        vmic = estimate_vmic(teff, logg, MH)
+    for teff, logg, MH, vmic in ranges:
+        if vmic is None:
+            vmic = estimate_vmic(teff, logg, MH)
         vmac = 0.0 # This can be modified after synthesis if needed
         vsini = 0.0 # This can be modified after synthesis if needed
         limb_darkening_coeff = 0.00 # This can be modified after synthesis if needed
         resolution = 0 # This can be modified after synthesis if needed
-        # For each reference point, calculate also the variations that iSpec will perform in the first iteration
-        steps =   ( # Final unconvolved spectra where vmic/vmac are free and do not follow vmic/vmac empirical relations
+        points = [
                     (teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff),
-                    (teff+Constants.SYNTH_STEP_TEFF, logg, MH, vmic, vmac, vsini, limb_darkening_coeff),
-                    (teff, logg+Constants.SYNTH_STEP_LOGG, MH, vmic, vmac, vsini, limb_darkening_coeff),
-                    (teff, logg, MH+Constants.SYNTH_STEP_MH, vmic, vmac, vsini, limb_darkening_coeff),
-                    (teff, logg, MH, vmic+Constants.SYNTH_STEP_VMIC, vmac, vsini, limb_darkening_coeff),
-                    # Final unconvolved spectra where vmic is not free and does follow vmic empirical relations
-                    (teff+Constants.SYNTH_STEP_TEFF, logg, MH, estimate_vmic(teff+Constants.SYNTH_STEP_TEFF, logg, MH), vmac, vsini, limb_darkening_coeff),
-                    (teff, logg+Constants.SYNTH_STEP_LOGG, MH, estimate_vmic(teff, logg+Constants.SYNTH_STEP_LOGG, MH), vmac, vsini, limb_darkening_coeff),
-                    (teff, logg, MH+Constants.SYNTH_STEP_MH, estimate_vmic(teff, logg, MH+Constants.SYNTH_STEP_MH), vmac, vsini, limb_darkening_coeff),
-                    )
+                ]
+        if steps:
+            # For each reference point, calculate also the variations that iSpec will perform in the first iteration
+            points += [ # Final unconvolved spectra where vmic/vmac are free and do not follow vmic/vmac empirical relations
+                        (teff+Constants.SYNTH_STEP_TEFF, logg, MH, vmic, vmac, vsini, limb_darkening_coeff),
+                        (teff, logg+Constants.SYNTH_STEP_LOGG, MH, vmic, vmac, vsini, limb_darkening_coeff),
+                        (teff, logg, MH+Constants.SYNTH_STEP_MH, vmic, vmac, vsini, limb_darkening_coeff),
+                        (teff, logg, MH, vmic+Constants.SYNTH_STEP_VMIC, vmac, vsini, limb_darkening_coeff),
+                    ]
+            points += [
+                        # Final unconvolved spectra where vmic is not free and does follow vmic empirical relations
+                        (teff+Constants.SYNTH_STEP_TEFF, logg, MH, estimate_vmic(teff+Constants.SYNTH_STEP_TEFF, logg, MH), vmac, vsini, limb_darkening_coeff),
+                        (teff, logg+Constants.SYNTH_STEP_LOGG, MH, estimate_vmic(teff, logg+Constants.SYNTH_STEP_LOGG, MH), vmac, vsini, limb_darkening_coeff),
+                        (teff, logg, MH+Constants.SYNTH_STEP_MH, estimate_vmic(teff, logg, MH+Constants.SYNTH_STEP_MH), vmac, vsini, limb_darkening_coeff),
+                    ]
 
-        for j, (teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff) in enumerate(steps):
+        for j, (teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff) in enumerate(points):
             filename_out = fits_dir + "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}".format(int(teff), logg, MH, vmic, vmac, vsini, limb_darkening_coeff) + ".fits.gz"
 
             if os.path.exists(filename_out):
@@ -2458,52 +2465,53 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
         pool.join()
 
 
-    reference_grid = None
-    reference_list = Table()
-    reference_list.add_column(Column(name='filename', dtype='|S50'))
-    reference_list.add_column(Column(name='teff', dtype=int))
-    reference_list.add_column(Column(name='logg', dtype=float))
-    reference_list.add_column(Column(name='MH', dtype=float))
-    reference_list.add_column(Column(name='vmic', dtype=float))
-    reference_list.add_column(Column(name='vmac', dtype=float))
-    reference_list.add_column(Column(name='vsini', dtype=float))
-    reference_list.add_column(Column(name='limb_darkening_coeff', dtype=float))
-    for teff, logg, MH in ranges:
-        # Only use the first spectra generated for each combination
-        zero_vmac = 0.0
-        zero_vsini = 0.0
-        zero_limb_darkening_coeff = 0.00
-        zero_resolution = 0
-        vmic = estimate_vmic(teff, logg, MH)
-        vmac = estimate_vmac(teff, logg, MH)
-        vsini = 1.6 # Sun
-        limb_darkening_coeff = 0.6
-        reference_filename_out = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}".format(int(teff), logg, MH, vmic, zero_vmac, zero_vsini, zero_limb_darkening_coeff) + ".fits.gz"
-        reference_list.add_row((reference_filename_out, int(teff), logg, MH, vmic, vmac, vsini, limb_darkening_coeff))
+    if to_resolution is not None:
+        reference_grid = None
+        reference_list = Table()
+        reference_list.add_column(Column(name='filename', dtype='|S50'))
+        reference_list.add_column(Column(name='teff', dtype=int))
+        reference_list.add_column(Column(name='logg', dtype=float))
+        reference_list.add_column(Column(name='MH', dtype=float))
+        reference_list.add_column(Column(name='vmic', dtype=float))
+        reference_list.add_column(Column(name='vmac', dtype=float))
+        reference_list.add_column(Column(name='vsini', dtype=float))
+        reference_list.add_column(Column(name='limb_darkening_coeff', dtype=float))
+        for teff, logg, MH in ranges:
+            # Only use the first spectra generated for each combination
+            zero_vmac = 0.0
+            zero_vsini = 0.0
+            zero_limb_darkening_coeff = 0.00
+            zero_resolution = 0
+            vmic = estimate_vmic(teff, logg, MH)
+            vmac = estimate_vmac(teff, logg, MH)
+            vsini = 1.6 # Sun
+            limb_darkening_coeff = 0.6
+            reference_filename_out = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}".format(int(teff), logg, MH, vmic, zero_vmac, zero_vsini, zero_limb_darkening_coeff) + ".fits.gz"
+            reference_list.add_row((reference_filename_out, int(teff), logg, MH, vmic, vmac, vsini, limb_darkening_coeff))
 
 
-        # Spectra in the grid is convolved to the specified resolution for fast comparison
-        print "Quick grid:", reference_filename_out
-        spectrum = read_spectrum(fits_dir + reference_filename_out)
+            # Spectra in the grid is convolved to the specified resolution for fast comparison
+            print "Quick grid:", reference_filename_out
+            spectrum = read_spectrum(fits_dir + reference_filename_out)
 
-        segments = None
-        vrad = (0,)
-        spectrum['flux'] = apply_post_fundamental_effects(spectrum['waveobs'], spectrum['flux'], segments, \
-                    macroturbulence=vmac, vsini=vsini, \
-                    limb_darkening_coeff=limb_darkening_coeff, R=to_resolution, vrad=vrad)
+            segments = None
+            vrad = (0,)
+            spectrum['flux'] = apply_post_fundamental_effects(spectrum['waveobs'], spectrum['flux'], segments, \
+                        macroturbulence=vmac, vsini=vsini, \
+                        limb_darkening_coeff=limb_darkening_coeff, R=to_resolution, vrad=vrad)
 
-        if reference_grid is None:
-            reference_grid = spectrum['flux']
-        else:
-            reference_grid = np.vstack((reference_grid, spectrum['flux']))
+            if reference_grid is None:
+                reference_grid = spectrum['flux']
+            else:
+                reference_grid = np.vstack((reference_grid, spectrum['flux']))
 
-    ascii.write(reference_list, reference_list_filename, delimiter='\t')
-    # Generate FITS file with grid for fast comparison
-    primary_hdu = fits.PrimaryHDU(reference_grid)
-    wavelengths_hdu = fits.ImageHDU(wavelengths, name="WAVELENGTHS")
-    params_bintable_hdu = fits.BinTableHDU(reference_list.as_array(), name="PARAMS")
-    fits_format = fits.HDUList([primary_hdu, wavelengths_hdu, params_bintable_hdu])
-    fits_format.writeto(reference_grid_filename, clobber=True)
+        ascii.write(reference_list, reference_list_filename, delimiter='\t')
+        # Generate FITS file with grid for fast comparison
+        primary_hdu = fits.PrimaryHDU(reference_grid)
+        wavelengths_hdu = fits.ImageHDU(wavelengths, name="WAVELENGTHS")
+        params_bintable_hdu = fits.BinTableHDU(reference_list.as_array(), name="PARAMS")
+        fits_format = fits.HDUList([primary_hdu, wavelengths_hdu, params_bintable_hdu])
+        fits_format.writeto(reference_grid_filename, clobber=True)
 
 
 

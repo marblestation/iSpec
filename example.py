@@ -985,13 +985,13 @@ def synthesize_spectrum(code="spectrum"):
 
 
     # Selected model amtosphere, linelist and solar abundances
-    #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
-    model = ispec_dir + "/input/atmospheres/MARCS.GES/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/MARCS/"
+    model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
@@ -1096,13 +1096,13 @@ def precompute_synthetic_grid(code="spectrum"):
 
 
     # Selected model amtosphere, linelist and solar abundances
-    #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
-    model = ispec_dir + "/input/atmospheres/MARCS.GES/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/MARCS/"
+    model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
@@ -1205,13 +1205,13 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     max_iterations = 6
 
     # Selected model amtosphere, linelist and solar abundances
-    #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
-    model = ispec_dir + "/input/atmospheres/MARCS.GES/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/MARCS/"
+    model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
@@ -1250,7 +1250,7 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     # Line regions
     line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_good_for_params_all.txt")
     #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_good_for_params_all_extended.txt")
-    # Select only some lines to speed up the execution (in a real analysis it is better not to do this)
+    ## Select only some lines to speed up the execution (in a real analysis it is better not to do this)
     line_regions = line_regions[np.logical_or(line_regions['note'] == 'Ti 1', line_regions['note'] == 'Ti 2')]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
     # Read segments if we have them or...
@@ -1367,13 +1367,13 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     max_iterations = 6
 
     # Selected model amtosphere, linelist and solar abundances
-    #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
-    model = ispec_dir + "/input/atmospheres/MARCS.GES/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/MARCS/"
+    model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
@@ -1551,13 +1551,13 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     max_iterations = 6
 
     # Selected model amtosphere, linelist and solar abundances
-    #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
-    model = ispec_dir + "/input/atmospheres/MARCS.GES/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/MARCS/"
+    model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
@@ -1710,13 +1710,13 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
     max_iterations = 6
 
     # Selected model amtosphere, linelist and solar abundances
-    #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
-    model = ispec_dir + "/input/atmospheres/MARCS.GES/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/MARCS/"
+    model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
@@ -1882,13 +1882,13 @@ def determine_loggf_line_by_line_using_synth_spectra(code="spectrum"):
     max_iterations = 6
 
     # Selected model amtosphere, linelist and solar abundances
-    #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
-    model = ispec_dir + "/input/atmospheres/MARCS.GES/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/MARCS/"
+    model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
@@ -2165,13 +2165,13 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
     max_iterations = 10
 
     # Selected model amtosphere, linelist and solar abundances
-    #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
-    model = ispec_dir + "/input/atmospheres/MARCS.GES/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/MARCS/"
+    model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
@@ -2408,13 +2408,13 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
     microturbulence_vel = 1.0
 
     # Selected model amtosphere and solar abundances
-    #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
-    model = ispec_dir + "/input/atmospheres/MARCS.GES/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/MARCS/"
+    model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/"
 
     solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
@@ -2458,13 +2458,13 @@ def calculate_theoretical_ew_and_depth(code="spectrum"):
     microturbulence_vel = 1.0
 
     # Selected model amtosphere, linelist and solar abundances
-    #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
-    model = ispec_dir + "/input/atmospheres/MARCS.GES/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/MARCS/"
+    model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/"
 
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
@@ -2579,13 +2579,13 @@ def interpolate_atmosphere(code="spectrum"):
     MH = 0.05
 
     # Selected model amtosphere, linelist and solar abundances
-    #model = ispec_dir + "/input/atmospheres/MARCS/modeled_layers_pack.dump"
-    model = ispec_dir + "/input/atmospheres/MARCS.GES/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/modeled_layers_pack.dump"
-    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/modeled_layers_pack.dump"
+    #model = ispec_dir + "/input/atmospheres/MARCS/"
+    model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/"
 
     # Load model atmospheres
     modeled_layers_pack = ispec.load_modeled_layers_pack(model)
@@ -2702,4 +2702,4 @@ if __name__ == '__main__':
     interpolate_atmosphere(code="spectrum")
     interpolate_atmosphere(code="turbospectrum")
     interpolate_atmosphere(code="moog")
-    #pass
+    pass

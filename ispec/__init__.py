@@ -40,9 +40,6 @@ from abundances import create_free_abundances_structure
 from atmospheres import interpolate_atmosphere_layers
 from atmospheres import load_modeled_layers_pack
 from atmospheres import valid_atmosphere_target
-from atmospheres import read_kurucz_atmospheres
-from atmospheres import build_modeled_interpolated_layer_values
-from atmospheres import dump_modeled_layers_pack
 from atmospheres import write_atmosphere
 from common import is_turbospectrum_support_enabled, is_spectrum_support_enabled, is_moog_support_enabled, is_width_support_enabled, is_ares_support_enabled, is_synthe_support_enabled, is_sme_support_enabled
 from synth import generate_spectrum
