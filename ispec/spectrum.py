@@ -76,7 +76,7 @@ def __read_fits_spectrum(spectrum_filename):
             wave_step = hdr['CDELT%s' % (specaxis)]
             wave_base = hdr['CRVAL%s' % (specaxis)]
             reference_pixel = hdr['CRPIX%s' % (specaxis)]
-            logging.info("Using the FITS CDELT value.  PIX=%f VAL=%f DELT=%f UNIT=%s" % (reference_pixel,wave_base,wave_step,unit))
+            #logging.info("Using the FITS CDELT value.  PIX=%f VAL=%f DELT=%f UNIT=%s" % (reference_pixel,wave_base,wave_step,unit))
         elif len(data.shape) > 1:
             logging.info("No CDELT or CD in header.  Assuming 2D input with 1st line representing the spectral axis.")
             # No valid WCS, try assuming first axis is the wavelength axis
@@ -328,7 +328,7 @@ def write_spectrum(spectrum, spectrum_filename):
             fits_format = pyfits.HDUList([primary_hdu, bintable_hdu])
 
 
-        fits_format.writeto(spectrum_filename, clobber=True)
+        fits_format.writeto(spectrum_filename, overwrite=True)
     elif spectrum_filename[-3:].lower() == ".gz":
         tmp_spec = tempfile.mktemp() + str(int(random.random() * 100000000))
         out = open(tmp_spec, "w")

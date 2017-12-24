@@ -21,6 +21,8 @@ import ctypes
 import time
 from datetime import datetime, timedelta
 import numpy as np
+import pandas as pd
+from scipy import spatial
 from mpfitmodels import MPFitModel
 #from continuum import fit_continuum
 from abundances import write_solar_abundances, write_fixed_abundances, determine_abundances, create_free_abundances_structure
@@ -77,35 +79,115 @@ class Constants:
     EW_STEP_VMIC = 0.5
 
 
-def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, waveobs_mask=None, code="spectrum", use_molecules=False, tmp_dir=None):
+def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, waveobs_mask=None, code="spectrum", use_molecules=False, grid=None, tmp_dir=None):
     """
     waveobs_mask is for SPECTRUM
     regions is for Turbospectrum
     """
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog', 'synthe', 'sme']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'synthe', 'sme', 'grid']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
-    # Filter out lines not supported by a given synthesizer
-    lcode = linelist[code+'_support'] == "T"
-    linelist = linelist[lcode]
-    # Limit linelist to the region asked to be synthesized
-    # Provide some margin or near-by deep lines might be omitted
-    margin = 2. # 2 nm
-    wfilter = np.logical_and(linelist['wave_nm'] >= np.min(waveobs)-margin, linelist['wave_nm'] <= np.max(waveobs)+margin)
-    linelist = linelist[wfilter]
+    if code != "grid":
+        # Filter out lines not supported by a given synthesizer
+        lcode = linelist[code+'_support'] == "T"
+        linelist = linelist[lcode]
+        # Limit linelist to the region asked to be synthesized
+        # Provide some margin or near-by deep lines might be omitted
+        margin = 2. # 2 nm
+        wfilter = np.logical_and(linelist['wave_nm'] >= np.min(waveobs)-margin, linelist['wave_nm'] <= np.max(waveobs)+margin)
+        linelist = linelist[wfilter]
 
-    if code == "turbospectrum":
-        return __turbospectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
-    elif code == "moog":
-        return __moog_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
-    elif code == "synthe":
-        return __synthe_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
-    elif code == "sme":
-        return __sme_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose, regions=regions, timeout=timeout)
-    elif code == "spectrum":
-        return __spectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions, waveobs_mask=waveobs_mask)
+        if code == "turbospectrum":
+            return __turbospectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
+        elif code == "moog":
+            return __moog_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
+        elif code == "synthe":
+            return __synthe_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
+        elif code == "sme":
+            return __sme_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose, regions=regions, timeout=timeout)
+        elif code == "spectrum":
+            return __spectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions, waveobs_mask=waveobs_mask)
+    elif code == "grid":
+        if grid is None:
+            raise Exception("Grid needed to generate an interpolated spectrum from a grid.")
+        return __grid_generate_fundamental_spectrum(grid, waveobs, teff, logg, MH)
 
+def load_spectral_grid(input_path):
+    """
+    :param input_path:
+        Name of the input file (i.e. models.dump) or directory (new interpolator)
+    :type input_path: string
+
+    :returns:
+        List of modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range and nlayers
+    """
+    if not os.path.isdir(input_path):
+        raise Exception("Input path '{}' is not a directory".format(input_path))
+
+    base_dirname = input_path
+    atm_dirname = os.path.join(base_dirname, "grid")
+    params_filename = os.path.join(base_dirname, "parameters.tsv")
+
+    if not os.path.exists(atm_dirname):
+        raise Exception("Grid path '{}' does not exist".format(atm_dirname))
+    if not os.path.exists(params_filename):
+        raise Exception("Parameters file '{}' does not exist".format(params_filename))
+
+    params = pd.read_csv(params_filename, sep="\t", names=["teff", "logg", "mh"])
+    teff_range = np.unique(params['teff'])
+    logg_range = np.unique(params['logg'])
+    MH_range = np.unique(params['mh'])
+    existing_points = zip(params["teff"], params["logg"], params["mh"])
+
+    delaunay_triangulation = spatial.Delaunay(existing_points)
+    kdtree = spatial.KDTree(existing_points)
+
+    # Functions will receive the parameters in the same order
+    existing_point_filename_pattern_builder = lambda p: os.path.join(atm_dirname, "{0:0.0f}_{1:0.2f}_{2:0.2f}_*.fits.gz".format(*p))
+    read_point_value = lambda f: read_spectrum(f)
+
+    value_fields = ["waveobs", "flux"]
+    return existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, delaunay_triangulation, kdtree, teff_range, logg_range, MH_range, base_dirname
+
+def valid_interpolated_spectrum_target(grid, teff_target, logg_target, MH_target):
+    """
+        Returns False if model could not be interpolated
+    """
+    existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, delaunay_triangulation, kdtree, teff_range, logg_range, MH_range, base_dirname = grid
+    target_point = (teff_target, logg_target, MH_target)
+    simplex = delaunay_triangulation.find_simplex(target_point)
+    target_point_cannot_be_interpolated = np.any(simplex == -1)
+    return not target_point_cannot_be_interpolated
+
+
+def __grid_generate_fundamental_spectrum(grid, waveobs, teff, logg, MH):
+    """
+    Generates an interpolated spectrum from a grid. vmic is always fixed and depends
+    on the grid existing points.
+
+    No macroturbulence, rotation (vsini), limb darkening coefficient or resolution is considered
+    in this process. That's why it is named as "fundamental" spectrum.
+    """
+    return __grid_generate_spectrum(grid, waveobs, teff, logg, MH, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0)
+
+def __grid_generate_spectrum(grid, waveobs, teff, logg, MH, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0):
+    from atmospheres import _interpolate
+    existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, delaunay_triangulation, kdtree, teff_range, logg_range, MH_range, base_dirname = grid
+    target_point = (teff, logg, MH)
+    interpolated = _interpolate(delaunay_triangulation, kdtree, existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, target_point)
+    interpolated_spectrum = create_spectrum_structure(interpolated['waveobs'], interpolated['flux'])
+
+    # Make sure we return the number of expected fluxes
+    if not np.array_equal(interpolated_spectrum['waveobs'], waveobs):
+        interpolated_spectrum = resample_spectrum(interpolated_spectrum, waveobs, method="linear", zero_edges=True)
+
+    segments = None
+    vrad = (0,)
+    interpolated_spectrum['flux'] = apply_post_fundamental_effects(interpolated_spectrum['waveobs'], interpolated_spectrum['flux'], segments, \
+                    macroturbulence=macroturbulence, vsini=vsini, \
+                    limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
+    return interpolated_spectrum['flux']
 
 def __spectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None):
     """
@@ -126,34 +208,39 @@ def __spectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, l
     return __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions)
 
 
-def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.60, R=500000, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, waveobs_mask=None, code="spectrum", use_molecules=False, tmp_dir=None):
+def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.60, R=500000, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, waveobs_mask=None, code="spectrum", use_molecules=False, grid=None, tmp_dir=None):
     """
     waveobs_mask is for SPECTRUM
     regions is for Turbospectrum, moog and synthe
     """
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog', 'synthe', 'sme']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'synthe', 'sme', 'grid']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
-    # Filter out lines not supported by a given synthesizer
-    lcode = linelist[code+'_support'] == "T"
-    linelist = linelist[lcode]
-    # Limit linelist to the region asked to be synthesized
-    # Provide some margin or near-by deep lines might be omitted
-    margin = 2. # 2 nm
-    wfilter = np.logical_and(linelist['wave_nm'] >= np.min(waveobs)-margin, linelist['wave_nm'] <= np.max(waveobs)+margin)
-    linelist = linelist[wfilter]
+    if code != "grid":
+        # Filter out lines not supported by a given synthesizer
+        lcode = linelist[code+'_support'] == "T"
+        linelist = linelist[lcode]
+        # Limit linelist to the region asked to be synthesized
+        # Provide some margin or near-by deep lines might be omitted
+        margin = 2. # 2 nm
+        wfilter = np.logical_and(linelist['wave_nm'] >= np.min(waveobs)-margin, linelist['wave_nm'] <= np.max(waveobs)+margin)
+        linelist = linelist[wfilter]
 
-    if code == "turbospectrum":
-        return __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
-    elif code == "moog":
-        return __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
-    elif code == "synthe":
-        return __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
-    elif code == "sme":
-        return __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose, regions=regions)
-    elif code == "spectrum":
-        return __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions, waveobs_mask=waveobs_mask)
+        if code == "turbospectrum":
+            return __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
+        elif code == "moog":
+            return __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
+        elif code == "synthe":
+            return __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
+        elif code == "sme":
+            return __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose, regions=regions)
+        elif code == "spectrum":
+            return __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions, waveobs_mask=waveobs_mask)
+    elif code == "grid":
+        if grid is None:
+            raise Exception("Grid needed to generate an interpolated spectrum from a grid.")
+        return __grid_generate_spectrum(grid, waveobs, teff, logg, MH, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff)
 
 
 def __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=0., vsini=0., limb_darkening_coeff=0., R=0, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None, tmp_dir=None):
@@ -657,33 +744,39 @@ class SynthModel(MPFitModel):
                 if not self.quiet:
                     print "Generating:", complete_key
 
+                if self.code != "grid":
+                    # Enhance alpha elements + CNO abundances following MARCS standard composition
+                    if self.enhance_abundances:
+                        alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(self.MH(), scale=self.scale)
+                        abundances = enhance_solar_abundances(self.abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
+                    else:
+                        abundances = self.abundances
 
-                # Enhance alpha elements + CNO abundances following MARCS standard composition
-                if self.enhance_abundances:
-                    alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(self.MH(), scale=self.scale)
-                    abundances = enhance_solar_abundances(self.abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
+                    # Atmosphere
+                    atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH(), code=self.code)
+                    # Fundamental synthetic fluxes
+                    if self.code == "turbospectrum":
+                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, use_molecules=self.use_molecules, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                    elif self.code == "moog":
+                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                    elif self.code == "synthe":
+                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, molecules_files=self.molecules_files, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                    elif self.code == "sme":
+                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), regions=self.segments, verbose=0, code=self.code, timeout=self.timeout)
+                        if np.all(self.last_fluxes == 0):
+                            raise Exception("SME has failed.")
+                    elif self.code == "spectrum":
+                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(),  atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, waveobs_mask=self.waveobs_mask, verbose=0, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                        if np.all(self.last_fluxes == 0):
+                            raise Exception("SPECTRUM has failed.")
+                    else:
+                        raise Exception("Unknown code: %s" % (self.code))
                 else:
-                    abundances = self.abundances
-
-                # Atmosphere
-                atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH(), code=self.code)
-                # Fundamental synthetic fluxes
-                if self.code == "turbospectrum":
-                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, use_molecules=self.use_molecules, tmp_dir=self.tmp_dir, timeout=self.timeout)
-                elif self.code == "moog":
-                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
-                elif self.code == "synthe":
-                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, molecules_files=self.molecules_files, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
-                elif self.code == "sme":
-                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), regions=self.segments, verbose=0, code=self.code, timeout=self.timeout)
-                    if np.all(self.last_fluxes == 0):
-                        raise Exception("SME has failed.")
-                elif self.code == "spectrum":
-                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(),  atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, waveobs_mask=self.waveobs_mask, verbose=0, tmp_dir=self.tmp_dir, timeout=self.timeout)
-                    if np.all(self.last_fluxes == 0):
-                        raise Exception("SPECTRUM has failed.")
-                else:
-                    raise Exception("Unknown code: %s" % (self.code))
+                    atmosphere_layers = None
+                    linelist = None
+                    abundances = None
+                    fixed_abundances = None
+                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), code=self.code, grid=self.grid)
 
 
                 # Optimization to avoid too small changes in parameters or repetition
@@ -695,7 +788,7 @@ class SynthModel(MPFitModel):
 
     def fitData(self, waveobs, segments, comparing_mask, fluxes, weights=None, parinfo=None, use_errors=False, max_iterations=20, quiet=True, code="spectrum", use_molecules=False, vmic_from_empirical_relation=True, vmac_from_empirical_relation=True, tmp_dir=None, timeout=1800):
         code = code.lower()
-        if code not in ['spectrum', 'turbospectrum', 'moog', 'synthe', 'sme']:
+        if code not in ['spectrum', 'turbospectrum', 'moog', 'synthe', 'sme', 'grid']:
             raise Exception("Unknown radiative transfer code: %s" % (code))
 
         self.timeout = timeout
@@ -712,6 +805,8 @@ class SynthModel(MPFitModel):
             default_timer = time.time
         self.waveobs = waveobs
         self.code = code
+        if self.code == "grid":
+            self.grid = load_spectral_grid(self.precomputed_grid_dir)
         self.use_molecules = use_molecules
         self.vmic_from_empirical_relation = vmic_from_empirical_relation
         self.vmac_from_empirical_relation = vmac_from_empirical_relation
@@ -745,15 +840,14 @@ class SynthModel(MPFitModel):
                 # moog requires two files for the linelist
                 # sme does not require files
                 self.linelist_file = None
-            else:
-                # 'turbospectrum',  'spectrum
+            elif self.code == 'turbospectrum' or self.code == 'spectrum':
                 self.linelist_file = write_atomic_linelist(self.linelist, code=self.code, tmp_dir=tmp_dir)
 
         if self.code == "spectrum":
             self.isotope_file = write_isotope_data(self.isotopes, tmp_dir=tmp_dir)
 
         # If teff, logg and MH are fixed
-        if self.code != 'sme' and parinfo[0]['fixed'] and parinfo[1]['fixed'] and parinfo[2]['fixed']:
+        if self.code not in ('sme', 'grid') and parinfo[0]['fixed'] and parinfo[1]['fixed'] and parinfo[2]['fixed']:
             atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, parinfo[0]['value'], parinfo[1]['value'], parinfo[2]['value'])
             self.atmosphere_layers_file = write_atmosphere(atmosphere_layers, parinfo[0]['value'], parinfo[1]['value'], parinfo[2]['value'], code=self.code, atmosphere_filename=None, tmp_dir=tmp_dir)
 
@@ -779,7 +873,7 @@ class SynthModel(MPFitModel):
 
         if self.abundances_file is not None:
             os.remove(self.abundances_file)
-        if len(self.linelist_free_loggf) == 0 and self.code != 'sme' and self.code != 'moog':
+        if len(self.linelist_free_loggf) == 0 and self.code not in ('sme', 'moog', 'grid'):
             os.remove(self.linelist_file)
         if self.code == 'spectrum':
             os.remove(self.isotope_file)
@@ -787,7 +881,7 @@ class SynthModel(MPFitModel):
             for molecules_file in self.molecules_files:
                 os.remove(molecules_file)
         # If teff, logg and MH are fixed
-        if self.code != "sme" and parinfo[0]['fixed'] and parinfo[1]['fixed'] and parinfo[2]['fixed']:
+        if self.code not in ("sme", "grid") and parinfo[0]['fixed'] and parinfo[1]['fixed'] and parinfo[2]['fixed']:
             os.remove(self.atmosphere_layers_file)
         self.abundances_file = None
         self.linelist_file = None
@@ -942,23 +1036,26 @@ class SynthModel(MPFitModel):
         abundances_errors = ""
 
 
-        transformed_abund = self.transformed_free_abundances()
-        for i in xrange(len(transformed_abund)):
-            element = transformed_abund['element'][i]
-            x_absolute_name = "A(" + element + ")"
-            x_over_h_name = "[" + element + "/H]"
-            x_over_fe_name = "[" + element + "/Fe]"
-            x = transformed_abund['Abund'][i]
-            x_absolute = transformed_abund['A(X)'][i]
-            x_over_h = transformed_abund['[X/H]'][i]
-            x_over_fe = transformed_abund['[X/Fe]'][i]
-            ex = transformed_abund['eAbund'][i]*error_scale_factor
-            ex_absolute = transformed_abund['eA(X)'][i]*error_scale_factor
-            ex_over_h = transformed_abund['e[X/H]'][i]*error_scale_factor
-            ex_over_fe = transformed_abund['e[X/Fe]'][i]*error_scale_factor
-            abundances_header += "%8s\t%8s\t%8s\t%8s" % (element, x_absolute_name, x_over_h_name, x_over_fe_name)
-            abundances_solution += "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (x, x_absolute, x_over_h, x_over_fe)
-            abundances_errors += "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (ex, ex_absolute, ex_over_h, ex_over_fe)
+        if self.code != "grid":
+            transformed_abund = self.transformed_free_abundances()
+            for i in xrange(len(transformed_abund)):
+                element = transformed_abund['element'][i]
+                x_absolute_name = "A(" + element + ")"
+                x_over_h_name = "[" + element + "/H]"
+                x_over_fe_name = "[" + element + "/Fe]"
+                x = transformed_abund['Abund'][i]
+                x_absolute = transformed_abund['A(X)'][i]
+                x_over_h = transformed_abund['[X/H]'][i]
+                x_over_fe = transformed_abund['[X/Fe]'][i]
+                ex = transformed_abund['eAbund'][i]*error_scale_factor
+                ex_absolute = transformed_abund['eA(X)'][i]*error_scale_factor
+                ex_over_h = transformed_abund['e[X/H]'][i]*error_scale_factor
+                ex_over_fe = transformed_abund['e[X/Fe]'][i]*error_scale_factor
+                abundances_header += "%8s\t%8s\t%8s\t%8s" % (element, x_absolute_name, x_over_h_name, x_over_fe_name)
+                abundances_solution += "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (x, x_absolute, x_over_h, x_over_fe)
+                abundances_errors += "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (ex, ex_absolute, ex_over_h, ex_over_fe)
+        else:
+            transformed_abund = []
 
         if len(self.vrad()) >= 1:
             vrad_header = "          %8s\t%8s\t%8s\t%8s" % ("wave_base","wave_top","vrad","error")
@@ -981,26 +1078,30 @@ class SynthModel(MPFitModel):
             print "Ab. errors:", abundances_errors
             print ""
 
-        transformed_free_loggf = self.transformed_free_loggf()
-        transformed_linelist_free_loggf = transformed_free_loggf['linelist']
-        loggf = transformed_free_loggf['loggf']
-        eloggf = transformed_free_loggf['eloggf']
-        if len(transformed_linelist_free_loggf) > 0:
-            loggf_header = "          %8s\t%8s\t%8s\t%8s" % ("wave_base","wave_top","log(gf)","error")
-            loggf_stats = ""
-            for i in xrange(len(transformed_linelist_free_loggf)):
-                loggf_stats += "log(gf)     %8.4f\t%8s\t%8.3f\t%8.3f\n" % (transformed_linelist_free_loggf['wave_nm'][i], transformed_linelist_free_loggf['element'][i], loggf[i], eloggf[i])
-            print ""
-            print loggf_header
-            print loggf_stats
-            print ""
+        if self.code != "grid":
+            transformed_free_loggf = self.transformed_free_loggf()
+            transformed_linelist_free_loggf = transformed_free_loggf['linelist']
+            loggf = transformed_free_loggf['loggf']
+            eloggf = transformed_free_loggf['eloggf']
+            if len(transformed_linelist_free_loggf) > 0:
+                loggf_header = "          %8s\t%8s\t%8s\t%8s" % ("wave_base","wave_top","log(gf)","error")
+                loggf_stats = ""
+                for i in xrange(len(transformed_linelist_free_loggf)):
+                    loggf_stats += "log(gf)     %8.4f\t%8s\t%8.3f\t%8.3f\n" % (transformed_linelist_free_loggf['wave_nm'][i], transformed_linelist_free_loggf['element'][i], loggf[i], eloggf[i])
+                print ""
+                print loggf_header
+                print loggf_stats
+                print ""
 
         print "Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second)
         header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","wchisq","rwchisq","chisq","rchisq","rms")
         stats = "%8i\t%8i\t%8i\t%8.2f\t%8.4f\t%8.2f\t%8.4f\t%8.4f" % (self.m.dof, self.m.niter, self.m.nfev, self.wchisq, self.reduced_wchisq, self.chisq, self.reduced_chisq, self.rms)
-        if model_atmosphere_is_closest_copy(self.modeled_layers_pack, self.teff(), self.logg(), self.MH()):
+        if self.code != "grid" and model_atmosphere_is_closest_copy(self.modeled_layers_pack, self.teff(), self.logg(), self.MH()):
             print ""
             print "WARNING: Model atmosphere used for the final solution was not interpolated, it is a copy of the closest model."
+        if self.code == "grid" and not valid_interpolated_spectrum_target(self.grid, self.teff(), self.logg(), self.MH()):
+            print ""
+            print "WARNING: Spectrum used for the final solution was not interpolated, it is a copy of the closest model."
         print ""
         print "         ", header
         print "Stats:   ", stats
@@ -1388,7 +1489,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
         quiet = True
 
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog', 'synthe', 'sme']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'synthe', 'sme', 'grid']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
 
@@ -1413,6 +1514,8 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
         # No free abundances
         free_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float), ('element', '|S30')])
     else:
+        if code == "grid":
+            raise Exception("There cannot be free abundances when using a spectral grid for interpolation")
         # Add free abundances as free params
         for element in free_abundances:
             free_params.append(str(element['code']))
@@ -1421,11 +1524,19 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     if linelist_free_loggf is None:
         linelist_free_loggf = np.recarray((0, ), dtype=atomic_dtype)
     else:
+        if code == "grid":
+            raise Exception("There cannot be free log(gf) when using a spectral grid for interpolation")
         # Make sure both linelists have the same structure so that it will be possible to merge them
         linelist = linelist[[x[0] for x in atomic_dtype]]
         linelist_free_loggf = linelist_free_loggf[[x[0] for x in atomic_dtype]]
         # Add free loggf as free params
         free_params.append("loggf")
+
+    if code == "grid":
+        if "vmic" in free_params:
+            raise Exception("Vmic cannot be free when using a spectral grid for interpolation")
+        elif vmic_from_empirical_relation:
+            raise Exception("Vmic cannot follow empirical relation when using a spectral grid for interpolation")
 
     if "vmic" in free_params and vmic_from_empirical_relation:
         vmic_from_empirical_relation = False
@@ -1439,14 +1550,16 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
         segments = np.recarray((1,),  dtype=[('wave_base', float), ('wave_top', float)])
         segments['wave_base'][0] = wave_base
         segments['wave_top'][0] = wave_top
-        # Limit linelist
-        # Provide some margin or near-by deep lines might be omitted
-        margin = 2. # 2 nm
-        lfilter = np.logical_and(linelist['wave_A'] >= (wave_base-margin)*10., linelist['wave_A'] <= (wave_top+margin)*10.)
-        linelist = linelist[lfilter]
+        if linelist is not None:
+            # Limit linelist
+            # Provide some margin or near-by deep lines might be omitted
+            margin = 2. # 2 nm
+            lfilter = np.logical_and(linelist['wave_A'] >= (wave_base-margin)*10., linelist['wave_A'] <= (wave_top+margin)*10.)
+            linelist = linelist[lfilter]
     else:
-        # Limit linelist
-        linelist = __filter_linelist(linelist, segments)
+        if linelist is not None:
+            # Limit linelist
+            linelist = __filter_linelist(linelist, segments)
 
     if linemasks is None:
         comparing_mask = np.ones(len(waveobs)) # Compare all fluxes
@@ -1494,9 +1607,13 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     weights = np.sqrt(weights)  # When squaring the flux errors, we get more reasonable parameter's errors (empirically validated)
 
 
-    teff_range = modeled_layers_pack[6]
-    logg_range = modeled_layers_pack[7]
-    MH_range = modeled_layers_pack[8]
+    if code == "grid":
+        grid = load_spectral_grid(precomputed_grid_dir)
+        existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, delaunay_triangulation, kdtree, teff_range, logg_range, MH_range, base_dirname = grid
+    else:
+        teff_range = modeled_layers_pack[6]
+        logg_range = modeled_layers_pack[7]
+        MH_range = modeled_layers_pack[8]
 
     if type(initial_vrad) not in (np.ndarray, list, tuple):
         if segments is not None:
@@ -1550,8 +1667,11 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     for i, evrad in enumerate(synth_model.evrad()):
         errors['vrad%04i' % (i)] = evrad
 
-    # Free abundances (original, transformed [X/H] [X/Fe] and errors)
-    free_abundances = synth_model.transformed_free_abundances()
+    if code != "grid":
+        # Free abundances (original, transformed [X/H] [X/Fe] and errors)
+        free_abundances = synth_model.transformed_free_abundances()
+    else:
+        free_abundances = []
 
     ### Scale errors using the reduced weigthed chisq (tanh)
     #   * It requires that spectrum errors are well estimated (weights are derived from them)
@@ -1607,7 +1727,10 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
 
     synth_spectrum = create_spectrum_structure(waveobs, synth_model.last_final_fluxes)
 
-    free_loggf = synth_model.transformed_free_loggf()
+    if code != "grid":
+        free_loggf = synth_model.transformed_free_loggf()
+    else:
+        free_loggf = []
 
     return spectrum, synth_spectrum, params, errors, free_abundances, free_loggf, status, stats_linemasks
 
@@ -2511,7 +2634,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
         wavelengths_hdu = fits.ImageHDU(wavelengths, name="WAVELENGTHS")
         params_bintable_hdu = fits.BinTableHDU(reference_list.as_array(), name="PARAMS")
         fits_format = fits.HDUList([primary_hdu, wavelengths_hdu, params_bintable_hdu])
-        fits_format.writeto(reference_grid_filename, clobber=True)
+        fits_format.writeto(reference_grid_filename, overwrite=True)
 
 
 

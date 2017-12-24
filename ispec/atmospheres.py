@@ -116,7 +116,7 @@ def __closest(kdtree, existing_points, existing_point_filename_pattern_builder, 
     logging.info("Closest to target point '{}' is '{}'".format(" ".join(map(str, target_point)), " ".join(map(str, closest_existing_point))))
     return value
 
-def __interpolate(delaunay_triangulation, kdtree, existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, target_point):
+def _interpolate(delaunay_triangulation, kdtree, existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, target_point):
     """
     input:
     - existing_points: points in the parameters space such as [( 3000.,  3.5,  0.  ,  0. ), ( 3000.,  3.5,  0.25,  0. ), ...]
@@ -180,7 +180,7 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
 
     existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, delaunay_triangulation, kdtree, teff_range, logg_range, MH_range, base_dirname = modeled_layers_pack
     target_point = (teff_target, logg_target, MH_target)
-    interpolated_atm = __interpolate(delaunay_triangulation, kdtree, existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, target_point)
+    interpolated_atm = _interpolate(delaunay_triangulation, kdtree, existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, target_point)
 
     interpolated_atm_compatible_format = interpolated_atm[["rhox", "temperature", "pgas", "xne", "abross", "accrad", "vturb", "logtau5", "depth", "pelectron"]]
     interpolated_atm_compatible_format = interpolated_atm_compatible_format.view(float).reshape(interpolated_atm_compatible_format.shape + (-1,))
