@@ -64,6 +64,7 @@ class Constants:
     SYNTH_STEP_TEFF = 100.
     SYNTH_STEP_LOGG = 0.1
     SYNTH_STEP_MH = 0.05
+    SYNTH_STEP_ALPHA = 0.05
     SYNTH_STEP_VMIC = 0.5
     SYNTH_STEP_VMAC = 2.0
     SYNTH_STEP_VSINI = 2.0
@@ -76,10 +77,11 @@ class Constants:
     EW_STEP_TEFF = 500.
     EW_STEP_LOGG = 0.5
     EW_STEP_MH = 0.05
+    EW_STEP_ALPHA = 0.05
     EW_STEP_VMIC = 0.5
 
 
-def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, waveobs_mask=None, code="spectrum", use_molecules=False, grid=None, tmp_dir=None):
+def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, waveobs_mask=None, code="spectrum", use_molecules=False, grid=None, tmp_dir=None):
     """
     waveobs_mask is for SPECTRUM
     regions is for Turbospectrum
@@ -98,20 +100,22 @@ def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, li
         wfilter = np.logical_and(linelist['wave_nm'] >= np.min(waveobs)-margin, linelist['wave_nm'] <= np.max(waveobs)+margin)
         linelist = linelist[wfilter]
 
+        abundances = enhance_solar_abundances(abundances, alpha)
+
         if code == "turbospectrum":
-            return __turbospectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
+            return __turbospectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
         elif code == "moog":
-            return __moog_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
+            return __moog_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
         elif code == "synthe":
-            return __synthe_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
+            return __synthe_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
         elif code == "sme":
-            return __sme_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose, regions=regions, timeout=timeout)
+            return __sme_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose, regions=regions, timeout=timeout)
         elif code == "spectrum":
-            return __spectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions, waveobs_mask=waveobs_mask)
+            return __spectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions, waveobs_mask=waveobs_mask)
     elif code == "grid":
         if grid is None:
             raise Exception("Grid needed to generate an interpolated spectrum from a grid.")
-        return __grid_generate_fundamental_spectrum(grid, waveobs, teff, logg, MH)
+        return __grid_generate_fundamental_spectrum(grid, waveobs, teff, logg, MH, alpha)
 
 def load_spectral_grid(input_path):
     """
@@ -134,34 +138,40 @@ def load_spectral_grid(input_path):
     if not os.path.exists(params_filename):
         raise Exception("Parameters file '{}' does not exist".format(params_filename))
 
-    params = pd.read_csv(params_filename, sep="\t", names=["teff", "logg", "mh"])
-    teff_range = np.unique(params['teff'])
-    logg_range = np.unique(params['logg'])
-    MH_range = np.unique(params['mh'])
-    existing_points = zip(params["teff"], params["logg"], params["mh"])
+    parameters = pd.read_csv(params_filename, sep="\t")
+    filenames = base_dirname + "/" + parameters['filename']
+    filenames = np.asarray(filenames)
+    ranges = {}
+    free_parameters = parameters.columns.get_values().tolist()
+    free_parameters = filter(lambda x: not x.startswith("fixed_") and x != "filename", free_parameters)
+    for free_param in free_parameters:
+        free_param_range = np.unique(parameters[free_param])
+        ranges[free_param] = free_param_range
+    existing_points = parameters[free_parameters]
 
     delaunay_triangulation = spatial.Delaunay(existing_points)
     kdtree = spatial.KDTree(existing_points)
 
     # Functions will receive the parameters in the same order
-    existing_point_filename_pattern_builder = lambda p: os.path.join(atm_dirname, "{0:0.0f}_{1:0.2f}_{2:0.2f}_*.fits.gz".format(*p))
     read_point_value = lambda f: read_spectrum(f)
 
     value_fields = ["waveobs", "flux"]
-    return existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, delaunay_triangulation, kdtree, teff_range, logg_range, MH_range, base_dirname
+    return existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname
 
-def valid_interpolated_spectrum_target(grid, teff_target, logg_target, MH_target):
+def valid_interpolated_spectrum_target(grid, target):
     """
         Returns False if model could not be interpolated
     """
-    existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, delaunay_triangulation, kdtree, teff_range, logg_range, MH_range, base_dirname = grid
-    target_point = (teff_target, logg_target, MH_target)
+    existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname = grid
+    target_point = []
+    for param in free_parameters:
+        target_point.append(target[param])
     simplex = delaunay_triangulation.find_simplex(target_point)
     target_point_cannot_be_interpolated = np.any(simplex == -1)
     return not target_point_cannot_be_interpolated
 
 
-def __grid_generate_fundamental_spectrum(grid, waveobs, teff, logg, MH):
+def __grid_generate_fundamental_spectrum(grid, waveobs, teff, logg, MH, alpha):
     """
     Generates an interpolated spectrum from a grid. vmic is always fixed and depends
     on the grid existing points.
@@ -169,13 +179,15 @@ def __grid_generate_fundamental_spectrum(grid, waveobs, teff, logg, MH):
     No macroturbulence, rotation (vsini), limb darkening coefficient or resolution is considered
     in this process. That's why it is named as "fundamental" spectrum.
     """
-    return __grid_generate_spectrum(grid, waveobs, teff, logg, MH, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0)
+    return __grid_generate_spectrum(grid, waveobs, teff, logg, MH, alpha, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0)
 
-def __grid_generate_spectrum(grid, waveobs, teff, logg, MH, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0):
+def __grid_generate_spectrum(grid, waveobs, teff, logg, MH, alpha, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0):
     from atmospheres import _interpolate
-    existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, delaunay_triangulation, kdtree, teff_range, logg_range, MH_range, base_dirname = grid
-    target_point = (teff, logg, MH)
-    interpolated = _interpolate(delaunay_triangulation, kdtree, existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, target_point)
+    existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname = grid
+    target_point = []
+    for param in free_parameters:
+        target_point.append(target[param])
+    interpolated = _interpolate(delaunay_triangulation, kdtree, existing_points, filenames, read_point_value, value_fields, target_point)
     interpolated_spectrum = create_spectrum_structure(interpolated['waveobs'], interpolated['flux'])
 
     # Make sure we return the number of expected fluxes
@@ -189,7 +201,7 @@ def __grid_generate_spectrum(grid, waveobs, teff, logg, MH, macroturbulence=0.0,
                     limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
     return interpolated_spectrum['flux']
 
-def __spectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None):
+def __spectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None):
     """
     Generates a synthetic spectrum for the wavelength specified in waveobs.
     In case regions is specified (recarray with 'wave_base' and 'wave_top'),
@@ -205,10 +217,10 @@ def __spectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, l
 
     Fixed abundances can be set to 'None'.
     """
-    return __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions)
+    return __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions)
 
 
-def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.60, R=500000, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, waveobs_mask=None, code="spectrum", use_molecules=False, grid=None, tmp_dir=None):
+def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.60, R=500000, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, waveobs_mask=None, code="spectrum", use_molecules=False, grid=None, tmp_dir=None):
     """
     waveobs_mask is for SPECTRUM
     regions is for Turbospectrum, moog and synthe
@@ -227,23 +239,25 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isot
         wfilter = np.logical_and(linelist['wave_nm'] >= np.min(waveobs)-margin, linelist['wave_nm'] <= np.max(waveobs)+margin)
         linelist = linelist[wfilter]
 
+        abundances = enhance_solar_abundances(abundances, alpha)
+
         if code == "turbospectrum":
-            return __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
+            return __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
         elif code == "moog":
-            return __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
+            return __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
         elif code == "synthe":
-            return __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
+            return __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
         elif code == "sme":
-            return __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose, regions=regions)
+            return __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose, regions=regions)
         elif code == "spectrum":
-            return __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions, waveobs_mask=waveobs_mask)
+            return __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions, waveobs_mask=waveobs_mask)
     elif code == "grid":
         if grid is None:
             raise Exception("Grid needed to generate an interpolated spectrum from a grid.")
-        return __grid_generate_spectrum(grid, waveobs, teff, logg, MH, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff)
+        return __grid_generate_spectrum(grid, waveobs, teff, logg, MH, alpha, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff)
 
 
-def __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=0., vsini=0., limb_darkening_coeff=0., R=0, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None, tmp_dir=None):
+def __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=0., vsini=0., limb_darkening_coeff=0., R=0, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None, tmp_dir=None):
     """
     Generates a synthetic spectrum for the wavelength specified in waveobs.
     In case regions is specified (recarray with 'wave_base' and 'wave_top'),
@@ -354,7 +368,7 @@ def __spectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, lin
     return fluxes
 
 
-def calculate_theoretical_ew_and_depth(atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, microturbulence_vel = 2.0, atmosphere_layers_file=None, abundances_file=None, linelist_file=None, isotope_file=None, verbose=0, gui_queue=None, timeout=1800, tmp_dir=None):
+def calculate_theoretical_ew_and_depth(atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, microturbulence_vel = 2.0, atmosphere_layers_file=None, abundances_file=None, linelist_file=None, isotope_file=None, verbose=0, gui_queue=None, timeout=1800, tmp_dir=None):
     """
     """
     if not is_spectrum_support_enabled():
@@ -550,7 +564,7 @@ class SynthModel(MPFitModel):
     Match synthetic spectrum to observed spectrum
     * Requires the synthetic spectrum generation functionality on
     """
-    def __init__(self, modeled_layers_pack, linelist, isotopes, linelist_free_loggf, abundances, enhance_abundances=True, scale=None, teff=5000, logg=3.0, MH=0.0, vmic=2.0, vmac=0.0, vsini=2.0, limb_darkening_coeff=0.0, R=0, precomputed_grid_dir=None):
+    def __init__(self, modeled_layers_pack, linelist, isotopes, linelist_free_loggf, abundances, enhance_abundances=True, scale=None, teff=5000, logg=3.0, MH=0.0, alpha=0.0, vmic=2.0, vmac=0.0, vsini=2.0, limb_darkening_coeff=0.0, R=0, precomputed_grid_dir=None):
         self.precomputed_grid_dir = precomputed_grid_dir
         self.elements = {}
         #self.elements["1"] = "H"
@@ -666,7 +680,7 @@ class SynthModel(MPFitModel):
         self.segments = None
         self.waveobs_mask = None
         self.cache = {}
-        p = [teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, R ]
+        p = [teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, R ]
         #
         self.abundances_file = None
         self.linelist_file = None
@@ -682,8 +696,8 @@ class SynthModel(MPFitModel):
             for i in xrange(len(p)):
                 self._parinfo[i]['value'] = p[i]
 
-        key = "%.0f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.vmic())
-        complete_key = "%.0f %.2f %.2f %.2f %.2f %.2f %.2f %i" % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
+        key = "%.0f %.2f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.alpha(), self.vmic())
+        complete_key = "%.0f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %i" % (self.teff(), self.logg(), self.MH(), self.alpha(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
 
         # Consider new loggf
         linelist_free_loggf = self.generate_linelist_free_loggf()
@@ -711,8 +725,8 @@ class SynthModel(MPFitModel):
         complete_key += " vrad [" + vrad_key + "]"
 
         ##### [start] Check precomputed (solar abundance)
-        precomputed_file = str(self.precomputed_grid_dir) + "/grid/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff())
-        fundamental_precomputed_file = str(self.precomputed_grid_dir) + "/grid/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.vmic(), 0., 0., 0.)
+        precomputed_file = str(self.precomputed_grid_dir) + "/grid/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.alpha(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff())
+        fundamental_precomputed_file = str(self.precomputed_grid_dir) + "/grid/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.alpha(), self.vmic(), 0., 0., 0.)
         if self.precomputed_grid_dir is not None and abundances_key == "" and os.path.exists(precomputed_file):
             if not self.quiet:
                 print "Pre-computed:", complete_key
@@ -745,28 +759,22 @@ class SynthModel(MPFitModel):
                     print "Generating:", complete_key
 
                 if self.code != "grid":
-                    # Enhance alpha elements + CNO abundances following MARCS standard composition
-                    if self.enhance_abundances:
-                        alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(self.MH(), scale=self.scale)
-                        abundances = enhance_solar_abundances(self.abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
-                    else:
-                        abundances = self.abundances
 
                     # Atmosphere
-                    atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH(), code=self.code)
+                    atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, {'teff':self.teff(), 'logg':self.logg(), 'MH':self.MH(), 'alpha':self.alpha()}, code=self.code)
                     # Fundamental synthetic fluxes
                     if self.code == "turbospectrum":
-                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, use_molecules=self.use_molecules, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, use_molecules=self.use_molecules, tmp_dir=self.tmp_dir, timeout=self.timeout)
                     elif self.code == "moog":
-                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
                     elif self.code == "synthe":
-                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, molecules_files=self.molecules_files, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, molecules_files=self.molecules_files, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
                     elif self.code == "sme":
-                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), regions=self.segments, verbose=0, code=self.code, timeout=self.timeout)
+                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(), regions=self.segments, verbose=0, code=self.code, timeout=self.timeout)
                         if np.all(self.last_fluxes == 0):
                             raise Exception("SME has failed.")
                     elif self.code == "spectrum":
-                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(),  atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, waveobs_mask=self.waveobs_mask, verbose=0, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(),  atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, waveobs_mask=self.waveobs_mask, verbose=0, tmp_dir=self.tmp_dir, timeout=self.timeout)
                         if np.all(self.last_fluxes == 0):
                             raise Exception("SPECTRUM has failed.")
                     else:
@@ -776,7 +784,7 @@ class SynthModel(MPFitModel):
                     linelist = None
                     abundances = None
                     fixed_abundances = None
-                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), code=self.code, grid=self.grid)
+                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), code=self.code, grid=self.grid)
 
 
                 # Optimization to avoid too small changes in parameters or repetition
@@ -848,7 +856,7 @@ class SynthModel(MPFitModel):
 
         # If teff, logg and MH are fixed
         if self.code not in ('sme', 'grid') and parinfo[0]['fixed'] and parinfo[1]['fixed'] and parinfo[2]['fixed']:
-            atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, parinfo[0]['value'], parinfo[1]['value'], parinfo[2]['value'])
+            atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, {'teff':parinfo[0]['value'], 'logg':parinfo[1]['value'], 'MH':parinfo[2]['value'], 'alpha':parinfo[3]['value']})
             self.atmosphere_layers_file = write_atmosphere(atmosphere_layers, parinfo[0]['value'], parinfo[1]['value'], parinfo[2]['value'], code=self.code, atmosphere_filename=None, tmp_dir=tmp_dir)
 
         if self.use_errors:
@@ -896,21 +904,27 @@ class SynthModel(MPFitModel):
     def teff(self): return self._parinfo[0]['value']
     def logg(self): return self._parinfo[1]['value']
     def MH(self): return self._parinfo[2]['value']
-    def vmic(self): return self._parinfo[3]['value']
-    def vmac(self): return self._parinfo[4]['value']
-    def vsini(self): return self._parinfo[5]['value']
-    def limb_darkening_coeff(self): return self._parinfo[6]['value']
-    def R(self): return self._parinfo[7]['value']
+    def alpha(self):
+        if self.enhance_abundances:
+            alpha_enhancement = determine_abundance_enchancements(self.MH(), scale=self.scale)
+        else:
+            alpha_enhancement = self._parinfo[3]['value']
+        return alpha_enhancement
+    def vmic(self): return self._parinfo[4]['value']
+    def vmac(self): return self._parinfo[5]['value']
+    def vsini(self): return self._parinfo[6]['value']
+    def limb_darkening_coeff(self): return self._parinfo[7]['value']
+    def R(self): return self._parinfo[8]['value']
     def vrad(self):
         vrad = []
-        base = 8
+        base = 9
         if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
             top = base+len(self.segments)
             for i in xrange(base, top):
                 vrad.append(self._parinfo[i]['value'])
         return vrad
     def free_loggf(self):
-        base = 8
+        base = 9
         if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
             base += len(self.segments)
         loggf = []
@@ -918,7 +932,7 @@ class SynthModel(MPFitModel):
             loggf.append(self._parinfo[i]['value'])
         return loggf
     def free_abundances(self):
-        base = 8
+        base = 9
         if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
             base += len(self.segments)
         base += len(self.linelist_free_loggf)
@@ -932,13 +946,14 @@ class SynthModel(MPFitModel):
     def eteff(self): return self.m.perror[0]
     def elogg(self): return self.m.perror[1]
     def eMH(self): return self.m.perror[2]
-    def evmic(self): return self.m.perror[3]
-    def evmac(self): return self.m.perror[4]
-    def evsini(self): return self.m.perror[5]
-    def elimb_darkening_coeff(self): return self.m.perror[6]
-    def eR(self): return self.m.perror[7]
+    def ealpha(self): return self.m.perror[3]
+    def evmic(self): return self.m.perror[4]
+    def evmac(self): return self.m.perror[5]
+    def evsini(self): return self.m.perror[6]
+    def elimb_darkening_coeff(self): return self.m.perror[7]
+    def eR(self): return self.m.perror[8]
     def evrad(self):
-        base = 8
+        base = 9
         evrad = []
         if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
             top = base+len(self.segments)
@@ -946,7 +961,7 @@ class SynthModel(MPFitModel):
                 evrad.append(self.m.perror[i])
         return evrad
     def efree_loggf(self):
-        base = 8
+        base = 9
         if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
             base += len(self.segments)
         eloggf = []
@@ -954,7 +969,7 @@ class SynthModel(MPFitModel):
             eloggf.append(self.m.perror[i])
         return eloggf
     def efree_abundances(self):
-        base = 8
+        base = 9
         if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
             base += len(self.segments)
         base += len(self.linelist_free_loggf)
@@ -1026,9 +1041,9 @@ class SynthModel(MPFitModel):
             #error_scale_factor = np.max((1., self.wchisq/np.sqrt(self.m.dof)))
         else:
             error_scale_factor = 1.
-        header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("teff","logg","MH","vmic","vmac","vsini","limb","R")
-        solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i" % (self.teff(), self.logg(), self.MH(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
-        errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i" % (self.eteff()*error_scale_factor, self.elogg()*error_scale_factor, self.eMH()*error_scale_factor, self.evmic()*error_scale_factor, self.evmac()*error_scale_factor, self.evsini()*error_scale_factor, self.elimb_darkening_coeff()*error_scale_factor, int(self.eR()*error_scale_factor))
+        header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("teff","logg","MH","alpha","vmic","vmac","vsini","limb","R")
+        solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i" % (self.teff(), self.logg(), self.MH(), self.alpha(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
+        errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i" % (self.eteff()*error_scale_factor, self.elogg()*error_scale_factor, self.eMH()*error_scale_factor, self.ealpha()*error_scale_factor, self.evmic()*error_scale_factor, self.evmac()*error_scale_factor, self.evsini()*error_scale_factor, self.elimb_darkening_coeff()*error_scale_factor, int(self.eR()*error_scale_factor))
 
         # Append free individual abundances
         abundances_header = ""
@@ -1096,10 +1111,10 @@ class SynthModel(MPFitModel):
         print "Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second)
         header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","wchisq","rwchisq","chisq","rchisq","rms")
         stats = "%8i\t%8i\t%8i\t%8.2f\t%8.4f\t%8.2f\t%8.4f\t%8.4f" % (self.m.dof, self.m.niter, self.m.nfev, self.wchisq, self.reduced_wchisq, self.chisq, self.reduced_chisq, self.rms)
-        if self.code != "grid" and model_atmosphere_is_closest_copy(self.modeled_layers_pack, self.teff(), self.logg(), self.MH()):
+        if self.code != "grid" and model_atmosphere_is_closest_copy(self.modeled_layers_pack, {'teff':self.teff(), 'logg':self.logg(), 'MH':self.MH(), 'alpha':self.alpha()}):
             print ""
             print "WARNING: Model atmosphere used for the final solution was not interpolated, it is a copy of the closest model."
-        if self.code == "grid" and not valid_interpolated_spectrum_target(self.grid, self.teff(), self.logg(), self.MH()):
+        if self.code == "grid" and not valid_interpolated_spectrum_target(self.grid, {'teff':self.teff(), 'logg':self.logg(), 'MH':self.MH(), 'alpha':self.alpha()}):
             print ""
             print "WARNING: Spectrum used for the final solution was not interpolated, it is a copy of the closest model."
         print ""
@@ -1110,26 +1125,19 @@ class SynthModel(MPFitModel):
 
 
 
-def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, vmic_from_empirical_relation, vmac_from_empirical_relation):
+def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, alpha_range, vmic_from_empirical_relation, vmac_from_empirical_relation):
     """
     Creates the structure needed for the mpfitmodel
     """
-    base = 8
+    base = 9
     free_params = [param.lower() for param in free_params]
     if "vrad" in free_params or np.any(initial_vrad != 0):
         parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base+len(initial_vrad)+len(free_abundances)+len(linelist_free_loggf))]
     else:
         parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base+len(free_abundances)+len(linelist_free_loggf))]
     ##
-    # Establish limits one step further away from the real limit
     min_teff = np.min(teff_range)
     max_teff = np.max(teff_range)
-    if initial_teff == min_teff:
-        initial_teff += Constants.SYNTH_STEP_TEFF
-    elif initial_teff == min_teff:
-        initial_teff -= Constants.SYNTH_STEP_TEFF
-    min_teff += Constants.SYNTH_STEP_TEFF
-    max_teff -= Constants.SYNTH_STEP_TEFF
     #
     parinfo[0]['parname'] = "teff"
     parinfo[0]['value'] = initial_teff
@@ -1137,16 +1145,11 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[0]['step'] = Constants.SYNTH_STEP_TEFF # For auto-derivatives
     parinfo[0]['limited'] = [True, True]
     parinfo[0]['limits'] = [min_teff, max_teff]
+    if parinfo[0]['value'] > parinfo[0]['limits'][1] or parinfo[0]['value'] < parinfo[0]['limits'][0]:
+        raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[0]['parname'], parinfo[0]['value'], parinfo[0]['limits'][0], parinfo[0]['limits'][1]))
     ##
-    # Establish limits one step further away from the real limit
     min_logg = np.min(logg_range)
     max_logg = np.max(logg_range)
-    if initial_logg == min_logg:
-        initial_logg += Constants.SYNTH_STEP_LOGG
-    elif initial_logg == min_logg:
-        initial_logg -= Constants.SYNTH_STEP_LOGG
-    min_logg += Constants.SYNTH_STEP_LOGG
-    max_logg -= Constants.SYNTH_STEP_LOGG
     #
     parinfo[1]['parname'] = "logg"
     parinfo[1]['value'] = initial_logg
@@ -1155,16 +1158,11 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     #parinfo[1]['mpmaxstep'] = 0.50 # Maximum change to be made in the parameter
     parinfo[1]['limited'] = [True, True]
     parinfo[1]['limits'] = [min_logg, max_logg]
+    if parinfo[1]['value'] > parinfo[1]['limits'][1] or parinfo[1]['value'] < parinfo[1]['limits'][0]:
+        raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[1]['parname'], parinfo[1]['value'], parinfo[1]['limits'][0], parinfo[1]['limits'][1]))
     ##
-    # Establish limits one step further away from the real limit
     min_MH = np.min(MH_range)
     max_MH = np.max(MH_range)
-    if initial_MH == min_MH:
-        initial_MH += Constants.SYNTH_STEP_MH
-    elif initial_MH == min_MH:
-        initial_MH -= Constants.SYNTH_STEP_MH
-    min_MH += Constants.SYNTH_STEP_MH
-    max_MH -= Constants.SYNTH_STEP_MH
     #
     parinfo[2]['parname'] = "MH"
     parinfo[2]['value'] = initial_MH
@@ -1172,48 +1170,72 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
     parinfo[2]['step'] = Constants.SYNTH_STEP_MH # For auto-derivatives
     parinfo[2]['limited'] = [True, True]
     parinfo[2]['limits'] = [min_MH, max_MH]
+    if parinfo[2]['value'] > parinfo[2]['limits'][1] or parinfo[2]['value'] < parinfo[2]['limits'][0]:
+        raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[2]['parname'], parinfo[2]['value'], parinfo[2]['limits'][0], parinfo[2]['limits'][1]))
     #
-    parinfo[3]['parname'] = "Vmic"
-    parinfo[3]['value'] = initial_vmic
+    min_alpha = np.min(alpha_range)
+    max_alpha = np.max(alpha_range)
+    #
+    parinfo[3]['parname'] = "alpha"
+    parinfo[3]['value'] = initial_alpha
     parinfo[3]['fixed'] = not parinfo[3]['parname'].lower() in free_params
-    if vmic_from_empirical_relation:
-        parinfo[3]['tied'] = 'estimate_vmic(p[0], p[1], p[2])'
-    parinfo[3]['step'] = Constants.SYNTH_STEP_VMIC # For auto-derivatives
+    parinfo[3]['step'] = Constants.SYNTH_STEP_ALPHA # For auto-derivatives
     parinfo[3]['limited'] = [True, True]
-    parinfo[3]['limits'] = [0.0, 50.0]
+    parinfo[3]['limits'] = [min_alpha, max_alpha]
+    if parinfo[3]['value'] > parinfo[3]['limits'][1] or parinfo[3]['value'] < parinfo[3]['limits'][0]:
+        raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[3]['parname'], parinfo[3]['value'], parinfo[3]['limits'][0], parinfo[3]['limits'][1]))
     #
-    parinfo[4]['parname'] = "Vmac"
-    parinfo[4]['value'] = initial_vmac
+    parinfo[4]['parname'] = "Vmic"
+    parinfo[4]['value'] = initial_vmic
     parinfo[4]['fixed'] = not parinfo[4]['parname'].lower() in free_params
-    if vmac_from_empirical_relation:
-        parinfo[4]['tied'] = 'estimate_vmac(p[0], p[1], p[2])'
-    parinfo[4]['step'] = Constants.SYNTH_STEP_VMAC # For auto-derivatives
+    if vmic_from_empirical_relation:
+        parinfo[4]['tied'] = 'estimate_vmic(p[0], p[1], p[2])'
+    parinfo[4]['step'] = Constants.SYNTH_STEP_VMIC # For auto-derivatives
     parinfo[4]['limited'] = [True, True]
     parinfo[4]['limits'] = [0.0, 50.0]
+    if parinfo[4]['value'] > parinfo[4]['limits'][1] or parinfo[4]['value'] < parinfo[4]['limits'][0]:
+        raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[4]['parname'], parinfo[4]['value'], parinfo[4]['limits'][0], parinfo[4]['limits'][1]))
     #
-    parinfo[5]['parname'] = "Vsini"
-    parinfo[5]['value'] = initial_vsini
+    parinfo[5]['parname'] = "Vmac"
+    parinfo[5]['value'] = initial_vmac
     parinfo[5]['fixed'] = not parinfo[5]['parname'].lower() in free_params
-    parinfo[5]['step'] = Constants.SYNTH_STEP_VSINI # For auto-derivatives
+    if vmac_from_empirical_relation:
+        parinfo[5]['tied'] = 'estimate_vmac(p[0], p[1], p[2])'
+    parinfo[5]['step'] = Constants.SYNTH_STEP_VMAC # For auto-derivatives
     parinfo[5]['limited'] = [True, True]
-    parinfo[5]['limits'] = [0.0, 300.0]
+    parinfo[5]['limits'] = [0.0, 50.0]
+    if parinfo[5]['value'] > parinfo[5]['limits'][1] or parinfo[5]['value'] < parinfo[5]['limits'][0]:
+        raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[5]['parname'], parinfo[5]['value'], parinfo[5]['limits'][0], parinfo[5]['limits'][1]))
     #
-    parinfo[6]['parname'] = "limb_darkening_coeff"
-    parinfo[6]['value'] = initial_limb_darkening_coeff
+    parinfo[6]['parname'] = "Vsini"
+    parinfo[6]['value'] = initial_vsini
     parinfo[6]['fixed'] = not parinfo[6]['parname'].lower() in free_params
-    parinfo[6]['step'] = Constants.SYNTH_STEP_LIMB_DARKENING_COEFF # For auto-derivatives
+    parinfo[6]['step'] = Constants.SYNTH_STEP_VSINI # For auto-derivatives
     parinfo[6]['limited'] = [True, True]
-    parinfo[6]['limits'] = [0.0, 1.0]
+    parinfo[6]['limits'] = [0.0, 300.0]
+    if parinfo[6]['value'] > parinfo[6]['limits'][1] or parinfo[6]['value'] < parinfo[6]['limits'][0]:
+        raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[6]['parname'], parinfo[6]['value'], parinfo[6]['limits'][0], parinfo[6]['limits'][1]))
     #
-    parinfo[7]['parname'] = "R"
-    parinfo[7]['value'] = initial_R
+    parinfo[7]['parname'] = "limb_darkening_coeff"
+    parinfo[7]['value'] = initial_limb_darkening_coeff
     parinfo[7]['fixed'] = not parinfo[7]['parname'].lower() in free_params
-    parinfo[7]['step'] = Constants.SYNTH_STEP_R # For auto-derivatives
+    parinfo[7]['step'] = Constants.SYNTH_STEP_LIMB_DARKENING_COEFF # For auto-derivatives
     parinfo[7]['limited'] = [True, True]
-    parinfo[7]['limits'] = [100.0, 900000.0]
+    parinfo[7]['limits'] = [0.0, 1.0]
+    if parinfo[7]['value'] > parinfo[7]['limits'][1] or parinfo[7]['value'] < parinfo[7]['limits'][0]:
+        raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[7]['parname'], parinfo[7]['value'], parinfo[7]['limits'][0], parinfo[7]['limits'][1]))
+    #
+    parinfo[8]['parname'] = "R"
+    parinfo[8]['value'] = initial_R
+    parinfo[8]['fixed'] = not parinfo[8]['parname'].lower() in free_params
+    parinfo[8]['step'] = Constants.SYNTH_STEP_R # For auto-derivatives
+    parinfo[8]['limited'] = [True, True]
+    parinfo[8]['limits'] = [100.0, 900000.0]
+    if parinfo[8]['value'] > parinfo[8]['limits'][1] or parinfo[8]['value'] < parinfo[8]['limits'][0]:
+        raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[8]['parname'], parinfo[8]['value'], parinfo[8]['limits'][0], parinfo[8]['limits'][1]))
     # VRAD
     if "vrad" in free_params or np.any(initial_vrad != 0):
-        base = 8
+        base = 9
         for i in xrange(len(initial_vrad)):
             parinfo[base+i]['parname'] = "vrad%03i" % (i)
             parinfo[base+i]['value'] = initial_vrad[i]
@@ -1221,10 +1243,12 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
             parinfo[base+i]['step'] = Constants.SYNTH_STEP_VRAD # For auto-derivatives
             parinfo[base+i]['limited'] = [True, True]
             parinfo[base+i]['limits'] = [-5., 5]
+            if parinfo[base+i]['value'] > parinfo[base+i]['limits'][1] or parinfo[base+i]['value'] < parinfo[base+i]['limits'][0]:
+                raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[base+i]['parname'], parinfo[base+i]['value'], parinfo[base+i]['limits'][0], parinfo[base+i]['limits'][1]))
     if "vrad" in free_params or np.any(initial_vrad != 0):
-        base = 8 + len(initial_vrad)
+        base = 9 + len(initial_vrad)
     else:
-        base = 8
+        base = 9
     # ABUNDANCES
     for i in xrange(len(free_abundances)):
         parinfo[base+i]['parname'] = str(free_abundances['code'][i])
@@ -1233,11 +1257,13 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
         parinfo[base+i]['step'] = Constants.SYNTH_STEP_ABUNDANCES # For auto-derivatives
         parinfo[base+i]['limited'] = [True, True]
         parinfo[base+i]['limits'] = [-30., 0.]
+        if parinfo[base+i]['value'] > parinfo[base+i]['limits'][1] or parinfo[base+i]['value'] < parinfo[base+i]['limits'][0]:
+            raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[base+i]['parname'], parinfo[base+i]['value'], parinfo[base+i]['limits'][0], parinfo[base+i]['limits'][1]))
     # log(gf)
     if "vrad" in free_params or np.any(initial_vrad != 0):
-        base = 8 + len(initial_vrad) + len(free_abundances)
+        base = 9 + len(initial_vrad) + len(free_abundances)
     else:
-        base = 8 + len(free_abundances)
+        base = 9 + len(free_abundances)
     for i in xrange(len(linelist_free_loggf)):
         parinfo[base+i]['parname'] = str(linelist_free_loggf['wave_nm'][i])
         parinfo[base+i]['value'] = linelist_free_loggf['loggf'][i]
@@ -1245,27 +1271,22 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmi
         parinfo[base+i]['step'] = Constants.SYNTH_STEP_LOGGF # For auto-derivatives
         parinfo[base+i]['limited'] = [True, True]
         parinfo[base+i]['limits'] = [-100., 0.]
+        if parinfo[base+i]['value'] > parinfo[base+i]['limits'][1] or parinfo[base+i]['value'] < parinfo[base+i]['limits'][0]:
+            raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[base+i]['parname'], parinfo[base+i]['value'], parinfo[base+i]['limits'][0], parinfo[base+i]['limits'][1]))
 
     return parinfo
 
-def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range, free_params, adjust_model_metalicity=False):
+def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, teff_range, logg_range, MH_range, alpha_range, free_params, adjust_model_metalicity=False):
     """
     Creates the structure needed for the mpfitmodel
     """
-    base = 4
+    base = 5
     free_params = [param.lower() for param in free_params]
     #parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base)]
     parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.]} for i in np.arange(base)]
     ##
-    # Establish limits one step further away from the real limit
     min_teff = np.min(teff_range)
     max_teff = np.max(teff_range)
-    if initial_teff == min_teff:
-        initial_teff += Constants.SYNTH_STEP_TEFF
-    elif initial_teff == min_teff:
-        initial_teff -= Constants.SYNTH_STEP_TEFF
-    min_teff += Constants.SYNTH_STEP_TEFF
-    max_teff -= Constants.SYNTH_STEP_TEFF
     #
     parinfo[0]['parname'] = "teff"
     parinfo[0]['value'] = initial_teff
@@ -1275,16 +1296,11 @@ def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_
     #parinfo[0]['mpmaxstep'] = parinfo[0]['step'] * 1.5
     parinfo[0]['limited'] = [True, True]
     parinfo[0]['limits'] = [min_teff, max_teff]
+    if parinfo[0]['value'] > parinfo[0]['limits'][1] or parinfo[0]['value'] < parinfo[0]['limits'][0]:
+        raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[0]['parname'], parinfo[0]['value'], parinfo[0]['limits'][0], parinfo[0]['limits'][1]))
     ##
-    # Establish limits one step further away from the real limit
     min_logg = np.min(logg_range)
     max_logg = np.max(logg_range)
-    if initial_logg == min_logg:
-        initial_logg += Constants.SYNTH_STEP_LOGG
-    elif initial_logg == min_logg:
-        initial_logg -= Constants.SYNTH_STEP_LOGG
-    min_logg += Constants.SYNTH_STEP_LOGG
-    max_logg -= Constants.SYNTH_STEP_LOGG
     #
     parinfo[1]['parname'] = "logg"
     parinfo[1]['value'] = initial_logg
@@ -1295,6 +1311,8 @@ def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_
     #parinfo[1]['mpmaxstep'] = parinfo[1]['step'] * 1.5
     parinfo[1]['limited'] = [True, True]
     parinfo[1]['limits'] = [min_logg, max_logg]
+    if parinfo[1]['value'] > parinfo[1]['limits'][1] or parinfo[1]['value'] < parinfo[1]['limits'][0]:
+        raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[1]['parname'], parinfo[1]['value'], parinfo[1]['limits'][0], parinfo[1]['limits'][1]))
     #
     parinfo[2]['parname'] = "Vmic"
     parinfo[2]['value'] = initial_vmic
@@ -1304,16 +1322,11 @@ def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_
     #parinfo[2]['mpmaxstep'] = parinfo[2]['step'] * 2.0
     parinfo[2]['limited'] = [True, True]
     parinfo[2]['limits'] = [0., 50.0]
+    if parinfo[2]['value'] > parinfo[2]['limits'][1] or parinfo[2]['value'] < parinfo[2]['limits'][0]:
+        raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[2]['parname'], parinfo[2]['value'], parinfo[2]['limits'][0], parinfo[2]['limits'][1]))
     ##
-    # Establish limits one step further away from the real limit
     min_MH = np.min(MH_range)
     max_MH = np.max(MH_range)
-    if initial_MH == min_MH:
-        initial_MH += Constants.SYNTH_STEP_MH
-    elif initial_MH == min_MH:
-        initial_MH -= Constants.SYNTH_STEP_MH
-    min_MH += Constants.SYNTH_STEP_MH
-    max_MH -= Constants.SYNTH_STEP_MH
     #
     parinfo[3]['parname'] = "MH"
     parinfo[3]['value'] = initial_MH
@@ -1324,6 +1337,23 @@ def __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_
         #parinfo[3]['mpmaxstep'] = parinfo[3]['step'] * 1.5
     parinfo[3]['limited'] = [True, True]
     parinfo[3]['limits'] = [min_MH, max_MH]
+    if parinfo[3]['value'] > parinfo[3]['limits'][1] or parinfo[3]['value'] < parinfo[3]['limits'][0]:
+        raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[3]['parname'], parinfo[3]['value'], parinfo[3]['limits'][0], parinfo[3]['limits'][1]))
+    #
+    min_alpha = np.min(alpha_range)
+    max_alpha = np.max(alpha_range)
+    #
+    parinfo[4]['parname'] = "alpha"
+    parinfo[4]['value'] = initial_alpha
+    parinfo[4]['fixed'] = not parinfo[4]['parname'].lower() in free_params
+    parinfo[4]['step'] = Constants.EW_STEP_ALPHA # For auto-derivatives
+    #parinfo[4]['mpside'] = 2
+    #if not parinfo[4]['fixed']:
+        #parinfo[4]['mpmaxstep'] = parinfo[4]['step'] * 1.5
+    parinfo[4]['limited'] = [True, True]
+    parinfo[4]['limits'] = [min_alpha, max_alpha]
+    if parinfo[4]['value'] > parinfo[4]['limits'][1] or parinfo[4]['value'] < parinfo[4]['limits'][0]:
+        raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[4]['parname'], parinfo[4]['value'], parinfo[4]['limits'][0], parinfo[4]['limits'][1]))
 
     return parinfo
 
@@ -1462,13 +1492,13 @@ def __get_stats_per_linemask(waveobs, fluxes, synthetic_fluxes, weights, free_pa
 
     return results
 
-def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=None, linemasks=None, enhance_abundances=True, scale=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1, code="spectrum", use_molecules=False, vmic_from_empirical_relation=False, vmac_from_empirical_relation=False, tmp_dir=None, timeout=1800):
+def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=None, linemasks=None, enhance_abundances=True, scale=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1, code="spectrum", use_molecules=False, vmic_from_empirical_relation=False, vmac_from_empirical_relation=False, tmp_dir=None, timeout=1800):
     """
     It matches synthetic spectrum to observed spectrum by applying a least
     square algorithm.
 
     - free_params is an array that can contain any combination of the following
-      strings: ["teff", "logg", "MH", "vmic", "vmac", "vsini", "R", "limb_darkening_coeff"]
+      strings: ["teff", "logg", "MH", "alpha", "vmic", "vmac", "vsini", "R", "limb_darkening_coeff"]
     - free_abundances can be set to 'None'
     - If segments are specified, the synthetic spectrum will be only generated for
       those regions.
@@ -1537,6 +1567,10 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
             raise Exception("Vmic cannot be free when using a spectral grid for interpolation")
         elif vmic_from_empirical_relation:
             raise Exception("Vmic cannot follow empirical relation when using a spectral grid for interpolation")
+
+    if "alpha" in free_params and enhance_abundances:
+        enhance_abundances = False
+        logging.warn("'enhance_abundances' changed to False because alpha is a free parameter")
 
     if "vmic" in free_params and vmic_from_empirical_relation:
         vmic_from_empirical_relation = False
@@ -1609,11 +1643,12 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
 
     if code == "grid":
         grid = load_spectral_grid(precomputed_grid_dir)
-        existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, delaunay_triangulation, kdtree, teff_range, logg_range, MH_range, base_dirname = grid
-    else:
-        teff_range = modeled_layers_pack[6]
-        logg_range = modeled_layers_pack[7]
-        MH_range = modeled_layers_pack[8]
+        existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname = grid
+    ranges = modeled_layers_pack[7]
+    teff_range = ranges['teff']
+    logg_range = ranges['logg']
+    MH_range = ranges['MH']
+    alpha_range = ranges.get('alpha', (0.,)) # Default (0.,) if 'alpha' is not a free parameter for atmospheres
 
     if type(initial_vrad) not in (np.ndarray, list, tuple):
         if segments is not None:
@@ -1626,7 +1661,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     if len(initial_vrad) != len(segments) and "vrad" in free_params:
         raise Exception("Number of Vrad should be equal to number of segments.")
 
-    parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, vmic_from_empirical_relation, vmac_from_empirical_relation)
+    parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, alpha_range, vmic_from_empirical_relation, vmac_from_empirical_relation)
 
     synth_model = SynthModel(modeled_layers_pack, linelist, isotopes, linelist_free_loggf, abundances, enhance_abundances=enhance_abundances, scale=scale, precomputed_grid_dir=precomputed_grid_dir)
 
@@ -1741,7 +1776,7 @@ class EquivalentWidthModel(MPFitModel):
     Match synthetic spectrum to observed spectrum
     * Requires the synthetic spectrum generation functionality on
     """
-    def __init__(self, modeled_layers_pack, abundances, teff=5000, logg=3.0, MH=0.0, vmic=2.0, adjust_model_metalicity=False, enhance_abundances=True, scale=None):
+    def __init__(self, modeled_layers_pack, abundances, teff=5000, logg=3.0, MH=0.0, alpha=0.0, vmic=2.0, adjust_model_metalicity=False, enhance_abundances=True, scale=None):
         self.elements = {}
         #self.elements["1"] = "H"
         #self.elements["2"] = "He"
@@ -1866,9 +1901,13 @@ class EquivalentWidthModel(MPFitModel):
         p = [teff, logg, vmic]
         self._MH = MH
         self._eMH = 0.0
+        self._alpha = alpha
+        self._ealpha = 0.0
 
-        self.min_MH = np.min(modeled_layers_pack[8])
-        self.max_MH = np.max(modeled_layers_pack[8])
+        ranges = modeled_layers_pack[7]
+        MH_range = ranges['MH']
+        self.min_MH = np.min(MH_range)
+        self.max_MH = np.max(MH_range)
         #
         super(EquivalentWidthModel, self).__init__(p)
 
@@ -1881,7 +1920,7 @@ class EquivalentWidthModel(MPFitModel):
             for i in xrange(len(p)):
                 self._parinfo[i]['value'] = p[i]
 
-        key = "%.0f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.vmic())
+        key = "%.0f %.2f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.alpha(), self.vmic())
         if self.cache.has_key(key):
             hit_cache = True
             if not self.quiet:
@@ -1893,7 +1932,7 @@ class EquivalentWidthModel(MPFitModel):
             if not self.quiet:
                 print "Generating:", key
             # Optimization to avoid too small changes in parameters or repetition
-            atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, self.teff(), self.logg(), self.MH(), code=self.code)
+            atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, {'teff':self.teff(), 'logg':self.logg(), 'MH':self.MH(), 'alpha':self.alpha()}, code=self.code)
             if self.fe1_filter is None or self.fe2_filter is None:
                 ignore = np.ones(len(self.linemasks)) # Do not ignore any line since it's the first execution and it has not been done any selection
             else:
@@ -1901,9 +1940,8 @@ class EquivalentWidthModel(MPFitModel):
                 ignore[np.where(np.logical_or(self.fe1_filter, self.fe2_filter))[0]] = 1.0 # Do not ignore selected fe1/2 lines
 
             spec_abund, absolute_abund, x_over_h, x_over_fe = determine_abundances(atmosphere_layers, \
-                    self.teff(), self.logg(), self.MH(), self.linemasks, self.abundances, microturbulence_vel = self.vmic(), \
-                    ignore=ignore, verbose=0, code=self.code, tmp_dir=self.tmp_dir, \
-                    enhance_abundances=self.enhance_abundances, scale=self.scale)
+                    self.teff(), self.logg(), self.MH(), self.alpha(), self.linemasks, self.abundances, microturbulence_vel = self.vmic(), \
+                    ignore=ignore, verbose=0, code=self.code, tmp_dir=self.tmp_dir)
 
 
             if 'EW_absolute_abund_median' in self.linemasks.dtype.names:
@@ -2315,6 +2353,14 @@ class EquivalentWidthModel(MPFitModel):
     #def MH(self): return self._MH
     #def eMH(self): return self._eMH
 
+    def alpha(self):
+        if self.enhance_abundances:
+            alpha_enhancement = determine_abundance_enchancements(self.MH(), scale=self.scale)
+        else:
+            alpha_enhancement = self._parinfo[4]['value']
+        return alpha_enhancement
+    def ealpha(self): return self.m.perror[4]
+
     def print_solution(self):
         # Calculate MH
         values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
@@ -2323,11 +2369,11 @@ class EquivalentWidthModel(MPFitModel):
         MH = self.fe1
         eMH = self.fe1_std
 
-        header = "%8s\t%8s\t%8s\t%8s" % ("teff","logg","MH","vmic")
-        #solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.teff(), self.logg(), self.MH(), self.vmic())
-        #errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.eteff(), self.elogg(), self.eMH(), self.evmic())
-        solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.teff(), self.logg(), MH, self.vmic())
-        errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.eteff(), self.elogg(), eMH, self.evmic())
+        header = "%8s\t%8s\t%8s\t%8s\t%8s" % ("teff","logg","MH","alpha","vmic")
+        #solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.teff(), self.logg(), self.MH(), self.alpha(), self.vmic())
+        #errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.eteff(), self.elogg(), self.eMH(), self.ealpha(), self.evmic())
+        solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.teff(), self.logg(), MH, self.alpha(), self.vmic())
+        errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.eteff(), self.elogg(), eMH, self.ealpha(), self.evmic())
 
         print "           ", header
         print "Solution:  ", solution
@@ -2337,7 +2383,7 @@ class EquivalentWidthModel(MPFitModel):
         print "Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second)
         header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","wchisq","rwchisq","chisq","rchisq","rms")
         stats = "%8i\t%8i\t%8i\t%8.6f\t%8.6f\t%8.6f\t%8.6f\t%8.6f" % (self.m.dof, self.m.niter, self.m.nfev, self.wchisq, self.reduced_wchisq, self.chisq, self.reduced_chisq, self.rms)
-        if model_atmosphere_is_closest_copy(self.modeled_layers_pack, self.teff(), self.logg(), MH):
+        if model_atmosphere_is_closest_copy(self.modeled_layers_pack, {'teff':self.teff(), 'logg':self.logg(), 'MH':MH, 'alpha':self.alpha()}):
             print ""
             print "WARNING: Model atmosphere used for the final solution was not interpolated, it is a copy of the closest model."
         print ""
@@ -2346,7 +2392,7 @@ class EquivalentWidthModel(MPFitModel):
         print "Return code:", self.m.status
 
 
-def model_spectrum_from_ew(linemasks, modeled_layers_pack, abundances, initial_teff, initial_logg, initial_MH, initial_vmic, free_params=["teff", "logg", "vmic"], adjust_model_metalicity=False, enhance_abundances=True, scale=None, max_iterations=20, outliers_detection='robust', sigma_level=3, outliers_weight_limit=0.90, code="spectrum", tmp_dir=None):
+def model_spectrum_from_ew(linemasks, modeled_layers_pack, abundances, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, free_params=["teff", "logg", "vmic"], adjust_model_metalicity=False, enhance_abundances=True, scale=None, max_iterations=20, outliers_detection='robust', sigma_level=3, outliers_weight_limit=0.90, code="spectrum", tmp_dir=None):
     """
     - outlier_detection:
         - 'robust': Fit a robust least square linear model, outliers_weight_limit will be use as a threshold. If it is set to zero, no outliers are filtered.
@@ -2358,9 +2404,11 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, abundances, initial_t
     if code not in ['spectrum', 'turbospectrum', 'moog', 'width']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
-    teff_range = modeled_layers_pack[5]
-    logg_range = modeled_layers_pack[6]
-    MH_range = modeled_layers_pack[7]
+    ranges = modeled_layers_pack[7]
+    teff_range = ranges['teff']
+    logg_range = ranges['logg']
+    MH_range = ranges['MH']
+    alpha_range = ranges.get('alpha', (0.,)) # Default (0.,) if 'alpha' is not a free parameter for atmospheres
 
     # Do not allow users to set free MH in free_params to avoid confusions
     # because metallicity is always free in this method, what we make by including MH in free_params
@@ -2368,13 +2416,17 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, abundances, initial_t
     if "MH" in free_params or "mh" in free_params:
         raise Exception("Metallicity cannot be a free parameter!")
 
+    if "alpha" in free_params and enhance_abundances:
+        enhance_abundances = False
+        logging.warn("'enhance_abundances' changed to False because alpha is a free parameter")
+
     if adjust_model_metalicity:
         free_params.append("MH")
 
-    parinfo = __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_vmic, teff_range, logg_range, MH_range, free_params, adjust_model_metalicity=adjust_model_metalicity)
+    parinfo = __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, teff_range, logg_range, MH_range, alpha_range, free_params, adjust_model_metalicity=adjust_model_metalicity)
 
 
-    EW_model = EquivalentWidthModel(modeled_layers_pack, abundances, MH=initial_MH, adjust_model_metalicity=adjust_model_metalicity, \
+    EW_model = EquivalentWidthModel(modeled_layers_pack, abundances, MH=initial_MH, alpha=initial_alpha, adjust_model_metalicity=adjust_model_metalicity, \
                                         enhance_abundances=enhance_abundances, scale=scale)
 
     lfilter = linemasks['element'] == "Fe 1"
@@ -2432,35 +2484,35 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, abundances, initial_t
 
 
 
-def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, code="spectrum", use_molecules=False, tmp_dir=None, locked=False):
+def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, code="spectrum", use_molecules=False, tmp_dir=None, locked=False):
     multiprocessing.current_process().daemon=False
 
 
-    if valid_atmosphere_target(modeled_layers_pack, teff, logg, MH):
+    if valid_atmosphere_target(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}):
         if not locked:
             lock = FileLock(filename_out+".lock")
             try:
                 lock.acquire(timeout=-1)    # Don't wait
             except (LockTimeout, AlreadyLocked) as e:
                 # Some other process is computing this spectrum, do not continue
-                print "Skipping", teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, "already locked"
+                print "Skipping", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, "already locked"
                 return None
 
         try:
-            print "[started]", teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution
+            print "[started]", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution
             # Prepare atmosphere model
-            atmosphere_layers = interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH, code=code)
+            atmosphere_layers = interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, code=code)
             # Synthesis
             synth_spectrum = create_spectrum_structure(wavelengths)
             synth_spectrum['flux'] = generate_spectrum(synth_spectrum['waveobs'], \
-                    atmosphere_layers, teff, logg, MH, atomic_linelist, isotopes, solar_abundances, \
+                    atmosphere_layers, teff, logg, MH, alpha, atomic_linelist, isotopes, solar_abundances, \
                     fixed_abundances=None, microturbulence_vel = vmic, \
                     macroturbulence=vmac, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, \
                     R=resolution, regions=segments, verbose=0, \
                     code=code, use_molecules=use_molecules, tmp_dir=tmp_dir)
             # FITS
             write_spectrum(synth_spectrum, filename_out)
-            print "[finished]", teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution
+            print "[finished]", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution
         finally:
             if not locked: # Not locked in this function
                 lock.release()
@@ -2469,7 +2521,7 @@ def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, M
 
 
 
-def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, enhance_abundances=True, scale=None, segments=None, number_of_processes=1, code="spectrum", use_molecules=False, steps=False, tmp_dir=None):
+def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, segments=None, number_of_processes=1, code="spectrum", use_molecules=False, steps=False, tmp_dir=None):
     """
     Pre-compute a synthetic grid with some reference ranges (Teff, log(g) and
     MH combinations) and all the steps that iSpec will perform in the
@@ -2502,10 +2554,10 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
     elapsed = 0 # seconds
 
     num_ref_spec = len(ranges)
-    num_spec = num_ref_spec * 8 # Reference + 7 variations in Teff, logg, MH, vmic, vmac, vsini, limb darkening coeff
+    num_spec = num_ref_spec * 9 # Reference + 8 variations in Teff, logg, MH, alpha, vmic, vmac, vsini, limb darkening coeff
 
     i = 0
-    for teff, logg, MH, vmic in ranges:
+    for teff, logg, MH, alpha, vmic in ranges:
         if vmic is None:
             vmic = estimate_vmic(teff, logg, MH)
         vmac = 0.0 # This can be modified after synthesis if needed
@@ -2513,38 +2565,30 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
         limb_darkening_coeff = 0.00 # This can be modified after synthesis if needed
         resolution = 0 # This can be modified after synthesis if needed
         points = [
-                    (teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff),
+                    (teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff),
                 ]
         if steps:
             # For each reference point, calculate also the variations that iSpec will perform in the first iteration
             points += [ # Final unconvolved spectra where vmic/vmac are free and do not follow vmic/vmac empirical relations
-                        (teff+Constants.SYNTH_STEP_TEFF, logg, MH, vmic, vmac, vsini, limb_darkening_coeff),
-                        (teff, logg+Constants.SYNTH_STEP_LOGG, MH, vmic, vmac, vsini, limb_darkening_coeff),
-                        (teff, logg, MH+Constants.SYNTH_STEP_MH, vmic, vmac, vsini, limb_darkening_coeff),
-                        (teff, logg, MH, vmic+Constants.SYNTH_STEP_VMIC, vmac, vsini, limb_darkening_coeff),
+                        (teff+Constants.SYNTH_STEP_TEFF, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff),
+                        (teff, logg+Constants.SYNTH_STEP_LOGG, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff),
+                        (teff, logg, MH+Constants.SYNTH_STEP_MH, alpha, vmic, vmac, vsini, limb_darkening_coeff),
+                        (teff, logg, MH, alpha+Constants.SYNTH_STEP_ALPHA, vmic, vmac, vsini, limb_darkening_coeff),
+                        (teff, logg, MH, alpha, vmic+Constants.SYNTH_STEP_VMIC, vmac, vsini, limb_darkening_coeff),
                     ]
             points += [
                         # Final unconvolved spectra where vmic is not free and does follow vmic empirical relations
-                        (teff+Constants.SYNTH_STEP_TEFF, logg, MH, estimate_vmic(teff+Constants.SYNTH_STEP_TEFF, logg, MH), vmac, vsini, limb_darkening_coeff),
-                        (teff, logg+Constants.SYNTH_STEP_LOGG, MH, estimate_vmic(teff, logg+Constants.SYNTH_STEP_LOGG, MH), vmac, vsini, limb_darkening_coeff),
-                        (teff, logg, MH+Constants.SYNTH_STEP_MH, estimate_vmic(teff, logg, MH+Constants.SYNTH_STEP_MH), vmac, vsini, limb_darkening_coeff),
+                        (teff+Constants.SYNTH_STEP_TEFF, logg, MH, alpha, estimate_vmic(teff+Constants.SYNTH_STEP_TEFF, logg, MH), vmac, vsini, limb_darkening_coeff),
+                        (teff, logg+Constants.SYNTH_STEP_LOGG, MH, alpha, estimate_vmic(teff, logg+Constants.SYNTH_STEP_LOGG, MH), vmac, vsini, limb_darkening_coeff),
+                        (teff, logg, MH+Constants.SYNTH_STEP_MH, alpha, estimate_vmic(teff, logg, MH+Constants.SYNTH_STEP_MH), vmac, vsini, limb_darkening_coeff),
                     ]
 
-        for j, (teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff) in enumerate(points):
-            filename_out = fits_dir + "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}".format(int(teff), logg, MH, vmic, vmac, vsini, limb_darkening_coeff) + ".fits.gz"
+        for j, (teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff) in enumerate(points):
+            filename_out = fits_dir + "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}".format(int(teff), logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff) + ".fits.gz"
 
             if os.path.exists(filename_out):
-                print "Skipping", teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, "already computed"
+                print "Skipping", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, "already computed"
                 continue
-
-
-
-            # Enhance alpha elements + CNO abundances following MARCS standard composition
-            if enhance_abundances:
-                alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(MH, scale=scale)
-                abundances = enhance_solar_abundances(solar_abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
-            else:
-                abundances = solar_abundances
 
 
             if pool is None:
@@ -2560,13 +2604,13 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                     lock.acquire(timeout=-1)    # Don't wait
                 except (LockTimeout, AlreadyLocked) as e:
                     # Some other process is computing this spectrum, do not continue
-                    print "Skipping", teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, "already locked"
+                    print "Skipping", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, "already locked"
                     continue
 
                 try:
                     tcheck = default_timer()
                     # Validate parameters
-                    __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, abundances, code=code, use_molecules=use_molecules, tmp_dir=tmp_dir, locked=True)
+                    __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, abundances, code=code, use_molecules=use_molecules, tmp_dir=tmp_dir, locked=True)
                     elapsed = default_timer() - tcheck
 
                     print "-----------------------------------------------------"
@@ -2580,7 +2624,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                     lock.release()
 
             else:
-                pool.apply_async(__generate_synthetic_fits, [filename_out, wavelengths, segments, teff, logg, MH, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, abundances], kwds={'code': code, 'use_molecules': use_molecules, 'tmp_dir':tmp_dir, 'locked':False})
+                pool.apply_async(__generate_synthetic_fits, [filename_out, wavelengths, segments, teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, abundances], kwds={'code': code, 'use_molecules': use_molecules, 'tmp_dir':tmp_dir, 'locked':False})
             i += 1
 
     if pool is not None:
@@ -2595,11 +2639,12 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
         reference_list.add_column(Column(name='teff', dtype=int))
         reference_list.add_column(Column(name='logg', dtype=float))
         reference_list.add_column(Column(name='MH', dtype=float))
+        reference_list.add_column(Column(name='alpha', dtype=float))
         reference_list.add_column(Column(name='vmic', dtype=float))
         reference_list.add_column(Column(name='vmac', dtype=float))
         reference_list.add_column(Column(name='vsini', dtype=float))
         reference_list.add_column(Column(name='limb_darkening_coeff', dtype=float))
-        for teff, logg, MH in ranges:
+        for teff, logg, MH, alpha in ranges:
             # Only use the first spectra generated for each combination
             zero_vmac = 0.0
             zero_vsini = 0.0
@@ -2609,8 +2654,8 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
             vmac = estimate_vmac(teff, logg, MH)
             vsini = 1.6 # Sun
             limb_darkening_coeff = 0.6
-            reference_filename_out = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}".format(int(teff), logg, MH, vmic, zero_vmac, zero_vsini, zero_limb_darkening_coeff) + ".fits.gz"
-            reference_list.add_row((reference_filename_out, int(teff), logg, MH, vmic, vmac, vsini, limb_darkening_coeff))
+            reference_filename_out = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}".format(int(teff), logg, MH, alpha, vmic, zero_vmac, zero_vsini, zero_limb_darkening_coeff) + ".fits.gz"
+            reference_list.add_row((reference_filename_out, int(teff), logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff))
 
 
             # Spectra in the grid is convolved to the specified resolution for fast comparison
@@ -2646,6 +2691,7 @@ def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks):
     initial_teff = 5000.
     initial_logg = 2.5
     initial_MH = 0.0
+    initial_alpha = 0.0
     initial_vmic = 1.0
     initial_vmac = 0.0
     initial_vsini = 0.0
@@ -2668,7 +2714,7 @@ def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks):
             residuals = grid['PRIMARY'].data[:,isegment] - resampled_spectrum['flux'][isegment]
             chisq = np.sum((residuals)**2, axis=1)
             min_j = np.argmin(chisq)
-            filename, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff = grid['PARAMS'].data[min_j]
+            filename, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff = grid['PARAMS'].data[min_j]
 
         except Exception, e:
             print "Initial parameters could not be estimated"
@@ -2677,13 +2723,13 @@ def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks):
         finally:
             grid.close()
 
-    return initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff
+    return initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff
 
 
-def __turbospectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, regions=None, use_molecules=False, tmp_dir=None, timeout=1800):
-    return __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
+def __turbospectrum_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, regions=None, use_molecules=False, tmp_dir=None, timeout=1800):
+    return __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
 
-def __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, use_molecules=False, tmp_dir=None, timeout=1800):
+def __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, use_molecules=False, tmp_dir=None, timeout=1800):
     if not is_turbospectrum_support_enabled():
         raise Exception("Turbospectrum support is not enabled")
 
@@ -2757,9 +2803,9 @@ def __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH
     remove_tmp_linelist_file = False
     if atmosphere_layers_file is None:
         remove_tmp_atm_file = True
-        atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=atmosphere_layers_file, code="turbospectrum", tmp_dir=tmp_dir)
+        atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH, alpha, atmosphere_filename=atmosphere_layers_file, code="turbospectrum", tmp_dir=tmp_dir)
 
-    opacities_file = calculate_opacities(atmosphere_layers_file, atom_abundances, MH, microturbulence_vel, global_wave_base-10, global_wave_top+10, wave_step, verbose=verbose, opacities_filename=None, tmp_dir=tmp_dir)
+    opacities_file = calculate_opacities(atmosphere_layers_file, atom_abundances, MH, alpha, microturbulence_vel, global_wave_base-10, global_wave_top+10, wave_step, verbose=verbose, opacities_filename=None, tmp_dir=tmp_dir)
 
     if linelist_file is None:
         remove_tmp_linelist_file = True
@@ -2905,10 +2951,10 @@ def __turbospectrum_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH
     return synth_spectrum['flux']
 
 
-def __moog_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, regions=None, tmp_dir=None, timeout=1800):
-    return __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0, tmp_dir=tmp_dir, timeout=timeout)
+def __moog_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, regions=None, tmp_dir=None, timeout=1800):
+    return __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0, tmp_dir=tmp_dir, timeout=timeout)
 
-def __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, tmp_dir=None, timeout=1800):
+def __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, tmp_dir=None, timeout=1800):
     if not is_moog_support_enabled():
         raise Exception("MOOG support is not enabled")
 
@@ -3140,10 +3186,10 @@ def __moog_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelis
     return synth_spectrum['flux']
 
 
-def __synthe_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, molecules_files=None, regions=None, tmp_dir=None, timeout=1800):
-    return __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0, tmp_dir=tmp_dir, timeout=timeout)
+def __synthe_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, molecules_files=None, regions=None, tmp_dir=None, timeout=1800):
+    return __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0, tmp_dir=tmp_dir, timeout=timeout)
 
-def __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, molecules_files=None, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, tmp_dir=None, timeout=1800):
+def __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, molecules_files=None, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, tmp_dir=None, timeout=1800):
     if not is_synthe_support_enabled():
         raise Exception("Synthe support is not enabled")
 
@@ -3544,11 +3590,11 @@ def __synthe_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linel
 
 
 
-def __sme_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, timeout=1800):
-    return __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose, regions=regions, timeout=timeout, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0)
+def __sme_generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, timeout=1800):
+    return __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose, regions=regions, timeout=timeout, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0)
 
 
-def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None):
+def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None):
     if not is_sme_support_enabled():
         raise Exception("SME support is not enabled")
 
@@ -3733,7 +3779,7 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
 
 
 
-def __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, timeout=1800):
+def __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, timeout=1800):
     if not is_sme_support_enabled():
         raise Exception("SME support is not enabled")
 
@@ -3743,7 +3789,7 @@ def __sme_generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, linelist
     # aborts the full process because unknown reasons
     process_communication_queue = Queue()
 
-    p = Process(target=__sme_true_generate_spectrum, args=(process_communication_queue, waveobs, atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel), kwargs={'regions': regions, 'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'verbose': verbose})
+    p = Process(target=__sme_true_generate_spectrum, args=(process_communication_queue, waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel), kwargs={'regions': regions, 'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'verbose': verbose})
     p.start()
     num_seconds = 0
     # Constantly check that the process has not died without returning any result and blocking the queue call

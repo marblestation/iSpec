@@ -40,7 +40,7 @@ class Meter(Tkinter.Frame):
         elif value > 1.0:
             value = 1.0
         self._value = value
-        if text == None:
+        if text is None:
             #if no text is specified use the default percentage string:
             text = str(int(round(100 * value))) + ' %'
         self._canv.coords(self._rect, 0, 0, self._canv.winfo_width()*value, self._canv.winfo_height())

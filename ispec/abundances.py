@@ -175,40 +175,38 @@ def read_solar_abundances(abundances_filename):
 
 def determine_abundance_enchancements(MH, scale=None):
     """
-    Calculates alpha_enhancement, c_enhancement, n_enhancement, o_enhancement
+    Calculates alpha_enhancement
     from the metallicity (MH). By default the standard composition of MARCS
     model atmospheres is used, which is the most logical for most analysis.
     """
     if scale is None:
         # MARCS standard scale
         # - http://marcs.astro.uu.se/
-        scale = [(+1.00,   0.00,    0.00,    0.00,    0.00,  ),
-                 (+0.75,   0.00,    0.00,    0.00,    0.00,  ),
-                 (+0.50,   0.00,    0.00,    0.00,    0.00,  ),
-                 (+0.25,   0.00,    0.00,    0.00,    0.00,  ),
-                 (+0.00,   0.00,    0.00,    0.00,    0.00,  ),
-                 (-0.25,   +0.10,   0.00,    0.00,    +0.10, ),
-                 (-0.50,   +0.20,   0.00,    0.00,    +0.20, ),
-                 (-0.75,   +0.30,   0.00,    0.00,    +0.30, ),
-                 (-1.00,   +0.40,   0.00,    0.00,    +0.40, ),
-                 (-1.50,   +0.40,   0.00,    0.00,    +0.40, ),
-                 (-2.00,   +0.40,   0.00,    0.00,    +0.40, ),
-                 (-2.50,   +0.40,   0.00,    0.00,    +0.40, ),
-                 (-3.00,   +0.40,   0.00,    0.00,    +0.40, ),
-                 (-4.00,   +0.40,   0.00,    0.00,    +0.40, ),
-                 (-5.00,   +0.40,   0.00,    0.00,    +0.40, )]
-        scale = np.array(scale, dtype=[('[Fe/H]', float), ('[a/Fe]', float), ('[C/Fe]', float), ('[N/Fe]', float), ('[O/Fe]', float)])
+        scale = [(+1.00,   +0.00),
+                 (+0.75,   +0.00),
+                 (+0.50,   +0.00),
+                 (+0.25,   +0.00),
+                 (+0.00,   +0.00),
+                 (-0.25,   +0.10),
+                 (-0.50,   +0.20),
+                 (-0.75,   +0.30),
+                 (-1.00,   +0.40),
+                 (-1.50,   +0.40),
+                 (-2.00,   +0.40),
+                 (-2.50,   +0.40),
+                 (-3.00,   +0.40),
+                 (-4.00,   +0.40),
+                 (-5.00,   +0.40)]
+        scale = np.array(scale, dtype=[('[Fe/H]', float), ('[a/Fe]', float)])
     scale.sort(order='[Fe/H]') # It should be sorted or interpolation does not work properly
     alpha_enhancement = np.interp(MH, scale['[Fe/H]'], scale['[a/Fe]'])
-    c_enhancement = np.interp(MH, scale['[Fe/H]'], scale['[C/Fe]'])
-    n_enhancement = np.interp(MH, scale['[Fe/H]'], scale['[N/Fe]'])
-    o_enhancement = np.interp(MH, scale['[Fe/H]'], scale['[O/Fe]'])
-    return alpha_enhancement, c_enhancement, n_enhancement, o_enhancement
+    return alpha_enhancement
 
 
 
-
-def enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement):
+# TODO
+#abundances = enhance_solar_abundances(abundances, alpha, MH_compensantion=MH)
+def enhance_solar_abundances(abundances, alpha_enhancement, MH_compensantion=0.):
     """
     Scales alpha elements and CNO abundances.
     """
@@ -220,6 +218,13 @@ def enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enh
     n = abundances['code'] == 7
     #  8|O|Oxygen|16|2|8|3|3
     o = abundances['code'] == 8
+
+
+    # APOGEE alpha element: O, Mg, Si, S, Ca, and Ti
+    ## http://www.sdss.org/dr12/irspec/aspcap/
+    ## http://www.iac.es/proyecto/ATLAS-APOGEE/
+    # Kurucz alpha enchanced: O, Ne, Mg, Si, S, Ar, Ca, and Ti
+    ## http://kurucz.harvard.edu/grids.html
 
     # 10|Ne|Neon|18|2|10|5|5
     # 12|Mg|Magnesium|2|3|12|7|6
@@ -235,12 +240,15 @@ def enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enh
     # 22|Ti|Titanium|4|4|22|22|19
     alpha = np.logical_or(alpha, abundances['code'] == 22)
 
-    abundances['Abund'][c] += c_enhancement
-    abundances['Abund'][n] += n_enhancement
-    abundances['Abund'][o] += o_enhancement
-    abundances['Abund'][alpha] += alpha_enhancement
+    ## MH_compensantion is specified when it is known that abundances will
+    ## be scaled by MH after the alpha enhancement (thus it is necessary
+    ## to cancel that out)
+    #abundances['Abund'][c] += c_enhancement - MH_compensantion
+    #abundances['Abund'][n] += n_enhancement - MH_compensantion
+    #abundances['Abund'][o] += o_enhancement - MH_compensantion
+    abundances['Abund'][o] += alpha_enhancement - MH_compensantion # MARCS standard enhances Oxygen as well as alpha elements at the same rate
+    abundances['Abund'][alpha] += alpha_enhancement - MH_compensantion
 
-    #logging.info("alpha += %.2f; c += %.2f; n += %.2f; o += %.2f" % (alpha_enhancement, c_enhancement, n_enhancement, o_enhancement))
     return abundances
 
 
@@ -264,15 +272,17 @@ def write_solar_abundances(abundances, abundances_filename=None, tmp_dir=None):
     return out.name
 
 
-def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, gui_queue=None, timeout=1800, isotopes=None, code="spectrum", tmp_dir=None, enhance_abundances=True, scale=None):
+def determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, gui_queue=None, timeout=1800, isotopes=None, code="spectrum", tmp_dir=None):
     code = code.lower()
     if code not in ['spectrum', 'turbospectrum', 'moog', 'width']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
+    abundances = enhance_solar_abundances(abundances, alpha)
+
     if code == "turbospectrum":
-        return __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+        return __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir)
     elif code == "moog":
-        #return __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+        #return __moog_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir)
         success = False
         bad = linemasks['wave_A'] < 0 # All to false
         # MOOG can fail for some lines and it stops the execution, automatically detect that
@@ -283,7 +293,7 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
                     filtered_ignore = ignore[~bad]
                 else:
                     filtered_ignore = None
-                spec_abund, absolute_abund, x_over_h, x_over_fe = __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks[~bad], isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=filtered_ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+                spec_abund, absolute_abund, x_over_h, x_over_fe = __moog_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks[~bad], isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=filtered_ignore, verbose=verbose, tmp_dir=tmp_dir)
             except Exception, e:
                 # MOOG ERROR: CANNOT DECIDE ON LINE WAVELENGTH STEP SIZE FOR   5158.62   I QUIT!
                 if "CANNOT DECIDE ON LINE WAVELENGTH STEP SIZE FOR" in str(e):
@@ -306,7 +316,7 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
             x_over_fe = __reconstruct(nlines, x_over_fe, bad)
         return spec_abund, absolute_abund, x_over_h, x_over_fe
     elif code == "width":
-        #return __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+        #return __width_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir)
         success = False
         bad = linemasks['wave_A'] < 0 # All to false
         # WIDTH can fail for some lines and it stops the execution, automatically detect that
@@ -317,7 +327,7 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
                     filtered_ignore = ignore[~bad]
                 else:
                     filtered_ignore = None
-                spec_abund, absolute_abund, x_over_h, x_over_fe =  __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks[~bad], isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=filtered_ignore, verbose=verbose, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+                spec_abund, absolute_abund, x_over_h, x_over_fe =  __width_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks[~bad], isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=filtered_ignore, verbose=verbose, tmp_dir=tmp_dir)
             except Exception, e:
                 # WIDTH ERROR: 515.8551 -2.379  3.5  108707.400  2.0*********************01
                 if "WIDTH ERROR:" in str(e):
@@ -339,7 +349,7 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundance
             x_over_fe = __reconstruct(nlines, x_over_fe, bad)
         return spec_abund, absolute_abund, x_over_h, x_over_fe
     elif code == "spectrum":
-        return __spectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, gui_queue=gui_queue, timeout=timeout, tmp_dir=tmp_dir, enhance_abundances=enhance_abundances, scale=scale)
+        return __spectrum_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, gui_queue=gui_queue, timeout=timeout, tmp_dir=tmp_dir)
 
 def __reconstruct(nlines, spec_abund, bad):
     spec_abund_reconstructed = np.zeros(nlines)
@@ -348,7 +358,7 @@ def __reconstruct(nlines, spec_abund, bad):
     return spec_abund_reconstructed
 
 
-def __spectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, gui_queue=None, timeout=1800, tmp_dir=None, enhance_abundances=True, scale=None):
+def __spectrum_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, gui_queue=None, timeout=1800, tmp_dir=None):
     """
     Determine abundances from equivalent widths (linemasks previously fitted and
     cross-matched with an atomic linelist).
@@ -362,18 +372,13 @@ def __spectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks
       the quantity [X/H] where X is the species in question.
     """
 
-    # Enhance alpha elements + CNO abundances following MARCS standard composition
-    if enhance_abundances:
-        alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(MH, scale=scale)
-        abundances = enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
-
     linemasks_file = __spectrum_write_abundance_lines(linemasks)
     atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH, tmp_dir=tmp_dir)
     abundances_file = write_solar_abundances(abundances, tmp_dir=tmp_dir)
     num_measures = len(linemasks)
     nlayers = len(atmosphere_layers)
 
-    if ignore == None:
+    if ignore is None:
         ignore = np.ones(num_measures) # Compute fluxes for all the wavelengths
     # Filter out lines not supported by turbospectrum:
     lcode = linemasks['spectrum_support'] == "T"
@@ -403,10 +408,12 @@ def __spectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks
             if type(data) == tuple:
                 # Results received!
                 spec_abund, normal_abund, x_over_h = data
+
                 # If the reference solar abundances given to SPECTRUM were
                 # enhanced, we should correct it to put in the correct solar scale
-                if enhance_abundances:
-                    x_over_h = __correct_enhance_solar_abundances(linemasks, x_over_h, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
+                #abundances = enhance_solar_abundances(abundances, -1.*alpha)
+                x_over_h = __correct_enhance_solar_abundances(linemasks, x_over_h, alpha)
+
                 #import pudb
                 #pudb.set_trace()
                 #sun_log_Nx_over_Ntotal = abundances['Abund'][abundances['code'] == 26]]
@@ -507,7 +514,7 @@ def __turbospectrum_read_abund_results(abundances_filename):
     return abundances
 
 
-def __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, tmp_dir=None, enhance_abundances=True, scale=None):
+def __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, isotopes, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, tmp_dir=None):
     if not is_turbospectrum_support_enabled():
         raise Exception("Turbospectrum support is not enabled")
 
@@ -540,11 +547,8 @@ def __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, line
     wave_top = np.max(linemasks['wave_nm'])
     wave_step = 0.001
 
-    # Enhance alpha elements + CNO abundances following MARCS standard composition
-    original_abundances = abundances.copy()
-    if enhance_abundances:
-        alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(MH, scale=scale)
-        abundances = enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
+    # Remove alpha enhancement to obtain the original solar scale
+    original_abundances = enhance_solar_abundances(abundances, -1.*alpha)
 
     # Turbospectrum is not going to scale the abundances because we are indicating
     # our abundances in the input and that overrides any other prescription, thus
@@ -674,7 +678,7 @@ def __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, line
     return spec_abund, absolute_abund, x_over_h, x_over_fe
 
 
-def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, tmp_dir=None, enhance_abundances=True, scale=None):
+def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, isotopes, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, tmp_dir=None):
     if not is_moog_support_enabled():
         raise Exception("MOOG support is not enabled")
 
@@ -713,11 +717,8 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
     linelist_filename = write_atomic_linelist(sorted_tmp_linemasks[~filtered], linelist_filename=linelist_file, code="moog", tmp_dir=tmp_dir)
     linelist_filename = write_atomic_linelist(sorted_tmp_linemasks[~filtered], linelist_filename=barklem_linelist_file, code="moog_barklem", tmp_dir=tmp_dir)
 
-    # Enhance alpha elements + CNO abundances following MARCS standard composition
-    original_abundances = abundances.copy()
-    if enhance_abundances:
-        alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(MH, scale=scale)
-        abundances = enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
+    # Remove alpha enhancement to obtain the original solar scale
+    original_abundances = enhance_solar_abundances(abundances, -1.*alpha)
 
     # MOOG is not going to scale the abundances because we are indicating
     # our abundances in the input and that overrides any other prescription, thus
@@ -841,7 +842,7 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, is
     return spec_abund, absolute_abund, x_over_h, x_over_fe
 
 
-def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, isotopes, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, tmp_dir=None, enhance_abundances=True, scale=None):
+def __width_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, isotopes, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, tmp_dir=None):
     if not is_width_support_enabled():
         raise Exception("WIDTH support is not enabled")
 
@@ -857,11 +858,8 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
     tmp_execution_dir = tempfile.mkdtemp(dir=tmp_dir)
     os.symlink(width_molecules, tmp_execution_dir+"/fort.2")
 
-    # Enhance alpha elements + CNO abundances following MARCS standard composition
-    original_abundances = abundances.copy()
-    if enhance_abundances:
-        alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = determine_abundance_enchancements(MH, scale=scale)
-        abundances = enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
+    # Remove alpha enhancement to obtain the original solar scale
+    original_abundances = enhance_solar_abundances(abundances, -1.*alpha)
 
     previous_cwd = os.getcwd()
     os.chdir(tmp_execution_dir)
@@ -1068,7 +1066,7 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, i
     return spec_abund, absolute_abund, x_over_h, x_over_fe
 
 
-def __correct_enhance_solar_abundances(linemasks, abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement):
+def __correct_enhance_solar_abundances(linemasks, abundances, alpha_enhancement):
     """
     Descales alpha elements and CNO abundances.
     """
@@ -1096,9 +1094,10 @@ def __correct_enhance_solar_abundances(linemasks, abundances, alpha_enhancement,
     # 22|Ti|Titanium|4|4|22|22|19
     alpha = np.logical_or(alpha, code == 22)
 
-    abundances[c] -= c_enhancement
-    abundances[n] -= n_enhancement
-    abundances[o] -= o_enhancement
+    #abundances[c] -= c_enhancement
+    #abundances[n] -= n_enhancement
+    #abundances[o] -= o_enhancement
+    abundances[o] -= alpha_enhancement # MARCS standard enhances Oxygen as well as alpha elements at the same rate
     abundances[alpha] -= alpha_enhancement
 
     return abundances

@@ -47,7 +47,7 @@ class ConstantValue:
     def __call__(self, x, y):
         return self.value
 
-def valid_atmosphere_target(modeled_layers_pack, teff_target, logg_target, MH_target):
+def valid_atmosphere_target(modeled_layers_pack, target):
     """
     Checks if the objectif teff, logg and metallicity can be obtained by using the loaded model
 
@@ -59,68 +59,40 @@ def valid_atmosphere_target(modeled_layers_pack, teff_target, logg_target, MH_ta
         True if the target teff, logg and metallicity can be obtained with the
         models
     """
-    existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, delaunay_triangulation, kdtree, teff_range, logg_range, MH_range, base_dirname = modeled_layers_pack
+    existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname = modeled_layers_pack
 
-    nteff = len(teff_range)
-    nlogg = len(logg_range)
-    nMH  = len(MH_range)
+    for param in free_parameters:
+        param_target = target[param]
+        param_range = ranges[param]
+        ntotal = len(param_range)
 
-    teff_index = np.searchsorted(teff_range, teff_target)
-    if teff_index == 0 and teff_target != teff_range[0]:
-        #raise Exception("Out of range: low teff value")
-        return False
-    if teff_index >= nteff:
-        #raise Exception("Out of range: high teff value")
-        return False
-
-    logg_index = np.searchsorted(logg_range, logg_target)
-    if logg_index == 0 and logg_target != logg_range[0]:
-        #raise Exception("Out of range: low logg value")
-        return False
-    if logg_index >= nlogg:
-        #raise Exception("Out of range: high logg value")
-        return False
-
-    MH_index = np.searchsorted(MH_range, MH_target)
-    if MH_index == 0 and MH_target != MH_range[0]:
-        #raise Exception("Out of range: low MH value")
-        return False
-    if MH_index >= nMH:
-        #raise Exception("Out of range: high MH value")
-        return False
-
+        param_index = np.searchsorted(param_range, param_target)
+        if param_index == 0 and param_target != param_range[0]:
+            return False
+        if param_index >= ntotal:
+            return False
     return True
 
-def __find_matching_filename(filename_pattern):
-    filenames = glob.glob(filename_pattern)
-    if len(filenames) > 1:
-        raise Exception("Ambigous filename pattern '{}'".format(filename_pattern))
-    elif len(filenames) == 0:
-        raise Exception("Non existent filenames with pattern '{}'".format(filename_pattern))
-    return filenames[0]
-
-def __closest(kdtree, existing_points, existing_point_filename_pattern_builder, read_point_value, target_point):
+def __closest(kdtree, existing_points, read_point_value, target_point):
     """
     If there is no model in the extreme points, copy the closest one.
     input:
     - existing_points: points in the parameters space such as [( 3000.,  3.5,  0.  ,  0. ), ( 3000.,  3.5,  0.25,  0. ), ...]
-    - existing_point_filename_pattern_builder: function that returns a filename pattern to find the matching model
     - target_point: parameters for the target model
     output:
     - created extreme points such as [(3000, 0.0, -5.0, 0.0), (3000, 0.0, -5.0, 0.40000000000000002),]
     """
     distance, index = kdtree.query(target_point, k=1)
     closest_existing_point = existing_points[index]
-    closest_existing_point_filename = __find_matching_filename(existing_point_filename_pattern_builder(closest_existing_point))
+    closest_existing_point_filename = closest_existing_point['filename']
     value = read_point_value(closest_existing_point_filename)
     logging.info("Closest to target point '{}' is '{}'".format(" ".join(map(str, target_point)), " ".join(map(str, closest_existing_point))))
     return value
 
-def _interpolate(delaunay_triangulation, kdtree, existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, target_point):
+def _interpolate(delaunay_triangulation, kdtree, existing_points, filenames, read_point_value, value_fields, target_point):
     """
     input:
     - existing_points: points in the parameters space such as [( 3000.,  3.5,  0.  ,  0. ), ( 3000.,  3.5,  0.25,  0. ), ...]
-    - existing_point_filename_pattern_builder: function that returns a filename pattern to find the matching model
     - read_point_value: function to read the value from the model filename
     - target_point: parameters for the target model
     output:
@@ -129,13 +101,11 @@ def _interpolate(delaunay_triangulation, kdtree, existing_points, existing_point
     simplex = delaunay_triangulation.find_simplex(target_point)
     if np.any(simplex == -1):
         logging.warn("Target point '{}' is out of bound, using the closest".format(" ".join(map(str, target_point))))
-        return __closest(kdtree, existing_points, existing_point_filename_pattern_builder, read_point_value, target_point)
+        return __closest(kdtree, existing_points, read_point_value, target_point)
     index = delaunay_triangulation.simplices[simplex]
     points = []
     values = {}
-    existing_points = np.array(existing_points)
-    for point in existing_points[index]:
-        filename = __find_matching_filename(existing_point_filename_pattern_builder(point))
+    for point, filename in zip(existing_points[index], filenames[index]):
         value = read_point_value(filename)
         points.append(point.tolist())
         for field in value_fields:
@@ -147,7 +117,7 @@ def _interpolate(delaunay_triangulation, kdtree, existing_points, existing_point
     interpolated_values = None
     for field in value_fields:
         interpolator = LinearNDInterpolator(points, values[field])
-        interpolated_value = interpolator((target_point))
+        interpolated_value = interpolator((target_point))[0]
         if interpolated_values is None:
             interpolated_values = pd.DataFrame(interpolated_value, columns=[field])
         else:
@@ -156,7 +126,7 @@ def _interpolate(delaunay_triangulation, kdtree, existing_points, existing_point
 
 
 
-def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target, MH_target, code="spectrum"):
+def interpolate_atmosphere_layers(modeled_layers_pack, target, code="spectrum"):
     """
     Generates an interpolated atmosphere for a given teff, logg and metallicity
 
@@ -171,18 +141,25 @@ def interpolate_atmosphere_layers(modeled_layers_pack,  teff_target, logg_target
     if code not in ['spectrum', 'turbospectrum', 'moog', 'width', 'synthe', 'sme']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
+    existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname = modeled_layers_pack
+
     if code == "turbospectrum" and "MARCS" not in base_dirname:
         # Spherical models in turbospectrum require a parameters that is only provided in MARCS model atmosphere
         raise Exception("Turbospectrum can only be used with MARCS model atmospheres.")
 
-    if not valid_atmosphere_target(modeled_layers_pack, teff_target, logg_target, MH_target):
-        raise Exception("Target parameters '{} {} {}' are out of range.".format(teff_target, logg_target, MH_target))
+    if not valid_atmosphere_target(modeled_layers_pack, target):
+        raise Exception("Target parameters '{}' are out of range.".format(target))
 
-    existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, delaunay_triangulation, kdtree, teff_range, logg_range, MH_range, base_dirname = modeled_layers_pack
-    target_point = (teff_target, logg_target, MH_target)
-    interpolated_atm = _interpolate(delaunay_triangulation, kdtree, existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, target_point)
+    target_point = []
+    for param in free_parameters:
+        target_point.append(target[param])
+    interpolated_atm = _interpolate(delaunay_triangulation, kdtree, existing_points, filenames, read_point_value, value_fields, target_point)
 
-    interpolated_atm_compatible_format = interpolated_atm[["rhox", "temperature", "pgas", "xne", "abross", "accrad", "vturb", "logtau5", "depth", "pelectron"]]
+    compatible_fields = ["rhox", "temperature", "pgas", "xne", "abross", "accrad", "vturb", "logtau5", "depth", "pelectron"]
+    if "MARCS" in base_dirname:
+        compatible_fields.append("radius")
+    #interpolated_atm_compatible_format = interpolated_atm[compatible_fields]
+    interpolated_atm_compatible_format = pd.DataFrame(interpolated_atm)[compatible_fields].to_records(index=False)
     interpolated_atm_compatible_format = interpolated_atm_compatible_format.view(float).reshape(interpolated_atm_compatible_format.shape + (-1,))
     return interpolated_atm_compatible_format
 
@@ -280,12 +257,14 @@ def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None
     atm_file.close()
     return atm_file.name
 
-def model_atmosphere_is_closest_copy(modeled_layers_pack, teff_target, logg_target, MH_target):
+def model_atmosphere_is_closest_copy(modeled_layers_pack, target):
     """
         Returns True if model could not be interpolated
     """
-    existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, delaunay_triangulation, kdtree, teff_range, logg_range, MH_range, base_dirname = modeled_layers_pack
-    target_point = (teff_target, logg_target, MH_target)
+    existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname = modeled_layers_pack
+    target_point = []
+    for param in free_parameters:
+        target_point.append(target[param])
     simplex = delaunay_triangulation.find_simplex(target_point)
     target_point_cannot_be_interpolated = np.any(simplex == -1)
     return target_point_cannot_be_interpolated
@@ -303,7 +282,7 @@ def load_modeled_layers_pack(input_path):
     :type input_path: string
 
     :returns:
-        List of modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range and nlayers
+        List of modeled_layers, used_values_for_layers, proximity, teff_range, logg_range, MH_range, alpha_range and nlayers
     """
     if not os.path.isdir(input_path):
         raise Exception("Input path '{}' is not a directory".format(input_path))
@@ -311,29 +290,45 @@ def load_modeled_layers_pack(input_path):
     base_dirname = input_path
     atm_dirname = os.path.join(base_dirname, "grid")
     params_filename = os.path.join(base_dirname, "parameters.tsv")
+    cache_filename = os.path.join(base_dirname, "cache.dump")
 
     if not os.path.exists(atm_dirname):
         raise Exception("Grid path '{}' does not exist".format(atm_dirname))
     if not os.path.exists(params_filename):
         raise Exception("Parameters file '{}' does not exist".format(params_filename))
 
-    params = pd.read_csv(params_filename, sep="\t", names=["teff", "logg", "mh"])
-    teff_range = np.unique(params['teff'])
-    logg_range = np.unique(params['logg'])
-    MH_range = np.unique(params['mh'])
-    existing_points = zip(params["teff"], params["logg"], params["mh"])
+    parameters = pd.read_csv(params_filename, sep="\t")
+    filenames = base_dirname + "/" + parameters['filename']
+    filenames = np.asarray(filenames)
+    ranges = {}
+    free_parameters = parameters.columns.get_values().tolist()
+    free_parameters = filter(lambda x: not x.startswith("fixed_") and x != "filename", free_parameters)
+    for free_param in free_parameters:
+        free_param_range = np.unique(parameters[free_param])
+        ranges[free_param] = free_param_range
+    existing_points = parameters[free_parameters]
+    existing_points = np.array(existing_points)
 
-    delaunay_triangulation = spatial.Delaunay(existing_points)
-    kdtree = spatial.KDTree(existing_points)
+    # The delaunay triangulation and kdtree can be computationally expensive,
+    # do it once and save a pickle dump
+    use_dump = False
+    if os.path.exists(cache_filename):
+        delaunay_triangulation, kdtree = pickle.load(open(cache_filename, 'rb'))
+        if delaunay_triangulation.ndim == len(free_parameters) and delaunay_triangulation.npoints == len(existing_points):
+            use_dump = True
+
+    if not os.path.exists(cache_filename) or not use_dump:
+        delaunay_triangulation = spatial.Delaunay(existing_points)
+        kdtree = spatial.cKDTree(existing_points)
+        pickle.dump((delaunay_triangulation, kdtree), open(cache_filename, 'wb'))
 
     # Functions will receive the parameters in the same order
-    existing_point_filename_pattern_builder = lambda p: os.path.join(atm_dirname, "[ps]{0:0.0f}_g{1:+0.1f}*_m?.?_t??_st_z{2:+0.2f}_a*.fits.gz".format(*p))
     read_point_value = lambda f: fits.open(f)[1].data
 
     value_fields = ["rhox", "temperature", "pgas", "xne", "abross", "accrad", "vturb", "logtau5", "depth", "pelectron"]
     value_fields += ["alpha_enhancement", "c_enhancement", "n_enhancement", "o_enhancement", "rapid_neutron_capture_enhancement", "slow_neutron_capture_enhancement"]
     value_fields += ["radius", "mass", "vmic"]
-    return existing_points, existing_point_filename_pattern_builder, read_point_value, value_fields, delaunay_triangulation, kdtree, teff_range, logg_range, MH_range, base_dirname
+    return existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname
 
 
 def calculate_opacities(atmosphere_layers_file, abundances, MH, microturbulence_vel, wave_base, wave_top, wave_step, verbose=0, opacities_filename=None, tmp_dir=None):

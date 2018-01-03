@@ -970,6 +970,7 @@ def synthesize_spectrum(code="spectrum"):
     teff = 5771.0
     logg = 4.44
     MH = 0.00
+    alpha = ispec.determine_abundance_enchancements(MH)
     microturbulence_vel = ispec.estimate_vmic(teff, logg, MH) # 1.07
     macroturbulence = ispec.estimate_vmac(teff, logg, MH) # 4.21
     vsini = 1.60 # Sun
@@ -1024,22 +1025,21 @@ def synthesize_spectrum(code="spectrum"):
     fixed_abundances = None
 
     # Validate parameters
-    if not ispec.valid_atmosphere_target(modeled_layers_pack, teff, logg, MH):
+    if not ispec.valid_atmosphere_target(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}):
         msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                 fall out of theatmospheric models."
         print msg
 
     # Enhance alpha elements + CNO abundances following MARCS standard composition
-    alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = ispec.determine_abundance_enchancements(MH)
-    abundances = ispec.enhance_solar_abundances(solar_abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
+    abundances = ispec.enhance_solar_abundances(solar_abundances, alpha)
 
     # Prepare atmosphere model
-    atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH, code=code)
+    atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, code=code)
 
     # Synthesis
     synth_spectrum = ispec.create_spectrum_structure(np.arange(wave_base, wave_top, wave_step))
     synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], \
-            atmosphere_layers, teff, logg, MH, atomic_linelist, isotopes, abundances, \
+            atmosphere_layers, teff, logg, MH, alpha, atomic_linelist, isotopes, abundances, \
             fixed_abundances, microturbulence_vel = microturbulence_vel, \
             macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, \
             R=resolution, regions=regions, verbose=1,
@@ -1056,6 +1056,7 @@ def interpolate_spectrum():
     teff = 4025.0
     logg = 4.44
     MH = 0.00
+    alpha = ispec.determine_abundance_enchancements(MH)
     microturbulence_vel = ispec.estimate_vmic(teff, logg, MH) # 1.07
     macroturbulence = ispec.estimate_vmac(teff, logg, MH) # 4.21
     vsini = 1.60 # Sun
@@ -1082,7 +1083,7 @@ def interpolate_spectrum():
     regions = None
 
     # Validate parameters
-    if not ispec.valid_interpolated_spectrum_target(grid, teff, logg, MH):
+    if not ispec.valid_interpolated_spectrum_target(grid, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}):
         msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                 fall out of the spectral grid limits."
         print msg
@@ -1090,7 +1091,7 @@ def interpolate_spectrum():
     # Interpolation
     interpolated_spectrum = ispec.create_spectrum_structure(np.arange(wave_base, wave_top, wave_step))
     interpolated_spectrum['flux'] = ispec.generate_spectrum(interpolated_spectrum['waveobs'], \
-            atmosphere_layers, teff, logg, MH, atomic_linelist, isotopes, abundances, \
+            atmosphere_layers, teff, logg, MH, alpha, atomic_linelist, isotopes, abundances, \
             fixed_abundances, microturbulence_vel = microturbulence_vel, \
             macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, \
             R=resolution, regions=regions, verbose=1,
@@ -1248,6 +1249,7 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     initial_teff = 5750.0
     initial_logg = 4.5
     initial_MH = 0.00
+    initial_alpha = ispec.determine_abundance_enchancements(MH)
     initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
     initial_vmac = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH)
     initial_vsini = 2.0
@@ -1330,7 +1332,7 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     obs_spec, modeled_synth_spectrum, params, errors, abundances_found, loggf_found, status, stats_linemasks = \
             ispec.model_spectrum(normalized_star_spectrum, star_continuum_model, \
             modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, linelist_free_loggf, initial_teff, \
-            initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
+            initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, \
             initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=segments, \
             linemasks=line_regions, \
             enhance_abundances=True, \
@@ -1411,6 +1413,7 @@ def determine_astrophysical_parameters_using_grid():
     initial_teff = 5750.0
     initial_logg = 4.5
     initial_MH = 0.00
+    initial_alpha = 0.00
     initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
     initial_vmac = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH)
     initial_vsini = 2.0
@@ -1468,7 +1471,7 @@ def determine_astrophysical_parameters_using_grid():
     obs_spec, modeled_synth_spectrum, params, errors, abundances_found, loggf_found, status, stats_linemasks = \
             ispec.model_spectrum(normalized_star_spectrum, star_continuum_model, \
             modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, linelist_free_loggf, initial_teff, \
-            initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
+            initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, \
             initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=segments, \
             linemasks=line_regions, \
             enhance_abundances=True, \
@@ -1628,9 +1631,9 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     segments = np.hstack((segments, mgtriplet_segments))
 
     initial_vrad = 0
-    initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff = \
+    initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff = \
             ispec.estimate_initial_ap(normalized_star_spectrum, precomputed_grid_dir, initial_R, line_regions)
-    print "Initial estimation:", initial_teff, initial_logg, initial_MH, \
+    print "Initial estimation:", initial_teff, initial_logg, initial_MH, initial_alpha, \
             initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff
 
     #--- Change LOG level ----------------------------------------------------------
@@ -1642,7 +1645,7 @@ def determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(
     obs_spec, modeled_synth_spectrum, params, errors, abundances_found, loggf_found, status, stats_linemasks = \
             ispec.model_spectrum(normalized_star_spectrum, star_continuum_model, \
             modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, linelist_free_loggf, initial_teff, \
-            initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
+            initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, \
             initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=segments, \
             linemasks=line_regions, \
             enhance_abundances=True, \
@@ -1732,6 +1735,7 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     initial_teff = 5771.0
     initial_logg = 4.44
     initial_MH = 0.00
+    initial_alpha = 0.00
     initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
     initial_vmac = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH)
     initial_vsini = 1.60 # Sun
@@ -1811,7 +1815,7 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     obs_spec, modeled_synth_spectrum, params, errors, abundances_found, loggf_found, status, stats_linemasks = \
             ispec.model_spectrum(normalized_star_spectrum, star_continuum_model, \
             modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, linelist_free_loggf, initial_teff, \
-            initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
+            initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, \
             initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=segments, \
             linemasks=line_regions, \
             enhance_abundances=True, \
@@ -1891,6 +1895,7 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
     initial_teff = 5771.0
     initial_logg = 4.44
     initial_MH = 0.00
+    initial_alpha = 0.00
     initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
     initial_vmac = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH)
     initial_vsini = 1.60 # Sun
@@ -1981,7 +1986,7 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
         obs_spec, modeled_synth_spectrum, params, errors, abundances_found, loggf_found, status, stats_linemasks = \
                 ispec.model_spectrum(normalized_star_spectrum[wfilter], star_continuum_model, \
                 modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, linelist_free_loggf, initial_teff, \
-                initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
+                initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, \
                 initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=segments, \
                 linemasks=individual_line_regions, \
                 enhance_abundances=True, \
@@ -2063,6 +2068,7 @@ def determine_loggf_line_by_line_using_synth_spectra(code="spectrum"):
     initial_teff = 5771.0
     initial_logg = 4.44
     initial_MH = 0.00
+    initial_alpha = 0.00
     initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
     initial_vmac = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH)
     initial_vsini = 1.60 # Sun
@@ -2154,7 +2160,7 @@ def determine_loggf_line_by_line_using_synth_spectra(code="spectrum"):
         obs_spec, modeled_synth_spectrum, params, errors, abundances_found, loggf_found, status, stats_linemasks = \
                 ispec.model_spectrum(normalized_star_spectrum[wfilter], star_continuum_model, \
                 modeled_layers_pack, atomic_linelist[~lfilter], isotopes, solar_abundances, free_abundances, linelist_free_loggf, initial_teff, \
-                initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, \
+                initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, \
                 initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=segments, \
                 linemasks=individual_line_regions, \
                 enhance_abundances=True, \
@@ -2351,6 +2357,7 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
     initial_teff = 5777.0
     initial_logg = 4.44
     initial_MH = 0.00
+    initial_alpha = 0.00
     initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
     max_iterations = 10
 
@@ -2383,7 +2390,7 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
 
 
     # Validate parameters
-    if not ispec.valid_atmosphere_target(modeled_layers_pack, initial_teff, initial_logg, initial_MH):
+    if not ispec.valid_atmosphere_target(modeled_layers_pack, {'teff':initial_teff, 'logg':initial_logg, 'MH':initial_MH, 'alpha':initial_alpha}):
         msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                 fall out of theatmospheric models."
         print msg
@@ -2406,7 +2413,7 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
     efilter = np.logical_and(efilter, np.logical_not(unfitted))
 
     results = ispec.model_spectrum_from_ew(linemasks[efilter], modeled_layers_pack, \
-                        solar_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, \
+                        solar_abundances, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, \
                         free_params=["teff", "logg", "vmic"], \
                         adjust_model_metalicity=True, \
                         max_iterations=max_iterations, \
@@ -2595,6 +2602,7 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
     teff = 5777.0
     logg = 4.44
     MH = 0.00
+    alpha = 0.00
     microturbulence_vel = 1.0
 
     # Selected model amtosphere and solar abundances
@@ -2618,15 +2626,15 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
     solar_abundances = ispec.read_solar_abundances(solar_abundances_file)
 
     # Validate parameters
-    if not ispec.valid_atmosphere_target(modeled_layers_pack, teff, logg, MH):
+    if not ispec.valid_atmosphere_target(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}):
         msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                 fall out of theatmospheric models."
         print msg
 
     # Prepare atmosphere model
-    atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH, code=code)
+    atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, code=code)
     spec_abund, normal_abund, x_over_h, x_over_fe = ispec.determine_abundances(atmosphere_layers, \
-            teff, logg, MH, linemasks, solar_abundances, microturbulence_vel = microturbulence_vel, \
+            teff, logg, MH, alpha, linemasks, solar_abundances, microturbulence_vel = microturbulence_vel, \
             verbose=1, code=code)
 
     bad = np.isnan(x_over_h)
@@ -2645,6 +2653,7 @@ def calculate_theoretical_ew_and_depth(code="spectrum"):
     teff = 5777.0
     logg = 4.44
     MH = 0.00
+    alpha = 0.00
     microturbulence_vel = 1.0
 
     # Selected model amtosphere, linelist and solar abundances
@@ -2682,17 +2691,16 @@ def calculate_theoretical_ew_and_depth(code="spectrum"):
     solar_abundances = ispec.read_solar_abundances(solar_abundances_file)
 
     # Validate parameters
-    if not ispec.valid_atmosphere_target(modeled_layers_pack, teff, logg, MH):
+    if not ispec.valid_atmosphere_target(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}):
         msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                 fall out of theatmospheric models."
         print msg
 
     # Enhance alpha elements + CNO abundances following MARCS standard composition
-    alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = ispec.determine_abundance_enchancements(MH)
-    abundances = ispec.enhance_solar_abundances(solar_abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
+    abundances = ispec.enhance_solar_abundances(solar_abundances, alpha)
 
     # Prepare atmosphere model
-    atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH)
+    atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha})
 
     # Synthesis
     #output_wave, output_code, output_ew, output_depth = ispec.calculate_theoretical_ew_and_depth(atmosphere_layers, \
@@ -2764,9 +2772,10 @@ def generate_and_plot_YY_isochrone():
 def interpolate_atmosphere(code="spectrum"):
     #--- Synthesizing spectrum -----------------------------------------------------
     # Parameters
-    teff = 5777.0
+    teff = 4777.0
     logg = 4.44
-    MH = 0.05
+    MH = 0.00
+    alpha = 0.00
 
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
@@ -2775,19 +2784,21 @@ def interpolate_atmosphere(code="spectrum"):
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.KuruczNOVER/"
+    #model = ispec_dir + "/input/atmospheres/ATLAS9.KuruczODFNEW/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/"
 
     # Load model atmospheres
     modeled_layers_pack = ispec.load_modeled_layers_pack(model)
 
     # Validate parameters
-    if not ispec.valid_atmosphere_target(modeled_layers_pack, teff, logg, MH):
+    if not ispec.valid_atmosphere_target(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}):
         msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                 fall out of theatmospheric models."
         print msg
 
     # Prepare atmosphere model
-    atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, teff, logg, MH, code=code)
+    atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, code=code)
     atmosphere_layers_file = "example_atmosphere.txt"
     atmosphere_layers_file = ispec.write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=atmosphere_layers_file, code=code)
 
@@ -2855,24 +2866,24 @@ if __name__ == '__main__':
     #determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(code="synthe")
     determine_abundances_using_synth_spectra(code="spectrum")
     determine_abundances_using_synth_spectra(code="turbospectrum")
-    determine_abundances_using_synth_spectra(code="sme")
+    determine_abundances_using_synth_spectra(code="sme") # TODO: Problem
     determine_abundances_using_synth_spectra(code="moog")
     determine_abundances_using_synth_spectra(code="synthe")
     determine_abundances_line_by_line_using_synth_spectra(code="spectrum")
     determine_abundances_line_by_line_using_synth_spectra(code="turbospectrum")
-    determine_abundances_line_by_line_using_synth_spectra(code="sme")
+    determine_abundances_line_by_line_using_synth_spectra(code="sme") # TODO: Problem
     determine_abundances_line_by_line_using_synth_spectra(code="moog")
     determine_abundances_line_by_line_using_synth_spectra(code="synthe")
     determine_loggf_line_by_line_using_synth_spectra(code="spectrum")
     determine_loggf_line_by_line_using_synth_spectra(code="turbospectrum")
-    determine_loggf_line_by_line_using_synth_spectra(code="sme")
+    determine_loggf_line_by_line_using_synth_spectra(code="sme") # TODO: Problem
     determine_loggf_line_by_line_using_synth_spectra(code="moog")
     determine_loggf_line_by_line_using_synth_spectra(code="synthe")
     determine_astrophysical_parameters_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=True)
     determine_astrophysical_parameters_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=False)
     determine_astrophysical_parameters_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=True)
     determine_astrophysical_parameters_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=False)
-    #determine_astrophysical_parameters_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=True)
+    determine_astrophysical_parameters_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=True)
     #determine_astrophysical_parameters_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=False)
     #determine_astrophysical_parameters_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=True)
     #determine_astrophysical_parameters_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=False)
