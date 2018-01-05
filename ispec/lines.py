@@ -28,17 +28,18 @@ import gzip
 import os
 import subprocess
 import shutil
-from common import *
-from continuum import *
-from lines import *
-from spectrum import *
 import matplotlib.pyplot as plt
-from mpfitmodels import GaussianModel
-from mpfitmodels import VoigtModel
 import log
 import logging
 import copy
 import re
+
+from common import *
+from continuum import *
+from lines import *
+from spectrum import *
+from modeling.mpfitmodels import GaussianModel
+from modeling.mpfitmodels import VoigtModel
 
 
 

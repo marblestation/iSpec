@@ -1,12 +1,266 @@
-#!/usr/bin/env python
+#
+#    This file is part of the Integrated Spectroscopic Framework (iSpec).
+#    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
+#
+#    iSpec is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    iSpec is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
+#
+#    You should have received a copy of the GNU Affero General Public License
+#    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
+#
 import os
 import sys
-import numpy as np
 import ctypes
-import sys
-from common import is_sme_support_enabled
-from spectrum import create_spectrum_structure, convolve_spectrum, resample_spectrum
+import numpy as np
+from multiprocessing import Process
+from multiprocessing import Queue
+from Queue import Empty
+import logging
 
+from ispec.common import is_sme_support_enabled
+from ispec.spectrum import create_spectrum_structure, resample_spectrum
+from effects import _filter_linelist, apply_post_fundamental_effects
+
+
+def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, timeout=1800):
+    return generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose, regions=regions, timeout=timeout, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0)
+
+
+def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None):
+    if not is_sme_support_enabled():
+        raise Exception("SME support is not enabled")
+
+
+    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../../"
+    sme_dir = ispec_dir + "/synthesizer/sme/"
+    from sys import platform as _platform
+    system_64bits = sys.maxsize > 2**32
+    if _platform == "linux" or _platform == "linux2":
+        # linux
+        if system_64bits:
+            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.linux.x86_64.64")
+        else:
+            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.linux.x86.32")
+    elif _platform == "darwin":
+        # OS X
+        if system_64bits:
+            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.darwin.x86_64.64")
+        else:
+            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.darwin.i386.32")
+    else:
+        # Windows
+        if system_64bits:
+            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.Win32.x86_64.64")
+        else:
+            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.Win32.x86.32")
+
+    #logging.warn("SME does not support isotope modifications")
+
+    waveobs = waveobs.copy()
+    waveobs.sort()
+    #wave_step = waveobs[1] - waveobs[0] # 0.001
+    wave_step = np.max((0.001, np.min(waveobs[1:] - waveobs[:-1])))
+
+    if regions is None:
+        global_wave_base = np.min(waveobs)
+        global_wave_top = np.max(waveobs)
+        regions = np.recarray((1,),  dtype=[('wave_base', float), ('wave_top', float)])
+        regions['wave_base'][0] = global_wave_base
+        regions['wave_top'][0] = global_wave_top
+    else:
+        global_wave_base = np.min(regions['wave_base'])
+        global_wave_top = np.max(regions['wave_top'])
+
+    # Limit linelist
+    linelist = _filter_linelist(linelist, regions)
+
+    # Update abundances with the ones that should be fixed to a given value and
+    # not affected by metallicity scalation
+    atom_abundances = abundances[abundances['code'] <= 92]
+    if fixed_abundances is not None and len(fixed_abundances) > 0:
+        atom_abundances = atom_abundances.copy()
+        for fixed_abundance in fixed_abundances:
+            index = np.where(atom_abundances['code'] == fixed_abundance['code'])[0]
+            # WARNING: Fix the abundance BUT also substract MH because SME will scale it later on
+            atom_abundances['Abund'][index] = fixed_abundance['Abund'] - MH
+
+    radius = atmosphere_layers[0][-1]
+    nvalues = len(atmosphere_layers[0])
+    if nvalues == 11 and radius > 2.0: # Compare to 2.0 instead of 1.0 to avoid floating point imprecisions
+        logging.info("Spherical model atmosphere with radius %.2e cm" % (radius))
+        spherical_model = True
+    else:
+        spherical_model = False
+
+    #---------------------------------------------------------------------------
+    # *.- Entry.SMELibraryVersion
+    #msg = _sme_librrayversion(sme)
+
+    #---------------------------------------------------------------------------
+    # 0.- Entry.InputLineList (passlinelist.pro)
+    if verbose == 1:
+        logging.info("SME InputLineList")
+    msg = _sme_inputlinelist(sme, linelist)
+    if msg != "''":
+        logging.warn(msg)
+
+    #---------------------------------------------------------------------------
+    # 1.- Entry.InputModel (passmodel.pro)
+    if verbose == 1:
+        logging.info("SME InputModel")
+    msg = _sme_inputmodel(sme, teff, logg, MH, microturbulence_vel, atmosphere_layers, atom_abundances, spherical_model)
+    if msg != "''":
+        logging.warn(msg)
+
+    #---------------------------------------------------------------------------
+    # 2.- Entry.InputNLTE
+
+    #---------------------------------------------------------------------------
+    # 3.- Entry.InputAbund (passabund.pro)
+    if verbose == 1:
+        logging.info("SME InputAbund")
+    msg = _sme_inputabund(sme, atom_abundances, MH)
+    if msg != "''":
+        logging.warn(msg)
+
+    #---------------------------------------------------------------------------
+    # 4.- Entry.Ionization
+    if verbose == 1:
+        logging.info("SME Ionization")
+    msg = _sme_ionization(sme)
+    if msg != "''":
+        logging.warn(msg)
+
+    #---------------------------------------------------------------------------
+    # 5.- Entry.SetVWscale
+    if verbose == 1:
+        logging.info("SME SetVWscale")
+    msg = _sme_setvwscale(sme)
+    if msg != "''":
+        logging.warn(msg)
+
+
+    synth_fluxes = []
+    synth_waveobs = []
+    for i, region in enumerate(regions):
+        # It is better not to synthesize in a single run a big chunk of wavelength so
+        # we split the computation in several pieces
+        max_segment = 100. # nm
+        if (region['wave_top'] - region['wave_base'])/wave_step > max_segment/wave_step:
+            segment_wave_base = np.arange(region['wave_base'], region['wave_top'], max_segment)
+            segments = np.recarray((len(segment_wave_base),),  dtype=[('wave_base', float), ('wave_top', float)])
+            segments['wave_base'] = segment_wave_base
+            segments['wave_top'] = segment_wave_base + max_segment - wave_step
+            segments['wave_top'][-1] = region['wave_top'] # Last segment should not over pass the original global limits
+        else:
+            segments = np.recarray((1,),  dtype=[('wave_base', float), ('wave_top', float)])
+            segments['wave_base'][0] = region['wave_base']
+            segments['wave_top'][0] = region['wave_top']
+
+        for segment in segments:
+            wave_base = segment['wave_base']
+            wave_top = segment['wave_top']
+            if verbose == 1:
+                logging.info("Segment %.2f - %.2f" % (wave_base, wave_top))
+
+
+            #---------------------------------------------------------------------------
+            # 6.- Entry.InputWaveRange (passwaverange.pro)
+            if verbose == 1:
+                logging.info("SME InputWaveRange")
+            msg = _sme_inputwaverange(sme, wave_base*10., wave_top*10.)
+            if msg != "''":
+                logging.warn(msg)
+
+            #---------------------------------------------------------------------------
+            # 7.- Entry.Opacity
+            if verbose == 1:
+                logging.info("SME Opacity")
+            msg = _sme_opacity(sme)
+            if msg != "''":
+                logging.warn(msg)
+
+            #---------------------------------------------------------------------------
+            # 8.- Entry.Transf
+            if verbose == 1:
+                logging.info("SME Transf")
+            first_execution = i == 0
+            #nwmax = int((wave_top - wave_base) / wave_step) * 2
+            nwmax = 200000
+            synth_waveobs_tmp, synth_fluxes_tmp = _sme_transf(sme, sme_dir, nwmax, keep_lineop=not first_execution)
+            if msg != "''":
+                logging.warn(msg)
+
+            synth_waveobs = np.hstack((synth_waveobs, synth_waveobs_tmp))
+            synth_fluxes = np.hstack((synth_fluxes, synth_fluxes_tmp))
+
+    synth_spectrum = create_spectrum_structure(synth_waveobs/10., synth_fluxes)
+    synth_spectrum.sort(order=['waveobs'])
+
+    # Make sure we return the number of expected fluxes
+    if not np.array_equal(synth_spectrum['waveobs'], waveobs):
+        synth_spectrum = resample_spectrum(synth_spectrum, waveobs, method="linear", zero_edges=True)
+
+    segments = None
+    vrad = (0,)
+    synth_spectrum['flux'] = apply_post_fundamental_effects(synth_spectrum['waveobs'], synth_spectrum['flux'], segments, \
+                    macroturbulence=macroturbulence, vsini=vsini, \
+                    limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
+
+    process_communication_queue.put(synth_spectrum['flux'])
+
+
+
+def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, timeout=1800):
+    if not is_sme_support_enabled():
+        raise Exception("SME support is not enabled")
+
+    fluxes = np.zeros(len(waveobs))
+
+    # It is better to run SME in a separate process since sometimes it
+    # aborts the full process because unknown reasons
+    process_communication_queue = Queue()
+
+    p = Process(target=__sme_true_generate_spectrum, args=(process_communication_queue, waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel), kwargs={'regions': regions, 'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'verbose': verbose})
+    p.start()
+    num_seconds = 0
+    # Constantly check that the process has not died without returning any result and blocking the queue call
+    while p.is_alive() and num_seconds < timeout:
+        try:
+            data = process_communication_queue.get(timeout=1)
+            if type(data) == np.ndarray:
+                # Results received!
+                fluxes = data
+                break
+            #elif gui_queue is not None:
+                ## GUI update
+                ## It allows communications between process in order to update the GUI progress bar
+                #gui_queue.put(data)
+            process_communication_queue.task_done()
+        except Empty:
+            # No results, continue waiting
+            pass
+        num_seconds += 1
+    if num_seconds >= timeout:
+        logging.error("A timeout has occurred in the SME synthesis process.")
+        p.terminate()
+    elif np.all(fluxes == 0):
+        logging.error("SME has failed.")
+        p.terminate()
+    else:
+        p.join()
+
+    return fluxes
+
+####################################################################################################
+####################################################################################################
 class IDL_STRING(ctypes.Structure):
     _fields_ = [
                 ('slen', ctypes.c_int),

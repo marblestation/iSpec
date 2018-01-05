@@ -17,7 +17,7 @@
 #
 import numpy as np
 from atmospheres import *
-from lines import write_atomic_linelist, van_der_Waals_ABO_to_single_gamma_format
+from lines import write_atomic_linelist
 from common import is_turbospectrum_support_enabled, is_spectrum_support_enabled, is_moog_support_enabled, is_width_support_enabled
 from multiprocessing import Process
 from multiprocessing import Queue

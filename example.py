@@ -1069,8 +1069,8 @@ def interpolate_spectrum():
     wave_top = 525.0
 
     code = "grid"
-    #precomputed_grid_dir = ispec_dir + "/input/grid/GES.480_680_nm/"
     precomputed_grid_dir = ispec_dir + "/input/grid/SPECTRUM_MARCS.GES_VALD.480_680nm/"
+    #precomputed_grid_dir = ispec_dir + "/input/grid/SPECTRUM_MARCS.GES_GESv5_atom_hfs_iso.480_680nm/"
     grid = ispec.load_spectral_grid(precomputed_grid_dir)
 
     atomic_linelist = None
@@ -1083,7 +1083,7 @@ def interpolate_spectrum():
     regions = None
 
     # Validate parameters
-    if not ispec.valid_interpolated_spectrum_target(grid, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}):
+    if not ispec.valid_interpolated_spectrum_target(grid, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha, 'vmic': microturbulence_vel}):
         msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                 fall out of the spectral grid limits."
         print msg
@@ -1126,21 +1126,28 @@ def generate_new_random_realizations_from_spectrum():
 def precompute_synthetic_grid(code="spectrum"):
     precomputed_grid_dir = "example_grid_%s/" % (code)
 
-    # - Read grid ranges from file
+    ## - Read grid ranges from file
+    #from astropy.io import ascii
     #ranges_filename = "input/grid/grid_ranges.txt"
     #ranges = ascii.read(ranges_filename, delimiter="\t")
-    # - or define them directly here (example of only 2 reference points):
-    ranges = np.recarray((2,),  dtype=[('Teff', int), ('logg', float), ('MH', float)])
-    ranges['Teff'][0] = 5500
+    ## - or define them directly here (example of only 2 reference points):
+    ranges = np.recarray((2,),  dtype=[('teff', int), ('logg', float), ('MH', float), ('alpha', float), ('vmic', float)])
+    ranges['teff'][0] = 5500
     ranges['logg'][0] = 4.5
     ranges['MH'][0] = 0.0
-    ranges['Teff'][1] = 3500
+    ranges['alpha'][0] = 0.0
+    ranges['vmic'][0] = ispec.estimate_vmic(ranges['teff'][0], ranges['logg'][0], ranges['MH'][0])
+    ranges['teff'][1] = 3500
     ranges['logg'][1] = 1.5
     ranges['MH'][1] = 0.0
+    ranges['alpha'][1] = 0.0
+    ranges['vmic'][1] = ispec.estimate_vmic(ranges['teff'][1], ranges['logg'][1], ranges['MH'][1])
 
     # Wavelengths
-    initial_wave = 480.0
-    final_wave = 680.0
+    #initial_wave = 480.0
+    #final_wave = 680.0
+    initial_wave = 515.0
+    final_wave = 525.0
     step_wave = 0.001
     wavelengths = np.arange(initial_wave, final_wave, step_wave)
 
@@ -1191,7 +1198,7 @@ def precompute_synthetic_grid(code="spectrum"):
     ispec.precompute_synthetic_grid(precomputed_grid_dir, ranges, wavelengths, to_resolution, \
                                     modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, \
                                     segments=None, number_of_processes=number_of_processes, \
-                                    code=code)
+                                    code=code, steps=False)
 
 
 def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
@@ -1249,7 +1256,7 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     initial_teff = 5750.0
     initial_logg = 4.5
     initial_MH = 0.00
-    initial_alpha = ispec.determine_abundance_enchancements(MH)
+    initial_alpha = ispec.determine_abundance_enchancements(initial_MH)
     initial_vmic = ispec.estimate_vmic(initial_teff, initial_logg, initial_MH)
     initial_vmac = ispec.estimate_vmac(initial_teff, initial_logg, initial_MH)
     initial_vsini = 2.0
@@ -1423,7 +1430,6 @@ def determine_astrophysical_parameters_using_grid():
     max_iterations = 20
 
     code = "grid"
-    #precomputed_grid_dir = ispec_dir + "/input/grid/GES.480_680_nm/"
     precomputed_grid_dir = ispec_dir + "/input/grid/SPECTRUM_MARCS.GES_VALD.480_680nm/"
     #precomputed_grid_dir = ispec_dir + "/input/grid/SPECTRUM_MARCS.GES_GESv5_atom_hfs_iso.480_680nm/"
 
@@ -1435,8 +1441,8 @@ def determine_astrophysical_parameters_using_grid():
     linelist_free_loggf = None
 
     # Free parameters (vmic cannot be used as a free parameter when using a spectral grid)
-    #free_params = ["teff", "logg", "MH", "vmac", "vsini", "R", "vrad", "limb_darkening_coeff"]
-    free_params = ["teff", "logg", "MH", "R"]
+    #free_params = ["teff", "logg", "MH", "alpha", "vmic", "vmac", "vsini", "R", "vrad", "limb_darkening_coeff"]
+    free_params = ["teff", "logg", "MH"]
 
     # Line regions
     line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_good_for_params_all.txt")
@@ -1474,7 +1480,7 @@ def determine_astrophysical_parameters_using_grid():
             initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, \
             initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=segments, \
             linemasks=line_regions, \
-            enhance_abundances=True, \
+            enhance_abundances=False, \
             use_errors = True, \
             vmic_from_empirical_relation = False, \
             vmac_from_empirical_relation = True, \
@@ -2705,7 +2711,7 @@ def calculate_theoretical_ew_and_depth(code="spectrum"):
     # Synthesis
     #output_wave, output_code, output_ew, output_depth = ispec.calculate_theoretical_ew_and_depth(atmosphere_layers, \
     new_atomic_linelist = ispec.calculate_theoretical_ew_and_depth(atmosphere_layers, \
-            teff, logg, MH, \
+            teff, logg, MH, alpha, \
             atomic_linelist[:10], isotopes, abundances, microturbulence_vel=microturbulence_vel, \
             verbose=1, gui_queue=None, timeout=900)
     ispec.write_atomic_linelist(new_atomic_linelist, linelist_filename="example_linelist.txt")
@@ -2866,24 +2872,24 @@ if __name__ == '__main__':
     #determine_astrophysical_parameters_using_synth_spectra_and_precomputed_grid(code="synthe")
     determine_abundances_using_synth_spectra(code="spectrum")
     determine_abundances_using_synth_spectra(code="turbospectrum")
-    determine_abundances_using_synth_spectra(code="sme") # TODO: Problem
+    determine_abundances_using_synth_spectra(code="sme")
     determine_abundances_using_synth_spectra(code="moog")
     determine_abundances_using_synth_spectra(code="synthe")
     determine_abundances_line_by_line_using_synth_spectra(code="spectrum")
     determine_abundances_line_by_line_using_synth_spectra(code="turbospectrum")
-    determine_abundances_line_by_line_using_synth_spectra(code="sme") # TODO: Problem
+    determine_abundances_line_by_line_using_synth_spectra(code="sme")
     determine_abundances_line_by_line_using_synth_spectra(code="moog")
     determine_abundances_line_by_line_using_synth_spectra(code="synthe")
     determine_loggf_line_by_line_using_synth_spectra(code="spectrum")
     determine_loggf_line_by_line_using_synth_spectra(code="turbospectrum")
-    determine_loggf_line_by_line_using_synth_spectra(code="sme") # TODO: Problem
+    determine_loggf_line_by_line_using_synth_spectra(code="sme")
     determine_loggf_line_by_line_using_synth_spectra(code="moog")
     determine_loggf_line_by_line_using_synth_spectra(code="synthe")
     determine_astrophysical_parameters_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=True)
     determine_astrophysical_parameters_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=False)
     determine_astrophysical_parameters_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=True)
     determine_astrophysical_parameters_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=False)
-    determine_astrophysical_parameters_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=True)
+    #determine_astrophysical_parameters_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=True)
     #determine_astrophysical_parameters_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=False)
     #determine_astrophysical_parameters_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=True)
     #determine_astrophysical_parameters_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=False)

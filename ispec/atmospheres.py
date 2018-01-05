@@ -73,7 +73,7 @@ def valid_atmosphere_target(modeled_layers_pack, target):
             return False
     return True
 
-def __closest(kdtree, existing_points, read_point_value, target_point):
+def __closest(kdtree, existing_points, filenames, read_point_value, target_point):
     """
     If there is no model in the extreme points, copy the closest one.
     input:
@@ -84,7 +84,7 @@ def __closest(kdtree, existing_points, read_point_value, target_point):
     """
     distance, index = kdtree.query(target_point, k=1)
     closest_existing_point = existing_points[index]
-    closest_existing_point_filename = closest_existing_point['filename']
+    closest_existing_point_filename = filenames[index]
     value = read_point_value(closest_existing_point_filename)
     logging.info("Closest to target point '{}' is '{}'".format(" ".join(map(str, target_point)), " ".join(map(str, closest_existing_point))))
     return value
@@ -101,7 +101,7 @@ def _interpolate(delaunay_triangulation, kdtree, existing_points, filenames, rea
     simplex = delaunay_triangulation.find_simplex(target_point)
     if np.any(simplex == -1):
         logging.warn("Target point '{}' is out of bound, using the closest".format(" ".join(map(str, target_point))))
-        return __closest(kdtree, existing_points, read_point_value, target_point)
+        return __closest(kdtree, existing_points, filenames, read_point_value, target_point)
     index = delaunay_triangulation.simplices[simplex]
     points = []
     values = {}
