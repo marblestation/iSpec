@@ -135,6 +135,9 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
         reference_grid_filename = output_dirname + "/convolved_grid_%i.fits.gz" % to_resolution
     fits_dir = os.path.join(output_dirname, "grid/")
     mkdir_p(fits_dir)
+    if steps:
+        steps_fits_dir = os.path.join(output_dirname, "steps/")
+        mkdir_p(steps_fits_dir)
 
     # Parallelization pool
     if number_of_processes == 1:
@@ -156,27 +159,32 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
         vsini = 0.0 # This can be modified after synthesis if needed
         limb_darkening_coeff = 0.00 # This can be modified after synthesis if needed
         resolution = 0 # This can be modified after synthesis if needed
+        is_step = False
         points = [
-                    (teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff),
+                    (teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, is_step),
                 ]
         if steps:
+            is_step = True
             # For each reference point, calculate also the variations that iSpec will perform in the first iteration
             points += [ # Final unconvolved spectra where vmic/vmac are free and do not follow vmic/vmac empirical relations
-                        (teff+Constants.SYNTH_STEP_TEFF, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff),
-                        (teff, logg+Constants.SYNTH_STEP_LOGG, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff),
-                        (teff, logg, MH+Constants.SYNTH_STEP_MH, alpha, vmic, vmac, vsini, limb_darkening_coeff),
-                        (teff, logg, MH, alpha+Constants.SYNTH_STEP_ALPHA, vmic, vmac, vsini, limb_darkening_coeff),
-                        (teff, logg, MH, alpha, vmic+Constants.SYNTH_STEP_VMIC, vmac, vsini, limb_darkening_coeff),
+                        (teff+Constants.SYNTH_STEP_TEFF, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, is_step),
+                        (teff, logg+Constants.SYNTH_STEP_LOGG, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, is_step),
+                        (teff, logg, MH+Constants.SYNTH_STEP_MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, is_step),
+                        (teff, logg, MH, alpha+Constants.SYNTH_STEP_ALPHA, vmic, vmac, vsini, limb_darkening_coeff, is_step),
+                        (teff, logg, MH, alpha, vmic+Constants.SYNTH_STEP_VMIC, vmac, vsini, limb_darkening_coeff, is_step),
                     ]
             points += [
                         # Final unconvolved spectra where vmic is not free and does follow vmic empirical relations
-                        (teff+Constants.SYNTH_STEP_TEFF, logg, MH, alpha, estimate_vmic(teff+Constants.SYNTH_STEP_TEFF, logg, MH), vmac, vsini, limb_darkening_coeff),
-                        (teff, logg+Constants.SYNTH_STEP_LOGG, MH, alpha, estimate_vmic(teff, logg+Constants.SYNTH_STEP_LOGG, MH), vmac, vsini, limb_darkening_coeff),
-                        (teff, logg, MH+Constants.SYNTH_STEP_MH, alpha, estimate_vmic(teff, logg, MH+Constants.SYNTH_STEP_MH), vmac, vsini, limb_darkening_coeff),
+                        (teff+Constants.SYNTH_STEP_TEFF, logg, MH, alpha, estimate_vmic(teff+Constants.SYNTH_STEP_TEFF, logg, MH), vmac, vsini, limb_darkening_coeff, is_step),
+                        (teff, logg+Constants.SYNTH_STEP_LOGG, MH, alpha, estimate_vmic(teff, logg+Constants.SYNTH_STEP_LOGG, MH), vmac, vsini, limb_darkening_coeff, is_step),
+                        (teff, logg, MH+Constants.SYNTH_STEP_MH, alpha, estimate_vmic(teff, logg, MH+Constants.SYNTH_STEP_MH), vmac, vsini, limb_darkening_coeff, is_step),
                     ]
 
-        for j, (teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff) in enumerate(points):
-            filename_out = fits_dir + "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}".format(int(teff), logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff) + ".fits.gz"
+        for j, (teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, is_step) in enumerate(points):
+            if is_step:
+                filename_out = steps_fits_dir + "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}".format(int(teff), logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff) + ".fits.gz"
+            else:
+                filename_out = fits_dir + "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}".format(int(teff), logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff) + ".fits.gz"
 
             if os.path.exists(filename_out):
                 print "Skipping", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, "already computed"
@@ -315,7 +323,7 @@ def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks):
     initial_vsini = 0.0
     initial_limb_darkening_coeff = 0.00
 
-    reference_grid_filename = precomputed_dir + "/reference_grid_%i.fits.gz" % resolution
+    reference_grid_filename = precomputed_dir + "/convolved_grid_%i.fits.gz" % resolution
     if not os.path.exists(reference_grid_filename):
         logging.warn("Pre-computed grid does not exists for R = %i" % resolution)
     else:
@@ -374,6 +382,8 @@ def load_spectral_grid(input_path):
     for free_param in free_parameters:
         free_param_range = np.unique(parameters[free_param])
         ranges[free_param] = free_param_range
+    if len(free_parameters) == 0:
+        raise Exception("No free parameters in grid: '{}'".format(input_path))
     existing_points = parameters[free_parameters]
     existing_points = np.array(existing_points)
 

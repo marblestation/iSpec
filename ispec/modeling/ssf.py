@@ -201,12 +201,19 @@ class SynthModel(MPFitModel):
         complete_key += " vrad [" + vrad_key + "]"
 
         ##### [start] Check precomputed (solar abundance)
-        precomputed_file = str(self.precomputed_grid_dir) + "/grid/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.alpha(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff())
-        fundamental_precomputed_file = str(self.precomputed_grid_dir) + "/grid/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.alpha(), self.vmic(), 0., 0., 0.)
-        if self.precomputed_grid_dir is not None and abundances_key == "" and os.path.exists(precomputed_file):
+        filename = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.alpha(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff())
+        fundamental_filename = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.alpha(), self.vmic(), 0., 0., 0.)
+        precomputed_file = os.path.join(str(self.precomputed_grid_dir), "grid", filename)
+        precomputed_step_file = os.path.join(str(self.precomputed_grid_dir), "steps", filename)
+        fundamental_precomputed_file = os.path.join(str(self.precomputed_grid_dir), "grid", fundamental_filename)
+        fundamental_precomputed_step_file = os.path.join(str(self.precomputed_grid_dir), "steps", fundamental_filename)
+        if self.precomputed_grid_dir is not None and abundances_key == "" and (os.path.exists(precomputed_file) or os.path.exists(precomputed_step_file)):
             if not self.quiet:
                 print "Pre-computed:", complete_key
-            precomputed = read_spectrum(precomputed_file)
+            if os.path.exists(precomputed_file):
+                precomputed = read_spectrum(precomputed_file)
+            else:
+                precomputed = read_spectrum(precomputed_step_file)
             convolved_precomputed = convolve_spectrum(precomputed, self.R())
 
             convolved_precomputed = resample_spectrum(convolved_precomputed, self.waveobs, method="linear", zero_edges=True)
@@ -214,10 +221,13 @@ class SynthModel(MPFitModel):
             self.last_fluxes = convolved_precomputed['flux'].copy()
             self.last_final_fluxes = convolved_precomputed['flux'].copy()
 
-        elif self.precomputed_grid_dir is not None and abundances_key == "" and os.path.exists(fundamental_precomputed_file):
+        elif self.precomputed_grid_dir is not None and abundances_key == "" and (os.path.exists(fundamental_precomputed_file) or os.path.exists(fundamental_precomputed_step_file)):
             if not self.quiet:
                 print "Pre-computed (fundamental):", complete_key
-            fundamental_precomputed = read_spectrum(fundamental_precomputed_file)
+            if os.path.exists(fundamental_precomputed_file):
+                fundamental_precomputed = read_spectrum(fundamental_precomputed_file)
+            else:
+                fundamental_precomputed = read_spectrum(fundamental_precomputed_step_file)
             fundamental_precomputed = resample_spectrum(fundamental_precomputed, self.waveobs, method="linear", zero_edges=True)
             fundamental_precomputed['flux'][self.waveobs_mask == 0] = 1.
             self.last_fluxes = fundamental_precomputed['flux']
@@ -602,7 +612,7 @@ class SynthModel(MPFitModel):
 
 
 
-def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, alpha_range, vmic_from_empirical_relation, vmac_from_empirical_relation):
+def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, alpha_range, vmic_range, vmic_from_empirical_relation, vmac_from_empirical_relation):
     """
     Creates the structure needed for the mpfitmodel
     """
@@ -662,6 +672,9 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
     if parinfo[3]['value'] > parinfo[3]['limits'][1] or parinfo[3]['value'] < parinfo[3]['limits'][0]:
         raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[3]['parname'], parinfo[3]['value'], parinfo[3]['limits'][0], parinfo[3]['limits'][1]))
     #
+    min_vmic = np.min(vmic_range)
+    max_vmic = np.max(vmic_range)
+    #
     parinfo[4]['parname'] = "Vmic"
     parinfo[4]['value'] = initial_vmic
     parinfo[4]['fixed'] = not parinfo[4]['parname'].lower() in free_params
@@ -669,7 +682,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
         parinfo[4]['tied'] = 'estimate_vmic(p[0], p[1], p[2])'
     parinfo[4]['step'] = Constants.SYNTH_STEP_VMIC # For auto-derivatives
     parinfo[4]['limited'] = [True, True]
-    parinfo[4]['limits'] = [0.0, 50.0]
+    parinfo[4]['limits'] = [min_vmic, max_vmic]
     if parinfo[4]['value'] > parinfo[4]['limits'][1] or parinfo[4]['value'] < parinfo[4]['limits'][0]:
         raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[4]['parname'], parinfo[4]['value'], parinfo[4]['limits'][0], parinfo[4]['limits'][1]))
     #
@@ -844,7 +857,12 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     teff_range = ranges['teff']
     logg_range = ranges['logg']
     MH_range = ranges['MH']
-    alpha_range = ranges.get('alpha', (0.,)) # Default (0.,) if 'alpha' is not a free parameter for atmospheres
+    if code == "grid":
+        alpha_range = ranges.get('alpha', (0.,)) # Default (0.,) if 'alpha' is not a free parameter for grid interpolation
+        vmic_range = ranges.get('vmic', (0.,)) # Default (0.,) if 'vmic' is not a free parameter for grid interpolation
+    else:
+        alpha_range = ranges.get('alpha', (-1.5, 1.5)) # Default (0.,) if 'alpha' is not a free parameter for atmosphere interpolation
+        vmic_range = ranges.get('vmic', (0.0, 50.)) # Default (0.,) if 'vmic' is not a free parameter for atmosphere interpolation
 
 
     if "alpha" in free_params and enhance_abundances:
@@ -931,7 +949,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     if len(initial_vrad) != len(segments) and "vrad" in free_params:
         raise Exception("Number of Vrad should be equal to number of segments.")
 
-    parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, alpha_range, vmic_from_empirical_relation, vmac_from_empirical_relation)
+    parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, alpha_range, vmic_range, vmic_from_empirical_relation, vmac_from_empirical_relation)
 
     synth_model = SynthModel(modeled_layers_pack, linelist, isotopes, linelist_free_loggf, abundances, enhance_abundances=enhance_abundances, scale=scale, precomputed_grid_dir=precomputed_grid_dir)
 
