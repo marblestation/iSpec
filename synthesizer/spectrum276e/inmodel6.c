@@ -15,7 +15,7 @@ int flagw;
     FILE *fp;
     double teff, logg, MH;
     double k = 8.617084e-05;
-    char buffer[150], *tmp;
+    char buffer[250], *tmp;
     char buf2[150];
     extern int Ntau;
     extern int flagt;
@@ -44,7 +44,7 @@ int flagw;
             printf("Teff = %6.0f log(g) = %5.2f [M/H] = %5.2f\n", model->teff, model->logg, model->MH);
 
         for (i = 0; i < Ntau; i++) {
-            fgets(buffer, 120, fp);
+            fgets(buffer, 220, fp);
             model->mass[i] = atof(strtok(buffer, " "));
             model->T[i] = atof(strtok(NULL, " "));
             model->kT[i] = k * model->T[i];
@@ -60,7 +60,7 @@ int flagw;
         /* This section attempts to parse a Kurucz ATLAS9 header. Success not
            guaranteed! Can deal with Castelli models with extra columns */
         do {
-            fgets(buffer, 120, fp);
+            fgets(buffer, 220, fp);
         }
         while (strstr(buffer, "TEFF") == NULL);
         strcpy(buf2, strstr(buffer, "TEFF"));
@@ -70,7 +70,7 @@ int flagw;
         tmp = strtok(buf2, " ");
         model->logg = atof(strtok(NULL, " "));
         do {
-            fgets(buffer, 120, fp);
+            fgets(buffer, 220, fp);
         }
         while (strstr(buffer, "SCALE") == NULL);
         strcpy(buf2, strstr(buffer, "SCALE"));
@@ -79,11 +79,11 @@ int flagw;
         if (flagw == 1)
             printf("Teff = %6.0f log(g) = %5.2f [M/H] = %5.2f\n", model->teff, model->logg, model->MH);
         do {
-            fgets(buffer, 120, fp);
+            fgets(buffer, 220, fp);
         }
         while (strstr(buffer, "READ") == NULL);
         i = 0;
-        while (fgets(buffer, 120, fp) != NULL) {
+        while (fgets(buffer, 220, fp) != NULL) {
             if (strstr(buffer, "PRADK") != NULL)
                 break;
             model->mass[i] = atof(strtok(buffer, " "));
