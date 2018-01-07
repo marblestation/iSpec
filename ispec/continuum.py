@@ -16,7 +16,6 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 import numpy as np
-from plotting import *
 from common import *
 from spectrum import *
 from scipy.ndimage.filters import maximum_filter

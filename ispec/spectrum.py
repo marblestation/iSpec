@@ -20,13 +20,16 @@ import numpy.lib.recfunctions as rfn # Extra functions
 from astropy.io import fits as pyfits
 import scipy.ndimage as ndi
 from spectrum import *
-from plotting import *
 from common import *
 from scipy import interpolate
-import matplotlib.pyplot as plt
 import time
 import log
 import logging
+try:
+    from plotting import *
+except:
+    logging.warn("Plotting could not be loaded!")
+    pass
 
 def __read_fits_spectrum(spectrum_filename):
     """

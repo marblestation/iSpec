@@ -1,34 +1,16 @@
 import numpy as np
 from CustomDialog import *
 
-class SyntheticSpectrumDialog(CustomDialog):
+class InterpolateSpectrumDialog(CustomDialog):
     def __init__(self, parent, title, wave_base, wave_top, wave_step, resolution, teff, logg, feh, alpha, vmic, vmac, vsini, limb_darkening_coeff,  lists, default_lists):
         self.__parent = parent
         self.__title = title
         self.__components = []
         component = {}
         component["type"] = "OptionMenu"
-        component["text"] = "Code"
-        component["options"] = lists['synth_code']
-        component["default"] = component["options"][default_lists['synth_code']]
-        self.__components.append(component)
-        component = {}
-        component["type"] = "OptionMenu"
-        component["text"] = "Model atmosphere"
-        component["options"] = lists['atmospheres']['name']
-        component["default"] = component["options"][default_lists['atmospheres']]
-        self.__components.append(component)
-        component = {}
-        component["type"] = "OptionMenu"
-        component["text"] = "Solar abundances"
-        component["options"] = lists['abundances']['name']
-        component["default"] = component["options"][default_lists['abundances']]
-        self.__components.append(component)
-        component = {}
-        component["type"] = "OptionMenu"
-        component["text"] = "Line list"
-        component["options"] = lists['atomic_lines']['name']
-        component["default"] = component["options"][default_lists['atomic_lines']]
+        component["text"] = "Grid"
+        component["options"] = lists['grid']['name']
+        component["default"] = component["options"][default_lists['grid']]
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"

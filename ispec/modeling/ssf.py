@@ -40,8 +40,9 @@ class SynthModel(MPFitModel):
     Match synthetic spectrum to observed spectrum
     * Requires the synthetic spectrum generation functionality on
     """
-    def __init__(self, modeled_layers_pack, linelist, isotopes, linelist_free_loggf, abundances, enhance_abundances=True, scale=None, teff=5000, logg=3.0, MH=0.0, alpha=0.0, vmic=2.0, vmac=0.0, vsini=2.0, limb_darkening_coeff=0.0, R=0, precomputed_grid_dir=None):
+    def __init__(self, modeled_layers_pack, linelist, isotopes, linelist_free_loggf, abundances, enhance_abundances=True, scale=None, teff=5000, logg=3.0, MH=0.0, alpha=0.0, vmic=2.0, vmac=0.0, vsini=2.0, limb_darkening_coeff=0.0, R=0, precomputed_grid_dir=None, grid=None):
         self.precomputed_grid_dir = precomputed_grid_dir
+        self.grid = grid
         self.elements = {}
         #self.elements["1"] = "H"
         #self.elements["2"] = "He"
@@ -299,7 +300,7 @@ class SynthModel(MPFitModel):
             default_timer = time.time
         self.waveobs = waveobs
         self.code = code
-        if self.code == "grid":
+        if self.code == "grid" and self.grid is None:
             self.grid = load_spectral_grid(self.precomputed_grid_dir)
         self.use_molecules = use_molecules
         self.vmic_from_empirical_relation = vmic_from_empirical_relation
@@ -766,7 +767,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
 
     return parinfo
 
-def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=None, linemasks=None, enhance_abundances=True, scale=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1, code="spectrum", use_molecules=False, vmic_from_empirical_relation=False, vmac_from_empirical_relation=False, tmp_dir=None, timeout=1800):
+def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=None, linemasks=None, enhance_abundances=True, scale=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1, code="spectrum", grid=None, use_molecules=False, vmic_from_empirical_relation=False, vmac_from_empirical_relation=False, tmp_dir=None, timeout=1800):
     """
     It matches synthetic spectrum to observed spectrum by applying a least
     square algorithm.
@@ -836,22 +837,23 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
         # Add free loggf as free params
         free_params.append("loggf")
 
-    if code == "grid" and precomputed_grid_dir is None:
+    if code == "grid" and precomputed_grid_dir is None and grid is None:
         raise Exception("Pre-computed grid should be specified when using 'grid' code")
 
     if code == "grid":
-        grid = load_spectral_grid(precomputed_grid_dir)
+        if grid is None:
+            grid = load_spectral_grid(precomputed_grid_dir)
         existing_points, grid_free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname = grid
         if "teff" not in grid_free_parameters and "teff" in free_params:
-            raise Exception("teff cannot be free when using the grid '{}'".format(precomputed_grid_dir))
+            raise Exception("teff cannot be free when using this grid")
         if "logg" not in grid_free_parameters and "logg" in free_params:
-            raise Exception("logg cannot be free when using the grid '{}'".format(precomputed_grid_dir))
+            raise Exception("logg cannot be free when using this grid")
         if "MH" not in grid_free_parameters and "MH" in free_params:
-            raise Exception("MH cannot be free when using the grid '{}'".format(precomputed_grid_dir))
+            raise Exception("MH cannot be free when using this grid")
         if "alpha" not in grid_free_parameters and ("alpha" in free_params or enhance_abundances):
-            raise Exception("alpha cannot be free or be automatically enhance when using the grid '{}'".format(precomputed_grid_dir))
+            raise Exception("alpha cannot be free or be automatically enhance when using this grid")
         if "vmic" not in grid_free_parameters and ("vmic" in free_params or vmic_from_empirical_relation):
-            raise Exception("vmic cannot be free or follow an empirical relation when using the grid '{}'".format(precomputed_grid_dir))
+            raise Exception("vmic cannot be free or follow an empirical relation when using this grid")
     else:
         ranges = modeled_layers_pack[7]
     teff_range = ranges['teff']
@@ -951,7 +953,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
 
     parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, alpha_range, vmic_range, vmic_from_empirical_relation, vmac_from_empirical_relation)
 
-    synth_model = SynthModel(modeled_layers_pack, linelist, isotopes, linelist_free_loggf, abundances, enhance_abundances=enhance_abundances, scale=scale, precomputed_grid_dir=precomputed_grid_dir)
+    synth_model = SynthModel(modeled_layers_pack, linelist, isotopes, linelist_free_loggf, abundances, enhance_abundances=enhance_abundances, scale=scale, precomputed_grid_dir=precomputed_grid_dir, grid=grid)
 
     #segments = None
     synth_model.fitData(waveobs, segments, comparing_mask, flux, weights=weights, parinfo=parinfo, use_errors=use_errors, max_iterations=max_iterations, quiet=quiet, code=code, use_molecules=use_molecules, vmic_from_empirical_relation=vmic_from_empirical_relation, vmac_from_empirical_relation=vmac_from_empirical_relation, tmp_dir=tmp_dir, timeout=timeout)
@@ -970,6 +972,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     params['teff'] = synth_model.teff()
     params['logg'] = synth_model.logg()
     params['MH'] = synth_model.MH()
+    params['alpha'] = synth_model.alpha()
     params['vmic'] = synth_model.vmic()
     params['vmac'] = synth_model.vmac()
     params['vsini'] = synth_model.vsini()
@@ -982,6 +985,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     errors['teff'] = synth_model.eteff()
     errors['logg'] = synth_model.elogg()
     errors['MH'] = synth_model.eMH()
+    errors['alpha'] = synth_model.ealpha()
     errors['vmic'] = synth_model.evmic()
     errors['vmac'] = synth_model.evmac()
     errors['vsini'] = synth_model.evsini()

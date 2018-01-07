@@ -28,7 +28,6 @@ import gzip
 import os
 import subprocess
 import shutil
-import matplotlib.pyplot as plt
 import log
 import logging
 import copy
@@ -345,6 +344,7 @@ def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None, baseli
             #return a*np.exp(-(x-mu)**2/(2*sig**2))
 
         #def show():
+            #import matplotlib.pyplot as plt
             #plt.plot(spectrum_slice['waveobs'], spectrum_slice['flux'])
             #plt.plot(x, baseline+func(x, model.A(), model.mu(), model.sig()))
             #plt.show()
@@ -367,6 +367,7 @@ def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None, baseli
         #print popt
 
         def show():
+            import matplotlib.pyplot as plt
             plt.plot(spectrum_slice['waveobs'], spectrum_slice['flux'])
             plt.plot(x, baseline+func2(x, popt[0], popt[1]))
             plt.plot(x[:-1], baseline+func(x[:-1], model.A(), model.mu(), model.sig()))

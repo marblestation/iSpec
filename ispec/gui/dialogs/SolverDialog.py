@@ -2,7 +2,7 @@ import numpy as np
 from CustomDialog import *
 
 class SolverDialog(CustomDialog):
-    def __init__(self, parent, title, resolution, teff, logg, feh, vmic, vmac, vsini, limb_darkening_coeff, lists, default_lists):
+    def __init__(self, parent, title, resolution, teff, logg, feh, alpha, vmic, vmac, vsini, limb_darkening_coeff, lists, default_lists):
         self.__parent = parent
         self.__title = title
         self.__components = []
@@ -66,7 +66,20 @@ class SolverDialog(CustomDialog):
         self.__components.append(component)
         component = {}
         component["type"] = "Checkbutton"
-        component["text"] = "Free [Fe/H]"
+        component["text"] = "Free [M/H]"
+        component["default"] = True
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Entry"
+        component["text"] = "Alpha enhancement [alpha/Fe]"
+        component["text-type"] = "float" # float, int or str
+        component["default"] = alpha
+        component["minvalue"] = -2
+        component["maxvalue"] = 2
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Free [alpha/Fe]"
         component["default"] = True
         self.__components.append(component)
         component = {}

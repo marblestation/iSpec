@@ -1,34 +1,16 @@
 import numpy as np
 from CustomDialog import *
 
-class SyntheticSpectrumDialog(CustomDialog):
-    def __init__(self, parent, title, wave_base, wave_top, wave_step, resolution, teff, logg, feh, alpha, vmic, vmac, vsini, limb_darkening_coeff,  lists, default_lists):
+class InterpolateSolverDialog(CustomDialog):
+    def __init__(self, parent, title, resolution, teff, logg, feh, alpha, vmic, vmac, vsini, limb_darkening_coeff, lists, default_lists):
         self.__parent = parent
         self.__title = title
         self.__components = []
         component = {}
         component["type"] = "OptionMenu"
-        component["text"] = "Code"
-        component["options"] = lists['synth_code']
-        component["default"] = component["options"][default_lists['synth_code']]
-        self.__components.append(component)
-        component = {}
-        component["type"] = "OptionMenu"
-        component["text"] = "Model atmosphere"
-        component["options"] = lists['atmospheres']['name']
-        component["default"] = component["options"][default_lists['atmospheres']]
-        self.__components.append(component)
-        component = {}
-        component["type"] = "OptionMenu"
-        component["text"] = "Solar abundances"
-        component["options"] = lists['abundances']['name']
-        component["default"] = component["options"][default_lists['abundances']]
-        self.__components.append(component)
-        component = {}
-        component["type"] = "OptionMenu"
-        component["text"] = "Line list"
-        component["options"] = lists['atomic_lines']['name']
-        component["default"] = component["options"][default_lists['atomic_lines']]
+        component["text"] = "Grid"
+        component["options"] = lists['grid']['name']
+        component["default"] = component["options"][default_lists['grid']]
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
@@ -39,12 +21,22 @@ class SyntheticSpectrumDialog(CustomDialog):
         component["maxvalue"] = 50000
         self.__components.append(component)
         component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Free Teff"
+        component["default"] = False
+        self.__components.append(component)
+        component = {}
         component["type"] = "Entry"
         component["text"] = "Surface gravity (log g)"
         component["text-type"] = "float" # float, int or str
         component["default"] = logg
         component["minvalue"] = 0
         component["maxvalue"] = 5
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Free Log(g)"
+        component["default"] = False
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
@@ -55,12 +47,22 @@ class SyntheticSpectrumDialog(CustomDialog):
         component["maxvalue"] = 1
         self.__components.append(component)
         component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Free [M/H]"
+        component["default"] = True
+        self.__components.append(component)
+        component = {}
         component["type"] = "Entry"
         component["text"] = "Alpha enhancement [alpha/Fe]"
         component["text-type"] = "float" # float, int or str
         component["default"] = alpha
         component["minvalue"] = -2
         component["maxvalue"] = 2
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Free [alpha/Fe]"
+        component["default"] = True
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
@@ -71,12 +73,22 @@ class SyntheticSpectrumDialog(CustomDialog):
         component["maxvalue"] = np.inf
         self.__components.append(component)
         component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Free Vmic"
+        component["default"] = True
+        self.__components.append(component)
+        component = {}
         component["type"] = "Entry"
         component["text"] = "Macroturbulence velocity (km/s)"
         component["text-type"] = "float" # float, int or str
         component["default"] = vmac
         component["minvalue"] = 0
         component["maxvalue"] = np.inf
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Free Vmac"
+        component["default"] = True
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
@@ -87,12 +99,22 @@ class SyntheticSpectrumDialog(CustomDialog):
         component["maxvalue"] = np.inf
         self.__components.append(component)
         component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Free vsin(i)"
+        component["default"] = False
+        self.__components.append(component)
+        component = {}
         component["type"] = "Entry"
         component["text"] = "Limb darkening coefficient"
         component["text-type"] = "float" # float, int or str
         component["default"] = limb_darkening_coeff
         component["minvalue"] = 0
         component["maxvalue"] = 1
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Free limb dark. coeff."
+        component["default"] = False
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
@@ -103,34 +125,30 @@ class SyntheticSpectrumDialog(CustomDialog):
         component["maxvalue"] = np.inf
         self.__components.append(component)
         component = {}
-        component["type"] = "Entry"
-        component["text"] = "Wavelength min (nm)"
-        component["text-type"] = "float" # float, int or str
-        component["default"] = wave_base
-        component["minvalue"] = 300
-        component["maxvalue"] = 2400
+        component["type"] = "Checkbutton"
+        component["text"] = "Free resolution"
+        component["default"] = False
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
-        component["text"] = "Wavelength max (nm)"
+        component["text"] = "Radial velocity"
         component["text-type"] = "float" # float, int or str
-        component["default"] = wave_top
-        component["minvalue"] = 300
-        component["maxvalue"] = 2400
+        component["default"] = 0.
+        component["minvalue"] = -5
+        component["maxvalue"] = 5
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Free radial velocity"
+        component["default"] = False
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
-        component["text"] = "Wavelength step (nm)"
-        component["text-type"] = "float" # float, int or str
-        component["default"] = wave_step
-        component["minvalue"] = 1.0e-5
-        component["maxvalue"] = 0.01
-        self.__components.append(component)
-        component = {}
-        component["type"] = "Radiobutton"
-        component["text"] = "Generate spectrum for"
-        component["options"] = ["Custom range (defined above)", "Segments", "Line masks"]
-        component["default"] = component["options"][0]
+        component["text"] = "Maximum number of iterations"
+        component["text-type"] = "int" # float, int or str
+        component["default"] = "6"
+        component["minvalue"] = 0
+        component["maxvalue"] = np.inf
         self.__components.append(component)
 
 

@@ -77,7 +77,7 @@ class SolverEWDialog(CustomDialog):
             self.__stats.append("%-50s: %10.0f" % ( element + " lines number", np.round(len(element_abundances_over_h), 0)))
 
 
-    def __init__(self, parent, title, teff, logg, feh, vmic, lists, default_lists):
+    def __init__(self, parent, title, teff, logg, feh, alpha, vmic, lists, default_lists):
         self.__parent = parent
         self.__title = title
         self.__plot = None
@@ -147,6 +147,14 @@ class SolverEWDialog(CustomDialog):
         component["default"] = feh
         component["minvalue"] = -5
         component["maxvalue"] = 1
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Entry"
+        component["text"] = "Alpha enhancement [alpha/Fe]"
+        component["text-type"] = "float" # float, int or str
+        component["default"] = alpha
+        component["minvalue"] = -2
+        component["maxvalue"] = 2
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"

@@ -46,6 +46,8 @@ from OperateSpectrumDialog import *
 from ResampleSpectrumDialog import *
 from SendSpectrumDialog import *
 from SyntheticSpectrumDialog import *
+from InterpolateSpectrumDialog import *
+from InterpolateSolverDialog import *
 from VelocityProfileDialog import *
 from SolverDialog import *
 from SolverEWDialog import *

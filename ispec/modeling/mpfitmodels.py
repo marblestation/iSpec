@@ -17,7 +17,6 @@
 #
 import mpfit
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.integrate import quad
 
 class MPFitModel(object):
@@ -308,108 +307,5 @@ class VoigtModel(MPFitModel):
     def resolution_olivero(self):
         fwhm, fwhm_kms = self.fwhm_olivero()
         return self.mu() / fwhm
-
-
-
-
-if __name__ == '__main__':
-    ### Full range
-    x = np.arange(-10.,10., 1)
-    ### Reduced range
-    ##x = np.arange(-3.,3., 0.5)
-
-    x_fine = np.arange(-10.,10., 20./1000)
-
-    ############### GAUSSIAN
-    ## Generate model data for a Gaussian with param mu and sigma and add noise
-    baseline = 10
-    A = -1
-    sig = 2
-    mu = 0.5
-    gaussian_model = GaussianModel(baseline, A, sig, mu)
-    y_true = gaussian_model(x)
-
-    #preal = [-1, -2, .5]
-    #y_true = gaussian_model(x, preal)
-
-    mu, sigma = 0, 0.7
-    y      = y_true + 0.01 * np.random.normal(mu, sigma, len(x) )
-    ##err    = 1.0 + 0.01 * np.random.normal(mu, sigma, len(x) )
-    err = np.ones(len(x))
-
-    gaussian_model.fitData(x, y)
-
-
-    print "Fitted pars: "
-    print "\tBase:\t", gaussian_model.baseline()
-    print "\tA:\t", gaussian_model.A()
-    print "\tsig:\t", gaussian_model.sig()
-    print "\tmu:\t", gaussian_model.mu()
-    fwhm, fwhm_kms = gaussian_model.fwhm()
-    R = gaussian_model.resolution()
-    print "FWHM: ", fwhm
-    print "FWHM km/s: ", fwhm_kms
-    print "R: ", R
-    print "RMS: ", np.sqrt(np.sum(np.power(gaussian_model.residuals(), 2)) / len(gaussian_model.residuals()))
-
-    plt.clf()
-    plt.plot(x,y,'r', label="Noisy data")
-    plt.plot( x_fine, gaussian_model(x_fine), label="Fit" )
-    plt.plot( x, y_true, 'g', label="True data" )
-    plt.xlabel( "X" )
-    plt.ylabel( "Measurement data" )
-    plt.title( "Least-squares fit to noisy data using MPFIT" )
-    plt.legend()
-    plt.show()
-
-    ############### VOIGT
-    ## Generate model data for a Gaussian with param mu and sigma and add noise
-    baseline = 10
-    A = -1
-    sig = 2
-    mu = 0.5
-    gamma = 0.5
-    voigt_model = VoigtModel(baseline, A, sig, mu, gamma)
-    y_true = voigt_model(x)
-
-    #preal = [-1, -2, .5]
-    #y_true = gaussian_model(x, preal)
-
-    mu, sigma = 0, 0.7
-    y      = y_true + 0.01 * np.random.normal(mu, sigma, len(x) )
-    ##err    = 1.0 + 0.01 * np.random.normal(mu, sigma, len(x) )
-    err = np.ones(len(x))
-
-    voigt_model.fitData(x, y)
-
-    print "Fitted pars: "
-    print "\tBase:\t", voigt_model.baseline()
-    print "\tA:\t", voigt_model.A()
-    print "\tsig:\t", voigt_model.sig()
-    print "\tmu:\t", voigt_model.mu()
-    print "\tgamma:\t", voigt_model.gamma()
-    fwhm, fwhm_kms = voigt_model.fwhm()
-    R = voigt_model.resolution()
-    print "FWHM: ", fwhm
-    print "FWHM km/s: ", fwhm_kms
-    print "R: ", R
-    fwhm, fwhm_kms = voigt_model.fwhm_olivero()
-    R = voigt_model.resolution_olivero()
-    print "* Olivero version *"
-    print "FWHM: ", fwhm
-    print "FWHM km/s: ", fwhm_kms
-    print "R: ", R
-    print "*******************"
-    print "RMS: ", np.sqrt(np.sum(np.power(voigt_model.residuals(), 2)) / len(voigt_model.residuals()))
-
-    plt.clf()
-    plt.plot(x,y,'r', label="Noisy data")
-    plt.plot( x_fine, voigt_model(x_fine), label="Fit" )
-    plt.plot( x, y_true, 'g', label="True data" )
-    plt.xlabel( "X" )
-    plt.ylabel( "Measurement data" )
-    plt.title( "Least-squares fit to noisy data using MPFIT" )
-    plt.legend()
-    plt.show()
 
 

@@ -320,7 +320,7 @@ def load_modeled_layers_pack(input_path):
     if not os.path.exists(cache_filename) or not use_dump:
         delaunay_triangulation = spatial.Delaunay(existing_points)
         kdtree = spatial.cKDTree(existing_points)
-        pickle.dump((delaunay_triangulation, kdtree), open(cache_filename, 'wb'))
+        pickle.dump((delaunay_triangulation, kdtree), open(cache_filename, 'wb'), protocol=2)
 
     # Functions will receive the parameters in the same order
     read_point_value = lambda f: fits.open(f)[1].data

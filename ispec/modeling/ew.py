@@ -705,12 +705,14 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, abundances, initial_t
     params['teff'] = EW_model.teff()
     params['logg'] = EW_model.logg()
     params['MH'] = MH
+    params['alpha'] = EW_model.alpha()
     params['vmic'] = EW_model.vmic()
 
     errors = {}
     errors['teff'] = EW_model.eteff()
     errors['logg'] = EW_model.elogg()
     errors['MH'] = eMH
+    errors['alpha'] = EW_model.ealpha()
     errors['vmic'] = EW_model.evmic()
 
     status = {}

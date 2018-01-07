@@ -65,6 +65,8 @@ from dialogs import SendSpectrumDialog
 from dialogs import SolverDialog
 from dialogs import SolverEWDialog
 from dialogs import SyntheticSpectrumDialog
+from dialogs import InterpolateSpectrumDialog
+from dialogs import InterpolateSolverDialog
 from dialogs import VelocityProfileDialog
 
 from CustomizableRegion import CustomizableRegion
@@ -108,7 +110,7 @@ class iSpecBaseApp(Tkinter.Tk):
         self.solar_abundances = {}
 
         self.lists = {}
-        self.lists['atmospheres'] = self.__get_filelist('input/atmospheres/', 'modeled_layers_pack.dump')
+        self.lists['atmospheres'] = self.__get_filelist('input/atmospheres/', 'parameters.tsv')
         self.lists['abundances'] = self.__get_filelist('input/abundances/', 'stdatom.dat')
         self.lists['atomic_lines'] = self.__get_filelist('input/linelists/transitions/', 'atomic_lines.tsv')
         self.lists['masks'] = self.__get_filelist('input/linelists/CCF/', 'mask.lst')
@@ -120,6 +122,7 @@ class iSpecBaseApp(Tkinter.Tk):
         self.default_lists['atmospheres'] = 0
         self.default_lists['abundances'] = 0
         self.default_lists['atomic_lines'] = 0
+        self.default_lists['grid'] = 0
 
         # Radiative transfer codes
         self.lists['synth_code'] = []
@@ -141,6 +144,8 @@ class iSpecBaseApp(Tkinter.Tk):
             self.default_lists['ew_code'] = len(self.lists['ew_code'])-1 # Prefer width before moog
         if ispec.is_synthe_support_enabled():
             self.lists['synth_code'].append("Synthe")
+
+        self.lists['grid'] = self.__get_filelist('input/grid/', 'parameters.tsv')
 
         ######
         # Prefered defaults:
@@ -168,6 +173,7 @@ class iSpecBaseApp(Tkinter.Tk):
         self.velocity_template_upper_limit = 200 # km/s
         self.velocity_template_step = 1.0 # km/s
         self.modeled_layers_pack = {} # Synthesize spectrum (atmospheric models)
+        self.grid = {} # Interpolate spectrum
         self.find_continuum_regions_wave_step = 0.05
         self.find_continuum_regions_sigma = 0.001
         self.find_continuum_regions_max_continuum_diff = 1.0
@@ -373,7 +379,7 @@ class iSpecBaseApp(Tkinter.Tk):
         import os
 
         filelist = []
-        for root, dirnames, filenames in os.walk(resource_path(dirname)):
+        for root, dirnames, filenames in os.walk(resource_path(dirname), followlinks=True):
             for filename in fnmatch.filter(filenames, match):
                 filelist.append((os.path.basename(root), resource_path(os.path.join(root, filename))))
         filelist = np.array(filelist, dtype=[('name', '|S100'), ('path', '|S500')])
@@ -512,6 +518,9 @@ class iSpecBaseApp(Tkinter.Tk):
         parametersmenu.add_command(label="Estimate SNR", command=self.on_estimate_snr)
         self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
         parametersmenu.add_separator()
+        if len(self.lists['grid']) > 0:
+            parametersmenu.add_command(label="Determine parameters and abundances with grid", command=self.on_determine_parameters_with_grid)
+            self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
         if (ispec.is_spectrum_support_enabled() \
                 #or ispec.is_turbospectrum_support_enabled() \
                 #or ispec.is_moog_support_enabled() \
@@ -549,6 +558,9 @@ class iSpecBaseApp(Tkinter.Tk):
                 ) and \
                 len(self.lists['atmospheres']) > 0 and len(self.lists['abundances']) > 0 and len(self.lists['atomic_lines']) > 0:
                 self.menu_active_spectrum.add_command(label="Synthesize spectrum", command=self.on_synthesize)
+
+        if len(self.lists['grid']) > 0:
+                self.menu_active_spectrum.add_command(label="Interpolate spectrum", command=self.on_interpolate)
 
         if self.samp_manager is not None:
             self.menu_active_spectrum.add_command(label="Send spectrum to...", command=self.on_send_spectrum)
@@ -4005,6 +4017,191 @@ iSpec uses the following radiative transfer codes:
         self.update_scale()
         self.flash_status_message("Operation succesfully executed.")
 
+    def on_interpolate(self):
+        if self.check_operation_in_progress():
+            return
+
+        if len(self.lists['grid']) > 0:
+
+            if self.active_spectrum is not None:
+                wave_base = np.round(np.min(self.active_spectrum.data['waveobs']), 2)
+                wave_top = np.round(np.max(self.active_spectrum.data['waveobs']), 2)
+            else:
+                wave_base = 515.0 # Magnesium triplet region
+                wave_top = 525.0
+                #wave_top = 517.0
+            teff = 5771.0
+            logg = 4.44
+            MH = 0.00
+            alpha = 0.00
+            macroturbulence = 4.21
+            vsini = 1.6
+            limb_darkening_coeff = 0.6
+            microturbulence_vel = 1.07
+            #resolution = 47000
+            #resolution = 0
+            resolution = 300000
+            wave_step = 0.001
+
+            key = "InterpolateSpectrumDialog"
+            if not self.dialog.has_key(key):
+                self.dialog[key] = InterpolateSpectrumDialog(self, "Spectrum interpolator", wave_base, wave_top, wave_step, resolution, teff, logg, MH, alpha, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.default_lists)
+            self.dialog[key].show()
+
+            if self.dialog[key].results is None:
+                # Cancel
+                self.dialog[key].destroy()
+                return
+
+            selected_grid = self.dialog[key].results["Grid"]
+            teff = self.dialog[key].results["Effective temperature (K)"]
+            logg = self.dialog[key].results["Surface gravity (log g)"]
+            MH = self.dialog[key].results["Metallicity [M/H]"]
+            alpha = self.dialog[key].results["Alpha enhancement [alpha/Fe]"]
+            microturbulence_vel = self.dialog[key].results["Microturbulence velocity (km/s)"]
+            macroturbulence = self.dialog[key].results["Macroturbulence velocity (km/s)"]
+            vsini = self.dialog[key].results["Rotation (v sin(i)) (km/s)"]
+            limb_darkening_coeff = self.dialog[key].results["Limb darkening coefficient"]
+            resolution = self.dialog[key].results["Resolution"]
+            wave_base = self.dialog[key].results["Wavelength min (nm)"]
+            wave_top = self.dialog[key].results["Wavelength max (nm)"]
+            wave_step = self.dialog[key].results["Wavelength step (nm)"]
+            in_segments = self.dialog[key].results["Generate spectrum for"] == "Segments"
+            in_lines = self.dialog[key].results["Generate spectrum for"] == "Line masks"
+
+            self.dialog[key].destroy()
+
+            ### Find filenames
+            i = np.where(self.lists['grid']['name'] == selected_grid)
+            grid_dirname = os.path.dirname(self.lists['grid']['path'][i][0])
+
+            if in_segments:
+                elements_type = "segments"
+            if in_lines:
+                elements_type = "lines"
+
+            if teff is None or logg is None or MH is None or alpha is None or microturbulence_vel is None or resolution is None or wave_base is None or wave_top is None:
+                self.flash_status_message("Bad value.")
+                return
+
+            if not self.grid.has_key(selected_grid):
+                logging.info("Loading grid %s..." % selected_grid)
+                self.status_message("Loading grid %s..." % selected_grid)
+                self.grid[selected_grid] = ispec.load_spectral_grid(grid_dirname)
+
+            if not ispec.valid_interpolated_spectrum_target(self.grid[selected_grid], {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha, 'vmic':microturbulence_vel}):
+                msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of the grid limits."
+                title = 'Out of the grid limits'
+                self.error(title, msg)
+                self.flash_status_message("Bad values.")
+                return
+
+            if not in_segments and not in_lines:
+                regions = None # Compute fluxes for all the wavelengths
+            else:
+                #in_segments or in_lines
+                if len(self.region_widgets[elements_type]) == 0:
+                    self.flash_status_message("No segments/line masks present for synthetic spectrum generation.")
+                    return
+                self.__update_numpy_arrays_from_widgets(elements_type)
+                regions = self.regions[elements_type]
+                wave_base = np.min(regions['wave_base'])
+                wave_top = np.max(regions['wave_top'])
+
+            if wave_base >= wave_top:
+                msg = "Bad wavelength range definition, maximum value cannot be lower than minimum value."
+                title = 'Wavelength range'
+                self.error(title, msg)
+                self.flash_status_message("Bad values.")
+                return
+
+            waveobs = np.arange(wave_base, wave_top, wave_step)
+            if in_segments or in_lines:
+                wfilter = ispec.create_wavelength_filter({'waveobs': waveobs}, wave_base=wave_base, wave_top=wave_top, regions=regions)
+                waveobs = waveobs[wfilter]
+            total_points = len(waveobs)
+
+            if total_points < 2:
+                msg = "Wavelength range too narrow."
+                title = 'Wavelength range'
+                self.error(title, msg)
+                self.flash_status_message("Bad values.")
+                return
+
+            self.operation_in_progress = True
+            self.status_message("Interpolating spectrum...")
+            code = "grid"
+            thread = threading.Thread(target=self.on_interpolate_thread, args=(code, selected_grid, waveobs, regions, teff, logg, MH, alpha, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, ))
+            thread.setDaemon(True)
+            thread.start()
+
+    def on_interpolate_thread(self, code, selected_grid, waveobs, regions, teff, logg, MH, alpha, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
+
+        synth_spectrum = ispec.create_spectrum_structure(waveobs)
+
+        # No fixed abundances
+        fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
+
+        error_message = None
+        try:
+            # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
+            atmosphere_layers = None
+            linelist = None
+            isotopes = None
+            abundances = None
+            synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, regions=regions, verbose=1, gui_queue=self.queue, code=code, grid=self.grid[selected_grid])
+        except Exception, e:
+            error_message = str(e)
+
+
+        synth_spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
+
+        # Remove atmosphere model temporary file
+        self.queue.put((self.on_synthesize_finnish, [code, synth_spectrum, teff, logg, MH, alpha, microturbulence_vel, error_message], {}))
+
+    def on_synthesize_finnish(self, code, synth_spectrum, teff, logg, MH, alpha, microturbulence_vel, error_message):
+        if error_message is not None:
+            msg = error_message
+            title = 'Problem synthesizing spectrum'
+            self.error(title, msg)
+            self.operation_in_progress = False
+            return
+        self.operation_in_progress = False
+
+        # Check if synthetic generation has failed
+        if np.all(synth_spectrum['flux'] == 0):
+            self.flash_status_message("The synthetic spectrum generation has failed for those astrophysical parameters!")
+            return
+
+        # Remove current continuum from plot if exists
+        self.remove_drawn_continuum_spectrum()
+
+        # Remove current drawn fitted lines if they exist
+        self.remove_drawn_fitted_lines()
+
+        # Remove "[A]  " from spectrum name (legend) if it exists
+        if self.active_spectrum is not None and self.active_spectrum.plot_id is not None:
+            self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
+
+        # Name: If it already exists, add a suffix
+        name = self.get_name(code + "_" + str(teff) + "_" + str(logg) + "_"  + str(MH) + "_"  + str(alpha) + "_" + str(microturbulence_vel))
+        color = self.get_color()
+        self.active_spectrum = Spectrum(synth_spectrum, name, color=color)
+
+        self.spectra.append(self.active_spectrum)
+        self.active_spectrum_history.append(self.active_spectrum)
+        self.active_spectrum.not_saved = True
+        self.update_title()
+        self.update_menu_active_spectrum()
+        self.draw_active_spectrum()
+        self.update_scale()
+
+        self.canvas.draw()
+
+        self.operation_in_progress = False
+        self.flash_status_message("Spectrum generated!")
+
+
     def on_synthesize(self):
         if self.check_operation_in_progress():
             return
@@ -4027,6 +4224,7 @@ iSpec uses the following radiative transfer codes:
             teff = 5771.0
             logg = 4.44
             MH = 0.00
+            alpha = 0.00
             macroturbulence = 4.21
             vsini = 1.6
             limb_darkening_coeff = 0.6
@@ -4038,7 +4236,7 @@ iSpec uses the following radiative transfer codes:
 
             key = "SyntheticSpectrumDialog"
             if not self.dialog.has_key(key):
-                self.dialog[key] = SyntheticSpectrumDialog(self, "Synthetic spectrum generator", wave_base, wave_top, wave_step, resolution, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.default_lists)
+                self.dialog[key] = SyntheticSpectrumDialog(self, "Synthetic spectrum generator", wave_base, wave_top, wave_step, resolution, teff, logg, MH, alpha, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.default_lists)
             self.dialog[key].show()
 
             if self.dialog[key].results is None:
@@ -4050,6 +4248,7 @@ iSpec uses the following radiative transfer codes:
             teff = self.dialog[key].results["Effective temperature (K)"]
             logg = self.dialog[key].results["Surface gravity (log g)"]
             MH = self.dialog[key].results["Metallicity [M/H]"]
+            alpha = self.dialog[key].results["Alpha enhancement [alpha/Fe]"]
             microturbulence_vel = self.dialog[key].results["Microturbulence velocity (km/s)"]
             macroturbulence = self.dialog[key].results["Macroturbulence velocity (km/s)"]
             vsini = self.dialog[key].results["Rotation (v sin(i)) (km/s)"]
@@ -4074,7 +4273,7 @@ iSpec uses the following radiative transfer codes:
             abundances_file = self.lists['abundances']['path'][i][0]
 
             i = np.where(self.lists['atmospheres']['name'] == selected_atmosphere_models)
-            atmospheres_file = self.lists['atmospheres']['path'][i][0]
+            atmospheres_file = os.path.dirname(self.lists['atmospheres']['path'][i][0])
             ####
 
             isotope_file = resource_path("input/isotopes/SPECTRUM.lst")
@@ -4084,7 +4283,7 @@ iSpec uses the following radiative transfer codes:
             if in_lines:
                 elements_type = "lines"
 
-            if teff is None or logg is None or MH is None or microturbulence_vel is None or resolution is None or wave_base is None or wave_top is None:
+            if teff is None or logg is None or MH is None or alpha is None or microturbulence_vel is None or resolution is None or wave_base is None or wave_top is None:
                 self.flash_status_message("Bad value.")
                 return
 
@@ -4093,8 +4292,8 @@ iSpec uses the following radiative transfer codes:
                 self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
                 self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(atmospheres_file)
 
-            if not ispec.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
-                msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of theatmospheric models."
+            if not ispec.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha, 'vmic':microturbulence_vel}):
+                msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of the atmospheric models."
                 title = 'Out of the atmospheric models'
                 self.error(title, msg)
                 self.flash_status_message("Bad values.")
@@ -4122,7 +4321,7 @@ iSpec uses the following radiative transfer codes:
 
             # Prepare atmosphere model
             self.status_message("Interpolating atmosphere model...")
-            atmosphere_layers = ispec.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH)
+            atmosphere_layers = ispec.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha})
 
 
             if not in_segments and not in_lines:
@@ -4144,6 +4343,9 @@ iSpec uses the following radiative transfer codes:
                 self.flash_status_message("Bad values.")
                 return
             waveobs = np.arange(wave_base, wave_top, wave_step)
+            if in_segments or in_lines:
+                wfilter = ispec.create_wavelength_filter({'waveobs': waveobs}, wave_base=wave_base, wave_top=wave_top, regions=regions)
+                waveobs = waveobs[wfilter]
 
             # If wavelength out of the linelist file are used, SPECTRUM starts to generate flat spectrum
             if np.min(waveobs) < 300.0 or np.max(waveobs) > 2400.0:
@@ -4167,25 +4369,21 @@ iSpec uses the following radiative transfer codes:
 
             self.operation_in_progress = True
             self.status_message("Synthesizing spectrum...")
-            thread = threading.Thread(target=self.on_synthesize_thread, args=(code, waveobs, regions, linelist, isotopes, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, ))
+            thread = threading.Thread(target=self.on_synthesize_thread, args=(code, waveobs, regions, linelist, isotopes, abundances, atmosphere_layers, teff, logg, MH, alpha, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, ))
             thread.setDaemon(True)
             thread.start()
 
-    def on_synthesize_thread(self, code, waveobs, regions, linelist, isotopes, abundances, atmosphere_layers, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
+    def on_synthesize_thread(self, code, waveobs, regions, linelist, isotopes, abundances, atmosphere_layers, teff, logg, MH, alpha, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
 
         synth_spectrum = ispec.create_spectrum_structure(waveobs)
 
         # No fixed abundances
         fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
 
-        # Enhance alpha elements + CNO abundances following MARCS standard composition
-        alpha_enhancement, c_enhancement, n_enhancement, o_enhancement = ispec.determine_abundance_enchancements(MH)
-        abundances = ispec.enhance_solar_abundances(abundances, alpha_enhancement, c_enhancement, n_enhancement, o_enhancement)
-
         error_message = None
         try:
             # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
-            synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], atmosphere_layers, teff, logg, MH, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, regions=regions, verbose=1, gui_queue=self.queue, code=code)
+            synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, regions=regions, verbose=1, gui_queue=self.queue, code=code)
         except Exception, e:
             error_message = str(e)
 
@@ -4193,9 +4391,9 @@ iSpec uses the following radiative transfer codes:
         synth_spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
 
         # Remove atmosphere model temporary file
-        self.queue.put((self.on_synthesize_finnish, [code, synth_spectrum, teff, logg, MH, microturbulence_vel, error_message], {}))
+        self.queue.put((self.on_synthesize_finnish, [code, synth_spectrum, teff, logg, MH, alpha, microturbulence_vel, error_message], {}))
 
-    def on_synthesize_finnish(self, code, synth_spectrum, teff, logg, MH, microturbulence_vel, error_message):
+    def on_synthesize_finnish(self, code, synth_spectrum, teff, logg, MH, alpha, microturbulence_vel, error_message):
         if error_message is not None:
             msg = error_message
             title = 'Problem synthesizing spectrum'
@@ -4220,7 +4418,7 @@ iSpec uses the following radiative transfer codes:
             self.active_spectrum.plot_id.set_label(self.active_spectrum.name)
 
         # Name: If it already exists, add a suffix
-        name = self.get_name(code + "_" + str(teff) + "_" + str(logg) + "_"  + str(MH) + "_" + str(microturbulence_vel))
+        name = self.get_name(code + "_" + str(teff) + "_" + str(logg) + "_"  + str(MH) + "_"  + str(alpha) + "_" + str(microturbulence_vel))
         color = self.get_color()
         self.active_spectrum = Spectrum(synth_spectrum, name, color=color)
 
@@ -4253,8 +4451,9 @@ iSpec uses the following radiative transfer codes:
             teff = 5771.0
             logg = 4.44
             MH = 0.00
+            alpha = 0.00
             microturbulence_vel = 1.07
-            self.active_spectrum.dialog[key] = AbundancesDialog(self, "Abundances determination from EW", teff, logg, MH, microturbulence_vel, self.lists, self.default_lists)
+            self.active_spectrum.dialog[key] = AbundancesDialog(self, "Abundances determination from EW", teff, logg, MH, alpha, microturbulence_vel, self.lists, self.default_lists)
             self.active_spectrum.dialog[key].show()
         elif show_previous_results:
             self.active_spectrum.dialog[key].show()
@@ -4268,13 +4467,14 @@ iSpec uses the following radiative transfer codes:
         teff = self.active_spectrum.dialog[key].results["Effective temperature (K)"]
         logg = self.active_spectrum.dialog[key].results["Surface gravity (log g)"]
         MH = self.active_spectrum.dialog[key].results["Metallicity [M/H]"]
+        alpha = self.active_spectrum.dialog[key].results["Alpha enhancement [alpha/Fe]"]
         microturbulence_vel = self.active_spectrum.dialog[key].results["Microturbulence velocity (km/s)"]
         selected_atmosphere_models = self.active_spectrum.dialog[key].results["Model atmosphere"]
         selected_abundances = self.active_spectrum.dialog[key].results["Solar abundances"]
         abundances_file = resource_path("input/abundances/" + selected_abundances + "/stdatom.dat")
         self.active_spectrum.dialog[key].destroy()
 
-        if teff is None or logg is None or MH is None or microturbulence_vel is None:
+        if teff is None or logg is None or MH is None or alpha is None or microturbulence_vel is None:
             self.flash_status_message("Bad value.")
             return
 
@@ -4282,10 +4482,10 @@ iSpec uses the following radiative transfer codes:
         if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
             logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
             self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
-            self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/modeled_layers_pack.dump'))
+            self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/'))
 
-        if not ispec.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
-            msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of theatmospheric models."
+        if not ispec.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha, 'vmic':microturbulence_vel}):
+            msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of the atmospheric models."
             title = 'Out of the atmospheric models'
             self.error(title, msg)
             self.flash_status_message("Bad values.")
@@ -4298,21 +4498,21 @@ iSpec uses the following radiative transfer codes:
 
         # Prepare atmosphere model
         self.status_message("Interpolating atmosphere model...")
-        atmosphere_layers = ispec.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH)
+        atmosphere_layers = ispec.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha})
 
         self.operation_in_progress = True
         self.status_message("Determining abundances...")
 
-        thread = threading.Thread(target=self.on_determine_abundances_from_ew_thread, args=(code, atmosphere_layers, teff, logg, MH, abundances, microturbulence_vel,))
+        thread = threading.Thread(target=self.on_determine_abundances_from_ew_thread, args=(code, atmosphere_layers, teff, logg, MH, alpha, abundances, microturbulence_vel,))
         thread.setDaemon(True)
         thread.start()
 
 
-    def on_determine_abundances_from_ew_thread(self, code, atmosphere_layers, teff, logg, MH, abundances, microturbulence_vel):
+    def on_determine_abundances_from_ew_thread(self, code, atmosphere_layers, teff, logg, MH, alpha, abundances, microturbulence_vel):
         linemasks = self.active_spectrum.linemasks
         error_message = None
         try:
-            spec_abund, normal_abund, x_over_h, x_over_fe = ispec.determine_abundances(atmosphere_layers, teff, logg, MH, linemasks, abundances, microturbulence_vel=microturbulence_vel, verbose=1, gui_queue=self.queue, code=code)
+            spec_abund, normal_abund, x_over_h, x_over_fe = ispec.determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, abundances, microturbulence_vel=microturbulence_vel, verbose=1, gui_queue=self.queue, code=code)
         except Exception, e:
             spec_abund = None
             normal_abund = None
@@ -4365,8 +4565,9 @@ iSpec uses the following radiative transfer codes:
             teff = 5771.0
             logg = 4.44
             MH = 0.00
+            alpha = 0.00
             microturbulence_vel = 1.07
-            self.active_spectrum.dialog[key] = SolverEWDialog(self, "Parameters determination from EW", teff, logg, MH, microturbulence_vel, self.lists, self.default_lists)
+            self.active_spectrum.dialog[key] = SolverEWDialog(self, "Parameters determination from EW", teff, logg, MH, alpha, microturbulence_vel, self.lists, self.default_lists)
             self.active_spectrum.dialog[key].show()
         elif show_previous_results:
             self.active_spectrum.dialog[key].show()
@@ -4380,6 +4581,7 @@ iSpec uses the following radiative transfer codes:
         teff = self.active_spectrum.dialog[key].results["Effective temperature (K)"]
         logg = self.active_spectrum.dialog[key].results["Surface gravity (log g)"]
         MH = self.active_spectrum.dialog[key].results["Metallicity [M/H]"]
+        alpha = self.active_spectrum.dialog[key].results["Alpha enhancement [alpha/Fe]"]
         microturbulence_vel = self.active_spectrum.dialog[key].results["Microturbulence velocity (km/s)"]
         max_iterations = self.active_spectrum.dialog[key].results["Maximum number of iterations"]
         free_teff = self.active_spectrum.dialog[key].results["Free Teff"] == 1
@@ -4404,7 +4606,7 @@ iSpec uses the following radiative transfer codes:
         abundances_file = resource_path("input/abundances/" + selected_abundances + "/stdatom.dat")
         self.active_spectrum.dialog[key].destroy()
 
-        if teff is None or logg is None or MH is None or microturbulence_vel is None:
+        if teff is None or logg is None or MH is None or alpha is None or microturbulence_vel is None:
             self.flash_status_message("Bad value.")
             return
 
@@ -4412,10 +4614,10 @@ iSpec uses the following radiative transfer codes:
         if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
             logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
             self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
-            self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/modeled_layers_pack.dump'))
+            self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/'))
 
-        if not ispec.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
-            msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of theatmospheric models."
+        if not ispec.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha, 'vmic':microturbulence_vel}):
+            msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of the atmospheric models."
             title = 'Out of the atmospheric models'
             self.error(title, msg)
             self.flash_status_message("Bad values.")
@@ -4429,12 +4631,12 @@ iSpec uses the following radiative transfer codes:
         self.operation_in_progress = True
         self.status_message("Determining abundances...")
 
-        thread = threading.Thread(target=self.on_determine_parameters_from_ew_thread, args=(code, self.modeled_layers_pack[selected_atmosphere_models], abundances,  teff, logg, MH, microturbulence_vel, free_params, max_iterations))
+        thread = threading.Thread(target=self.on_determine_parameters_from_ew_thread, args=(code, self.modeled_layers_pack[selected_atmosphere_models], abundances,  teff, logg, MH, alpha, microturbulence_vel, free_params, max_iterations))
         thread.setDaemon(True)
         thread.start()
 
 
-    def on_determine_parameters_from_ew_thread(self, code, modeled_layers_pack, solar_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, free_params, max_iterations):
+    def on_determine_parameters_from_ew_thread(self, code, modeled_layers_pack, solar_abundances, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, free_params, max_iterations):
         linemasks = self.active_spectrum.linemasks
         # Reduced equivalent width
         # Filter too weak/strong lines
@@ -4459,7 +4661,7 @@ iSpec uses the following radiative transfer codes:
         error_message = None
         try:
             results = ispec.model_spectrum_from_ew(linemasks[efilter], modeled_layers_pack, \
-                                solar_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, \
+                                solar_abundances, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, \
                                 free_params=free_params, \
                                 adjust_model_metalicity=True, \
                                 max_iterations=max_iterations, \
@@ -4519,17 +4721,18 @@ iSpec uses the following radiative transfer codes:
         teff = 5771.0
         logg = 4.44
         MH = 0.00
+        alpha = 0.00
         macroturbulence = 4.21
         vsini = 1.6
         limb_darkening_coeff = 0.6
-        microturbulence_vel = 4.21
+        microturbulence_vel = 1.05
         #resolution = 47000
         resolution = 300000
         #resolution = 100000
 
         key = "SolverDialog"
         if not self.active_spectrum.dialog.has_key(key):
-            self.active_spectrum.dialog[key] = SolverDialog(self, "Determine parameters", resolution, teff, logg, MH, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.default_lists)
+            self.active_spectrum.dialog[key] = SolverDialog(self, "Determine parameters", resolution, teff, logg, MH, alpha, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.default_lists)
         self.active_spectrum.dialog[key].show()
 
         if self.active_spectrum.dialog[key].results is None:
@@ -4541,6 +4744,7 @@ iSpec uses the following radiative transfer codes:
         initial_teff = self.active_spectrum.dialog[key].results["Effective temperature (K)"]
         initial_logg = self.active_spectrum.dialog[key].results["Surface gravity (log g)"]
         initial_MH = self.active_spectrum.dialog[key].results["Metallicity [M/H]"]
+        initial_alpha = self.active_spectrum.dialog[key].results["Alpha enhancement [alpha/Fe]"]
         initial_vmic = self.active_spectrum.dialog[key].results["Microturbulence velocity (km/s)"]
         initial_vmac = self.active_spectrum.dialog[key].results["Macroturbulence velocity (km/s)"]
         initial_vsini = self.active_spectrum.dialog[key].results["Rotation (v sin(i)) (km/s)"]
@@ -4556,7 +4760,8 @@ iSpec uses the following radiative transfer codes:
 
         free_teff = self.active_spectrum.dialog[key].results["Free Teff"] == 1
         free_logg = self.active_spectrum.dialog[key].results["Free Log(g)"] == 1
-        free_MH = self.active_spectrum.dialog[key].results["Free [Fe/H]"] == 1
+        free_MH = self.active_spectrum.dialog[key].results["Free [M/H]"] == 1
+        free_alpha = self.active_spectrum.dialog[key].results["Free [alpha/H]"] == 1
         free_microturbulence = self.active_spectrum.dialog[key].results["Free Vmic"] == 1
         free_macroturbulence = self.active_spectrum.dialog[key].results["Free Vmac"] == 1
         free_vsini = self.active_spectrum.dialog[key].results["Free vsin(i)"] == 1
@@ -4572,6 +4777,8 @@ iSpec uses the following radiative transfer codes:
             free_params.append("logg")
         if free_MH:
             free_params.append("MH")
+        if free_alpha:
+            free_params.append("alpha")
         if free_microturbulence:
             free_params.append("vmic")
         if free_macroturbulence:
@@ -4604,7 +4811,8 @@ iSpec uses the following radiative transfer codes:
         abundances_file = self.lists['abundances']['path'][i][0]
 
         i = np.where(self.lists['atmospheres']['name'] == selected_atmosphere_models)
-        atmospheres_file = self.lists['atmospheres']['path'][i][0]
+        atmospheres_file = os.path.dirname(self.lists['atmospheres']['path'][i][0])
+
         ####
 
         isotope_file = resource_path("input/isotopes/SPECTRUM.lst")
@@ -4614,12 +4822,13 @@ iSpec uses the following radiative transfer codes:
             self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
             self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(atmospheres_file)
 
-        if not ispec.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], teff, logg, MH):
-            msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of theatmospheric models."
+        if not ispec.valid_atmosphere_target(self.modeled_layers_pack[selected_atmosphere_models], {'teff':initial_teff, 'logg':initial_logg, 'MH':initial_MH, 'alpha':initial_alpha, 'vmic':initial_vmic}):
+            msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of the atmospheric models."
             title = 'Out of the atmospheric models'
             self.error(title, msg)
             self.flash_status_message("Bad values.")
             return
+
 
         # Load SPECTRUM linelist
         chemical_elements_file = resource_path("input/abundances/chemical_elements_symbols.dat")
@@ -4680,18 +4889,18 @@ iSpec uses the following radiative transfer codes:
         self.operation_in_progress = True
         self.status_message("Determining parameters...")
         self.update_progress(10)
-        thread = threading.Thread(target=self.on_determine_parameters_thread, args=(code, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, max_iterations))
+        thread = threading.Thread(target=self.on_determine_parameters_thread, args=(code, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, max_iterations))
         thread.setDaemon(True)
         thread.start()
 
-    def on_determine_parameters_thread(self, code, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, max_iterations):
+    def on_determine_parameters_thread(self, code, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, max_iterations):
         self.__update_numpy_arrays_from_widgets("lines")
         self.__update_numpy_arrays_from_widgets("segments")
 
         error_message = None
         linelist_free_loggf = None
         try:
-            obs_spectrum, synth_spectrum, params, errors, free_abundances, loggf_found, status, stats_linemasks = ispec.model_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations, code=code, \
+            obs_spectrum, synth_spectrum, params, errors, free_abundances, loggf_found, status, stats_linemasks = ispec.model_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations, code=code, \
             vmic_from_empirical_relation=False, \
             vmac_from_empirical_relation=False, \
             )
@@ -4714,7 +4923,7 @@ iSpec uses the following radiative transfer codes:
             self.operation_in_progress = False
             return
         # Name: If it already exists, add a suffix
-        base_name = "%.1f_%.2f_%.2f_%.1f_%.1f_%.1f_%.1f_%.0f" % (params['teff'], params['logg'], params['MH'], params['vmic'], params['vmac'], params['vsini'], params['limb_darkening_coeff'], params['R'])
+        base_name = "%.1f_%.2f_%.2f_%.2f_%.1f_%.1f_%.1f_%.1f_%.0f" % (params['teff'], params['logg'], params['MH'], params['alpha'], params['vmic'], params['vmac'], params['vsini'], params['limb_darkening_coeff'], params['R'])
 
         analysed_spectrum = self.active_spectrum
 
@@ -4756,5 +4965,161 @@ iSpec uses the following radiative transfer codes:
         self.operation_in_progress = False
         self.flash_status_message("Parameters determined!")
 
+    def on_determine_parameters_with_grid(self):
+        if not self.check_active_spectrum_exists():
+            return
+        if self.check_operation_in_progress():
+            return
+        if not self.check_continuum_model_exists():
+            return
 
+        teff = 5771.0
+        logg = 4.44
+        MH = 0.00
+        alpha = 0.00
+        macroturbulence = 4.21
+        vsini = 1.6
+        limb_darkening_coeff = 0.6
+        microturbulence_vel = 1.05
+        #resolution = 47000
+        resolution = 300000
+        #resolution = 100000
+
+        key = "InterpolateSolverDialog"
+        if not self.active_spectrum.dialog.has_key(key):
+            self.active_spectrum.dialog[key] = InterpolateSolverDialog(self, "Determine parameters with grid", resolution, teff, logg, MH, alpha, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.default_lists)
+        self.active_spectrum.dialog[key].show()
+
+        if self.active_spectrum.dialog[key].results is None:
+            # Cancel
+            self.active_spectrum.dialog[key].destroy()
+            return
+
+        selected_grid = self.active_spectrum.dialog[key].results["Grid"]
+        initial_teff = self.active_spectrum.dialog[key].results["Effective temperature (K)"]
+        initial_logg = self.active_spectrum.dialog[key].results["Surface gravity (log g)"]
+        initial_MH = self.active_spectrum.dialog[key].results["Metallicity [M/H]"]
+        initial_alpha = self.active_spectrum.dialog[key].results["Alpha enhancement [alpha/Fe]"]
+        initial_vmic = self.active_spectrum.dialog[key].results["Microturbulence velocity (km/s)"]
+        initial_vmac = self.active_spectrum.dialog[key].results["Macroturbulence velocity (km/s)"]
+        initial_vsini = self.active_spectrum.dialog[key].results["Rotation (v sin(i)) (km/s)"]
+        initial_limb_darkening_coeff = self.active_spectrum.dialog[key].results["Limb darkening coefficient"]
+        initial_R = self.active_spectrum.dialog[key].results["Resolution"]
+        initial_vrad = self.active_spectrum.dialog[key].results["Radial velocity"]
+        max_iterations = self.active_spectrum.dialog[key].results["Maximum number of iterations"]
+
+        free_teff = self.active_spectrum.dialog[key].results["Free Teff"] == 1
+        free_logg = self.active_spectrum.dialog[key].results["Free Log(g)"] == 1
+        free_MH = self.active_spectrum.dialog[key].results["Free [M/H]"] == 1
+        free_alpha = self.active_spectrum.dialog[key].results["Free [alpha/Fe]"] == 1
+        free_microturbulence = self.active_spectrum.dialog[key].results["Free Vmic"] == 1
+        free_macroturbulence = self.active_spectrum.dialog[key].results["Free Vmac"] == 1
+        free_vsini = self.active_spectrum.dialog[key].results["Free vsin(i)"] == 1
+        free_limb_darkening_coeff = self.active_spectrum.dialog[key].results["Free limb dark. coeff."] == 1
+        free_resolution = self.active_spectrum.dialog[key].results["Free resolution"] == 1
+        free_vrad = self.active_spectrum.dialog[key].results["Free radial velocity"] == 1
+
+        free_params = []
+        if free_teff:
+            free_params.append("teff")
+        if free_logg:
+            free_params.append("logg")
+        if free_MH:
+            free_params.append("MH")
+        if free_alpha:
+            free_params.append("alpha")
+        if free_microturbulence:
+            free_params.append("vmic")
+        if free_macroturbulence:
+            free_params.append("vmac")
+        if free_vsini:
+            free_params.append("vsini")
+        if free_limb_darkening_coeff:
+            free_params.append("limb_darkening_coef")
+        if free_resolution:
+            free_params.append("R")
+        if free_vrad:
+            free_params.append("vrad")
+
+        if len(free_params) == 0:
+            msg = "At least one parameter should be let free"
+            title = 'No free parameters'
+            self.error(title, msg)
+            return
+
+        self.active_spectrum.dialog[key].destroy()
+
+        ### Find filenames
+        i = np.where(self.lists['grid']['name'] == selected_grid)
+        grid_dirname = os.path.dirname(self.lists['grid']['path'][i][0])
+
+        ####
+
+        if not self.grid.has_key(selected_grid):
+            logging.info("Loading grid %s..." % selected_grid)
+            self.status_message("Loading grid %s..." % selected_grid)
+            self.grid[selected_grid] = ispec.load_spectral_grid(grid_dirname)
+
+        if not ispec.valid_interpolated_spectrum_target(self.grid[selected_grid], {'teff':initial_teff, 'logg':initial_logg, 'MH':initial_MH, 'alpha':initial_alpha, 'vmic':initial_vmic}):
+            msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] fall out of the grid limits."
+            title = 'Out of the grid limits'
+            self.error(title, msg)
+            self.flash_status_message("Bad values.")
+            return
+
+        # Consider only segments
+        elements_type = "segments"
+        if len(self.region_widgets[elements_type]) == 0:
+            msg = "No segments present for synthetic spectrum generation."
+            title = 'No segments'
+            self.error(title, msg)
+            return
+
+        waveobs = self.active_spectrum.data['waveobs']
+        total_points = len(waveobs)
+
+        if total_points < 2:
+            msg = "Wavelength range too narrow."
+            title = 'Wavelength range'
+            self.error(title, msg)
+            self.flash_status_message("Bad values.")
+            return
+
+        self.operation_in_progress = True
+        self.status_message("Determining parameters with grid...")
+        self.update_progress(10)
+        code = "grid"
+        thread = threading.Thread(target=self.on_determine_parameters_with_grid_thread, args=(code, selected_grid, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, max_iterations))
+        thread.setDaemon(True)
+        thread.start()
+
+    def on_determine_parameters_with_grid_thread(self, code, selected_grid, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, max_iterations):
+        self.__update_numpy_arrays_from_widgets("lines")
+        self.__update_numpy_arrays_from_widgets("segments")
+
+        # No fixed abundances
+        fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float)])
+        modeled_layers_pack = None
+        linelist = None
+        isotopes = None
+        abundances = None
+        error_message = None
+        linelist_free_loggf = None
+        free_abundances = None
+        try:
+            obs_spectrum, synth_spectrum, params, errors, free_abundances, loggf_found, status, stats_linemasks = ispec.model_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations, code=code, \
+            vmic_from_empirical_relation=False, \
+            vmac_from_empirical_relation=False, \
+            grid=self.grid[selected_grid] \
+            )
+        except Exception, e:
+            #raise
+            obs_spectrum = None
+            synth_spectrum = None
+            params = None
+            errors = None
+            status = None
+            stats_linemasks = None
+            error_message = str(e)
+        self.queue.put((self.on_determine_parameters_finnish, [obs_spectrum, synth_spectrum, params, errors, status, stats_linemasks, error_message], {}))
 
