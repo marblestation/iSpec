@@ -161,7 +161,10 @@ def interpolate_atmosphere_layers(modeled_layers_pack, target, code="spectrum"):
     #interpolated_atm_compatible_format = interpolated_atm[compatible_fields]
     interpolated_atm_compatible_format = pd.DataFrame(interpolated_atm)[compatible_fields].to_records(index=False)
     interpolated_atm_compatible_format = interpolated_atm_compatible_format.view(float).reshape(interpolated_atm_compatible_format.shape + (-1,))
-    return interpolated_atm_compatible_format
+    # SME fails if it is not a np.ndarray (it does not accept views either)
+    # built like this:
+    interpolated_atm_compatible_format_ndarray = np.array(interpolated_atm_compatible_format.T.tolist()).T
+    return interpolated_atm_compatible_format_ndarray
 
 
 def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None, code='spectrum', tmp_dir=None):
