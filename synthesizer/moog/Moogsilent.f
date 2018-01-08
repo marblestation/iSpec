@@ -20,7 +20,7 @@ c     generate a reminder of this
       write (moogpath,1001)
       moogpath = 
      . 'DATA/'
-c     . '/home/marble/Sync/VirtualDrop/Projects/moog/moogjul2014/'
+c     .  '/astro/users/sakaricm/MOOG2015'
 
 
 c*****What kind of machine are you using?  Possible ones are:

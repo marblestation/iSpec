@@ -38,7 +38,7 @@ c    will not write on the 80th column or the 25th row of the screen.
 c
        include 'Pstuff.com'
        integer y,x,count,ccount
-       character arr*80,dummy*80,string(80)*1,esc*1
+       character arr*(*),dummy*80,string(80)*1,esc*1
        equivalence (dummy,string(1))
 c
        count = ccount

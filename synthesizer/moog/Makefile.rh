@@ -3,42 +3,35 @@
 
 #     here are the object files 
 OBJECTS = Abfind.o Abpop.o Abunplot.o Batom.o Begin.o Binary.o \
-	Binplot.o Binplotprep.o Blankstring.o Blends.o Bmolec.o Boxit.o \
-	Calmod.o Cdcalc.o Chabund.o Cog.o Cogplot.o Cogsyn.o \
-	Correl.o Crosscorr.o Curve.o Damping.o Defcolor.o Discov.o \
-	Doflux.o Drawcurs.o Eqlib.o Estim.o Ewfind.o \
-	Ewweighted.o Fakeline.o Findtic.o Finish.o \
-	Fluxplot.o Gammabark.o Getasci.o Getcount.o Getnum.o Getsyns.o \
-	Gridplo.o Gridsyn.o Infile.o Inlines.o Inmodel.o Invert.o \
-	Jexpint.o Lineinfo.o Lineabund.o Linlimit.o \
-	Makeplot.o Minimax.o Molquery.o Moog.o Mydriver.o \
-	Nansi.o Nearly.o Number.o Obshead.o \
-	Oneline.o Opaccouls.o OpacHelium.o OpacHydrogen.o \
-	Opacit.o Opacmetals.o Opacscat.o Params.o Partfn.o \
-	Partnew.o Plotit.o Plotremember.o Pltabun.o Pltcog.o \
-	Pltflux.o Pltspec.o Pointcurs.o Prinfo.o Putasci.o Readobs.o \
-	Rinteg.o Smooth.o Specplot.o Stats.o Sunder.o Synpop.o Synspec.o \
-	Synth.o Tablepop.o Taukap.o Total.o Trudamp.o Ucalc.o Vargauss.o \
-	Vmacro.o Voigt.o Wavecalc.o Weedout.o Writenumber.o
+        Binplot.o Binplotprep.o Blends.o Bmolec.o Boxit.o \
+        Calmod.o Cdcalc.o Chabund.o Cog.o Cogplot.o Cogsyn.o \
+        Correl.o Crosscorr.o Curve.o Damping.o Defcolor.o Discov.o \
+        Doflux.o Drawcurs.o Eqlib.o Estim.o Ewfind.o \
+        Ewweighted.o Fakeline.o Findtic.o Finish.o \
+        Fluxplot.o Gammabark.o Getasci.o Getcount.o Getnum.o \
+        Gridplo.o Gridsyn.o Infile.o Inlines.o Inmodel.o Invert.o \
+        Jexpint.o Lineinfo.o Lineabund.o Linlimit.o \
+        Makeplot.o Minimax.o Molquery.o Moog.o Mydriver.o \
+        Nansi.o Nearly.o Number.o Obshead.o \
+        Oneline.o Opaccouls.o OpacHelium.o OpacHydrogen.o \
+        Opacit.o Opacmetals.o Opacscat.o Params.o Partfn.o \
+        Partnew.o Plotit.o Plotremember.o Pltabun.o Pltcog.o \
+        Pltflux.o Pltspec.o Pointcurs.o Prinfo.o Putasci.o Readobs.o \
+        Rinteg.o Smooth.o Specplot.o Stats.o Sunder.o Synpop.o Synspec.o \
+        Synth.o Tablepop.o Taukap.o Total.o Trudamp.o Ucalc.o Vargauss.o \
+        Vmacro.o Voigt.o Wavecalc.o Weedout.o Writenumber.o
 
 
 COMMON =  Atmos.com Dummy.com Equivs.com Factor.com Kappa.com Linex.com \
         Mol.com Multistar.com Obspars.com Plotval.com Pstuff.com \
         Quants.com Multimod.com Dampdat.com
 
-FC = gfortran
-#FFLAGS = -Wall -O4 -ffixed-line-length-72 -ff2c # it does not work
-#FFLAGS = -Wall -m32 -ff2c
-#FFLAGS = -Wall -ff2c
-FFLAGS = -Wall -O1 -ff2c
-SMLIB = fake_sm-2.4.35
+CC = cc
+FC = f77 -Wall
 
-#CC = cc
-#FC = f77 -Wall
-
-## the following lines point to some needed libraries
-#X11LIB = /usr/X11R6/lib
-#SMLIB = /opt/local/lib
+# the following lines point to some needed libraries
+X11LIB = /usr/X11R6/lib
+SMLIB = /opt/local/lib
 
 #        here are the compilation and linking commands
 all: MOOG ;
@@ -54,15 +47,11 @@ all: MOOG ;
 	@echo
 	@echo -----------------------------------------------------------------
 
-$(SMLIB)/lib/libfakesm.a:
-	cd $(SMLIB) && make
-
-MOOG:  $(OBJECTS) $(SMLIB)/lib/libfakesm.a;
+MOOG:  $(OBJECTS);
 	$(FC) $(OBJECTS) -o MOOG -L$(X11LIB) -lX11 \
-        -L$(SMLIB)/lib -lfakesm # -lplotsub -ldevices -lutils
+        -L$(SMLIB) -lplotsub -ldevices -lutils
 
 $(OBJECTS): $(COMMON)
 
 clean:
 	-rm -f *.o MOOG libMOOG.a
-	cd $(SMLIB) && make clean

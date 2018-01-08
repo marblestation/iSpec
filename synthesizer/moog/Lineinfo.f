@@ -70,15 +70,17 @@ c     lineprintop =4 outputs line-center opacities
             endif
             if (iunits .eq. 1) then
                write (nf1out,1009) j, 1.d-4*wave1(j), molname, 
-     .           atom1(j), e(j,1), gf(j), damptype(j), logstrength,
-     .           1000.*width(j)
+     .               atom1(j), e(j,1), loggf, damptype(j), 
+     .               logstrength, 1000.*width(j)
             else
                write (nf1out,1010) j, wave1(j), molname, 
-     .           atom1(j), e(j,1), gf(j), damptype(j), logstrength,
-     .           1000.*width(j)
+     .               atom1(j), e(j,1), loggf, damptype(j), 
+     .               logstrength, 1000.*width(j)
             endif
-            if (linprintopt .ge. 2) write (nf1out,1005) 
-     .                 (chi(j,k),k=1,3), charge(j), amass(j), rdmass(j)
+            if (linprintopt .ge. 2) 
+     .         write (nf1out,1005) 
+     .               d0(j), (chi(j,k),k=1,2), charge(j), amass(j), 
+     .               rdmass(j)
          endif
       enddo    
       if (start.ne.0.0 .or. sstop.ne.0.0) then
@@ -122,11 +124,11 @@ c     molecular line can possibly be in this category
          if (iatom .lt. 100) then
             if (iunits .eq. 1) then
                write (nf1out,1003) j-nlines,1.d-4*wave1(j),names(iatom),
-     .                             ion(ich), atom1(j), e(j,1), gf(j),
+     .                             ion(ich), atom1(j), e(j,1), loggf,
      .                             damptype(j), logstrength
             else
                write (nf1out,1004) j-nlines, wave1(j),names(iatom),
-     .                             ion(ich), atom1(j), e(j,1), gf(j), 
+     .                             ion(ich), atom1(j), e(j,1), loggf,
      .                             damptype(j), logstrength
             endif
          else
@@ -197,13 +199,14 @@ c     look here also for the calls to the trend line calculations
          endif
          ew = 1000.*width(l)
          rw = dlog10(width(l)/wave1(l))
-         write (array,3007) wave1(l), atom1(l), e(l,1), dlog10(gf(l)),
+         loggf = dlog10(gf(l))
+         write (array,3007) wave1(l), atom1(l), e(l,1), loggf,
      .         ew, rw, abundout(l), diff
          if (errmess(1:9) .ne. 'stopinfo!') then
             line = line + 1
             call prinfo (line)
          endif
-         write (nf2out,3007) wave1(l), atom1(l), e(l,1), dlog10(gf(l)),
+         write (nf2out,3007) wave1(l), atom1(l), e(l,1), loggf,
      .         ew, rw, abundout(l), diff
       enddo
       write (array,3008) average, deviate, kount

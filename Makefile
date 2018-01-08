@@ -1,4 +1,7 @@
 
+UNAME_S := $(shell uname -s)
+
+
 all: spectrum turbospectrum moog isochrones
 
 spectrum: ispec/synthesizer.so
@@ -40,6 +43,18 @@ synthesizer/turbospectrum/bin/babsma_lu synthesizer/turbospectrum/bin/bsyn_lu sy
 	mv synthesizer/turbospectrum/exec-gf-v15.1/eqwidt_lu synthesizer/turbospectrum/bin/
 
 synthesizer/moog/MOOGSILENT: synthesizer/moog/*.f
+ifeq ($(UNAME_S),Linux)
+	sed -i 's/machine = "mac"/machine = "pcl"/' synthesizer/moog/Moogsilent.f
+	sed -i 's/machine = "uni"/machine = "pcl"/' synthesizer/moog/Moogsilent.f
+endif
+ifeq ($(UNAME_S),Darwin)
+	sed -i 's/machine = "pcl"/machine = "mac"/' synthesizer/moog/Moogsilent.f
+	sed -i 's/machine = "uni"/machine = "mac"/' synthesizer/moog/Moogsilent.f
+endif
+ifeq ($(UNAME_S),Solaris)
+	sed -i 's/machine = "mac"/machine = "uni"/' synthesizer/moog/Moogsilent.f
+	sed -i 's/machine = "pcl"/machine = "uni"/' synthesizer/moog/Moogsilent.f
+endif
 	rm -f synthesizer/moog/*.o
 	rm -f synthesizer/moog/MOOG
 	rm -f synthesizer/moog/MOOGSILENT

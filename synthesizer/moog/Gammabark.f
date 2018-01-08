@@ -78,7 +78,7 @@ c*****search for Barklem data
          gamrad(j)  = -1.
          if (atom1(j) .gt. 100.) cycle
          iatom10 = nint(10.*atom1(j))
-         write (*,*) nummin, nummax
+c        write (*,*) nummin, nummax
          do k=nummin,nummax
             waveerror = -(wave1(j) - wavebk(k))/wavebk(k)
             iii = nint(10.*idbk(k))

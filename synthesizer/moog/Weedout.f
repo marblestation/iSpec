@@ -89,30 +89,42 @@ c*****divide the lines into keepers and discards
          residual = 10.*atom1(j) - dble(nint(10.*(atom1(j))))
          if (strength(j)/kaplam(jtau5) .ge. xratio) then
             if (atom1(j) .lt. 100.) then
-               if (residual .gt. 0.) then
+               if (residual .gt. 0. .and. dampnum(j) .gt. 0.) then
                   write (nf8out,1007) wave1(j), atom1(j), e(j,1), 
-     .                     dlog10(gf(j)), dlog10(strength(j))
-               else
+     .            dlog10(gf(j)), dlog10(dampnum(j)), dlog10(strength(j))
+               else if (residual .gt. 0. .and. dampnum(j) .le. 0.) then
+                  write (nf8out,1007) wave1(j), atom1(j), e(j,1), 
+     .            dlog10(gf(j)), 0.0, dlog10(strength(j))
+               else if (residual .le. 0. .and. dampnum(j) .gt. 0.) then
                   write (nf8out,1004) wave1(j), atom1(j), e(j,1),
-     .                     dlog10(gf(j)), dlog10(strength(j))
+     .            dlog10(gf(j)), dlog10(dampnum(j)), dlog10(strength(j))
+               else 
+                  write (nf8out,1004) wave1(j), atom1(j), e(j,1),
+     .            dlog10(gf(j)), 0.0, dlog10(strength(j))
                endif
             else 
                if (residual .gt. 0.) then
                   write (nf8out, 1008) wave1(j), atom1(j), e(j,1),
-     .                     dlog10(gf(j)), d0(j), dlog10(strength(j))
+     .            dlog10(gf(j)), d0(j), dlog10(strength(j))
                else
                   write (nf8out, 1005) wave1(j), atom1(j), e(j,1),
-     .                     dlog10(gf(j)), d0(j), dlog10(strength(j))
+     .            dlog10(gf(j)), d0(j), dlog10(strength(j))
                endif
             endif
          else
             if (atom1(j) .lt. 100.) then
-               if (residual .gt. 0.) then
+               if (residual .gt. 0. .and. dampnum(j) .gt. 0.) then
                   write (nf9out,1007) wave1(j), atom1(j), e(j,1),
-     .                     dlog10(gf(j)), dlog10(strength(j))
+     .            dlog10(gf(j)), dlog10(dampnum(j)), dlog10(strength(j))
+               else if (residual .gt. 0. .and. dampnum(j) .le. 0.) then
+                  write (nf9out,1007) wave1(j), atom1(j), e(j,1),
+     .            dlog10(gf(j)), 0.0, dlog10(strength(j))
+               else if (residual .le. 0. .and. dampnum(j) .gt. 0.) then
+                  write (nf9out,1004) wave1(j), atom1(j), e(j,1),
+     .            dlog10(gf(j)), dlog10(dampnum(j)), dlog10(strength(j))
                else
                   write (nf9out,1004) wave1(j), atom1(j), e(j,1),
-     .                     dlog10(gf(j)), dlog10(strength(j))
+     .            dlog10(gf(j)), 0.0, dlog10(strength(j))
                endif
             else
                if (residual .gt. 0.) then
@@ -140,11 +152,11 @@ c*****format statements
      .        1pe10.2)
 1002  format ('THIS IS THE KEEPER LINE LIST')
 1003  format ('THIS IS THE DISCARDED LINE LIST')
-1004  format (f10.4, f10.1, f10.3, f10.3, 30x, f9.1)
+1004  format (f10.4, f10.1, f10.3, f10.3, f10.3, 20x, f9.1)
 1005  format (f10.4, f10.1, f10.3, f10.3, 10x, f10.3, 10x, f9.1)
 1006  format ('  kaplam from 1 to ntau at wavelength',f10.2/
      .        (6(1pd12.4)))
-1007  format (f10.4, f10.4, f10.3, f10.3, 30x, f9.1)
+1007  format (f10.4, f10.4, f10.3, f10.3, f10.3, 20x, f9.1)
 1008  format (f10.4, f10.5, f10.3, f10.3, 10x, f10.3, 10x, f9.1)
 
 

@@ -28,11 +28,11 @@ COMMON =  Atmos.com Dummy.com Equivs.com Factor.com Kappa.com Linex.com \
         Quants.com Multimod.com Dampdat.com
 
 CC = cc
-FC = f77 -Wall
+FC = gfortran -ff2c -Wall
 
 # the following lines point to some needed libraries
-X11LIB = /usr/X11R6/lib64
-SMLIB = /opt/local/sm_2.4.27-x86_64/lib
+X11LIB = /usr/lib64
+SMLIB = /astro/apps6/opt/sm-2.4.35/lib
 
 #        here are the compilation and linking commands
 all: MOOG ;

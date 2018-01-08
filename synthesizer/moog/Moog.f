@@ -20,14 +20,14 @@ c     generate a reminder of this necessity
       write (moogpath,1001)
       moogpath = 
      . 'DATA/'
-c     . '/home/marble/Sync/VirtualDrop/Projects/moog/moogjul2014/'
+c     .  '/astro/users/sakaricm/MOOG2015'
 
 
 c*****What kind of machine are you using?  Possible ones are:
 c     "mac" = Intel-based Apple Mac 
 c     "pcl" = a PC or desktop running some standard linux like Redhat
 c     "uni" = a machine running Unix, specifically Sun Solaris
-      machine = "pcl"
+      machine = "mac"
 
 
 c*****for x11 terminal types, define the parameters of plotting windows;

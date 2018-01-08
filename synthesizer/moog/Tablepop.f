@@ -110,8 +110,8 @@ c*****read the table input for integrated light spectrum syntheses
                   if     (nabs.le.0 .and. nisos.le.0) then
                      read (nftable,*,end=10) j, radius(mmod),
      .                                       relcount(mmod)
-                     write (nf7out,1006) j, radius(mmmod), 
-     .                                   relcount(mmmod)     
+                     write (nf7out,1006) j, radius(mmod), 
+     .                                   relcount(mmod)     
                   elseif (nabs.gt.0 .and. nisos.le.0) then       
                      read (nftable,*,end=10) j, radius(mmod),    
      .                                       relcount(mmod),     

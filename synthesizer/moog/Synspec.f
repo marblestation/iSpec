@@ -158,7 +158,8 @@ c*****format statements
 1101  format (/'SPECTRUM DEPTHS')
 1102  format (4f11.3)
 1103  format (4f10.7)
-1104  format ('SIMPLE  =    t'/'NAXIS   =     1'/'NAXIS1  = ',i10,/
+1104  format ('SIMPLE  =                    T / Fits standard'/
+     .        'NAXIS   =     1'/'NAXIS1  = ',i10,/
      .        'W0      =',f10.4/'CRVAL1  =',f10.4/'WPC     =',f10.4/
      .        'CDELT1  =',f10.4)
 1105  format (16HORIGIN  = 'moog'/21HDATA-TYP= 'synthetic'/

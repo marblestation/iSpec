@@ -129,7 +129,7 @@ c*****do the syntheses
          else
             do n=1,numatomsyn
                isynth = n
-               isorun = 1
+               isorun = n
                start = oldstart
                sstop = oldstop
                mode = 3
@@ -259,7 +259,12 @@ c*****now plot the spectrum
             call infile ('output ',nf5out,'formatted  ',0,nchars,
      .                   f5out,lscreen)
          endif
-         call pltspec (lscreen,ncall)
+         if (plotopt .eq. 3) then
+            call smooth (-1,ncall)
+            choice = 'q'
+         else
+            call pltspec (lscreen,ncall)
+         endif
 
 
 c*****if needed, loop back with abundance changes

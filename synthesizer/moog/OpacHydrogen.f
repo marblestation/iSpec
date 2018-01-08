@@ -47,7 +47,7 @@ c  set up some data upon first entrance with a new model atmosphere
       do i=1,ntau
          ex = boltex(i)
          if (freq .lt. 4.05933d13) ex = exlim(i)/evhkt(i)
-         h = (cont(7)*bolt(i,7) + cont(8)*bolt(i,8) + ! SBC: Andy Casey
+         h = (cont(7)*bolt(i,7) + cont8*bolt(i,8) + 
      .       (ex - exlim(i))*c + 
      .       coulff(1,tlog(i),freq)*freet(i)*cfree)*(1.-evhkt(i))
          do n=1,6
@@ -159,14 +159,17 @@ c  main opacity computation yielding "aHminus"
       wave = 2.99792458d17/freq
       wavelog = dlog(wave)
       do itheta=1,11
-         call linter (wfflog,fflog(1,itheta),22,wavelog,fftlog,1)
+         nnnn = 22
+         call linter (wfflog,fflog(1,itheta),nnnn,wavelog,fftlog,1)
          fftt(itheta) = dexp(fftlog)/thetaff(itheta)*5040.*1.380658E-16
       enddo
       hminbf = 0.
+      nnnn = 85
       if (freq  .gt.  1.82365d14) 
-     .              maxwave = map1(wbf,bf,85,wave,hminbf,1) 
+     .              maxwave = map1(wbf,bf,nnnn,wave,hminbf,1) 
       do i=1,ntau
-         call linter (thetaff,fftt,11,theta(i),fftheta(i),1)
+         nnnn = 11
+         call linter (thetaff,fftt,nnnn,theta(i),fftheta(i),1)
          hminff = fftheta(i)*numdens(1,1,i)/u(1,1,i)*2.*ne(i)
          h = hminbf*1.d-18*(1.-evhkt(i))*xhmin(i)
          aHminus(i) = h + hminff
@@ -249,7 +252,7 @@ c******************************************************************************
          go to 50
 25       d = (fold(l)-fold(l1))/(xold(l)-xold(l1))
          cfor =  fold(l+1)/((xold(l+1)-xold(l))*(xold(l+1)-xold(l1)))+
-     .      (fold(l1)/(xold(l+1)-xold(l1))-fold(l)/(xold(l+1)-xold(l)))/       
+     .      (fold(l1)/(xold(l+1)-xold(l1))-fold(l)/(xold(l+1)-xold(l)))/
      .      (xold(L)-xold(l1))
          bfor = d - (xold(l)+xold(l1))*cfor
          afor = fold(l1) - xold(l1)*d + xold(l)*xold(l1)*cfor

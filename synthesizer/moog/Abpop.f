@@ -220,9 +220,13 @@ c     options concerning what is seen on the plot
 
 *****quit, or go on to another species?
       array = 'DO ANOTHER SPECIES ([y]/n)? '
-      nchars = 28
-      call getasci (nchars,maxline)
-      choice = chinfo(1:1)
+      if (silent .eq. 'n') then 
+         nchars = 28
+         call getasci (nchars,maxline)
+         choice = chinfo(1:1)
+      else
+         choice = 'y'
+      endif
       if (choice.eq.'y' .or. nchars.le.0) then
          if (mode .eq. 2) then
             go to 5

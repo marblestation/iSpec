@@ -131,8 +131,6 @@ c*****or the observations may be rescaled
          array = 'MULTIPLY THE OBSERVED POINTS BY WHAT FACTOR? '
          nchars = 45
          call getnum (nchars,13,xnum,yymult)
-c                    write (*,*) ymult, yymult
-c                    pause
          ymult = ymult*yymult
          do i=1,lount
             yobs(i) = yymult*yobs(i)
