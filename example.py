@@ -1069,8 +1069,8 @@ def interpolate_spectrum():
     wave_top = 525.0
 
     code = "grid"
-    precomputed_grid_dir = ispec_dir + "/input/grid/SPECTRUM_MARCS.GES_VALD.480_680nm/"
     #precomputed_grid_dir = ispec_dir + "/input/grid/SPECTRUM_MARCS.GES_GESv5_atom_hfs_iso.480_680nm/"
+    precomputed_grid_dir = ispec_dir + "/input/grid/SPECTRUM_MARCS.GES_VALD.480_680nm/"
     grid = ispec.load_spectral_grid(precomputed_grid_dir)
 
     atomic_linelist = None
@@ -1430,8 +1430,8 @@ def determine_astrophysical_parameters_using_grid():
     max_iterations = 20
 
     code = "grid"
-    precomputed_grid_dir = ispec_dir + "/input/grid/SPECTRUM_MARCS.GES_VALD.480_680nm/"
     #precomputed_grid_dir = ispec_dir + "/input/grid/SPECTRUM_MARCS.GES_GESv5_atom_hfs_iso.480_680nm/"
+    precomputed_grid_dir = ispec_dir + "/input/grid/SPECTRUM_MARCS.GES_VALD.480_680nm/"
 
     atomic_linelist = None
     isotopes = None
@@ -1442,7 +1442,7 @@ def determine_astrophysical_parameters_using_grid():
 
     # Free parameters (vmic cannot be used as a free parameter when using a spectral grid)
     #free_params = ["teff", "logg", "MH", "alpha", "vmic", "vmac", "vsini", "R", "vrad", "limb_darkening_coeff"]
-    free_params = ["teff", "logg", "MH"]
+    free_params = ["teff", "logg", "MH", "alpha", "vmic", "R"]
 
     # Line regions
     line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/spectrum_synth_turbospectrum_synth_sme_synth_moog_synth_synthe_synth_good_for_params_all.txt")
