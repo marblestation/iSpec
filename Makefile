@@ -48,8 +48,9 @@ ifeq ($(UNAME_S),Linux)
 	sed -i 's/machine = "uni"/machine = "pcl"/' synthesizer/moog/Moogsilent.f
 endif
 ifeq ($(UNAME_S),Darwin)
-	sed -i 's/machine = "pcl"/machine = "mac"/' synthesizer/moog/Moogsilent.f
-	sed -i 's/machine = "uni"/machine = "mac"/' synthesizer/moog/Moogsilent.f
+	sed -i.bak 's/machine = "pcl"/machine = "mac"/' synthesizer/moog/Moogsilent.f
+	sed -i.bak 's/machine = "uni"/machine = "mac"/' synthesizer/moog/Moogsilent.f
+	rm -f synthesizer/moog/Moogsilent.f.bak
 endif
 ifeq ($(UNAME_S),Solaris)
 	sed -i 's/machine = "mac"/machine = "uni"/' synthesizer/moog/Moogsilent.f
