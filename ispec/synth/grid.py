@@ -284,6 +284,8 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
             vsini = 1.6 # Sun
             limb_darkening_coeff = 0.6
             reference_filename_out = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}".format(int(teff), logg, MH, alpha, vmic, zero_vmac, zero_vsini, zero_limb_darkening_coeff) + ".fits.gz"
+            if not os.path.exists(fits_dir + reference_filename_out):
+                continue
             complete_reference_list.add_row((int(teff), logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff))
 
 
@@ -302,12 +304,13 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
             else:
                 reference_grid = np.vstack((reference_grid, spectrum['flux']))
 
-        # Generate FITS file with grid for fast comparison
-        primary_hdu = fits.PrimaryHDU(reference_grid)
-        wavelengths_hdu = fits.ImageHDU(wavelengths, name="WAVELENGTHS")
-        params_bintable_hdu = fits.BinTableHDU(complete_reference_list.as_array(), name="PARAMS")
-        fits_format = fits.HDUList([primary_hdu, wavelengths_hdu, params_bintable_hdu])
-        fits_format.writeto(reference_grid_filename, overwrite=True)
+        if len(ranges) == len(complete_reference_list):
+            # Generate FITS file with grid for fast comparison
+            primary_hdu = fits.PrimaryHDU(reference_grid)
+            wavelengths_hdu = fits.ImageHDU(wavelengths, name="WAVELENGTHS")
+            params_bintable_hdu = fits.BinTableHDU(complete_reference_list.as_array(), name="PARAMS")
+            fits_format = fits.HDUList([primary_hdu, wavelengths_hdu, params_bintable_hdu])
+            fits_format.writeto(reference_grid_filename, overwrite=True)
 
 def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks):
     """
