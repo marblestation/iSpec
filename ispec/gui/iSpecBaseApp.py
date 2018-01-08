@@ -375,13 +375,13 @@ class iSpecBaseApp(Tkinter.Tk):
 
 
     def __get_filelist(self, dirname, match):
-        import fnmatch
         import os
+        import glob
 
         filelist = []
-        for root, dirnames, filenames in os.walk(resource_path(dirname), followlinks=True):
-            for filename in fnmatch.filter(filenames, match):
-                filelist.append((os.path.basename(root), resource_path(os.path.join(root, filename))))
+        for root in glob.glob(os.path.join(dirname, "*")):
+            if os.path.isdir(root) and os.path.exists(os.path.join(root, match)):
+                filelist.append((os.path.basename(root), resource_path(os.path.join(root, match))))
         filelist = np.array(filelist, dtype=[('name', '|S100'), ('path', '|S500')])
         filelist.sort(order=['name'])
         return filelist
@@ -550,6 +550,9 @@ class iSpecBaseApp(Tkinter.Tk):
         self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(Tkinter.END, "label")))
         self.menu_active_spectrum.add_separator()
 
+        if len(self.lists['grid']) > 0:
+                self.menu_active_spectrum.add_command(label="Interpolate spectrum from grid", command=self.on_interpolate)
+
         if (ispec.is_spectrum_support_enabled() \
                 #or ispec.is_turbospectrum_support_enabled() \
                 #or ispec.is_sme_support_enabled() \
@@ -558,9 +561,6 @@ class iSpecBaseApp(Tkinter.Tk):
                 ) and \
                 len(self.lists['atmospheres']) > 0 and len(self.lists['abundances']) > 0 and len(self.lists['atomic_lines']) > 0:
                 self.menu_active_spectrum.add_command(label="Synthesize spectrum", command=self.on_synthesize)
-
-        if len(self.lists['grid']) > 0:
-                self.menu_active_spectrum.add_command(label="Interpolate spectrum with grid", command=self.on_interpolate)
 
         if self.samp_manager is not None:
             self.menu_active_spectrum.add_command(label="Send spectrum to...", command=self.on_send_spectrum)
@@ -4762,7 +4762,7 @@ iSpec uses the following radiative transfer codes:
         free_teff = self.active_spectrum.dialog[key].results["Free Teff"] == 1
         free_logg = self.active_spectrum.dialog[key].results["Free Log(g)"] == 1
         free_MH = self.active_spectrum.dialog[key].results["Free [M/H]"] == 1
-        free_alpha = self.active_spectrum.dialog[key].results["Free [alpha/H]"] == 1
+        free_alpha = self.active_spectrum.dialog[key].results["Free [alpha/Fe]"] == 1
         free_microturbulence = self.active_spectrum.dialog[key].results["Free Vmic"] == 1
         free_macroturbulence = self.active_spectrum.dialog[key].results["Free Vmac"] == 1
         free_vsini = self.active_spectrum.dialog[key].results["Free vsin(i)"] == 1
@@ -5024,6 +5024,7 @@ iSpec uses the following radiative transfer codes:
         free_limb_darkening_coeff = self.active_spectrum.dialog[key].results["Free limb dark. coeff."] == 1
         free_resolution = self.active_spectrum.dialog[key].results["Free resolution"] == 1
         free_vrad = self.active_spectrum.dialog[key].results["Free radial velocity"] == 1
+        vmac_from_empirical_relation = self.active_spectrum.dialog[key].results["Automatic Vmac from empirical relation"] == 1
 
         free_params = []
         if free_teff:
@@ -5095,11 +5096,11 @@ iSpec uses the following radiative transfer codes:
         self.status_message("Determining parameters with grid...")
         self.update_progress(10)
         code = "grid"
-        thread = threading.Thread(target=self.on_determine_parameters_with_grid_thread, args=(code, selected_grid, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, max_iterations))
+        thread = threading.Thread(target=self.on_determine_parameters_with_grid_thread, args=(code, selected_grid, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, vmac_from_empirical_relation, max_iterations))
         thread.setDaemon(True)
         thread.start()
 
-    def on_determine_parameters_with_grid_thread(self, code, selected_grid, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, max_iterations):
+    def on_determine_parameters_with_grid_thread(self, code, selected_grid, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, vmac_from_empirical_relation, max_iterations):
         self.__update_numpy_arrays_from_widgets("lines")
         self.__update_numpy_arrays_from_widgets("segments")
 
@@ -5115,7 +5116,7 @@ iSpec uses the following radiative transfer codes:
         try:
             obs_spectrum, synth_spectrum, params, errors, free_abundances, loggf_found, status, stats_linemasks = ispec.model_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations, code=code, \
             vmic_from_empirical_relation=False, \
-            vmac_from_empirical_relation=False, \
+            vmac_from_empirical_relation=vmac_from_empirical_relation, \
             grid=self.grid[selected_grid] \
             )
         except Exception, e:

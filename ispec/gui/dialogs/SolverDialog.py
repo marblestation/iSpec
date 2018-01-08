@@ -41,7 +41,7 @@ class SolverDialog(CustomDialog):
         component = {}
         component["type"] = "Checkbutton"
         component["text"] = "Free Teff"
-        component["default"] = False
+        component["default"] = True
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
@@ -54,7 +54,7 @@ class SolverDialog(CustomDialog):
         component = {}
         component["type"] = "Checkbutton"
         component["text"] = "Free Log(g)"
-        component["default"] = False
+        component["default"] = True
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
@@ -85,7 +85,7 @@ class SolverDialog(CustomDialog):
         component = {}
         component["type"] = "Checkbutton"
         component["text"] = "Automatic alpha enhancement [alpha/Fe]"
-        component["default"] = True
+        component["default"] = False
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
@@ -103,7 +103,7 @@ class SolverDialog(CustomDialog):
         component = {}
         component["type"] = "Checkbutton"
         component["text"] = "Automatic Vmic from empirical relation"
-        component["default"] = True
+        component["default"] = False
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
@@ -116,7 +116,7 @@ class SolverDialog(CustomDialog):
         component = {}
         component["type"] = "Checkbutton"
         component["text"] = "Free Vmac"
-        component["default"] = True
+        component["default"] = False
         self.__components.append(component)
         component = {}
         component["type"] = "Checkbutton"
@@ -160,7 +160,7 @@ class SolverDialog(CustomDialog):
         component = {}
         component["type"] = "Checkbutton"
         component["text"] = "Free resolution"
-        component["default"] = False
+        component["default"] = True
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"

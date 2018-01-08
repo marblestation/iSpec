@@ -23,7 +23,7 @@ class InterpolateSolverDialog(CustomDialog):
         component = {}
         component["type"] = "Checkbutton"
         component["text"] = "Free Teff"
-        component["default"] = False
+        component["default"] = True
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
@@ -36,7 +36,7 @@ class InterpolateSolverDialog(CustomDialog):
         component = {}
         component["type"] = "Checkbutton"
         component["text"] = "Free Log(g)"
-        component["default"] = False
+        component["default"] = True
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
@@ -88,6 +88,11 @@ class InterpolateSolverDialog(CustomDialog):
         component = {}
         component["type"] = "Checkbutton"
         component["text"] = "Free Vmac"
+        component["default"] = False
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Automatic Vmac from empirical relation"
         component["default"] = True
         self.__components.append(component)
         component = {}
@@ -127,7 +132,7 @@ class InterpolateSolverDialog(CustomDialog):
         component = {}
         component["type"] = "Checkbutton"
         component["text"] = "Free resolution"
-        component["default"] = False
+        component["default"] = True
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
