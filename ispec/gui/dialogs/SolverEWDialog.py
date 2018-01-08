@@ -157,6 +157,11 @@ class SolverEWDialog(CustomDialog):
         component["maxvalue"] = 2
         self.__components.append(component)
         component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Automatic alpha enhancement [alpha/Fe]"
+        component["default"] = True
+        self.__components.append(component)
+        component = {}
         component["type"] = "Entry"
         component["text"] = "Microturbulence velocity (km/s)"
         component["text-type"] = "float" # float, int or str

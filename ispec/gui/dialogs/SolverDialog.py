@@ -83,6 +83,11 @@ class SolverDialog(CustomDialog):
         component["default"] = True
         self.__components.append(component)
         component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Automatic alpha enhancement [alpha/Fe]"
+        component["default"] = True
+        self.__components.append(component)
+        component = {}
         component["type"] = "Entry"
         component["text"] = "Microturbulence velocity (km/s)"
         component["text-type"] = "float" # float, int or str
@@ -96,6 +101,11 @@ class SolverDialog(CustomDialog):
         component["default"] = True
         self.__components.append(component)
         component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Automatic Vmic from empirical relation"
+        component["default"] = True
+        self.__components.append(component)
+        component = {}
         component["type"] = "Entry"
         component["text"] = "Macroturbulence velocity (km/s)"
         component["text-type"] = "float" # float, int or str
@@ -106,6 +116,11 @@ class SolverDialog(CustomDialog):
         component = {}
         component["type"] = "Checkbutton"
         component["text"] = "Free Vmac"
+        component["default"] = True
+        self.__components.append(component)
+        component = {}
+        component["type"] = "Checkbutton"
+        component["text"] = "Automatic Vmac from empirical relation"
         component["default"] = True
         self.__components.append(component)
         component = {}

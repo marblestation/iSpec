@@ -560,7 +560,7 @@ class iSpecBaseApp(Tkinter.Tk):
                 self.menu_active_spectrum.add_command(label="Synthesize spectrum", command=self.on_synthesize)
 
         if len(self.lists['grid']) > 0:
-                self.menu_active_spectrum.add_command(label="Interpolate spectrum", command=self.on_interpolate)
+                self.menu_active_spectrum.add_command(label="Interpolate spectrum with grid", command=self.on_interpolate)
 
         if self.samp_manager is not None:
             self.menu_active_spectrum.add_command(label="Send spectrum to...", command=self.on_send_spectrum)
@@ -4587,6 +4587,7 @@ iSpec uses the following radiative transfer codes:
         free_teff = self.active_spectrum.dialog[key].results["Free Teff"] == 1
         free_logg = self.active_spectrum.dialog[key].results["Free Log(g)"] == 1
         free_microturbulence = self.active_spectrum.dialog[key].results["Free Vmic"] == 1
+        enhance_abundances = self.active_spectrum.dialog[key].results["Automatic alpha enhancement [alpha/Fe]"] == 1
         free_params = []
         if free_teff:
             free_params.append("teff")
@@ -4631,12 +4632,12 @@ iSpec uses the following radiative transfer codes:
         self.operation_in_progress = True
         self.status_message("Determining abundances...")
 
-        thread = threading.Thread(target=self.on_determine_parameters_from_ew_thread, args=(code, self.modeled_layers_pack[selected_atmosphere_models], abundances,  teff, logg, MH, alpha, microturbulence_vel, free_params, max_iterations))
+        thread = threading.Thread(target=self.on_determine_parameters_from_ew_thread, args=(code, self.modeled_layers_pack[selected_atmosphere_models], abundances,  teff, logg, MH, alpha, microturbulence_vel, free_params, enhance_abundances, max_iterations))
         thread.setDaemon(True)
         thread.start()
 
 
-    def on_determine_parameters_from_ew_thread(self, code, modeled_layers_pack, solar_abundances, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, free_params, max_iterations):
+    def on_determine_parameters_from_ew_thread(self, code, modeled_layers_pack, solar_abundances, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, free_params, enhance_abundances, max_iterations):
         linemasks = self.active_spectrum.linemasks
         # Reduced equivalent width
         # Filter too weak/strong lines
@@ -4665,7 +4666,7 @@ iSpec uses the following radiative transfer codes:
                                 free_params=free_params, \
                                 adjust_model_metalicity=True, \
                                 max_iterations=max_iterations, \
-                                enhance_abundances=True, \
+                                enhance_abundances=enhance_abundances, \
                                 #outliers_detection = "robust", \
                                 #outliers_weight_limit = 0.90, \
                                 outliers_detection = "sigma_clipping", \
@@ -4769,6 +4770,9 @@ iSpec uses the following radiative transfer codes:
         free_resolution = self.active_spectrum.dialog[key].results["Free resolution"] == 1
         free_vrad = self.active_spectrum.dialog[key].results["Free radial velocity"] == 1
         free_element_abundance = self.active_spectrum.dialog[key].results["Free individual abundance"] == 1
+        enhance_abundances = self.active_spectrum.dialog[key].results["Automatic alpha enhancement [alpha/Fe]"] == 1
+        vmic_from_empirical_relation = self.active_spectrum.dialog[key].results["Automatic Vmic from empirical relation"] == 1
+        vmac_from_empirical_relation = self.active_spectrum.dialog[key].results["Automatic Vmac from empirical relation"] == 1
 
         free_params = []
         if free_teff:
@@ -4889,11 +4893,11 @@ iSpec uses the following radiative transfer codes:
         self.operation_in_progress = True
         self.status_message("Determining parameters...")
         self.update_progress(10)
-        thread = threading.Thread(target=self.on_determine_parameters_thread, args=(code, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, max_iterations))
+        thread = threading.Thread(target=self.on_determine_parameters_thread, args=(code, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, enhance_abundances, vmic_from_empirical_relation, vmac_from_empirical_relation, max_iterations))
         thread.setDaemon(True)
         thread.start()
 
-    def on_determine_parameters_thread(self, code, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, max_iterations):
+    def on_determine_parameters_thread(self, code, selected_atmosphere_models, linelist, isotopes, abundances, free_abundances, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, enhance_abundances, vmic_from_empirical_relation, vmac_from_empirical_relation, max_iterations):
         self.__update_numpy_arrays_from_widgets("lines")
         self.__update_numpy_arrays_from_widgets("segments")
 
@@ -4901,8 +4905,10 @@ iSpec uses the following radiative transfer codes:
         linelist_free_loggf = None
         try:
             obs_spectrum, synth_spectrum, params, errors, free_abundances, loggf_found, status, stats_linemasks = ispec.model_spectrum(self.active_spectrum.data, self.active_spectrum.continuum_model, self.modeled_layers_pack[selected_atmosphere_models], linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=self.regions['segments'], linemasks=self.regions['lines'], max_iterations=max_iterations, code=code, \
-            vmic_from_empirical_relation=False, \
-            vmac_from_empirical_relation=False, \
+            enhance_abundances=enhance_abundances, \
+            use_errors = True, \
+            vmic_from_empirical_relation = vmic_from_empirical_relation, \
+            vmac_from_empirical_relation = vmac_from_empirical_relation \
             )
         except Exception, e:
             raise

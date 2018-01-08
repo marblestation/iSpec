@@ -665,7 +665,7 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, abundances, initial_t
     teff_range = ranges['teff']
     logg_range = ranges['logg']
     MH_range = ranges['MH']
-    alpha_range = ranges.get('alpha', (0.,)) # Default (0.,) if 'alpha' is not a free parameter for atmospheres
+    alpha_range = ranges.get('alpha', (-1.5, 1.5)) # Default if 'alpha' is not a free parameter for atmosphere interpolation
 
     # Do not allow users to set free MH in free_params to avoid confusions
     # because metallicity is always free in this method, what we make by including MH in free_params
@@ -673,9 +673,8 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, abundances, initial_t
     if "MH" in free_params or "mh" in free_params:
         raise Exception("Metallicity cannot be a free parameter!")
 
-    if "alpha" in free_params and enhance_abundances:
-        enhance_abundances = False
-        logging.warn("'enhance_abundances' changed to False because alpha is a free parameter")
+    if "alpha" in free_params:
+        raise Exception("Alpha enhancement cannot be a free parameter!")
 
     if adjust_model_metalicity:
         free_params.append("MH")
