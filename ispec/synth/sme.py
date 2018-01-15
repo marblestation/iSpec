@@ -19,6 +19,8 @@ import os
 import sys
 import ctypes
 import numpy as np
+import tempfile
+import shutil
 from multiprocessing import Process
 from multiprocessing import Queue
 from Queue import Empty
@@ -29,37 +31,42 @@ from ispec.spectrum import create_spectrum_structure, resample_spectrum
 from effects import _filter_linelist, apply_post_fundamental_effects
 
 
-def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, timeout=1800):
-    return generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose, regions=regions, timeout=timeout, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0)
+def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, tmp_dir=None, timeout=1800):
+    return generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose, regions=regions, timeout=timeout, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0, tmp_dir=tmp_dir)
 
 
-def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None):
+def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, tmp_dir=None):
     if not is_sme_support_enabled():
         raise Exception("SME support is not enabled")
 
 
+    tmp_execution_dir = tempfile.mkdtemp(dir=tmp_dir)
+
     ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../../"
     sme_dir = ispec_dir + "/synthesizer/sme/"
+    sme_shorter_dir = os.path.join(tmp_execution_dir, "sme")
+    os.symlink(sme_dir, sme_shorter_dir)
+    sme_shorter_dir += "/"
     from sys import platform as _platform
     system_64bits = sys.maxsize > 2**32
     if _platform == "linux" or _platform == "linux2":
         # linux
         if system_64bits:
-            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.linux.x86_64.64")
+            sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.linux.x86_64.64")
         else:
-            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.linux.x86.32")
+            sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.linux.x86.32")
     elif _platform == "darwin":
         # OS X
         if system_64bits:
-            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.darwin.x86_64.64")
+            sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.darwin.x86_64.64")
         else:
-            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.darwin.i386.32")
+            sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.darwin.i386.32")
     else:
         # Windows
         if system_64bits:
-            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.Win32.x86_64.64")
+            sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.Win32.x86_64.64")
         else:
-            sme = ctypes.CDLL(sme_dir + "/sme_synth.so.Win32.x86.32")
+            sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.Win32.x86.32")
 
     #logging.warn("SME does not support isotope modifications")
 
@@ -194,7 +201,7 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
             first_execution = i == 0
             #nwmax = int((wave_top - wave_base) / wave_step) * 2
             nwmax = 200000
-            synth_waveobs_tmp, synth_fluxes_tmp = _sme_transf(sme, sme_dir, nwmax, keep_lineop=not first_execution)
+            synth_waveobs_tmp, synth_fluxes_tmp = _sme_transf(sme, sme_shorter_dir, nwmax, keep_lineop=not first_execution)
             if msg != "''":
                 logging.warn(msg)
 
@@ -214,11 +221,13 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
                     macroturbulence=macroturbulence, vsini=vsini, \
                     limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
 
+    shutil.rmtree(tmp_execution_dir)
+
     process_communication_queue.put(synth_spectrum['flux'])
 
 
 
-def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, timeout=1800):
+def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, tmp_dir=None, timeout=1800):
     if not is_sme_support_enabled():
         raise Exception("SME support is not enabled")
 
@@ -228,7 +237,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
     # aborts the full process because unknown reasons
     process_communication_queue = Queue()
 
-    p = Process(target=__sme_true_generate_spectrum, args=(process_communication_queue, waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel), kwargs={'regions': regions, 'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'verbose': verbose})
+    p = Process(target=__sme_true_generate_spectrum, args=(process_communication_queue, waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel), kwargs={'regions': regions, 'macroturbulence': macroturbulence, 'vsini': vsini, 'limb_darkening_coeff': limb_darkening_coeff, 'R': R, 'verbose': verbose, 'tmp_dir':tmp_dir})
     p.start()
     num_seconds = 0
     # Constantly check that the process has not died without returning any result and blocking the queue call
