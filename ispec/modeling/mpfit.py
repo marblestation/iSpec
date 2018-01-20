@@ -1303,7 +1303,7 @@ class mpfit:
                 if (chisq_limit is not None and self.fnorm**2 <= chisq_limit) or ((numpy.abs(actred) <= ftol) and (prered <= ftol) \
                      and (0.5 * ratio <= 1)):
                      self.status = 1
-                if delta <= xtol*xnorm:
+                if delta <= xtol*xnorm or xnorm == 0:
                     self.status = 2
                 if (numpy.abs(actred) <= ftol) and (prered <= ftol) \
                      and (0.5 * ratio <= 1) and (self.status == 2):
