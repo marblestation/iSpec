@@ -119,8 +119,8 @@ class SolverEWDialog(CustomDialog):
         component["text"] = "Effective temperature (K)"
         component["text-type"] = "float" # float, int or str
         component["default"] = teff
-        component["minvalue"] = 2500
-        component["maxvalue"] = 8000
+        component["minvalue"] = 400
+        component["maxvalue"] = 55000
         self.__components.append(component)
         component = {}
         component["type"] = "Checkbutton"
@@ -132,8 +132,8 @@ class SolverEWDialog(CustomDialog):
         component["text"] = "Surface gravity (log g)"
         component["text-type"] = "float" # float, int or str
         component["default"] = logg
-        component["minvalue"] = 0
-        component["maxvalue"] = 5
+        component["minvalue"] = -0.5
+        component["maxvalue"] = 5.5
         self.__components.append(component)
         component = {}
         component["type"] = "Checkbutton"
