@@ -62,8 +62,12 @@ class CustomDialog(Dialog):
 
                 if "ttk" in sys.modules.keys():
                     # It supports better long lists of options
+                    max_width = 20
+                    for value in component["options"]:
+                        if len(value) > max_width:
+                            max_width = len(value)+1
                     component["variable"].set(component["default"])
-                    component["object"] = ttk.Combobox(grid_frame, textvariable=component["variable"], state='readonly')
+                    component["object"] = ttk.Combobox(grid_frame, textvariable=component["variable"], state='readonly', width=max_width)
                     component["object"]['values'] = tuple(component["options"])
                     component["object"].grid(row=row, column=1, sticky=Tkinter.W)
                 else:
