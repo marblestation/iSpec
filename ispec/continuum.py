@@ -592,14 +592,14 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
     # (avoid oversampling that leads to slower fitting process)
     if from_resolution is not None:
         wave_step = np.min(spectrum['waveobs']) / from_resolution
-        wavelengths = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), wave_step)
-        logging.info("Resampling spectrum to wave_step: %.5f nm (R = %i)" % (wave_step, from_resolution))
+        wavelengths = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs'])+wave_step, wave_step)
+        resampling_log_message = "Resampling spectrum to wave_step: %.5f nm (R = %i)" % (wave_step, from_resolution)
     else:
         spectrum.sort(order='waveobs')
         wave_step = np.median(np.abs(spectrum['waveobs'][1:] - spectrum['waveobs'][:-1]))
         infered_resolution = np.min(spectrum['waveobs']) / wave_step
-        wavelengths = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), wave_step)
-        logging.info("Resampling spectrum to wave_step: %.5f nm (R ~ %i)" % (wave_step, infered_resolution))
+        wavelengths = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs'])+wave_step, wave_step)
+        resampling_log_message = "Resampling spectrum to wave_step: %.5f nm (R ~ %i)" % (wave_step, infered_resolution)
 
 
     if model == 'Template':
@@ -628,7 +628,12 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
 
     zeros = spectrum['flux'] <= 0
     # Resample avoiding zeros and repating the last good value in the borders (not zeros!)
-    resampled_spectrum = resample_spectrum(spectrum[~zeros], wavelengths, method="linear", zero_edges=False)
+    if len(spectrum['waveobs']) == len(wavelengths) and np.all(np.abs(spectrum['waveobs'] - wavelengths) < 1e-6):
+        # Same wavelengths, no need to resample
+        resampled_spectrum = spectrum[~zeros]
+    else:
+        logging.info(resampling_log_message)
+        resampled_spectrum = resample_spectrum(spectrum[~zeros], wavelengths, method="linear", zero_edges=False)
 
     # Filter the spectrum to get the continuum
     if order == "max+median":

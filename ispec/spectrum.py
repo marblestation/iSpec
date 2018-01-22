@@ -997,7 +997,7 @@ def create_filter_cosmic_rays(spectrum, continuum_model, resampling_wave_step=0.
     Only those detected cosmics above the continuum will be discarded.
     """
     import scipy.signal
-    wavelengths = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), resampling_wave_step)
+    wavelengths = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs'])+resampling_wave_step, resampling_wave_step)
     resampled_spectrum = resample_spectrum(spectrum, wavelengths)
 
     resampled_smooth = create_spectrum_structure(resampled_spectrum['waveobs'])
