@@ -211,6 +211,8 @@ def read_line_regions(line_regions_filename):
     write_line_regions(..., extended=True), which contains more fields corresponding
     to atomic cross-match and line fits.
     """
+    if not os.path.exists(line_regions_filename):
+        raise Exception("Filename '{}' does not exist!".format(line_regions_filename))
     atomic_dtype = _get_atomic_linelist_definition()
     fitted_dtype = __get_fitted_lines_definition()
     try:

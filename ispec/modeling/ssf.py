@@ -259,12 +259,14 @@ class SynthModel(MPFitModel):
                         self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, molecules_files=self.molecules_files, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
                     elif self.code == "sme":
                         self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(), regions=self.segments, verbose=0, code=self.code, timeout=self.timeout)
-                        if np.all(self.last_fluxes == 0):
-                            raise Exception("SME has failed.")
+                        ## Do not abort failed synthesis, the minimization algorithm will just consider this point as a bad one
+                        #if np.all(self.last_fluxes == 0):
+                            #raise Exception("SME has failed.")
                     elif self.code == "spectrum":
                         self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(),  atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, waveobs_mask=self.waveobs_mask, verbose=0, tmp_dir=self.tmp_dir, timeout=self.timeout)
-                        if np.all(self.last_fluxes == 0):
-                            raise Exception("SPECTRUM has failed.")
+                        ## Do not abort failed synthesis, the minimization algorithm will just consider this point as a bad one
+                        #if np.all(self.last_fluxes == 0):
+                            #raise Exception("SPECTRUM has failed.")
                     else:
                         raise Exception("Unknown code: %s" % (self.code))
                 else:
@@ -277,10 +279,18 @@ class SynthModel(MPFitModel):
                 # Optimization to avoid too small changes in parameters or repetition
                 self.cache[key] = self.last_fluxes.copy()
 
-            self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, self.segments, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), vrad=self.vrad(), verbose=0)
+            if not np.all(self.last_fluxes == 0):
+                # If synthesis did not fail
+                self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, self.segments, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), vrad=self.vrad(), verbose=0)
 
-            if self.normalize_func is not None:
-                self.last_final_fluxes = self.normalize_func(create_spectrum_structure(self.waveobs, self.last_final_fluxes))['flux']
+                if self.normalize_func is not None:
+                    self.last_final_fluxes = self.normalize_func(create_spectrum_structure(self.waveobs, self.last_final_fluxes))['flux']
+            else:
+                self.last_final_fluxes = self.last_fluxes
+
+            if (self.code != "grid" and model_atmosphere_is_closest_copy(self.modeled_layers_pack, {'teff':self.teff(), 'logg':self.logg(), 'MH':self.MH(), 'alpha':self.alpha(), 'vmic': self.vmic()})) \
+               or (self.code == "grid" and not valid_interpolated_spectrum_target(self.grid, {'teff':self.teff(), 'logg':self.logg(), 'MH':self.MH(), 'alpha':self.alpha(), 'vmic': self.vmic()})):
+                   self.last_final_fluxes *= 0.
 
         return self.last_final_fluxes[self.comparing_mask]
 
@@ -770,7 +780,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
 
     return parinfo
 
-def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=None, linemasks=None, enhance_abundances=True, scale=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1, code="spectrum", grid=None, use_molecules=False, vmic_from_empirical_relation=False, vmac_from_empirical_relation=False, normalize_func=None, tmp_dir=None, timeout=1800):
+def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=None, linemasks=None, enhance_abundances=False, scale=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1, code="spectrum", grid=None, use_molecules=False, vmic_from_empirical_relation=False, vmac_from_empirical_relation=False, normalize_func=None, tmp_dir=None, timeout=1800):
     """
     It matches synthetic spectrum to observed spectrum by applying a least
     square algorithm.

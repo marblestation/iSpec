@@ -23,7 +23,7 @@ from multiprocessing import JoinableQueue
 from Queue import Empty
 import logging
 
-from ispec.abundances import write_solar_abundances, write_fixed_abundances
+from ispec.abundances import write_solar_abundances, write_fixed_abundances, enhance_solar_abundances
 from ispec.atmospheres import write_atmosphere
 from ispec.lines import write_atomic_linelist, write_isotope_data
 from ispec.common import is_spectrum_support_enabled
@@ -176,6 +176,10 @@ def __spectrum_true_generate_spectrum(process_communication_queue, waveobs, wave
     ## do not seem to work as expected in the SPECTRUM code, thus we set them to zero and
     ## we use a python implementation
     #fluxes = ispec.synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, abundances_file, fixed_abundances_file, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, R, nlayers, verbose, update_progress_func)
+    if verbose:
+        verbose = 1
+    else:
+        verbose = 0
     fluxes = ispec.synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, isotope_file, abundances_file, fixed_abundances_file, microturbulence_vel, 0, 0, 0, 0, nlayers, verbose, update_progress_func)
 
     # Zero values, when convolved, remain zero so we give a very tiny flux to avoid this problem

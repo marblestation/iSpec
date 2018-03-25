@@ -2702,9 +2702,6 @@ def calculate_theoretical_ew_and_depth(code="spectrum"):
                 fall out of theatmospheric models."
         print msg
 
-    # Enhance alpha elements + CNO abundances following MARCS standard composition
-    abundances = ispec.enhance_solar_abundances(solar_abundances, alpha)
-
     # Prepare atmosphere model
     atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha})
 
@@ -2712,7 +2709,7 @@ def calculate_theoretical_ew_and_depth(code="spectrum"):
     #output_wave, output_code, output_ew, output_depth = ispec.calculate_theoretical_ew_and_depth(atmosphere_layers, \
     new_atomic_linelist = ispec.calculate_theoretical_ew_and_depth(atmosphere_layers, \
             teff, logg, MH, alpha, \
-            atomic_linelist[:10], isotopes, abundances, microturbulence_vel=microturbulence_vel, \
+            atomic_linelist[:10], isotopes, solar_abundances, microturbulence_vel=microturbulence_vel, \
             verbose=1, gui_queue=None, timeout=900)
     ispec.write_atomic_linelist(new_atomic_linelist, linelist_filename="example_linelist.txt")
 

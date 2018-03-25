@@ -328,7 +328,11 @@ class EquivalentWidthModel(MPFitModel):
         fitted_lines_params.append(self.c2)
         selected_x_over_h.append(self.fe1_filter.copy())
         selected_x_over_h.append(self.fe2_filter.copy())
-        self.last_final_values = (np.asarray(values_to_evaluate), x_over_h, selected_x_over_h, fitted_lines_params)
+        values_to_evaluate = np.asarray(values_to_evaluate)
+        if model_atmosphere_is_closest_copy(self.modeled_layers_pack, {'teff':self.teff(), 'logg':self.logg(), 'MH':self.MH(), 'alpha':self.alpha(), 'vmic': self.vmic()}):
+            # Penalize these cases
+            values_to_evaluate *= 100.
+        self.last_final_values = (values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params)
 
         values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
         return values_to_evaluate.copy()
@@ -677,6 +681,7 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, abundances, initial_t
         raise Exception("Alpha enhancement cannot be a free parameter!")
 
     if adjust_model_metalicity:
+        free_params = free_params[:] # copy to avoid modifying user's free_params list
         free_params.append("MH")
 
     parinfo = __create_EW_param_structure(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, teff_range, logg_range, MH_range, alpha_range, free_params, adjust_model_metalicity=adjust_model_metalicity)

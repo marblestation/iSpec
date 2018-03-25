@@ -159,7 +159,13 @@ def interpolate_atmosphere_layers(modeled_layers_pack, target, code="spectrum"):
     if "MARCS" in base_dirname:
         compatible_fields.append("radius")
     #interpolated_atm_compatible_format = interpolated_atm[compatible_fields]
-    interpolated_atm_compatible_format = pd.DataFrame(interpolated_atm)[compatible_fields].to_records(index=False)
+    try:
+        interpolated_atm_compatible_format = pd.DataFrame(interpolated_atm)[compatible_fields].to_records(index=False)
+    except ValueError:
+        # Pandas raises exception when interpolated_atm is a FITS table read with astropy (case where there wasn't an interpolation but just the closest point was read)
+        #  - ValueError: Big-endian buffer not supported on little-endian compiler
+        # Bytes should be swapped and FITS converted to numpy array:
+        interpolated_atm_compatible_format = pd.DataFrame(np.array(interpolated_atm.byteswap().newbyteorder()))[compatible_fields].to_records(index=False)
     interpolated_atm_compatible_format = interpolated_atm_compatible_format.view(float).reshape(interpolated_atm_compatible_format.shape + (-1,))
     # SME fails if it is not a np.ndarray (it does not accept views either)
     # built like this:

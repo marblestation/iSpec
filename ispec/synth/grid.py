@@ -75,9 +75,12 @@ def generate_spectrum(grid, waveobs, teff, logg, MH, alpha, microturbulence_vel,
     return interpolated_spectrum['flux']
 
 
-def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, code="spectrum", use_molecules=False, tmp_dir=None, locked=False):
+def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution, pickled_modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, code="spectrum", use_molecules=False, tmp_dir=None, locked=False):
     multiprocessing.current_process().daemon=False
 
+    import dill # To allow pickle of lambda functions (e.g., one element in modeled_layers_pack)
+    import pickle
+    modeled_layers_pack = pickle.loads(pickled_modeled_layers_pack)
 
     if valid_atmosphere_target(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}):
         if not locked:
@@ -138,6 +141,10 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
     if steps:
         steps_fits_dir = os.path.join(output_dirname, "steps/")
         mkdir_p(steps_fits_dir)
+
+    import dill # To allow pickle of lambda functions (e.g., one element in modeled_layers_pack)
+    import pickle
+    pickled_modeled_layers_pack = pickle.dumps(modeled_layers_pack)
 
     # Parallelization pool
     if number_of_processes == 1:
@@ -210,7 +217,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                 try:
                     tcheck = default_timer()
                     # Validate parameters
-                    __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, code=code, use_molecules=use_molecules, tmp_dir=tmp_dir, locked=True)
+                    __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution, pickled_modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, code=code, use_molecules=use_molecules, tmp_dir=tmp_dir, locked=True)
                     elapsed = default_timer() - tcheck
 
                     print "-----------------------------------------------------"
@@ -224,7 +231,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                     lock.release()
 
             else:
-                pool.apply_async(__generate_synthetic_fits, [filename_out, wavelengths, segments, teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution, modeled_layers_pack, atomic_linelist, isotopes, solar_abundances], kwds={'code': code, 'use_molecules': use_molecules, 'tmp_dir':tmp_dir, 'locked':False})
+                pool.apply_async(__generate_synthetic_fits, [filename_out, wavelengths, segments, teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution, pickled_modeled_layers_pack, atomic_linelist, isotopes, solar_abundances], kwds={'code': code, 'use_molecules': use_molecules, 'tmp_dir':tmp_dir, 'locked':False})
             i += 1
 
     if pool is not None:
@@ -404,7 +411,7 @@ def load_spectral_grid(input_path):
         pickle.dump((delaunay_triangulation, kdtree), open(cache_filename, 'wb'), protocol=2)
 
     # Functions will receive the parameters in the same order
-    read_point_value = lambda f: read_spectrum(f)
+    read_point_value = lambda f: read_spectrum(f, apply_filters=False, sort=False)
 
     value_fields = ["waveobs", "flux"]
     return existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname
