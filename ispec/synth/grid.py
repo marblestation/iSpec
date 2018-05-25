@@ -146,6 +146,14 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
     import pickle
     pickled_modeled_layers_pack = pickle.dumps(modeled_layers_pack)
 
+    # For code != "grid", ranges are always in position 7 (for grid it would be in position 8)
+    valid_ranges = modeled_layers_pack[7]
+    teff_range = valid_ranges['teff']
+    logg_range = valid_ranges['logg']
+    MH_range = valid_ranges['MH']
+    alpha_range = valid_ranges.get('alpha', (-1.5, 1.5)) # Default (0.,) if 'alpha' is not a free parameter for atmosphere interpolation
+    vmic_range = valid_ranges.get('vmic', (0.0, 50.)) # Default (0.,) if 'vmic' is not a free parameter for atmosphere interpolation
+
     # Parallelization pool
     if number_of_processes == 1:
         pool = None
@@ -167,24 +175,31 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
         limb_darkening_coeff = 0.00 # This can be modified after synthesis if needed
         resolution = 0 # This can be modified after synthesis if needed
         is_step = False
+        if not valid_atmosphere_target(modeled_layers_pack, {'teff': teff, 'logg': logg, 'MH': MH, 'alpha': alpha}):
+            raise Exception("Target parameters out of the valid ranges")
         points = [
                     (teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, is_step),
                 ]
         if steps:
             is_step = True
+            new_teff = teff+Constants.SYNTH_STEP_TEFF if teff+Constants.SYNTH_STEP_TEFF <= teff_range[-1] else teff-Constants.SYNTH_STEP_TEFF
+            new_logg = logg+Constants.SYNTH_STEP_LOGG if logg+Constants.SYNTH_STEP_LOGG <= logg_range[-1] else logg-Constants.SYNTH_STEP_LOGG
+            new_MH = MH+Constants.SYNTH_STEP_MH if MH+Constants.SYNTH_STEP_MH <= MH_range[-1] else MH-Constants.SYNTH_STEP_MH
+            new_alpha = alpha+Constants.SYNTH_STEP_ALPHA if alpha+Constants.SYNTH_STEP_ALPHA <= alpha_range[-1] else alpha-Constants.SYNTH_STEP_ALPHA
+            new_vmic = vmic+Constants.SYNTH_STEP_VMIC if vmic+Constants.SYNTH_STEP_VMIC <= vmic_range[-1] else vmic-Constants.SYNTH_STEP_VMIC
             # For each reference point, calculate also the variations that iSpec will perform in the first iteration
             points += [ # Final unconvolved spectra where vmic/vmac are free and do not follow vmic/vmac empirical relations
-                        (teff+Constants.SYNTH_STEP_TEFF, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, is_step),
-                        (teff, logg+Constants.SYNTH_STEP_LOGG, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, is_step),
-                        (teff, logg, MH+Constants.SYNTH_STEP_MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, is_step),
-                        (teff, logg, MH, alpha+Constants.SYNTH_STEP_ALPHA, vmic, vmac, vsini, limb_darkening_coeff, is_step),
-                        (teff, logg, MH, alpha, vmic+Constants.SYNTH_STEP_VMIC, vmac, vsini, limb_darkening_coeff, is_step),
+                        (new_teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, is_step),
+                        (teff, new_logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, is_step),
+                        (teff, logg, new_MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, is_step),
+                        (teff, logg, MH, new_alpha, vmic, vmac, vsini, limb_darkening_coeff, is_step),
+                        (teff, logg, MH, alpha, new_vmic, vmac, vsini, limb_darkening_coeff, is_step),
                     ]
             points += [
                         # Final unconvolved spectra where vmic is not free and does follow vmic empirical relations
-                        (teff+Constants.SYNTH_STEP_TEFF, logg, MH, alpha, estimate_vmic(teff+Constants.SYNTH_STEP_TEFF, logg, MH), vmac, vsini, limb_darkening_coeff, is_step),
-                        (teff, logg+Constants.SYNTH_STEP_LOGG, MH, alpha, estimate_vmic(teff, logg+Constants.SYNTH_STEP_LOGG, MH), vmac, vsini, limb_darkening_coeff, is_step),
-                        (teff, logg, MH+Constants.SYNTH_STEP_MH, alpha, estimate_vmic(teff, logg, MH+Constants.SYNTH_STEP_MH), vmac, vsini, limb_darkening_coeff, is_step),
+                        (new_teff, logg, MH, alpha, estimate_vmic(new_teff, logg, MH), vmac, vsini, limb_darkening_coeff, is_step),
+                        (teff, new_logg, MH, alpha, estimate_vmic(teff, new_logg, MH), vmac, vsini, limb_darkening_coeff, is_step),
+                        (teff, logg, new_MH, alpha, estimate_vmic(teff, logg, new_MH), vmac, vsini, limb_darkening_coeff, is_step),
                     ]
 
         for j, (teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, is_step) in enumerate(points):
@@ -238,6 +253,8 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
         pool.close()
         pool.join()
 
+
+
     # Create parameters.tsv
     reference_list = Table()
     if len(np.unique(ranges[['logg', 'MH', 'alpha', 'vmic']])) == len(ranges):
@@ -269,71 +286,88 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
         reference_filename_out = "./grid/{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}".format(int(teff), logg, MH, alpha, vmic, zero_vmac, zero_vsini, zero_limb_darkening_coeff) + ".fits.gz"
         reference_list.add_row((int(teff), logg, MH, alpha, vmic, reference_filename_out))
 
-    ascii.write(reference_list, reference_list_filename, delimiter='\t', overwrite=True)
+    if not os.path.exists(reference_list_filename):
+        lock = FileLock(reference_list_filename+".lock")
+        try:
+            lock.acquire(timeout=-1)    # Don't wait
+        except (LockTimeout, AlreadyLocked) as e:
+            # Some other process is writing this file, do not continue
+            print "Skipping", reference_list_filename, "already locked"
+        else:
+            try:
+                ascii.write(reference_list, reference_list_filename, delimiter='\t', overwrite=True)
+                print "Written", reference_list_filename
+            finally:
+                lock.release()
 
     if to_resolution is not None:
-        reference_grid = None
-        complete_reference_list = Table()
-        complete_reference_list.add_column(Column(name='teff', dtype=int))
-        complete_reference_list.add_column(Column(name='logg', dtype=float))
-        complete_reference_list.add_column(Column(name='MH', dtype=float))
-        complete_reference_list.add_column(Column(name='alpha', dtype=float))
-        complete_reference_list.add_column(Column(name='vmic', dtype=float))
-        complete_reference_list.add_column(Column(name='vmac', dtype=float))
-        complete_reference_list.add_column(Column(name='vsini', dtype=float))
-        complete_reference_list.add_column(Column(name='limb_darkening_coeff', dtype=float))
-        for teff, logg, MH, alpha, vmic in ranges:
-            # Only use the first spectra generated for each combination
-            zero_vmac = 0.0
-            zero_vsini = 0.0
-            zero_limb_darkening_coeff = 0.00
-            vmac = estimate_vmac(teff, logg, MH)
-            vsini = 1.6 # Sun
-            limb_darkening_coeff = 0.6
-            reference_filename_out = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}".format(int(teff), logg, MH, alpha, vmic, zero_vmac, zero_vsini, zero_limb_darkening_coeff) + ".fits.gz"
-            if not os.path.exists(fits_dir + reference_filename_out):
-                continue
-            complete_reference_list.add_row((int(teff), logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff))
-
-
-            # Spectra in the grid is convolved to the specified resolution for fast comparison
-            print "Quick grid:", reference_filename_out
-            spectrum = read_spectrum(fits_dir + reference_filename_out)
-
-            segments = None
-            vrad = (0,)
-            spectrum['flux'] = apply_post_fundamental_effects(spectrum['waveobs'], spectrum['flux'], segments, \
-                        macroturbulence=vmac, vsini=vsini, \
-                        limb_darkening_coeff=limb_darkening_coeff, R=to_resolution, vrad=vrad)
-
-            if reference_grid is None:
-                reference_grid = spectrum['flux']
+        if not os.path.exists(reference_grid_filename):
+            lock = FileLock(reference_grid_filename+".lock")
+            try:
+                lock.acquire(timeout=-1)    # Don't wait
+            except (LockTimeout, AlreadyLocked) as e:
+                # Some other process is computing this spectrum, do not continue
+                print "Skipping", reference_grid_filename, "already locked"
             else:
-                reference_grid = np.vstack((reference_grid, spectrum['flux']))
+                try:
+                    reference_grid = None
+                    complete_reference_list = Table()
+                    complete_reference_list.add_column(Column(name='teff', dtype=int))
+                    complete_reference_list.add_column(Column(name='logg', dtype=float))
+                    complete_reference_list.add_column(Column(name='MH', dtype=float))
+                    complete_reference_list.add_column(Column(name='alpha', dtype=float))
+                    complete_reference_list.add_column(Column(name='vmic', dtype=float))
+                    complete_reference_list.add_column(Column(name='vmac', dtype=float))
+                    complete_reference_list.add_column(Column(name='vsini', dtype=float))
+                    complete_reference_list.add_column(Column(name='limb_darkening_coeff', dtype=float))
+                    for teff, logg, MH, alpha, vmic in ranges:
+                        # Only use the first spectra generated for each combination
+                        zero_vmac = 0.0
+                        zero_vsini = 0.0
+                        zero_limb_darkening_coeff = 0.00
+                        vmac = estimate_vmac(teff, logg, MH)
+                        vsini = 1.6 # Sun
+                        limb_darkening_coeff = 0.6
+                        reference_filename_out = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}".format(int(teff), logg, MH, alpha, vmic, zero_vmac, zero_vsini, zero_limb_darkening_coeff) + ".fits.gz"
+                        if not os.path.exists(fits_dir + reference_filename_out):
+                            continue
+                        complete_reference_list.add_row((int(teff), logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff))
 
-        if len(ranges) == len(complete_reference_list):
-            # Generate FITS file with grid for fast comparison
-            primary_hdu = fits.PrimaryHDU(reference_grid)
-            wavelengths_hdu = fits.ImageHDU(wavelengths, name="WAVELENGTHS")
-            params_bintable_hdu = fits.BinTableHDU(complete_reference_list.as_array(), name="PARAMS")
-            fits_format = fits.HDUList([primary_hdu, wavelengths_hdu, params_bintable_hdu])
-            fits_format.writeto(reference_grid_filename, overwrite=True)
 
-def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks):
+                        # Spectra in the grid is convolved to the specified resolution for fast comparison
+                        print "Quick grid:", reference_filename_out
+                        spectrum = read_spectrum(fits_dir + reference_filename_out)
+
+                        segments = None
+                        vrad = (0,)
+                        spectrum['flux'] = apply_post_fundamental_effects(spectrum['waveobs'], spectrum['flux'], segments, \
+                                    macroturbulence=vmac, vsini=vsini, \
+                                    limb_darkening_coeff=limb_darkening_coeff, R=to_resolution, vrad=vrad)
+
+                        if reference_grid is None:
+                            reference_grid = spectrum['flux']
+                        else:
+                            reference_grid = np.vstack((reference_grid, spectrum['flux']))
+
+                    if len(ranges) == len(complete_reference_list):
+                        # Generate FITS file with grid for fast comparison
+                        primary_hdu = fits.PrimaryHDU(reference_grid)
+                        wavelengths_hdu = fits.ImageHDU(wavelengths, name="WAVELENGTHS")
+                        params_bintable_hdu = fits.BinTableHDU(complete_reference_list.as_array(), name="PARAMS")
+                        fits_format = fits.HDUList([primary_hdu, wavelengths_hdu, params_bintable_hdu])
+                        fits_format.writeto(reference_grid_filename, overwrite=True)
+                        print "Written", reference_grid_filename
+                finally:
+                    lock.release()
+
+def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks, default_teff = 5000., default_logg = 2.5, default_MH = 0.0, default_alpha = 0.0, default_vmic = 1.0, default_vmac = 0.0, default_vsini = 0.0, default_limb_darkening_coeff = 0.00):
     """
     Estimate the initial atmospheric parameters by using a pre-computed grid
     at a given resolution. The comparison will be based on the linemasks.
     """
-    initial_teff = 5000.
-    initial_logg = 2.5
-    initial_MH = 0.0
-    initial_alpha = 0.0
-    initial_vmic = 1.0
-    initial_vmac = 0.0
-    initial_vsini = 0.0
-    initial_limb_darkening_coeff = 0.00
 
     reference_grid_filename = precomputed_dir + "/convolved_grid_%i.fits.gz" % resolution
+    estimation_found = False
     if not os.path.exists(reference_grid_filename):
         logging.warn("Pre-computed grid does not exists for R = %i" % resolution)
     else:
@@ -351,6 +385,7 @@ def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks):
             chisq = np.sum((residuals)**2, axis=1)
             min_j = np.argmin(chisq)
             initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff = grid['PARAMS'].data[min_j]
+            estimation_found = True
 
         except Exception, e:
             print "Initial parameters could not be estimated"
@@ -359,7 +394,10 @@ def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks):
         finally:
             grid.close()
 
-    return initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff
+    if estimation_found:
+        return initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff
+    else:
+        return default_teff, default_logg, default_MH, default_alpha, default_vmic, default_vmac, default_vsini, default_limb_darkening_coeff
 
 def load_spectral_grid(input_path):
     """
