@@ -633,9 +633,9 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
     base = 9
     free_params = [param.lower() for param in free_params]
     if "vrad" in free_params or np.any(initial_vrad != 0):
-        parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base+len(initial_vrad)+len(free_abundances)+len(linelist_free_loggf))]
+        parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0, 'mpmaxstep':0} for i in np.arange(base+len(initial_vrad)+len(free_abundances)+len(linelist_free_loggf))]
     else:
-        parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0} for i in np.arange(base+len(free_abundances)+len(linelist_free_loggf))]
+        parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0, 'mpmaxstep':0} for i in np.arange(base+len(free_abundances)+len(linelist_free_loggf))]
     ##
     min_teff = np.min(teff_range)
     max_teff = np.max(teff_range)
@@ -735,6 +735,8 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
     parinfo[8]['step'] = Constants.SYNTH_STEP_R # For auto-derivatives
     parinfo[8]['limited'] = [True, True]
     parinfo[8]['limits'] = [100.0, 900000.0]
+    if not parinfo[8]['fixed']:
+        parinfo[8]['mpmaxstep'] = float(initial_R)/4. # Maximum change to be made in the parameter
     if parinfo[8]['value'] > parinfo[8]['limits'][1] or parinfo[8]['value'] < parinfo[8]['limits'][0]:
         raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[8]['parname'], parinfo[8]['value'], parinfo[8]['limits'][0], parinfo[8]['limits'][1]))
     # VRAD
