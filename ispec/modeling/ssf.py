@@ -275,7 +275,7 @@ class SynthModel(MPFitModel):
                     linelist = None
                     abundances = None
                     fixed_abundances = None
-                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), code=self.code, grid=self.grid)
+                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), code=self.code, grid=self.grid, regions=self.segments)
 
                 # Optimization to avoid too small changes in parameters or repetition
                 self.cache[key] = self.last_fluxes.copy()

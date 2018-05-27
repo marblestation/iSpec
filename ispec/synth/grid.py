@@ -54,19 +54,24 @@ def _add_target_if_possible(free_parameters, target_point, name, value):
 
 def generate_spectrum(grid, waveobs, teff, logg, MH, alpha, microturbulence_vel, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0, regions=None):
     existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname = grid
+
+    if regions is None:
+        global_wave_base = np.min(waveobs)
+        global_wave_top = np.max(waveobs)
+        regions = np.recarray((1,),  dtype=[('wave_base', float), ('wave_top', float)])
+        regions['wave_base'][0] = global_wave_base
+        regions['wave_top'][0] = global_wave_top
+    # Only read the part of the spectrum that needs to be interpolated
+    custom_read_point_value = lambda f: read_point_value(f, regions=regions)
+
     target_point = []
     target_point = _add_target_if_possible(free_parameters, target_point, 'teff', teff)
     target_point = _add_target_if_possible(free_parameters, target_point, 'logg', logg)
     target_point = _add_target_if_possible(free_parameters, target_point, 'MH', MH)
     target_point = _add_target_if_possible(free_parameters, target_point, 'alpha', alpha)
     target_point = _add_target_if_possible(free_parameters, target_point, 'vmic', microturbulence_vel)
-    interpolated = _interpolate(delaunay_triangulation, kdtree, existing_points, filenames, read_point_value, value_fields, target_point)
+    interpolated = _interpolate(delaunay_triangulation, kdtree, existing_points, filenames, custom_read_point_value, value_fields, target_point)
     interpolated_spectrum = create_spectrum_structure(interpolated['waveobs'], interpolated['flux'])
-
-    if regions is not None:
-        # Wavelengths to be considered: segments
-        wfilter = create_wavelength_filter(spectrum, regions=regions)
-        interpolated_spectrum = interpolated_spectrum[wfilter]
 
     # Make sure we return the number of expected fluxes
     if not np.array_equal(interpolated_spectrum['waveobs'], waveobs):
@@ -454,7 +459,9 @@ def load_spectral_grid(input_path):
         pickle.dump((delaunay_triangulation, kdtree), open(cache_filename, 'wb'), protocol=2)
 
     # Functions will receive the parameters in the same order
-    read_point_value = lambda f: read_spectrum(f, apply_filters=False, sort=False)
+    #read_point_value = lambda f, regions: read_spectrum(f, apply_filters=False, sort=False, regions=regions)
+    def read_point_value(f, regions=None):
+        return read_spectrum(f, apply_filters=False, sort=False, regions=regions)
 
     value_fields = ["waveobs", "flux"]
     return existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname

@@ -69,18 +69,15 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
         fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float), ('element', '|S30')])
 
     if regions is None:
-        waveobs_mask = np.ones(len(waveobs)) # Compute fluxes for all the wavelengths
-        # Limit linelist
-        wave_base = np.min(waveobs)
-        wave_top = np.max(waveobs)
-        # Provide some margin or near-by deep lines might be omitted
-        margin = 2. # 2 nm
-        lfilter = np.logical_and(linelist['wave_A'] >= (wave_base-margin)*10., linelist['wave_A'] <= (wave_top+margin)*10.)
-        linelist = linelist[lfilter]
-    else:
-        waveobs_mask = _create_waveobs_mask(waveobs, regions)
-        # Limit linelist
-        linelist = _filter_linelist(linelist, regions)
+        global_wave_base = np.min(waveobs)
+        global_wave_top = np.max(waveobs)
+        regions = np.recarray((1,),  dtype=[('wave_base', float), ('wave_top', float)])
+        regions['wave_base'][0] = global_wave_base
+        regions['wave_top'][0] = global_wave_top
+
+    waveobs_mask = _create_waveobs_mask(waveobs, regions)
+    # Limit linelist
+    linelist = _filter_linelist(linelist, regions)
 
     # OPTIMIZATION: Use already saved files to reduce input/output time
     remove_tmp_atm_file = False

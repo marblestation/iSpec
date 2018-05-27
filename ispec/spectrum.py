@@ -176,7 +176,7 @@ def __read_spectrum(spectrum_filename):
         raise Exception("Empty spectrum or incompatible format")
     return spectrum
 
-def read_spectrum(spectrum_filename, apply_filters=True, sort=True):
+def read_spectrum(spectrum_filename, apply_filters=True, sort=True, regions=None):
     """
     Return spectrum recarray structure from a filename.
     The file format shouldd be plain text files with **tab** character as column delimiter.
@@ -250,6 +250,11 @@ def read_spectrum(spectrum_filename, apply_filters=True, sort=True):
 
     if sort:
         spectrum.sort(order='waveobs') # Make sure it is ordered by wavelength
+
+    if regions is not None:
+        # Wavelengths to be considered: segments
+        wfilter = create_wavelength_filter(spectrum, regions=regions)
+        spectrum = spectrum[wfilter]
 
     return spectrum
 
