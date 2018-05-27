@@ -263,7 +263,8 @@ class SynthModel(MPFitModel):
                         #if np.all(self.last_fluxes == 0):
                             #raise Exception("SME has failed.")
                     elif self.code == "spectrum":
-                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(),  atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, waveobs_mask=self.waveobs_mask, verbose=0, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(),  atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
+
                         ## Do not abort failed synthesis, the minimization algorithm will just consider this point as a bad one
                         #if np.all(self.last_fluxes == 0):
                             #raise Exception("SPECTRUM has failed.")
@@ -355,8 +356,8 @@ class SynthModel(MPFitModel):
         if self.code == "spectrum":
             self.isotope_file = write_isotope_data(self.isotopes, tmp_dir=tmp_dir)
 
-        # If teff, logg and MH are fixed
-        if self.code not in ('sme', 'grid') and parinfo[0]['fixed'] and parinfo[1]['fixed'] and parinfo[2]['fixed']:
+        # If teff, logg, MH and alpha are fixed
+        if self.code not in ('sme', 'grid') and parinfo[0]['fixed'] and parinfo[1]['fixed'] and parinfo[2]['fixed'] and parinfo[3]['fixed']:
             atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, {'teff':parinfo[0]['value'], 'logg':parinfo[1]['value'], 'MH':parinfo[2]['value'], 'alpha':parinfo[3]['value']})
             self.atmosphere_layers_file = write_atmosphere(atmosphere_layers, parinfo[0]['value'], parinfo[1]['value'], parinfo[2]['value'], code=self.code, atmosphere_filename=None, tmp_dir=tmp_dir)
 
@@ -389,8 +390,8 @@ class SynthModel(MPFitModel):
         if self.code == 'synthe' and self.molecules_files is not None:
             for molecules_file in self.molecules_files:
                 os.remove(molecules_file)
-        # If teff, logg and MH are fixed
-        if self.code not in ("sme", "grid") and parinfo[0]['fixed'] and parinfo[1]['fixed'] and parinfo[2]['fixed']:
+        # If teff, logg, MH and alpha are fixed
+        if self.code not in ("sme", "grid") and parinfo[0]['fixed'] and parinfo[1]['fixed'] and parinfo[2]['fixed'] and parinfo[3]['fixed']:
             os.remove(self.atmosphere_layers_file)
         self.abundances_file = None
         self.linelist_file = None
@@ -813,14 +814,13 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
 
-    # Duplicate
     if segments is not None:
         # Wavelengths to be computed: segments
         wfilter = create_wavelength_filter(spectrum, regions=segments)
         spectrum = create_spectrum_structure(spectrum['waveobs'][wfilter], spectrum['flux'][wfilter], spectrum['err'][wfilter])
     else:
         # Wavelengths to be computed: all
-        spectrum = spectrum.copy()
+        spectrum = spectrum.copy() # duplicate
 
     # Normalization
     spectrum = normalize_spectrum(spectrum, continuum_model)

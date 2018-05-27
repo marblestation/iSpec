@@ -588,7 +588,7 @@ class iSpecBaseApp(Tkinter.Tk):
         self.dpi = 100
         self.fig = Figure((5.0, 5.0), dpi=self.dpi)
         self.canvas = FigCanvas(self.fig, master=self.plot_frame)
-        self.canvas.show()
+        self.canvas.draw()
 
         # Since we have only one plot, we can use add_axes
         # instead of add_subplot, but then the subplot

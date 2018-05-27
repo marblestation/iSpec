@@ -191,8 +191,8 @@ def resample_spectrum():
     #--- Resampling  --------------------------------------------------------------
     logging.info("Resampling...")
     wavelengths = np.arange(480.0, 680.0, 0.001)
-    resampled_star_spectrum = ispec.resample_spectrum(star_spectrum, wavelengths, method="bessel", zero_edges=True)
-    #resampled_star_spectrum = ispec.resample_spectrum(star_spectrum, wavelengths, method="linear", zero_edges=True)
+    resampled_star_spectrum = ispec.resample_spectrum(star_spectrum, wavelengths, method="linear", zero_edges=True)
+    #resampled_star_spectrum = ispec.resample_spectrum(star_spectrum, wavelengths, method="bessel", zero_edges=True)
 
 def coadd_spectra():
     # WARNING: This example co-adds spectra from different stars, in a real life situation
@@ -1030,16 +1030,13 @@ def synthesize_spectrum(code="spectrum"):
                 fall out of theatmospheric models."
         print msg
 
-    # Enhance alpha elements + CNO abundances following MARCS standard composition
-    abundances = ispec.enhance_solar_abundances(solar_abundances, alpha)
-
     # Prepare atmosphere model
     atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, code=code)
 
     # Synthesis
     synth_spectrum = ispec.create_spectrum_structure(np.arange(wave_base, wave_top, wave_step))
     synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], \
-            atmosphere_layers, teff, logg, MH, alpha, atomic_linelist, isotopes, abundances, \
+            atmosphere_layers, teff, logg, MH, alpha, atomic_linelist, isotopes, solar_abundances, \
             fixed_abundances, microturbulence_vel = microturbulence_vel, \
             macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, \
             R=resolution, regions=regions, verbose=1,

@@ -37,7 +37,7 @@ from effects import apply_post_fundamental_effects
 from ispec.modeling.common import Constants
 import ispec.synth.common
 
-def generate_fundamental_spectrum(grid, waveobs, teff, logg, MH, alpha, microturbulence_vel):
+def generate_fundamental_spectrum(grid, waveobs, teff, logg, MH, alpha, microturbulence_vel, regions=None):
     """
     Generates an interpolated spectrum from a grid. vmic is always fixed and depends
     on the grid existing points.
@@ -45,14 +45,14 @@ def generate_fundamental_spectrum(grid, waveobs, teff, logg, MH, alpha, microtur
     No macroturbulence, rotation (vsini), limb darkening coefficient or resolution is considered
     in this process. That's why it is named as "fundamental" spectrum.
     """
-    return generate_spectrum(grid, waveobs, teff, logg, MH, alpha, microturbulence_vel, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0)
+    return generate_spectrum(grid, waveobs, teff, logg, MH, alpha, microturbulence_vel, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0, regions=regions)
 
 def _add_target_if_possible(free_parameters, target_point, name, value):
     if name in free_parameters:
         target_point.append(value)
     return target_point
 
-def generate_spectrum(grid, waveobs, teff, logg, MH, alpha, microturbulence_vel, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0):
+def generate_spectrum(grid, waveobs, teff, logg, MH, alpha, microturbulence_vel, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0, regions=None):
     existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname = grid
     target_point = []
     target_point = _add_target_if_possible(free_parameters, target_point, 'teff', teff)
@@ -62,6 +62,11 @@ def generate_spectrum(grid, waveobs, teff, logg, MH, alpha, microturbulence_vel,
     target_point = _add_target_if_possible(free_parameters, target_point, 'vmic', microturbulence_vel)
     interpolated = _interpolate(delaunay_triangulation, kdtree, existing_points, filenames, read_point_value, value_fields, target_point)
     interpolated_spectrum = create_spectrum_structure(interpolated['waveobs'], interpolated['flux'])
+
+    if regions is not None:
+        # Wavelengths to be considered: segments
+        wfilter = create_wavelength_filter(spectrum, regions=regions)
+        interpolated_spectrum = interpolated_spectrum[wfilter]
 
     # Make sure we return the number of expected fluxes
     if not np.array_equal(interpolated_spectrum['waveobs'], waveobs):

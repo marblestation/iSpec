@@ -30,7 +30,7 @@ from ispec.common import is_spectrum_support_enabled
 from effects import _filter_linelist, apply_post_fundamental_effects
 
 
-def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, tmp_dir=None, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None):
+def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, tmp_dir=None, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None):
     """
     Generates a synthetic spectrum for the wavelength specified in waveobs.
     In case regions is specified (recarray with 'wave_base' and 'wave_top'),
@@ -49,7 +49,7 @@ def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, al
     return generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=0.0, vsini=0.0, limb_darkening_coeff=0.00, R=0, verbose=verbose, gui_queue=gui_queue, timeout=timeout, atmosphere_layers_file=atmosphere_layers_file, abundances_file=abundances_file, fixed_abundances_file=fixed_abundances_file, linelist_file=linelist_file, isotope_file=isotope_file, regions=regions, tmp_dir=tmp_dir)
 
 
-def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=0., vsini=0., limb_darkening_coeff=0., R=0, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, waveobs_mask=None, tmp_dir=None):
+def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=0., vsini=0., limb_darkening_coeff=0., R=0, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None, tmp_dir=None):
     """
     Generates a synthetic spectrum for the wavelength specified in waveobs.
     In case regions is specified (recarray with 'wave_base' and 'wave_top'),
@@ -68,20 +68,19 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
         # No fixed abundances
         fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float), ('element', '|S30')])
 
-    if waveobs_mask is None:
-        if regions is None:
-            waveobs_mask = np.ones(len(waveobs)) # Compute fluxes for all the wavelengths
-            # Limit linelist
-            wave_base = np.min(waveobs)
-            wave_top = np.max(waveobs)
-            # Provide some margin or near-by deep lines might be omitted
-            margin = 2. # 2 nm
-            lfilter = np.logical_and(linelist['wave_A'] >= (wave_base-margin)*10., linelist['wave_A'] <= (wave_top+margin)*10.)
-            linelist = linelist[lfilter]
-        else:
-            waveobs_mask = _create_waveobs_mask(waveobs, regions)
-            # Limit linelist
-            linelist = _filter_linelist(linelist, regions)
+    if regions is None:
+        waveobs_mask = np.ones(len(waveobs)) # Compute fluxes for all the wavelengths
+        # Limit linelist
+        wave_base = np.min(waveobs)
+        wave_top = np.max(waveobs)
+        # Provide some margin or near-by deep lines might be omitted
+        margin = 2. # 2 nm
+        lfilter = np.logical_and(linelist['wave_A'] >= (wave_base-margin)*10., linelist['wave_A'] <= (wave_top+margin)*10.)
+        linelist = linelist[lfilter]
+    else:
+        waveobs_mask = _create_waveobs_mask(waveobs, regions)
+        # Limit linelist
+        linelist = _filter_linelist(linelist, regions)
 
     # OPTIMIZATION: Use already saved files to reduce input/output time
     remove_tmp_atm_file = False
