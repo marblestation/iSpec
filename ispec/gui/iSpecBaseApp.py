@@ -158,6 +158,12 @@ class iSpecBaseApp(Tkinter.Tk):
         found = np.where(self.lists['atomic_lines']['name'] == 'GESv5_atom_hfs_iso.420_920nm')[0]
         if len(found) == 1:
             self.default_lists['atomic_lines'] = found[0]
+        found = np.where(self.lists['grid']['name'] == 'SPECTRUM_MARCS.GES_GESv5_atom_hfs_iso.480_680nm_light')[0]
+        if len(found) == 1:
+            self.default_lists['grid'] = found[0]
+        found = np.where(self.lists['grid']['name'] == 'SPECTRUM_MARCS.GES_GESv5_atom_hfs_iso.480_680nm')[0]
+        if len(found) == 1:
+            self.default_lists['grid'] = found[0]
         ######
 
         ######
