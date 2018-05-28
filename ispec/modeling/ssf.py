@@ -777,7 +777,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
         parinfo[base+i]['fixed'] = not "loggf" in free_params
         parinfo[base+i]['step'] = Constants.SYNTH_STEP_LOGGF # For auto-derivatives
         parinfo[base+i]['limited'] = [True, True]
-        parinfo[base+i]['limits'] = [-100., 0.]
+        parinfo[base+i]['limits'] = [-10., 10.]
         if parinfo[base+i]['value'] > parinfo[base+i]['limits'][1] or parinfo[base+i]['value'] < parinfo[base+i]['limits'][0]:
             raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[base+i]['parname'], parinfo[base+i]['value'], parinfo[base+i]['limits'][0], parinfo[base+i]['limits'][1]))
 
