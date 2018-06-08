@@ -135,10 +135,42 @@ def __read_fits_spectrum(spectrum_filename):
         for i in xrange(len(hdulist)):
             if type(hdulist[i]) is pyfits.hdu.table.BinTableHDU:
                 data = hdulist[i].data
+                if len(data) == 1:
+                    # Sometimes we have an array inside another as a single element
+                    data = data[0]
                 # iSpec binary table for irregular spectra
-                try:
-                    spectrum = create_spectrum_structure(data['AWAV'], data['FLUX'], data['SIGMA'])
-                except:
+                waveobs = None
+                for key in ('AWAV', 'WAVE'):
+                    try:
+                        waveobs = data[key]
+                    except:
+                        continue
+                    else:
+                        break
+                flux = None
+                for key in ('FLUX',):
+                    try:
+                        flux = data[key]
+                    except:
+                        continue
+                    else:
+                        break
+                error = None
+                for key in ('ERR', 'SIGMA', 'NOISE'):
+                    try:
+                        error = data[key]
+                    except:
+                        continue
+                    else:
+                        break
+
+                if waveobs is not None and flux is not None:
+                    try:
+                        spectrum = create_spectrum_structure(waveobs, flux, error)
+                        break
+                    except:
+                        continue
+                else:
                     continue
         if spectrum is None:
             raise Exception("Unknown FITS file format")

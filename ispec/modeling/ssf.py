@@ -976,7 +976,10 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     if verbose:
         print "\n"
 
-    stats_linemasks = _get_stats_per_linemask(waveobs, flux, synth_model.last_final_fluxes, weights, free_params, linemasks, verbose=verbose)
+    if linemasks is not None:
+        stats_linemasks = _get_stats_per_linemask(waveobs, flux, synth_model.last_final_fluxes, weights, free_params, linemasks, verbose=verbose)
+    else:
+        stats_linemasks = None
 
     if verbose:
         print "\n"
