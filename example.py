@@ -1509,8 +1509,8 @@ def estimate_initial_ap_with_precomputed_grid_and_determine_ap_using_synth_spect
     # WARNING !!!
     #  This routine depends on the previous precomputation of the synthetic grid
     ############################################################################
-    if code == "spectrum" and os.path.exists(ispec_dir + "input/minigrid/SPECTRUM_MARCS.GES_GESv5_atom_hfs_iso.420_920nm/"):
-        precomputed_grid_dir = ispec_dir + "input/minigrid/SPECTRUM_MARCS.GES_GESv5_atom_hfs_iso.420_920nm/"
+    if code == "spectrum" and os.path.exists(ispec_dir + "input/minigrid/SPECTRUM_MARCS.GES_GESv5_atom_hfs_iso.480_680nm/"):
+        precomputed_grid_dir = ispec_dir + "input/minigrid/SPECTRUM_MARCS.GES_GESv5_atom_hfs_iso.480_680nm/"
     else:
         precomputed_grid_dir = "example_grid_%s/" % (code)
 
