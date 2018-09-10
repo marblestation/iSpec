@@ -680,7 +680,10 @@ def calculate_barycentric_velocity_correction(datetime, coordinates, deq=0):
     barycentric_vel = dvelb[0]*np.cos(dec)*np.cos(ra) + dvelb[1]*np.cos(dec)*np.sin(ra) + dvelb[2]*np.sin(dec) # km/s
     barycentric_vel = np.round(barycentric_vel, 2) # km/s
 
-    return barycentric_vel
+    # Correction in the opposite sense
+    barycentric_correction = -1*barycentric_vel
+
+    return barycentric_correction
 
 
 

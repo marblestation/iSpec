@@ -3837,21 +3837,15 @@ iSpec uses the following radiative transfer codes:
             combined_spectrum = ispec.create_spectrum_structure(xaxis, flux, err)
             combined_spectrum_name = "Added_spectrum"
         elif operation_divide:
-            flux = np.zeros(total_wavelengths)
-            err = np.zeros(total_wavelengths)
+            flux = resampled_spectra[active]['flux'].copy()
+            err = resampled_spectra[active]['err'].copy()
             i = 0
             for spec in resampled_spectra:
-                logging.warn("Division by zero may occur")
-                if i == 0:
-                    err = spec['err'].copy()
-                    flux = spec['flux'].copy()
-                else:
+                #logging.warn("Division by zero may occur")
+                if i != active:
                     # Error propagation assuming that they are independent
                     err = np.sqrt(np.power(flux / err, 2) + np.power(spec['flux'] / spec['err'], 2)) * 0.7
-                    if i == active:
-                        flux = flux * spec['flux']
-                    else:
-                        flux = flux * (1. / spec['flux'])
+                    flux = flux * (1. / spec['flux'])
                 i += 1
             combined_spectrum = ispec.create_spectrum_structure(xaxis, flux, err)
             combined_spectrum_name = "Divided_spectrum"
@@ -4354,7 +4348,7 @@ iSpec uses the following radiative transfer codes:
                 waveobs = waveobs[wfilter]
 
             # If wavelength out of the linelist file are used, SPECTRUM starts to generate flat spectrum
-            if np.min(waveobs) < 300.0 or np.max(waveobs) > 2400.0:
+            if np.min(waveobs) < 100.0 or np.max(waveobs) > 4000.0:
                 # luke.300_1000nm.lst
                 msg = "Wavelength range is outside line list for spectrum generation."
                 title = 'Wavelength range'
@@ -4879,7 +4873,7 @@ iSpec uses the following radiative transfer codes:
 
         waveobs = self.active_spectrum.data['waveobs']
         # If wavelength out of the linelist file are used, SPECTRUM starts to generate flat spectrum
-        if np.min(waveobs) < 300.0 or np.max(waveobs) > 2400.0:
+        if np.min(waveobs) < 100.0 or np.max(waveobs) > 4000.0:
             # luke.300_1000nm.lst
             msg = "Wavelength range is outside line list for spectrum generation."
             title = 'Wavelength range'

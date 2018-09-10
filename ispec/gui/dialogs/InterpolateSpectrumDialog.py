@@ -89,16 +89,16 @@ class InterpolateSpectrumDialog(CustomDialog):
         component["text"] = "Wavelength min (nm)"
         component["text-type"] = "float" # float, int or str
         component["default"] = wave_base
-        component["minvalue"] = 300
-        component["maxvalue"] = 2400
+        component["minvalue"] = 100
+        component["maxvalue"] = 4000
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
         component["text"] = "Wavelength max (nm)"
         component["text-type"] = "float" # float, int or str
         component["default"] = wave_top
-        component["minvalue"] = 300
-        component["maxvalue"] = 2400
+        component["minvalue"] = 100
+        component["maxvalue"] = 4000
         self.__components.append(component)
         component = {}
         component["type"] = "Entry"
