@@ -1,6 +1,6 @@
 #
-#    This file is part of the Integrated Spectroscopic Framework (iSpec).
-#    Copyright 2011-2012 Sergi Blanco Cuaresma - http://www.marblestation.com
+#    This file is part of iSpec.
+#    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
 #
 #    iSpec is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU Affero General Public License as published by
