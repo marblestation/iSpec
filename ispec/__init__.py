@@ -76,6 +76,7 @@ from continuum import read_continuum_regions
 from continuum import write_continuum_regions
 from continuum import fit_continuum
 from continuum import find_continuum
+from continuum import generate_random_continuum
 from lines import read_telluric_linelist
 from lines import read_isotope_data
 from lines import write_isotope_data

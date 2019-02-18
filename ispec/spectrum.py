@@ -93,18 +93,21 @@ def __read_fits_spectrum(spectrum_filename):
         else:
             raise Exception("Unknown FITS file format")
 
-        # Angstrom to nm
-        if unit != "nm":
-            wave_base /= 10
-            wave_step /= 10
 
         # Deal with logarithmic wavelength binning if necessary
         if waveobs is None:
             if hdr.get('WFITTYPE') == 'LOG-LINEAR':
                 xconv = lambda v: 10**((v-reference_pixel+1)*wave_step+wave_base)
                 waveobs = xconv(np.arange(len(flux)))
+                # Angstrom to nm
+                if unit != "nm":
+                    waveobs /= 10
                 print "Log scale"
             else:
+                # Angstrom to nm
+                if unit != "nm":
+                    wave_base /= 10
+                    wave_step /= 10
                 xconv = lambda v: ((v-reference_pixel+1)*wave_step+wave_base)
                 waveobs = xconv(np.arange(len(flux)))
 

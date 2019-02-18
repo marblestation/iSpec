@@ -22,6 +22,7 @@ from scipy.ndimage.filters import maximum_filter
 from scipy.ndimage.filters import median_filter
 from scipy.ndimage.filters import gaussian_filter
 from scipy import interpolate
+from scipy.interpolate import LSQUnivariateSpline
 import log
 import logging
 
@@ -75,7 +76,6 @@ class KnotSplineModel(object):
         else:
             self.iknots = np.linspace(x[0],x[-1],self.nknots+2)[1:-1]
 
-        from scipy.interpolate import LSQUnivariateSpline
         self.spline = LSQUnivariateSpline(x,y,t=self.iknots,k=int(self.degree),w=weights)
 
     def __call__(self, x):
@@ -359,15 +359,16 @@ def __clean_outliers(spectrum, min_wave, max_wave, wave_step, ignored_regions, p
     for wave_top in [min_wave + chunk_size, min_wave + chunk_size/2.]:
         while True:
             wfilter = np.logical_and(smooth1['waveobs'] >= wave_top - chunk_size, smooth1['waveobs'] < wave_top)
-            # RLM (Robust least squares)
-            # Huber's T norm with the (default) median absolute deviation scaling
-            # - http://en.wikipedia.org/wiki/Huber_loss_function
-            # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
-            x_c = sm.add_constant(x[wfilter], prepend=False) # Add a constant (1.0) to have a parameter base
-            huber_t = sm.RLM(y[wfilter], x_c, M=sm.robust.norms.HuberT())
-            linear_model = huber_t.fit()
-            # Accept only if always has been accepted
-            sfilter1a[wfilter] = np.logical_and(sfilter1a[wfilter], linear_model.weights > probability) # True equals to "accept region"
+            if np.all(np.abs(y[wfilter] - y[wfilter][0]) > 1e-10): # Avoid arrays with all equal values
+                # RLM (Robust least squares)
+                # Huber's T norm with the (default) median absolute deviation scaling
+                # - http://en.wikipedia.org/wiki/Huber_loss_function
+                # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
+                x_c = sm.add_constant(x[wfilter], prepend=False) # Add a constant (1.0) to have a parameter base
+                huber_t = sm.RLM(y[wfilter], x_c, M=sm.robust.norms.HuberT())
+                linear_model = huber_t.fit()
+                # Accept only if always has been accepted
+                sfilter1a[wfilter] = np.logical_and(sfilter1a[wfilter], linear_model.weights > probability) # True equals to "accept region"
             if np.abs(wave_top - max_wave) < 1.0e-10:
                 break
             else:
@@ -409,15 +410,16 @@ def __clean_outliers(spectrum, min_wave, max_wave, wave_step, ignored_regions, p
     for wave_top in [min_wave + chunk_size, min_wave + chunk_size/2.]:
         while True:
             wfilter = np.logical_and(smooth1['waveobs'] >= wave_top - chunk_size, smooth1['waveobs'] < wave_top)
-            # RLM (Robust least squares)
-            # Huber's T norm with the (default) median absolute deviation scaling
-            # - http://en.wikipedia.org/wiki/Huber_loss_function
-            # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
-            x_c = sm.add_constant(x[wfilter], prepend=False) # Add a constant (1.0) to have a parameter base
-            huber_t = sm.RLM(y[wfilter], x_c, M=sm.robust.norms.HuberT())
-            linear_model = huber_t.fit()
-            # Accept only if always has been accepted
-            sfilter2a[wfilter] = np.logical_and(sfilter2a[wfilter], linear_model.weights > probability) # True equals to "accept region"
+            if np.all(np.abs(y[wfilter] - y[wfilter][0]) > 1e-10): # Avoid arrays with all equal values
+                # RLM (Robust least squares)
+                # Huber's T norm with the (default) median absolute deviation scaling
+                # - http://en.wikipedia.org/wiki/Huber_loss_function
+                # - options are LeastSquares, HuberT, RamsayE, AndrewWave, TrimmedMean, Hampel, and TukeyBiweight
+                x_c = sm.add_constant(x[wfilter], prepend=False) # Add a constant (1.0) to have a parameter base
+                huber_t = sm.RLM(y[wfilter], x_c, M=sm.robust.norms.HuberT())
+                linear_model = huber_t.fit()
+                # Accept only if always has been accepted
+                sfilter2a[wfilter] = np.logical_and(sfilter2a[wfilter], linear_model.weights > probability) # True equals to "accept region"
             if np.abs(wave_top - max_wave) < 1.0e-10:
                 break
             else:
@@ -880,6 +882,37 @@ def __merge_regions(spectrum, dirty_continuum_regions):
 
     return continuum_regions
 
+
+def generate_random_continuum(waveobs, nknots=None):
+    """Generates a random continuum, typically to be multiplied by the fluxes of
+    a synthetic spectrum"""
+    wrange = np.max(waveobs) - np.min(waveobs)
+    half_wrange = wrange/2.
+    if nknots is None:
+        nknots = np.max([1, int(wrange / 5.)])
+    y = np.random.rand(len(waveobs))
+
+    # Add an asymetrical polynomial
+    left = np.random.rand() # 0..1
+    right = 1. - left
+    roots = [waveobs[0] - left*half_wrange, waveobs[-1] + right*half_wrange]
+    coeff = np.poly(roots)
+    p = np.poly1d(coeff)
+    y *= np.abs(p(waveobs))
+
+    # Add a sinusodial shape
+    fs = len(waveobs) # sample rate
+    f = nknots/10 # the frequency of the signal
+    x = np.arange(fs) # the points on the x axis for plotting
+    y *= 1+((1+np.sin(2 * np.pi * f * x / fs))/2.)*0.1
+
+    y /= np.max(y)
+
+    iknots = np.linspace(waveobs[0], waveobs[-1], nknots+2)[1:-1]
+    interpolator = LSQUnivariateSpline(waveobs, y, iknots, k=2)
+    continuum = interpolator(waveobs)
+    continuum += 1 - np.max(continuum) # Make the max flux be 1.0
+    return continuum
 
 
 

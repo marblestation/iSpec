@@ -2624,7 +2624,7 @@ def __moog_barklem_write_atomic_linelist(linelist, linelist_filename=None, tmp_d
         alpha = 0.00 # Omara theory (ABO) sigma.alpha (sigma was transformed to waals_single_gamma_format) and alpha is provided separately
         if line['spectrum_transition_type'] == "AO":
             alpha = line['waals'] % 1 # Decimal part
-        out.write("%10.3f%10s%10.2f%10.3f%10.2E\n" \
+        out.write("%10.3f%6s%8.3f%8.3f%10.2E\n" \
                 % (line['wave_A'], line['spectrum_moog_species'], line['waals_single_gamma_format'], alpha, line['turbospectrum_rad']))
     out.close()
     return out.name
@@ -2752,6 +2752,7 @@ def __turbospectrum_write_atomic_linelist(linelist, linelist_filename=None, tmp_
                 line_ew_err = 0.0
                 if with_ew:
                     line_ew = line['ew']
+                # NOTE: turbospectrum_fdamp corresponds to waals
                 if not molecule:
                     # 4602.826  1.848 -0.613 2006.342    4.0  6.61E+07 'p' 'd'   0.0    1.0 'Li I LS:1s2.2p 2P* LS:1s2.4d 2D'
                     out.write("%10.3f %9.5f %6.3f %8.3f %6.1f %9.2E '%s' '%s' %5.1f %6.1f '%s'\n" % (line['wave_A'], line['lower_state_eV'], \

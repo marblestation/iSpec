@@ -62,6 +62,8 @@ def generate_spectrum(grid, waveobs, teff, logg, MH, alpha, microturbulence_vel,
         regions['wave_base'][0] = global_wave_base
         regions['wave_top'][0] = global_wave_top
     # Only read the part of the spectrum that needs to be interpolated
+    def read_point_value(f, regions=None):
+        return read_spectrum(f, apply_filters=False, sort=False, regions=regions)
     custom_read_point_value = lambda f: read_point_value(f, regions=regions)
 
     target_point = []

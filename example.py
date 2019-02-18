@@ -1993,6 +1993,9 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
         segments = ispec.create_segments_around_lines(individual_line_regions, margin=0.25)
         wfilter = ispec.create_wavelength_filter(normalized_star_spectrum, regions=segments) # Only use the segment
 
+        if len(normalized_star_spectrum[wfilter]) == 0 or np.any(normalized_star_spectrum['flux'][wfilter] == 0):
+            continue
+
         obs_spec, modeled_synth_spectrum, params, errors, abundances_found, loggf_found, status, stats_linemasks = \
                 ispec.model_spectrum(normalized_star_spectrum[wfilter], star_continuum_model, \
                 modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, free_abundances, linelist_free_loggf, initial_teff, \
