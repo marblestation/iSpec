@@ -327,7 +327,7 @@ class iSpecBaseApp(Tkinter.Tk):
         for i in np.arange(len(spectra)):
             path = filenames["spectra"][i]
             name = path.split('/')[-1]
-            name = self.get_name(name) # If it already exists, add a suffix
+            name = self.get_name(name).encode('string_escape') # If it already exists, add a suffix
             color = self.get_color()
             self.active_spectrum = Spectrum(spectra[i], name, path=path, color=color)
             self.spectra.append(self.active_spectrum)
@@ -1156,7 +1156,7 @@ iSpec uses the following radiative transfer codes:
                 # Change name and path
                 self.active_spectrum.path = path
                 name = self.get_name(path.split('/')[-1]) # If it already exists, add a suffix
-                self.active_spectrum.name = name
+                self.active_spectrum.name = name.encode('string_escape')
                 self.active_spectrum.plot_id.set_label("[A] " + self.active_spectrum.name)
                 self.update_legend()
                 self.canvas.draw()
