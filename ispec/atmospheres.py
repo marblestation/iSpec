@@ -235,10 +235,13 @@ def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None
         # grid models, and advise those who would have liked a different
         # choice to use models with a different mass or g, according to
         # the recipe given in Eq. (7).
-        lgTauR = -5.00
+        lgTauR = -5.00 # lgTauR is only needed by Turbospectrum to read the model atmosphere but it has no effect
         for i, layer in enumerate(atmosphere_layers):
             atm_file.write("%i %.2f %.4f %.3E %.1f %.4E %.4E %.4E %.4E\n" % (i+1, lgTauR, layer[7], layer[8], layer[1], layer[9], layer[2], layer[5], 0.))
-            lgTauR += 0.20
+            if lgTauR <= -3.00 or lgTauR >= 1.00:
+                lgTauR += 0.20
+            else:
+                lgTauR += 0.10
     elif code == "spectrum":
         # Spectrum
         # mass depth, temperature in kelvin, gas pressure, electron density, Rosseland mean absorption coefficient, radiation pressure, microturbulent velocity in meters/second.
