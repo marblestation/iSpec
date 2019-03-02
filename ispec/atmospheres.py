@@ -59,7 +59,7 @@ def valid_atmosphere_target(modeled_layers_pack, target):
         True if the target teff, logg and metallicity can be obtained with the
         models
     """
-    existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname = modeled_layers_pack
+    existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulations, kdtree, ranges, base_dirname = modeled_layers_pack
 
     for param in free_parameters:
         param_target = target[param]
@@ -89,7 +89,7 @@ def __closest(kdtree, existing_points, filenames, read_point_value, target_point
     logging.info("Closest to target point '{}' is '{}'".format(" ".join(map(str, target_point)), " ".join(map(str, closest_existing_point))))
     return value
 
-def _interpolate(delaunay_triangulation, kdtree, existing_points, filenames, read_point_value, value_fields, target_point):
+def _interpolate(delaunay_triangulations, kdtree, existing_points, filenames, read_point_value, value_fields, target_point):
     """
     input:
     - existing_points: points in the parameters space such as [( 3000.,  3.5,  0.  ,  0. ), ( 3000.,  3.5,  0.25,  0. ), ...]
@@ -98,14 +98,21 @@ def _interpolate(delaunay_triangulation, kdtree, existing_points, filenames, rea
     output:
     - interpolated value
     """
-    simplex = delaunay_triangulation.find_simplex(target_point)
-    if np.any(simplex == -1):
+    target_point_cannot_be_interpolated = True
+    for subset, delaunay_triangulation in zip(delaunay_triangulations['subsets'], delaunay_triangulations['precomputed']):
+        if delaunay_triangulation is None:
+            continue
+        simplex = delaunay_triangulation.find_simplex(target_point)
+        if not np.any(simplex == -1):
+            target_point_cannot_be_interpolated = False
+            break
+    if target_point_cannot_be_interpolated:
         logging.warn("Target point '{}' is out of bound, using the closest".format(" ".join(map(str, target_point))))
         return __closest(kdtree, existing_points, filenames, read_point_value, target_point)
     index = delaunay_triangulation.simplices[simplex]
     points = []
     values = {}
-    for point, filename in zip(existing_points[index], filenames[index]):
+    for point, filename in zip(existing_points[subset][index], filenames[subset][index]):
         value = read_point_value(filename)
         points.append(point.tolist())
         for field in value_fields:
@@ -141,7 +148,7 @@ def interpolate_atmosphere_layers(modeled_layers_pack, target, code="spectrum"):
     if code not in ['spectrum', 'turbospectrum', 'moog', 'width', 'synthe', 'sme']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
-    existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname = modeled_layers_pack
+    existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulations, kdtree, ranges, base_dirname = modeled_layers_pack
 
     if code == "turbospectrum" and "MARCS" not in base_dirname:
         # Spherical models in turbospectrum require a parameters that is only provided in MARCS model atmosphere
@@ -153,7 +160,7 @@ def interpolate_atmosphere_layers(modeled_layers_pack, target, code="spectrum"):
     target_point = []
     for param in free_parameters:
         target_point.append(target[param])
-    interpolated_atm = _interpolate(delaunay_triangulation, kdtree, existing_points, filenames, read_point_value, value_fields, target_point)
+    interpolated_atm = _interpolate(delaunay_triangulations, kdtree, existing_points, filenames, read_point_value, value_fields, target_point)
 
     compatible_fields = ["rhox", "temperature", "pgas", "xne", "abross", "accrad", "vturb", "logtau5", "depth", "pelectron"]
     if "MARCS" in base_dirname:
@@ -273,13 +280,20 @@ def model_atmosphere_is_closest_copy(modeled_layers_pack, target):
     """
         Returns True if model could not be interpolated
     """
-    existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname = modeled_layers_pack
+    existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulations, kdtree, ranges, base_dirname = modeled_layers_pack
     target_point = []
     for param in free_parameters:
         target_point.append(target[param])
-    simplex = delaunay_triangulation.find_simplex(target_point)
-    target_point_cannot_be_interpolated = np.any(simplex == -1)
-    return target_point_cannot_be_interpolated
+    target_point_cannot_be_interpolated = None
+    for delaunay_triangulation in delaunay_triangulations['precomputed']:
+        if delaunay_triangulation is None:
+            continue
+        simplex = delaunay_triangulation.find_simplex(target_point)
+        if target_point_cannot_be_interpolated is None:
+            target_point_cannot_be_interpolated = np.any(simplex == -1)
+        else:
+            target_point_cannot_be_interpolated = target_point_cannot_be_interpolated and np.any(simplex == -1)
+    return target_point_cannot_be_interpolated if target_point_cannot_be_interpolated is not None else True
 
 
 
@@ -310,6 +324,9 @@ def load_modeled_layers_pack(input_path):
         raise Exception("Parameters file '{}' does not exist".format(params_filename))
 
     parameters = pd.read_csv(params_filename, sep="\t")
+    # Subsets are used in spectral grids to spread the number of data points among
+    # several Delaunay Triangulations, but this has not been necessary for model atmospheres
+    parameters_subsets = [np.array([True]*len(parameters))]
     filenames = base_dirname + "/" + parameters['filename']
     filenames = np.asarray(filenames)
     ranges = {}
@@ -323,16 +340,28 @@ def load_modeled_layers_pack(input_path):
 
     # The delaunay triangulation and kdtree can be computationally expensive,
     # do it once and save a pickle dump
+    # But first verify that the computed one (if exists) matches what is expected
     use_dump = False
     if os.path.exists(cache_filename):
-        delaunay_triangulation, kdtree = pickle.load(open(cache_filename, 'rb'))
-        if delaunay_triangulation.ndim == len(free_parameters) and delaunay_triangulation.npoints == len(existing_points):
-            use_dump = True
+        use_dump = True
+        delaunay_triangulations, kdtree = pickle.load(open(cache_filename, 'rb'))
+        for delaunay_triangulation, parameters_subset in zip(delaunay_triangulations['precomputed'], parameters_subsets):
+            if delaunay_triangulation is None:
+                continue
+            if not (delaunay_triangulation.ndim == len(free_parameters) and delaunay_triangulation.npoints == len(existing_points[parameters_subset])):
+                use_dump = False
+                break
 
     if not os.path.exists(cache_filename) or not use_dump:
-        delaunay_triangulation = spatial.Delaunay(existing_points)
+        delaunay_triangulations = {'subsets': parameters_subsets, 'precomputed': []}
+        for parameters_subset in parameters_subsets:
+            logging.info("Pre-computing [{}/{}]...".format(i+1, len(parameters_subsets)))
+            if len(existing_points[parameters_subset]) > 0:
+                delaunay_triangulations['precomputed'].append(spatial.Delaunay(existing_points[parameters_subset]))
+            else:
+                delaunay_triangulations['precomputed'].append(None)
         kdtree = spatial.cKDTree(existing_points)
-        pickle.dump((delaunay_triangulation, kdtree), open(cache_filename, 'wb'), protocol=2)
+        pickle.dump((delaunay_triangulations, kdtree), open(cache_filename, 'wb'), protocol=2)
 
     # Functions will receive the parameters in the same order
     read_point_value = lambda f: fits.open(f)[1].data
@@ -340,7 +369,7 @@ def load_modeled_layers_pack(input_path):
     value_fields = ["rhox", "temperature", "pgas", "xne", "abross", "accrad", "vturb", "logtau5", "depth", "pelectron"]
     value_fields += ["alpha_enhancement", "c_enhancement", "n_enhancement", "o_enhancement", "rapid_neutron_capture_enhancement", "slow_neutron_capture_enhancement"]
     value_fields += ["radius", "mass", "vmic"]
-    return existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname
+    return existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulations, kdtree, ranges, base_dirname
 
 
 def calculate_opacities(atmosphere_layers_file, abundances, MH, microturbulence_vel, wave_base, wave_top, wave_step, verbose=0, opacities_filename=None, tmp_dir=None):

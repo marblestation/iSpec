@@ -28,7 +28,7 @@ The user-friendly interface is perfect for learning and testing. However, to tak
 
 ## Citations
 
-We thank you to cite the [A&A article about iSpec](http://adsabs.harvard.edu/abs/2014A%26A...569A.111B) whenever it is used.
+If you use iSpec, we thank you to cite these two articles: [A&A (2014)](http://adsabs.harvard.edu/abs/2014A%26A...569A.111B) and [MNRAS (2019)](http://adsabs.harvard.edu/abs/2019arXiv190209558B).
 
 [More information and documentation](https://www.blancocuaresma.com/s/)
 

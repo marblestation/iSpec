@@ -188,7 +188,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
         resolution = 0 # This can be modified after synthesis if needed
         is_step = False
         if not valid_atmosphere_target(modeled_layers_pack, {'teff': teff, 'logg': logg, 'MH': MH, 'alpha': alpha}):
-            raise Exception("Target parameters out of the valid ranges")
+            raise Exception("Target parameters out of the valid ranges: teff={} logg={} MH={} alpha={}".format(teff, logg, MH, alpha))
         points = [
                     (teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, is_step),
                 ]
@@ -434,6 +434,15 @@ def load_spectral_grid(input_path):
         raise Exception("Parameters file '{}' does not exist".format(params_filename))
 
     parameters = pd.read_csv(params_filename, sep="\t")
+    # Divide grid in two using the temperature to reduce the number of data points
+    # to be used by a single Delaunay Triangulation
+    teff_limit = 10000
+    teff_margin = teff_limit/2
+    filter_cool_parameters = np.array(parameters['teff'] < teff_limit)
+    filter_intermediate_parameters = np.array(np.logical_and(parameters['teff'] > teff_limit-teff_margin, parameters['teff'] < teff_limit+teff_margin))
+    filter_hot_parameters = np.array(parameters['teff'] >= teff_limit)
+    parameters_subsets = [filter_cool_parameters, filter_intermediate_parameters, filter_hot_parameters]
+    #
     filenames = base_dirname + "/" + parameters['filename']
     filenames = np.asarray(filenames)
     ranges = {}
@@ -449,16 +458,28 @@ def load_spectral_grid(input_path):
 
     # The delaunay triangulation and kdtree can be computationally expensive,
     # do it once and save a pickle dump
+    # But first verify that the computed one (if exists) matches what is expected
     use_dump = False
     if os.path.exists(cache_filename):
-        delaunay_triangulation, kdtree = pickle.load(open(cache_filename, 'rb'))
-        if delaunay_triangulation.ndim == len(free_parameters) and delaunay_triangulation.npoints == len(existing_points):
-            use_dump = True
+        use_dump = True
+        delaunay_triangulations, kdtree = pickle.load(open(cache_filename, 'rb'))
+        for delaunay_triangulation, parameters_subset in zip(delaunay_triangulations['precomputed'], parameters_subsets):
+            if delaunay_triangulation is None:
+                continue
+            if not (delaunay_triangulation.ndim == len(free_parameters) and delaunay_triangulation.npoints == len(existing_points[parameters_subset])):
+                use_dump = False
+                break
 
     if not os.path.exists(cache_filename) or not use_dump:
-        delaunay_triangulation = spatial.Delaunay(existing_points)
+        delaunay_triangulations = {'subsets': parameters_subsets, 'precomputed': []}
+        for i, parameters_subset in enumerate(parameters_subsets):
+            logging.info("Pre-computing [{}/{}]...".format(i+1, len(parameters_subsets)))
+            if len(existing_points[parameters_subset]) > 0:
+                delaunay_triangulations['precomputed'].append(spatial.Delaunay(existing_points[parameters_subset]))
+            else:
+                delaunay_triangulations['precomputed'].append(None)
         kdtree = spatial.cKDTree(existing_points)
-        pickle.dump((delaunay_triangulation, kdtree), open(cache_filename, 'wb'), protocol=2)
+        pickle.dump((delaunay_triangulations, kdtree), open(cache_filename, 'wb'), protocol=2)
 
     # Functions will receive the parameters in the same order
     #read_point_value = lambda f, regions: read_spectrum(f, apply_filters=False, sort=False, regions=regions)
@@ -466,17 +487,24 @@ def load_spectral_grid(input_path):
         return read_spectrum(f, apply_filters=False, sort=False, regions=regions)
 
     value_fields = ["waveobs", "flux"]
-    return existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname
+    return existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulations, kdtree, ranges, base_dirname
 
 def valid_interpolated_spectrum_target(grid, target):
     """
         Returns False if model could not be interpolated
     """
-    existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname = grid
+    existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulations, kdtree, ranges, base_dirname = grid
     target_point = []
     for param in free_parameters:
         target_point.append(target[param])
-    simplex = delaunay_triangulation.find_simplex(target_point)
-    target_point_cannot_be_interpolated = np.any(simplex == -1)
-    return not target_point_cannot_be_interpolated
+    target_point_cannot_be_interpolated = None
+    for delaunay_triangulation in delaunay_triangulations['precomputed']:
+        if delaunay_triangulation is None:
+            continue
+        simplex = delaunay_triangulation.find_simplex(target_point)
+        if target_point_cannot_be_interpolated is None:
+            target_point_cannot_be_interpolated = np.any(simplex == -1)
+        else:
+            target_point_cannot_be_interpolated = target_point_cannot_be_interpolated and np.any(simplex == -1)
+    return not target_point_cannot_be_interpolated if target_point_cannot_be_interpolated is not None else False
 

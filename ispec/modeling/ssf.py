@@ -858,7 +858,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     if code == "grid":
         if grid is None:
             grid = load_spectral_grid(precomputed_grid_dir)
-        existing_points, grid_free_parameters, filenames, read_point_value, value_fields, delaunay_triangulation, kdtree, ranges, base_dirname = grid
+        existing_points, grid_free_parameters, filenames, read_point_value, value_fields, delaunay_triangulations, kdtree, ranges, base_dirname = grid
         if "teff" not in grid_free_parameters and "teff" in free_params:
             raise Exception("teff cannot be free when using this grid")
         if "logg" not in grid_free_parameters and "logg" in free_params:
