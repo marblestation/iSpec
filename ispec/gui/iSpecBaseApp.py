@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -41,41 +42,41 @@ import logging
 
 
 import ispec
-from dialogs import AbundancesDialog
-from dialogs import AdjustLinesDialog
-from dialogs import AddNoiseDialog
-from dialogs import CleanSpectrumDialog
-from dialogs import CleanTelluricsDialog
-from dialogs import CombineSpectraDialog
-from dialogs import CorrectVelocityDialog
-from dialogs import CutSpectrumDialog
-from dialogs import DegradeResolutionDialog
-from dialogs import DetermineBarycentricCorrectionDialog
-from dialogs import EstimateErrorsDialog
-from dialogs import EstimateSNRDialog
-from dialogs import FindContinuumDialog
-from dialogs import FindLinesDialog
-from dialogs import FindSegmentsDialog
-from dialogs import FitContinuumDialog
-from dialogs import FitLinesDialog
-from dialogs import OperateSpectrumDialog
-from dialogs import ResampleSpectrumDialog
-from dialogs import SendSpectrumDialog
-from dialogs import SolverDialog
-from dialogs import SolverEWDialog
-from dialogs import SyntheticSpectrumDialog
-from dialogs import InterpolateSpectrumDialog
-from dialogs import InterpolateSolverDialog
-from dialogs import VelocityProfileDialog
+from .dialogs import AbundancesDialog
+from .dialogs import AdjustLinesDialog
+from .dialogs import AddNoiseDialog
+from .dialogs import CleanSpectrumDialog
+from .dialogs import CleanTelluricsDialog
+from .dialogs import CombineSpectraDialog
+from .dialogs import CorrectVelocityDialog
+from .dialogs import CutSpectrumDialog
+from .dialogs import DegradeResolutionDialog
+from .dialogs import DetermineBarycentricCorrectionDialog
+from .dialogs import EstimateErrorsDialog
+from .dialogs import EstimateSNRDialog
+from .dialogs import FindContinuumDialog
+from .dialogs import FindLinesDialog
+from .dialogs import FindSegmentsDialog
+from .dialogs import FitContinuumDialog
+from .dialogs import FitLinesDialog
+from .dialogs import OperateSpectrumDialog
+from .dialogs import ResampleSpectrumDialog
+from .dialogs import SendSpectrumDialog
+from .dialogs import SolverDialog
+from .dialogs import SolverEWDialog
+from .dialogs import SyntheticSpectrumDialog
+from .dialogs import InterpolateSpectrumDialog
+from .dialogs import InterpolateSolverDialog
+from .dialogs import VelocityProfileDialog
 
-from CustomizableRegion import CustomizableRegion
-from Spectrum import Spectrum
-from Meter import Meter
-from StatusBar import StatusBar
+from .CustomizableRegion import CustomizableRegion
+from .Spectrum import Spectrum
+from .Meter import Meter
+from .StatusBar import StatusBar
 
 
 try:
-    from SAMPManager import SAMPManager
+    from .SAMPManager import SAMPManager
 except:
     pass
 
@@ -272,7 +273,7 @@ class iSpecBaseApp(Tkinter.Tk):
                 command = self.queue.get(0)
                 if len(command) == 3:
                     # func, args, kargs tuple
-                    apply(command[0], command[1], command[2])
+                    command[0](*command[1], **command[2])
                 else:
                     # string command (usefull when called from other processes
                     # such as when a synthetic spectrum is generated)
@@ -904,7 +905,7 @@ iSpec uses the following radiative transfer codes:
                 spec.continuum_data = None
             # Remove fitted lines if they exist
             for region in self.region_widgets["lines"]:
-                if region.line_model.has_key(spec):
+                if spec in region.line_model:
                     if region.line_plot_id[spec] is not None:
                         self.axes.lines.remove(region.line_plot_id[spec])
                     del region.line_plot_id[spec]
@@ -1070,7 +1071,7 @@ iSpec uses the following radiative transfer codes:
                     self.filenames[elements] = path
                     self.canvas.draw()
                     action_ended = True
-                except Exception, e:
+                except Exception as e:
                     msg = 'A file does not have a compatible format.'
                     title = 'File format incompatible'
                     self.error(title, msg)
@@ -1578,7 +1579,7 @@ iSpec uses the following radiative transfer codes:
             return
 
         key = "SendSpectrumDialog"
-        if not self.dialog.has_key(key):
+        if key not in self.dialog:
             self.dialog[key] = SendSpectrumDialog(self, "Send spectrum to external application", names)
         self.dialog[key].show()
 
@@ -1816,7 +1817,7 @@ iSpec uses the following radiative transfer codes:
             self.add_stats("Flux median", "%.6f" % np.median(spectrum_window['flux']))
             self.add_stats("Flux standard deviation", "%.6f" % np.std(spectrum_window['flux']))
 
-        if region.element_type == "lines" and region.line_plot_id.has_key(self.active_spectrum) and region.line_model[self.active_spectrum] is not None:
+        if region.element_type == "lines" and self.active_spectrum in region.line_plot_id and region.line_model[self.active_spectrum] is not None:
             self.add_stats("Gaussian mean (mu)", "%.4f" % region.line_model[self.active_spectrum].mu())
             self.add_stats("Gaussian mean (mu) error", "%.4f" % region.line_model[self.active_spectrum].emu())
             self.add_stats("Gaussian amplitude (A)", "%.4f" % region.line_model[self.active_spectrum].A())
@@ -1837,7 +1838,7 @@ iSpec uses the following radiative transfer codes:
             ew = ew * 10000 # From nm to mA
             self.add_stats("Gaussian fit Equivalent Width (EW)", "%.2f" % ew)
 
-        if region.element_type == "lines" and region.line_extra.has_key(self.active_spectrum) and region.line_extra[self.active_spectrum] is not None:
+        if region.element_type == "lines" and self.active_spectrum in region.line_extra and region.line_extra[self.active_spectrum] is not None:
             # Extras (all in string format separated by ;)
             atomic_wave_peak, species, lower_state, upper_state, loggf, fudge_factor, transition_type, rad, stark, waals, ew, element, telluric_wave_peak, telluric_depth = region.line_extra[self.active_spectrum].split(";")
             self.add_stats("Atomic element", element)
@@ -1898,7 +1899,7 @@ iSpec uses the following radiative transfer codes:
 
     def remove_drawn_fitted_lines(self):
         for region in self.region_widgets["lines"]:
-            if region.line_plot_id.has_key(self.active_spectrum) and region.line_plot_id[self.active_spectrum] is not None:
+            if self.active_spectrum in region.line_plot_id and region.line_plot_id[self.active_spectrum] is not None:
                 self.axes.lines.remove(region.line_plot_id[self.active_spectrum])
                 region.line_plot_id[self.active_spectrum] = None
         self.canvas.draw()
@@ -1907,7 +1908,7 @@ iSpec uses the following radiative transfer codes:
         self.remove_drawn_fitted_lines()
         # Remove fitted lines if they exist
         for region in self.region_widgets["lines"]:
-            if region.line_model.has_key(self.active_spectrum):
+            if self.active_spectrum in region.line_model:
                 del region.line_plot_id[self.active_spectrum]
                 del region.line_model[self.active_spectrum]
                 del region.line_extra[self.active_spectrum]
@@ -1929,7 +1930,7 @@ iSpec uses the following radiative transfer codes:
 
     def draw_fitted_lines(self):
         for region in self.region_widgets["lines"]:
-            if region.line_model.has_key(self.active_spectrum) and region.line_model[self.active_spectrum] is not None:
+            if self.active_spectrum in region.line_model and region.line_model[self.active_spectrum] is not None:
                 wave_base = region.get_wave_base()
                 wave_top = region.get_wave_top()
                 wave_filter = (self.active_spectrum.data['waveobs'] >= wave_base) & (self.active_spectrum.data['waveobs'] <= wave_top)
@@ -1975,7 +1976,7 @@ iSpec uses the following radiative transfer codes:
         # Initial recommendation: 1 knot every 5 nm
         nknots = np.max([1, int((np.max(self.active_spectrum.data['waveobs']) - np.min(self.active_spectrum.data['waveobs'])) / 5.)])
         degree = 2
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             if fit_type == "Template":
                 median_wave_range=5.0
             else:
@@ -2192,7 +2193,7 @@ iSpec uses the following radiative transfer codes:
             raise Exception("Velocity should be determined relative to something!")
 
         key = "VelocityProfileDialog:"+str(relative_to_atomic_data)+str(relative_to_telluric_data)+str(relative_to_template)
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             self.active_spectrum.dialog[key] = VelocityProfileDialog(self, title, rv_lower_limit=velocity_lower_limit, rv_upper_limit=velocity_upper_limit, rv_step=velocity_step, templates=templates, masks=masks, mask_size=mask_size, mask_depth=mask_depth)
             self.active_spectrum.dialog[key].show()
         elif show_previous_results:
@@ -2395,7 +2396,7 @@ iSpec uses the following radiative transfer codes:
 
         key = "FitLinesDialog"
         vel_telluric = self.active_spectrum.velocity_telluric
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             self.active_spectrum.dialog[key] = FitLinesDialog(self, "Fit lines", resolution, vel_telluric, self.lists, self.default_lists)
         self.active_spectrum.dialog[key].show(updated_vel_telluric=vel_telluric)
 
@@ -2635,7 +2636,7 @@ iSpec uses the following radiative transfer codes:
                 return
 
         key = "FindContinuumDialog"
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             self.active_spectrum.dialog[key] = FindContinuumDialog(self, "Properties for finding continuum regions", self.find_continuum_regions_wave_step, self.find_continuum_regions_sigma, self.find_continuum_regions_max_continuum_diff)
         self.active_spectrum.dialog[key].show()
 
@@ -2737,7 +2738,7 @@ iSpec uses the following radiative transfer codes:
             R = self.active_spectrum.resolution_telluric
 
         key = "AdjustLinesDialog"
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             self.active_spectrum.dialog[key] = AdjustLinesDialog(self, "Adjusting line masks", margin=0.5, resolution=R)
         self.active_spectrum.dialog[key].show()
 
@@ -2801,7 +2802,7 @@ iSpec uses the following radiative transfer codes:
 
 
         key = "FindLinesDialog"
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             self.active_spectrum.dialog[key] = FindLinesDialog(self, "Properties for finding line masks", self.find_lines_min_depth, self.find_lines_max_depth, vel_telluric, R, "Fe 1, Fe 2", self.lists, self.default_lists)
         self.active_spectrum.dialog[key].show(updated_vel_telluric=vel_telluric)
 
@@ -2984,7 +2985,7 @@ iSpec uses the following radiative transfer codes:
                 return
 
         key = "FindSegmentsDialog"
-        if not self.dialog.has_key(key):
+        if key not in self.dialog:
             self.dialog[key] = FindSegmentsDialog(self, "Properties for finding segments", margin=0.25)
         self.dialog[key].show()
 
@@ -3031,7 +3032,7 @@ iSpec uses the following radiative transfer codes:
             return
 
         key = "CorrectVelocityDialog:"+vel_type
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             self.active_spectrum.dialog[key] = CorrectVelocityDialog(self, "Velocity correction", vel_type, default_vel)
         self.active_spectrum.dialog[key].show(updated_vel=default_vel)
 
@@ -3084,7 +3085,7 @@ iSpec uses the following radiative transfer codes:
 
     def on_determine_barycentric_vel(self):
         key = "DetermineBarycentricCorrectionDialog"
-        if not self.dialog.has_key(key):
+        if key not in self.dialog:
             self.dialog[key] = DetermineBarycentricCorrectionDialog(self,  "Barycentric velocity determination", "15/02/2012", "00:00:00", "19:50:46.99", "08:52:5.96")
         self.dialog[key].show()
 
@@ -3134,7 +3135,7 @@ iSpec uses the following radiative transfer codes:
                 return
 
         key = "EstimateSNRDialog"
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             self.active_spectrum.dialog[key] = EstimateSNRDialog(self, "Properties for estimating SNR", num_points=10)
         self.active_spectrum.dialog[key].show()
 
@@ -3200,7 +3201,7 @@ iSpec uses the following radiative transfer codes:
                 return
 
         key = "EstimateErrorsDialog"
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             snr = 10.0
             self.active_spectrum.dialog[key] = EstimateErrorsDialog(self, "Calculate spectrum errors", snr)
         self.active_spectrum.dialog[key].show()
@@ -3232,7 +3233,7 @@ iSpec uses the following radiative transfer codes:
             return
 
         key = "AddNoiseDialog"
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             snr = 10.0
             self.active_spectrum.dialog[key] = AddNoiseDialog(self, "Add noise to spectrum", snr)
         self.active_spectrum.dialog[key].show()
@@ -3272,7 +3273,7 @@ iSpec uses the following radiative transfer codes:
             R = self.active_spectrum.resolution_atomic
         else:
             R = self.active_spectrum.resolution_telluric
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             self.active_spectrum.dialog[key] = DegradeResolutionDialog(self, "Degrade spectrum resolution", R, R/2)
         self.active_spectrum.dialog[key].show(updated_from_resolution=R, updated_to_resolution=R/2)
 
@@ -3335,7 +3336,7 @@ iSpec uses the following radiative transfer codes:
             return
 
         key = "CleanSpectrumDialog"
-        if not self.dialog.has_key(key):
+        if key not in self.dialog:
             self.dialog[key] = CleanSpectrumDialog(self, "Clean fluxes and errors", 0.0, 1.2, 0.0, 1.2)
         self.dialog[key].show()
 
@@ -3448,7 +3449,7 @@ iSpec uses the following radiative transfer codes:
 
         key = "CleanTelluricsDialog"
         vel_telluric = self.active_spectrum.velocity_telluric
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             self.active_spectrum.dialog[key] = CleanTelluricsDialog(self, "Clean telluric regions", vel_telluric, -30.0, 30.0, 0.02)
         self.active_spectrum.dialog[key].show(updated_vel=vel_telluric)
 
@@ -3534,7 +3535,7 @@ iSpec uses the following radiative transfer codes:
             return
 
         key = "CutSpectrumDialog"
-        if not self.dialog.has_key(key):
+        if key not in self.dialog:
             self.dialog[key] = CutSpectrumDialog(self, "Wavelength range reduction", np.round(np.min(self.active_spectrum.data['waveobs']), 2), np.round(np.max(self.active_spectrum.data['waveobs']), 2))
         self.dialog[key].show()
 
@@ -3633,7 +3634,7 @@ iSpec uses the following radiative transfer codes:
         max_step = np.round(max_step, decimals=np.max([0, int(-1*np.floor(np.log10(max_step)))]))
 
         key = "ResampleSpectrumDialog"
-        if not self.dialog.has_key(key):
+        if key not in self.dialog:
             self.dialog[key] = ResampleSpectrumDialog(self, "Resample spectrum", np.round(np.min(self.active_spectrum.data['waveobs']), 2), np.round(np.max(self.active_spectrum.data['waveobs']), 2), 0.001, median_step, mean_step, min_step, max_step)
         self.dialog[key].show(updated_median_step=median_step, updated_mean_step=mean_step, updated_min_step=min_step, updated_max_step=max_step)
 
@@ -3936,7 +3937,7 @@ iSpec uses the following radiative transfer codes:
         self.safe_operations['err'] = err
 
         key = "OperateSpectrumDialog"
-        if not self.dialog.has_key(key):
+        if key not in self.dialog:
             operation_waveobs = self.operation_waveobs
             operation_flux = self.operation_flux
             operation_err = self.operation_err
@@ -4043,7 +4044,7 @@ iSpec uses the following radiative transfer codes:
             wave_step = 0.001
 
             key = "InterpolateSpectrumDialog"
-            if not self.dialog.has_key(key):
+            if key not in self.dialog:
                 self.dialog[key] = InterpolateSpectrumDialog(self, "Spectrum interpolator", wave_base, wave_top, wave_step, resolution, teff, logg, MH, alpha, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.default_lists)
             self.dialog[key].show()
 
@@ -4083,7 +4084,7 @@ iSpec uses the following radiative transfer codes:
                 self.flash_status_message("Bad value.")
                 return
 
-            if not self.grid.has_key(selected_grid):
+            if selected_grid not in self.grid:
                 logging.info("Loading grid %s..." % selected_grid)
                 self.status_message("Loading grid %s..." % selected_grid)
                 self.grid[selected_grid] = ispec.load_spectral_grid(grid_dirname)
@@ -4149,7 +4150,7 @@ iSpec uses the following radiative transfer codes:
             isotopes = None
             abundances = None
             synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, regions=regions, verbose=1, gui_queue=self.queue, code=code, grid=self.grid[selected_grid])
-        except Exception, e:
+        except Exception as e:
             error_message = str(e)
 
 
@@ -4234,7 +4235,7 @@ iSpec uses the following radiative transfer codes:
             wave_step = 0.001
 
             key = "SyntheticSpectrumDialog"
-            if not self.dialog.has_key(key):
+            if key not in self.dialog:
                 self.dialog[key] = SyntheticSpectrumDialog(self, "Synthetic spectrum generator", wave_base, wave_top, wave_step, resolution, teff, logg, MH, alpha, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.default_lists)
             self.dialog[key].show()
 
@@ -4286,7 +4287,7 @@ iSpec uses the following radiative transfer codes:
                 self.flash_status_message("Bad value.")
                 return
 
-            if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
+            if selected_atmosphere_models not in self.modeled_layers_pack:
                 logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
                 self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
                 self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(atmospheres_file)
@@ -4383,7 +4384,7 @@ iSpec uses the following radiative transfer codes:
         try:
             # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
             synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, regions=regions, verbose=1, gui_queue=self.queue, code=code)
-        except Exception, e:
+        except Exception as e:
             error_message = str(e)
 
 
@@ -4446,7 +4447,7 @@ iSpec uses the following radiative transfer codes:
             return
 
         key = "AbundancesDialog"
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             teff = 5771.0
             logg = 4.44
             MH = 0.00
@@ -4478,7 +4479,7 @@ iSpec uses the following radiative transfer codes:
             return
 
 
-        if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
+        if selected_atmosphere_models not in self.modeled_layers_pack:
             logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
             self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
             self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/'))
@@ -4512,7 +4513,7 @@ iSpec uses the following radiative transfer codes:
         error_message = None
         try:
             spec_abund, normal_abund, x_over_h, x_over_fe = ispec.determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, abundances, microturbulence_vel=microturbulence_vel, verbose=1, gui_queue=self.queue, code=code)
-        except Exception, e:
+        except Exception as e:
             spec_abund = None
             normal_abund = None
             x_over_h = None
@@ -4560,7 +4561,7 @@ iSpec uses the following radiative transfer codes:
             return
 
         key = "SolverEWDialog"
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             teff = 5771.0
             logg = 4.44
             MH = 0.00
@@ -4611,7 +4612,7 @@ iSpec uses the following radiative transfer codes:
             return
 
 
-        if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
+        if selected_atmosphere_models not in self.modeled_layers_pack:
             logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
             self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
             self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(resource_path('input/atmospheres/' + selected_atmosphere_models + '/'))
@@ -4673,7 +4674,7 @@ iSpec uses the following radiative transfer codes:
                                 tmp_dir = None, \
                                 code=code)
             params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params, used_linemasks = results
-        except Exception, e:
+        except Exception as e:
             params = None
             errors = None
             status = None
@@ -4731,7 +4732,7 @@ iSpec uses the following radiative transfer codes:
         #resolution = 100000
 
         key = "SolverDialog"
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             self.active_spectrum.dialog[key] = SolverDialog(self, "Determine parameters", resolution, teff, logg, MH, alpha, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.default_lists)
         self.active_spectrum.dialog[key].show()
 
@@ -4820,7 +4821,7 @@ iSpec uses the following radiative transfer codes:
 
         isotope_file = resource_path("input/isotopes/SPECTRUM.lst")
 
-        if not self.modeled_layers_pack.has_key(selected_atmosphere_models):
+        if selected_atmosphere_models not in self.modeled_layers_pack:
             logging.info("Loading %s modeled atmospheres..." % selected_atmosphere_models)
             self.status_message("Loading %s modeled atmospheres..." % selected_atmosphere_models)
             self.modeled_layers_pack[selected_atmosphere_models] = ispec.load_modeled_layers_pack(atmospheres_file)
@@ -4909,7 +4910,7 @@ iSpec uses the following radiative transfer codes:
             vmic_from_empirical_relation = vmic_from_empirical_relation, \
             vmac_from_empirical_relation = vmac_from_empirical_relation \
             )
-        except Exception, e:
+        except Exception as e:
             raise
             obs_spectrum = None
             synth_spectrum = None
@@ -4991,7 +4992,7 @@ iSpec uses the following radiative transfer codes:
         #resolution = 100000
 
         key = "InterpolateSolverDialog"
-        if not self.active_spectrum.dialog.has_key(key):
+        if key not in self.active_spectrum.dialog:
             self.active_spectrum.dialog[key] = InterpolateSolverDialog(self, "Determine parameters with grid", resolution, teff, logg, MH, alpha, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, self.lists, self.default_lists)
         self.active_spectrum.dialog[key].show()
 
@@ -5061,7 +5062,7 @@ iSpec uses the following radiative transfer codes:
 
         ####
 
-        if not self.grid.has_key(selected_grid):
+        if selected_grid not in self.grid:
             logging.info("Loading grid %s..." % selected_grid)
             self.status_message("Loading grid %s..." % selected_grid)
             self.grid[selected_grid] = ispec.load_spectral_grid(grid_dirname)
@@ -5118,7 +5119,7 @@ iSpec uses the following radiative transfer codes:
             vmac_from_empirical_relation=vmac_from_empirical_relation, \
             grid=self.grid[selected_grid] \
             )
-        except Exception, e:
+        except Exception as e:
             #raise
             obs_spectrum = None
             synth_spectrum = None

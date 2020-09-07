@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -16,7 +17,7 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 import numpy as np
-from CustomDialog import *
+from .CustomDialog import *
 
 class FindContinuumDialog(CustomDialog):
     def __init__(self, parent, title, fixed_wave_step=0.05, sigma=0.001, max_continuum_diff=1.0):

@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os
 import sys
 import unittest
@@ -99,7 +100,7 @@ class TestSynthesis(unittest.TestCase):
         if not ispec.valid_atmosphere_target(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}):
             msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                     fall out of theatmospheric models."
-            print msg
+            print(msg)
 
         # Prepare atmosphere model
         atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, code=code)
@@ -150,7 +151,7 @@ class TestSynthesis(unittest.TestCase):
         if not ispec.valid_interpolated_spectrum_target(grid, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha, 'vmic': microturbulence_vel}):
             msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                     fall out of the spectral grid limits."
-            print msg
+            print(msg)
 
         # Interpolation
         interpolated_spectrum = ispec.create_spectrum_structure(np.arange(wave_base, wave_top, wave_step))

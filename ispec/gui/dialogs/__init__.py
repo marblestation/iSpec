@@ -16,6 +16,7 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 from __future__ import division
+from __future__ import absolute_import
 
 import os
 import sys
@@ -23,32 +24,32 @@ import sys
 if sys.hexversion < 0x02050000:
     raise RuntimeError("SVE requires at least Python 2.5")
 
-from AbundancesDialog import *
-from AddNoiseDialog import *
-from AdjustLinesDialog import *
-from CleanSpectrumDialog import *
-from CleanTelluricsDialog import *
-from CombineSpectraDialog import *
-from CorrectVelocityDialog import *
-from CustomDialog import *
-from CutSpectrumDialog import *
-from DegradeResolutionDialog import *
-from DetermineBarycentricCorrectionDialog import *
-from EstimateErrorsDialog import *
-from EstimateSNRDialog import *
-from ExampleDialog import *
-from FindContinuumDialog import *
-from FindLinesDialog import *
-from FindSegmentsDialog import *
-from FitContinuumDialog import *
-from FitLinesDialog import *
-from OperateSpectrumDialog import *
-from ResampleSpectrumDialog import *
-from SendSpectrumDialog import *
-from SyntheticSpectrumDialog import *
-from InterpolateSpectrumDialog import *
-from InterpolateSolverDialog import *
-from VelocityProfileDialog import *
-from SolverDialog import *
-from SolverEWDialog import *
+from .AbundancesDialog import *
+from .AddNoiseDialog import *
+from .AdjustLinesDialog import *
+from .CleanSpectrumDialog import *
+from .CleanTelluricsDialog import *
+from .CombineSpectraDialog import *
+from .CorrectVelocityDialog import *
+from .CustomDialog import *
+from .CutSpectrumDialog import *
+from .DegradeResolutionDialog import *
+from .DetermineBarycentricCorrectionDialog import *
+from .EstimateErrorsDialog import *
+from .EstimateSNRDialog import *
+from .ExampleDialog import *
+from .FindContinuumDialog import *
+from .FindLinesDialog import *
+from .FindSegmentsDialog import *
+from .FitContinuumDialog import *
+from .FitLinesDialog import *
+from .OperateSpectrumDialog import *
+from .ResampleSpectrumDialog import *
+from .SendSpectrumDialog import *
+from .SyntheticSpectrumDialog import *
+from .InterpolateSpectrumDialog import *
+from .InterpolateSolverDialog import *
+from .VelocityProfileDialog import *
+from .SolverDialog import *
+from .SolverEWDialog import *
 

@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -30,7 +32,7 @@ from ispec.lines import write_atomic_linelist
 from ispec.common import which
 from ispec.common import is_moog_support_enabled
 from ispec.spectrum import create_spectrum_structure, resample_spectrum
-from effects import _filter_linelist, apply_post_fundamental_effects
+from .effects import _filter_linelist, apply_post_fundamental_effects
 
 def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, regions=None, tmp_dir=None, timeout=1800):
     return generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0, tmp_dir=tmp_dir, timeout=timeout)
@@ -234,7 +236,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
             try:
                 data = np.loadtxt(tmp_execution_dir+"/moog.spec", skiprows=2)
             except:
-                print out
+                print(out)
                 sys.stdout.flush()
                 raise Exception("Synthesis failed!")
             #synth_waveobs_tmp = np.linspace(wave_base, wave_top, len(synth_fluxes_tmp)) # Not exactly identical to turbospectrum wavelengths

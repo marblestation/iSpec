@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -27,14 +29,14 @@ import os, errno
 #import ipdb
 import random
 import sys
-import log
+from . import log
 import logging
 import cPickle as pickle
 import gzip
 
 def is_spectrum_support_enabled():
     try:
-        import synthesizer as __synthesizer_ignore__
+        from . import synthesizer as __synthesizer_ignore__
         return True
     except:
         return False
@@ -340,12 +342,12 @@ try:
     import pyximport
     import numpy as np
     pyximport.install(setup_args={'include_dirs':[np.get_include()]})
-    from common_c import find_local_max_values
-    from common_c import find_local_min_values
+    from .common_c import find_local_max_values
+    from .common_c import find_local_min_values
 except:
-    print "*********************************************************************"
-    print "Not optimized version loaded!"
-    print "*********************************************************************"
+    print("*********************************************************************")
+    print("Not optimized version loaded!")
+    print("*********************************************************************")
 
     def find_local_max_values(x):
         """

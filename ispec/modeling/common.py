@@ -1,3 +1,4 @@
+from __future__ import print_function
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -134,8 +135,8 @@ def _get_stats_per_linemask(waveobs, fluxes, synthetic_fluxes, weights, free_par
             header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("wave_peak","wave_base","wave_top","wchisq","rwchisq","chisq","rchisq","rms")
             stats = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.4f\t%8.2f\t%8.4f\t%8.4f" % (wave_peak, wave_base, wave_top, wchisq, reduced_wchisq, chisq, reduced_chisq, rms)
             if i == 0:
-                print "         ", header
-            print "Line     ", stats
+                print("         ", header)
+            print("Line     ", stats)
         i += 1
 
     return results

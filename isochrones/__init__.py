@@ -16,5 +16,6 @@
     along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 """
 from __future__ import division
+from __future__ import absolute_import
 
-from isochrones import *
+from .isochrones import *

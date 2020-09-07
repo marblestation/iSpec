@@ -1,3 +1,4 @@
+from __future__ import print_function
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -163,7 +164,7 @@ class SAMPManager():
         return spectrum
 
     def __signal_handler(self, signal, frame):
-        print 'SIGTERM received (ctrl+c)'
+        print('SIGTERM received (ctrl+c)')
         self.shutdown()
 
     def shutdown(self):
@@ -355,7 +356,7 @@ class SAMPManager():
                 for subscriber in subscribers.keys():
                     metadata = self.samp_client.getMetadata(subscriber)
                     name = ""
-                    if metadata.has_key('samp.name'):
+                    if 'samp.name' in metadata:
                         name = metadata['samp.name']
                     ids.append(subscriber)
                     names.append(name)

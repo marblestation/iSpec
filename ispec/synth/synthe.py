@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -26,7 +27,7 @@ import logging
 from ispec.lines import write_atomic_linelist
 from ispec.common import which, is_synthe_support_enabled
 from ispec.spectrum import create_spectrum_structure, resample_spectrum
-from effects import _filter_linelist, apply_post_fundamental_effects
+from .effects import _filter_linelist, apply_post_fundamental_effects
 
 
 def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, molecules_files=None, regions=None, tmp_dir=None, timeout=1800):

@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -21,11 +23,11 @@ from datetime import datetime, timedelta
 import numpy as np
 import logging
 
-from mpfitmodels import MPFitModel
+from .mpfitmodels import MPFitModel
 from ispec.abundances import determine_abundances
 from ispec.abundances import determine_abundance_enchancements
 from ispec.atmospheres import interpolate_atmosphere_layers, model_atmosphere_is_closest_copy
-from common import Constants
+from .common import Constants
 
 
 class EquivalentWidthModel(MPFitModel):
@@ -178,16 +180,16 @@ class EquivalentWidthModel(MPFitModel):
                 self._parinfo[i]['value'] = p[i]
 
         key = "%.0f %.2f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.alpha(), self.vmic())
-        if self.cache.has_key(key):
+        if key in self.cache:
             hit_cache = True
             if not self.quiet:
-                print "Cache:", key
+                print("Cache:", key)
             self.last_final_values = self.cache[key]
             spec_abund, absolute_abund, x_over_h, x_over_fe = self.cache[key]
         else:
             hit_cache = False
             if not self.quiet:
-                print "Generating:", key
+                print("Generating:", key)
             # Optimization to avoid too small changes in parameters or repetition
             atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, {'teff':self.teff(), 'logg':self.logg(), 'MH':self.MH(), 'alpha':self.alpha()}, code=self.code)
             if self.fe1_filter is None or self.fe2_filter is None:
@@ -314,13 +316,13 @@ class EquivalentWidthModel(MPFitModel):
         residuals = np.asarray(values_to_evaluate) - self.y
 
         if not hit_cache:
-            print " # Element:                   Fe 1 / Fe 2\n",
-            print "   Teff/Vmic slopes:            %.6f %.6f" % (self.m1, self.m2)
-            print "   Abundances diff:             %.6f" % abundance_diff
-            print "   Abundances diff with model:  %.6f" % abundance_diff2
-            print "   Abundances stdev:            %.6f %.6f" % (np.std(x_over_h[self.fe1_filter]), np.std(x_over_h[self.fe2_filter]))
-            print "   Abundances median:           %.6f %.6f" % (np.median(self.fe1), np.median(self.fe2))
-            print " - Chisq:                       %.10g" % np.sum((self.weights*residuals)**2)
+            print(" # Element:                   Fe 1 / Fe 2\n", end=' ')
+            print("   Teff/Vmic slopes:            %.6f %.6f" % (self.m1, self.m2))
+            print("   Abundances diff:             %.6f" % abundance_diff)
+            print("   Abundances diff with model:  %.6f" % abundance_diff2)
+            print("   Abundances stdev:            %.6f %.6f" % (np.std(x_over_h[self.fe1_filter]), np.std(x_over_h[self.fe2_filter])))
+            print("   Abundances median:           %.6f %.6f" % (np.median(self.fe1), np.median(self.fe2)))
+            print(" - Chisq:                       %.10g" % np.sum((self.weights*residuals)**2))
 
         fitted_lines_params.append(self.m1)
         fitted_lines_params.append(self.c1)
@@ -362,18 +364,18 @@ class EquivalentWidthModel(MPFitModel):
 
         # Determine which parameters to print
         nprint = len(x)
-        print "*Iter ", ('%6i' % iter),"   CHI-SQUARE = ",('%.10g' % fnorm)," DOF = ", ('%i' % dof)
+        print("*Iter ", ('%6i' % iter),"   CHI-SQUARE = ",('%.10g' % fnorm)," DOF = ", ('%i' % dof))
         for i in range(nprint):
-            if (parinfo is not None) and (parinfo[i].has_key('parname')):
+            if (parinfo is not None) and ('parname' in parinfo[i]):
                 p = '   ' + parinfo[i]['parname'] + ' = '
             else:
                 p = '   P' + str(i) + ' = '
-            if (parinfo is not None) and (parinfo[i].has_key('mpprint')):
+            if (parinfo is not None) and ('mpprint' in parinfo[i]):
                 iprint = parinfo[i]['mpprint']
             else:
                 iprint = 1
             if iprint:
-                print p + (pformat % x[i]) + '  '
+                print(p + (pformat % x[i]) + '  ')
 
         ##### Metallicity
         #self._MH = self.fe1
@@ -528,8 +530,8 @@ class EquivalentWidthModel(MPFitModel):
                 self.fe2_filter = np.logical_and(fe2_filter, np.logical_not(bad))
             else:
                 self.fe2_filter = fe2_filter
-        print " > Selected Fe 1 lines for teff:", len(np.where(self.fe1_filter)[0]), "of", len(np.where(fe1_filter)[0])
-        print " > Selected Fe 2 lines for vmic:", len(np.where(self.fe2_filter)[0]), "of", len(np.where(fe2_filter)[0])
+        print(" > Selected Fe 1 lines for teff:", len(np.where(self.fe1_filter)[0]), "of", len(np.where(fe1_filter)[0]))
+        print(" > Selected Fe 2 lines for vmic:", len(np.where(self.fe2_filter)[0]), "of", len(np.where(fe2_filter)[0]))
 
 
 
@@ -636,21 +638,21 @@ class EquivalentWidthModel(MPFitModel):
         solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.teff(), self.logg(), MH, self.alpha(), self.vmic())
         errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f" % (self.eteff(), self.elogg(), eMH, self.ealpha(), self.evmic())
 
-        print "           ", header
-        print "Solution:  ", solution
-        print "Errors:    ", errors
-        print ""
+        print("           ", header)
+        print("Solution:  ", solution)
+        print("Errors:    ", errors)
+        print("")
 
-        print "Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second)
+        print("Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second))
         header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","wchisq","rwchisq","chisq","rchisq","rms")
         stats = "%8i\t%8i\t%8i\t%8.6f\t%8.6f\t%8.6f\t%8.6f\t%8.6f" % (self.m.dof, self.m.niter, self.m.nfev, self.wchisq, self.reduced_wchisq, self.chisq, self.reduced_chisq, self.rms)
         if model_atmosphere_is_closest_copy(self.modeled_layers_pack, {'teff':self.teff(), 'logg':self.logg(), 'MH':MH, 'alpha':self.alpha(), 'vmic': self.vmic()}):
-            print ""
-            print "WARNING: Model atmosphere used for the final solution was not interpolated, it is a copy of the closest model."
-        print ""
-        print "         ", header
-        print "Stats:   ", stats
-        print "Return code:", self.m.status
+            print("")
+            print("WARNING: Model atmosphere used for the final solution was not interpolated, it is a copy of the closest model.")
+        print("")
+        print("         ", header)
+        print("Stats:   ", stats)
+        print("Return code:", self.m.status)
 
 
 def model_spectrum_from_ew(linemasks, modeled_layers_pack, abundances, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, free_params=["teff", "logg", "vmic"], adjust_model_metalicity=False, enhance_abundances=True, scale=None, max_iterations=20, outliers_detection='robust', sigma_level=3, outliers_weight_limit=0.90, code="spectrum", tmp_dir=None):
@@ -694,7 +696,7 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, abundances, initial_t
     lfilter = np.logical_or(lfilter, linemasks['element'] == "Fe 2")
     linemasks = linemasks[lfilter]
     EW_model.fitData(linemasks, parinfo=parinfo, max_iterations=max_iterations, quiet=False, outliers_detection=outliers_detection, sigma_level=sigma_level, outliers_weight_limit=outliers_weight_limit, code=code, tmp_dir=tmp_dir)
-    print "\n"
+    print("\n")
     EW_model.print_solution()
 
     # Calculate MH

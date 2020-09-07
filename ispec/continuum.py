@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -16,14 +18,14 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 import numpy as np
-from common import *
-from spectrum import *
+from .common import *
+from .spectrum import *
 from scipy.ndimage.filters import maximum_filter
 from scipy.ndimage.filters import median_filter
 from scipy.ndimage.filters import gaussian_filter
 from scipy import interpolate
 from scipy.interpolate import LSQUnivariateSpline
-import log
+from . import log
 import logging
 
 
@@ -277,7 +279,7 @@ def fit_continuum(spectrum, from_resolution=None, independent_regions=None, cont
                     errors[np.where(wfilter)[0]] = continuum.placement_errors(xaxis[wfilter])
                     num_success += 1
             except:
-                print "Continuum fit failed for segment #", i, "[", region['wave_base'], ",", region['wave_top'], "]"
+                print("Continuum fit failed for segment #", i, "[", region['wave_base'], ",", region['wave_top'], "]")
                 pass
         if num_success == 0:
             raise Exception("Impossible to fit continuum to any of the segments")

@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -16,7 +17,7 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 import numpy as np
-from CustomDialog import *
+from .CustomDialog import *
 
 class CombineSpectraDialog(CustomDialog):
     def __init__(self, parent, title, wave_base, wave_top, wave_step):

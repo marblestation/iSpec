@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -22,7 +24,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import logging
 
-from mpfitmodels import MPFitModel
+from .mpfitmodels import MPFitModel
 from ispec.abundances import write_solar_abundances
 from ispec.abundances import determine_abundance_enchancements
 from ispec.atmospheres import write_atmosphere, interpolate_atmosphere_layers, model_atmosphere_is_closest_copy
@@ -30,7 +32,7 @@ from ispec.lines import write_atomic_linelist, write_isotope_data, _get_atomic_l
 from ispec.common import estimate_vmic, estimate_vmac
 from ispec.spectrum import create_spectrum_structure, convolve_spectrum, resample_spectrum, read_spectrum, create_wavelength_filter, read_spectrum, normalize_spectrum
 from ispec.synth.effects import _filter_linelist, apply_post_fundamental_effects
-from common import Constants, _filter_linemasks_not_in_segments, _create_comparing_mask, _get_stats_per_linemask
+from .common import Constants, _filter_linemasks_not_in_segments, _create_comparing_mask, _get_stats_per_linemask
 from ispec.synth.spectrum import _create_waveobs_mask
 from ispec.synth.common import generate_fundamental_spectrum
 from ispec.synth.grid import load_spectral_grid, valid_interpolated_spectrum_target
@@ -211,7 +213,7 @@ class SynthModel(MPFitModel):
         fundamental_precomputed_step_file = os.path.join(str(self.precomputed_grid_dir), "steps", fundamental_filename)
         if self.precomputed_grid_dir is not None and abundances_key == "" and (os.path.exists(precomputed_file) or os.path.exists(precomputed_step_file)):
             if not self.quiet:
-                print "Pre-computed:", complete_key
+                print("Pre-computed:", complete_key)
             if os.path.exists(precomputed_file):
                 precomputed = read_spectrum(precomputed_file)
             else:
@@ -225,7 +227,7 @@ class SynthModel(MPFitModel):
 
         elif self.precomputed_grid_dir is not None and abundances_key == "" and (os.path.exists(fundamental_precomputed_file) or os.path.exists(fundamental_precomputed_step_file)):
             if not self.quiet:
-                print "Pre-computed (fundamental):", complete_key
+                print("Pre-computed (fundamental):", complete_key)
             if os.path.exists(fundamental_precomputed_file):
                 fundamental_precomputed = read_spectrum(fundamental_precomputed_file)
             else:
@@ -238,13 +240,13 @@ class SynthModel(MPFitModel):
             self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, self.segments, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), vrad=self.vrad(), verbose=0)
             self.last_final_fluxes[self.waveobs_mask == 0] = 1.
         else:
-            if self.cache.has_key(key):
+            if key in self.cache:
                 if not self.quiet:
-                    print "Cache:", complete_key
+                    print("Cache:", complete_key)
                 self.last_fluxes = self.cache[key].copy()
             else:
                 if not self.quiet:
-                    print "Generating:", complete_key
+                    print("Generating:", complete_key)
 
                 if self.code != "grid":
 
@@ -579,21 +581,21 @@ class SynthModel(MPFitModel):
             vrad_stats = ""
             for i, (vrad, evrad, segment) in enumerate(zip(self.vrad(), self.evrad(), self.segments)):
                 vrad_stats += "Segment   %8.2f\t%8.2f\t%8.2f\t%8.2f\n" % (segment['wave_base'], segment['wave_top'], vrad, evrad)
-            print ""
-            print vrad_header
-            print vrad_stats
-            print ""
+            print("")
+            print(vrad_header)
+            print(vrad_stats)
+            print("")
 
 
-        print "           ", header
-        print "Solution:  ", solution
-        print "Errors:    ", errors
-        print ""
+        print("           ", header)
+        print("Solution:  ", solution)
+        print("Errors:    ", errors)
+        print("")
         if len(transformed_abund) > 0:
-            print "           ", abundances_header
-            print "Abundances:", abundances_solution
-            print "Ab. errors:", abundances_errors
-            print ""
+            print("           ", abundances_header)
+            print("Abundances:", abundances_solution)
+            print("Ab. errors:", abundances_errors)
+            print("")
 
         if self.code != "grid":
             transformed_free_loggf = self.transformed_free_loggf()
@@ -605,24 +607,24 @@ class SynthModel(MPFitModel):
                 loggf_stats = ""
                 for i in xrange(len(transformed_linelist_free_loggf)):
                     loggf_stats += "log(gf)     %8.4f\t%8s\t%8.3f\t%8.3f\n" % (transformed_linelist_free_loggf['wave_nm'][i], transformed_linelist_free_loggf['element'][i], loggf[i], eloggf[i])
-                print ""
-                print loggf_header
-                print loggf_stats
-                print ""
+                print("")
+                print(loggf_header)
+                print(loggf_stats)
+                print("")
 
-        print "Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second)
+        print("Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second))
         header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","wchisq","rwchisq","chisq","rchisq","rms")
         stats = "%8i\t%8i\t%8i\t%8.2f\t%8.4f\t%8.2f\t%8.4f\t%8.4f" % (self.m.dof, self.m.niter, self.m.nfev, self.wchisq, self.reduced_wchisq, self.chisq, self.reduced_chisq, self.rms)
         if self.code != "grid" and model_atmosphere_is_closest_copy(self.modeled_layers_pack, {'teff':self.teff(), 'logg':self.logg(), 'MH':self.MH(), 'alpha':self.alpha(), 'vmic': self.vmic()}):
-            print ""
-            print "WARNING: Model atmosphere used for the final solution was not interpolated, it is a copy of the closest model."
+            print("")
+            print("WARNING: Model atmosphere used for the final solution was not interpolated, it is a copy of the closest model.")
         if self.code == "grid" and not valid_interpolated_spectrum_target(self.grid, {'teff':self.teff(), 'logg':self.logg(), 'MH':self.MH(), 'alpha':self.alpha(), 'vmic': self.vmic()}):
-            print ""
-            print "WARNING: Spectrum used for the final solution was not interpolated, it is a copy of the closest model."
-        print ""
-        print "         ", header
-        print "Stats:   ", stats
-        print "Return code:", self.m.status
+            print("")
+            print("WARNING: Spectrum used for the final solution was not interpolated, it is a copy of the closest model.")
+        print("")
+        print("         ", header)
+        print("Stats:   ", stats)
+        print("Return code:", self.m.status)
 
 
 
@@ -974,7 +976,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     synth_model.fitData(waveobs, segments, comparing_mask, flux, weights=weights, parinfo=parinfo, use_errors=use_errors, max_iterations=max_iterations, quiet=quiet, code=code, use_molecules=use_molecules, vmic_from_empirical_relation=vmic_from_empirical_relation, vmac_from_empirical_relation=vmac_from_empirical_relation, tmp_dir=tmp_dir, timeout=timeout)
 
     if verbose:
-        print "\n"
+        print("\n")
 
     if linemasks is not None:
         stats_linemasks = _get_stats_per_linemask(waveobs, flux, synth_model.last_final_fluxes, weights, free_params, linemasks, verbose=verbose)
@@ -982,7 +984,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
         stats_linemasks = None
 
     if verbose:
-        print "\n"
+        print("\n")
         synth_model.print_solution()
 
     # Collect information to be returned

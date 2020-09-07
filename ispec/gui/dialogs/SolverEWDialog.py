@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -17,7 +18,7 @@
 #
 import numpy as np
 import matplotlib.pyplot as plt
-from CustomDialog import *
+from .CustomDialog import *
 
 class SolverEWDialog(CustomDialog):
     def plot(self, axes, component):

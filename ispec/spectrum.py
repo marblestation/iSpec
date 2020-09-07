@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -19,14 +21,14 @@ import numpy as np
 import numpy.lib.recfunctions as rfn # Extra functions
 from astropy.io import fits as pyfits
 import scipy.ndimage as ndi
-from spectrum import *
-from common import *
+from .spectrum import *
+from .common import *
 from scipy import interpolate
 import time
-import log
+from . import log
 import logging
 try:
-    from plotting import *
+    from .plotting import *
 except:
     logging.warn("Plotting could not be loaded!")
     pass
@@ -102,7 +104,7 @@ def __read_fits_spectrum(spectrum_filename):
                 # Angstrom to nm
                 if unit != "nm":
                     waveobs /= 10
-                print "Log scale"
+                print("Log scale")
             else:
                 # Angstrom to nm
                 if unit != "nm":
@@ -482,12 +484,12 @@ try:
     import pyximport
     import numpy as np
     pyximport.install(setup_args={'include_dirs':[np.get_include()]})
-    from spectrum_c import convolve_spectrum as __convolve_spectrum
-    from spectrum_c import interpolation as __interpolation
+    from .spectrum_c import convolve_spectrum as __convolve_spectrum
+    from .spectrum_c import interpolation as __interpolation
 except:
-    print "*********************************************************************"
-    print "Not optimized version loaded!"
-    print "*********************************************************************"
+    print("*********************************************************************")
+    print("Not optimized version loaded!")
+    print("*********************************************************************")
 
     def __interpolation(waveobs, fluxes, err, resampled_waveobs, bessel=False, zero_edges=True, frame=None):
         """

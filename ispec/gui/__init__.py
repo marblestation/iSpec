@@ -16,6 +16,7 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 from __future__ import division
+from __future__ import absolute_import
 
 import os
 import sys
@@ -24,6 +25,6 @@ if sys.hexversion < 0x02050000:
     raise RuntimeError("iSpec requires at least Python 2.5")
 
 #from iSpecApp import *
-from iSpecBaseApp import *
+from .iSpecBaseApp import *
 #from iSpecApp2 import *
 #import iSpecApp

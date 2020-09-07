@@ -16,6 +16,7 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from __future__ import print_function
 import os
 import sys
 import numpy as np
@@ -1034,7 +1035,7 @@ def synthesize_spectrum(code="spectrum"):
     if not ispec.valid_atmosphere_target(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}):
         msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                 fall out of theatmospheric models."
-        print msg
+        print(msg)
 
     # Prepare atmosphere model
     atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, code=code)
@@ -1088,7 +1089,7 @@ def interpolate_spectrum():
     if not ispec.valid_interpolated_spectrum_target(grid, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha, 'vmic': microturbulence_vel}):
         msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                 fall out of the spectral grid limits."
-        print msg
+        print(msg)
 
     # Interpolation
     interpolated_spectrum = ispec.create_spectrum_structure(np.arange(wave_base, wave_top, wave_step))
@@ -1647,8 +1648,8 @@ def estimate_initial_ap_with_precomputed_grid_and_determine_ap_using_synth_spect
     initial_vrad = 0
     initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff = \
             ispec.estimate_initial_ap(normalized_star_spectrum, precomputed_grid_dir, initial_R, line_regions)
-    print "Initial estimation:", initial_teff, initial_logg, initial_MH, initial_alpha, \
-            initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff
+    print("Initial estimation:", initial_teff, initial_logg, initial_MH, initial_alpha, \
+            initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff)
 
     #--- Change LOG level ----------------------------------------------------------
     LOG_LEVEL = "warning"
@@ -2411,7 +2412,7 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
     if not ispec.valid_atmosphere_target(modeled_layers_pack, {'teff':initial_teff, 'logg':initial_logg, 'MH':initial_MH, 'alpha':initial_alpha}):
         msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                 fall out of theatmospheric models."
-        print msg
+        print(msg)
 
     # Reduced equivalent width
     # Filter too weak/strong lines
@@ -2651,7 +2652,7 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
     if not ispec.valid_atmosphere_target(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}):
         msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                 fall out of theatmospheric models."
-        print msg
+        print(msg)
 
     # Prepare atmosphere model
     atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, code=code)
@@ -2662,9 +2663,9 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
     bad = np.isnan(x_over_h)
     fe1 = linemasks['element'] == "Fe 1"
     fe2 = linemasks['element'] == "Fe 2"
-    print "[Fe 1/H]: %.2f" % np.median(x_over_h[np.logical_and(fe1, ~bad)])
+    print("[Fe 1/H]: %.2f" % np.median(x_over_h[np.logical_and(fe1, ~bad)]))
     #print "[X/Fe]: %.2f" % np.median(x_over_fe[np.logical_and(fe1, ~bad)])
-    print "[Fe 2/H]: %.2f" % np.median(x_over_h[np.logical_and(fe2, ~bad)])
+    print("[Fe 2/H]: %.2f" % np.median(x_over_h[np.logical_and(fe2, ~bad)]))
     #print "[X/Fe]: %.2f" % np.median(x_over_fe[np.logical_and(fe2, ~bad)])
 
 
@@ -2716,7 +2717,7 @@ def calculate_theoretical_ew_and_depth(code="spectrum"):
     if not ispec.valid_atmosphere_target(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}):
         msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                 fall out of theatmospheric models."
-        print msg
+        print(msg)
 
     # Prepare atmosphere model
     atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha})
@@ -2737,9 +2738,9 @@ def analyze(text, number):
     import time
 
     # Print some text and wait for some seconds to finish
-    print "Starting", text
+    print("Starting", text)
     time.sleep(2 + number)
-    print "... end of", number
+    print("... end of", number)
 
 def paralelize_code():
     number_of_processes = 2
@@ -2759,14 +2760,14 @@ def estimate_vmic_from_empirical_relation():
     logg = 4.5
     MH = 0.0
     vmic = ispec.estimate_vmic(teff, logg, MH)
-    print "VMIC:", vmic
+    print("VMIC:", vmic)
 
 def estimate_vmac_from_empirical_relation():
     teff = 5500
     logg = 4.5
     MH = 0.0
     vmac = ispec.estimate_vmac(teff, logg, MH)
-    print "VMAC:", vmac
+    print("VMAC:", vmac)
 
 def generate_and_plot_YY_isochrone():
     import isochrones
@@ -2814,7 +2815,7 @@ def interpolate_atmosphere(code="spectrum"):
     if not ispec.valid_atmosphere_target(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}):
         msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                 fall out of theatmospheric models."
-        print msg
+        print(msg)
 
     # Prepare atmosphere model
     atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, code=code)

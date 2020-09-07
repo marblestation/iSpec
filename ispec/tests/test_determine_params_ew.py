@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os
 import sys
 import unittest
@@ -176,7 +177,7 @@ class TestDetermineParamsEW(unittest.TestCase):
         if not ispec.valid_atmosphere_target(modeled_layers_pack, {'teff':initial_teff, 'logg':initial_logg, 'MH':initial_MH, 'alpha':initial_alpha}):
             msg = "The specified effective temperature, gravity (log g) and metallicity [M/H] \
                     fall out of theatmospheric models."
-            print msg
+            print(msg)
 
         # Reduced equivalent width
         # Filter too weak/strong lines

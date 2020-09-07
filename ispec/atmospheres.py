@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -23,7 +24,7 @@ import math
 from datetime import datetime
 import tempfile
 import cPickle as pickle
-import log
+from . import log
 import logging
 import subprocess
 import shutil
@@ -32,7 +33,7 @@ from astropy.io import fits
 from scipy import spatial
 from scipy.interpolate import LinearNDInterpolator
 import glob
-from common import is_turbospectrum_support_enabled, is_spectrum_support_enabled
+from .common import is_turbospectrum_support_enabled, is_spectrum_support_enabled
 
 # SPECTRUM is compatible only with the plane-parallel atmospheres.
 # The first layer represents the surface.

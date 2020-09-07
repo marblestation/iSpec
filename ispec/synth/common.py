@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -17,12 +18,12 @@
 #
 import numpy as np
 from ispec.abundances import enhance_solar_abundances
-import moog
-import sme
-import spectrum
-import synthe
-import turbospectrum
-import grid as grid_module
+from . import moog
+from . import sme
+from . import spectrum
+from . import synthe
+from . import turbospectrum
+from . import grid as grid_module
 
 def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, code="spectrum", use_molecules=False, grid=None, tmp_dir=None):
     """

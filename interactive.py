@@ -16,6 +16,7 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from __future__ import print_function
 import sys
 import os
 import getopt
@@ -32,15 +33,15 @@ from ispec.gui import iSpecBaseApp
 
 ## Print usage
 def usage():
-    print "Usage:"
-    print sys.argv[0], "[--continuum=file] [--lines=file] [--segments=file] [spectrum_file]"
+    print("Usage:")
+    print(sys.argv[0], "[--continuum=file] [--lines=file] [--segments=file] [spectrum_file]")
 
 ## Interpret arguments
 def get_arguments():
     try:
         opts, args = getopt.getopt(sys.argv[1:], "cls", ["continuum=", "lines=", "segments="])
     except getopt.GetoptError as err:
-        print str(err)
+        print(str(err))
         usage()
         sys.exit(2)
 
@@ -52,20 +53,20 @@ def get_arguments():
         if o in ("-c", "--continuum"):
             continuum_file = a
             if not os.path.exists(continuum_file):
-                print "Continuum file", continuum_file, "does not exists!"
+                print("Continuum file", continuum_file, "does not exists!")
                 sys.exit(2)
         elif o in ("-l", "--lines"):
             lines_file = a
             if not os.path.exists(lines_file):
-                print "Lines file", lines_file, "does not exists!"
+                print("Lines file", lines_file, "does not exists!")
                 sys.exit(2)
         elif o in ("-s", "--segments"):
             segments_file = a
             if not os.path.exists(segments_file):
-                print "Segments file", segments_file, "does not exists!"
+                print("Segments file", segments_file, "does not exists!")
                 sys.exit(2)
         else:
-            print "Argument", o, "not recognized!"
+            print("Argument", o, "not recognized!")
             usage()
             sys.exit(2)
 
@@ -79,7 +80,7 @@ def get_arguments():
     for arg in args:
         spectrum_file = arg
         if not os.path.exists(spectrum_file):
-            print "Spectrum file", arg, "does not exists!"
+            print("Spectrum file", arg, "does not exists!")
             sys.exit(2)
         filenames['spectra'].append(spectrum_file)
 
@@ -101,7 +102,7 @@ if __name__ == '__main__':
             #wfilter = (spectrum['waveobs'] >= 516.0) & (spectrum['waveobs'] <= 519.0)
             #spectrum = spectrum[wfilter]
         except Exception as e:
-            print "Spectrum file", path, "has an incompatible format!"
+            print("Spectrum file", path, "has an incompatible format!")
             sys.exit(2)
         spectra.append(spectrum)
 
@@ -109,7 +110,7 @@ if __name__ == '__main__':
         try:
             continuum = ispec.read_continuum_regions(filenames['continuum'])
         except Exception as e:
-            print "Continuum file", filenames['continuum'], "has an incompatible format!"
+            print("Continuum file", filenames['continuum'], "has an incompatible format!")
             sys.exit(2)
 
         ## Validations
@@ -122,7 +123,7 @@ if __name__ == '__main__':
         try:
             lines = ispec.read_line_regions(filenames['lines'])
         except Exception as e:
-            print "Lines file", filenames['lines'], "has an incompatible format!"
+            print("Lines file", filenames['lines'], "has an incompatible format!")
             sys.exit(2)
 
 
@@ -142,7 +143,7 @@ if __name__ == '__main__':
         try:
             segments = ispec.read_segment_regions(filenames['segments'])
         except Exception as e:
-            print "Segments file", filenames['segments'], "has an incompatible format!"
+            print("Segments file", filenames['segments'], "has an incompatible format!")
             sys.exit(2)
 
         ## Validations

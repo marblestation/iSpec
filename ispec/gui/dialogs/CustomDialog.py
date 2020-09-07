@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -18,7 +19,7 @@
 import sys
 import Tkinter
 import tkMessageBox
-from tkSimpleDialog import Dialog
+from .tkSimpleDialog import Dialog
 
 try:
     import ttk
@@ -91,7 +92,7 @@ class CustomDialog(Dialog):
                     Tkinter.Label(grid_frame, text=component["text"]).grid(row=row, sticky=Tkinter.W)
                     component["variable"] = Tkinter.StringVar()
                     component["variable"].set(component["default"])
-                    component["object"] = apply(Tkinter.OptionMenu, (grid_frame, component["variable"]) + tuple(component["options"]))
+                    component["object"] = Tkinter.OptionMenu(*(grid_frame, component["variable"]) + tuple(component["options"]))
                     component["object"].grid(row=row, column=1, sticky=Tkinter.W)
             elif component["type"].lower() == "radiobutton":
                 Tkinter.Label(grid_frame, text=component["text"]).grid(row=row, sticky=Tkinter.W)
@@ -151,7 +152,7 @@ class CustomDialog(Dialog):
                     self.canvas._tkcanvas.pack(side=Tkinter.TOP, fill=Tkinter.BOTH, expand=1)
 
                 # Plotting function
-                apply(component["function"], (self.axes, component))
+                component["function"](*(self.axes, component))
 
         plot_frame.pack(side=Tkinter.TOP, fill=Tkinter.BOTH, expand=1)
         stats_frame.pack(side=Tkinter.TOP, fill=Tkinter.BOTH, expand=1)

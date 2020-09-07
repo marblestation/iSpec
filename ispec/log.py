@@ -39,7 +39,7 @@ if CONSOLE:
 megabyte = 1048576
 try:
     handler = logging.handlers.RotatingFileHandler(LOG_FILE, 'a', maxBytes=50*megabyte, backupCount=5)
-except IOError, e:
+except IOError as e:
     logging.error("Logging information will not be stored in a file ({})".format(str(e)))
 else:
     handler.setFormatter(formatter)

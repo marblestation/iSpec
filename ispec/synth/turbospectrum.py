@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -29,7 +31,7 @@ from ispec.atmospheres import write_atmosphere, calculate_opacities
 from ispec.lines import write_atomic_linelist
 from ispec.common import which, is_turbospectrum_support_enabled
 from ispec.spectrum import create_spectrum_structure, resample_spectrum
-from effects import _filter_linelist, apply_post_fundamental_effects
+from .effects import _filter_linelist, apply_post_fundamental_effects
 
 
 def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, regions=None, use_molecules=False, tmp_dir=None, timeout=1800):
@@ -220,7 +222,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
             if len(data) == 0:
                 raise Exception()
         except:
-            print out
+            print(out)
             sys.stdout.flush()
             raise Exception("Synthesis failed!")
         #synth_waveobs_tmp = np.linspace(wave_base, wave_top, len(synth_fluxes_tmp)) # Not exactly identical to turbospectrum wavelengths

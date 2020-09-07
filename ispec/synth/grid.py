@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -33,7 +35,7 @@ import logging
 from ispec.atmospheres import interpolate_atmosphere_layers, valid_atmosphere_target, _interpolate
 from ispec.common import mkdir_p, estimate_vmic, estimate_vmac
 from ispec.spectrum import create_spectrum_structure, resample_spectrum, create_wavelength_filter, read_spectrum, write_spectrum
-from effects import apply_post_fundamental_effects
+from .effects import apply_post_fundamental_effects
 from ispec.modeling.common import Constants
 import ispec.synth.common
 
@@ -101,11 +103,11 @@ def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, M
                 lock.acquire(timeout=-1)    # Don't wait
             except (LockTimeout, AlreadyLocked) as e:
                 # Some other process is computing this spectrum, do not continue
-                print "Skipping", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, "already locked"
+                print("Skipping", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, "already locked")
                 return None
 
         try:
-            print "[started]", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution
+            print("[started]", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution)
             # Prepare atmosphere model
             atmosphere_layers = interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, code=code)
             fixed_abundances=None
@@ -119,7 +121,7 @@ def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, M
                     code=code, use_molecules=use_molecules, tmp_dir=tmp_dir)
             # FITS
             write_spectrum(synth_spectrum, filename_out)
-            print "[finished]", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution
+            print("[finished]", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution)
         finally:
             if not locked: # Not locked in this function
                 lock.release()
@@ -221,7 +223,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                 filename_out = fits_dir + "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}".format(int(teff), logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff) + ".fits.gz"
 
             if os.path.exists(filename_out):
-                print "Skipping", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, "already computed"
+                print("Skipping", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, "already computed")
                 continue
 
 
@@ -238,7 +240,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                     lock.acquire(timeout=-1)    # Don't wait
                 except (LockTimeout, AlreadyLocked) as e:
                     # Some other process is computing this spectrum, do not continue
-                    print "Skipping", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, "already locked"
+                    print("Skipping", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, "already locked")
                     continue
 
                 try:
@@ -247,13 +249,13 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                     __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution, pickled_modeled_layers_pack, atomic_linelist, isotopes, solar_abundances, code=code, use_molecules=use_molecules, tmp_dir=tmp_dir, locked=True)
                     elapsed = default_timer() - tcheck
 
-                    print "-----------------------------------------------------"
-                    print "Remaining time:"
-                    print "\t", (num_spec-i)*elapsed, "seconds"
-                    print "\t", (num_spec-i)*(elapsed/60), "minutes"
-                    print "\t", (num_spec-i)*(elapsed/(60*60)), "hours"
-                    print "\t", (num_spec-i)*(elapsed/(60*60*24)), "days"
-                    print "-----------------------------------------------------"
+                    print("-----------------------------------------------------")
+                    print("Remaining time:")
+                    print("\t", (num_spec-i)*elapsed, "seconds")
+                    print("\t", (num_spec-i)*(elapsed/60), "minutes")
+                    print("\t", (num_spec-i)*(elapsed/(60*60)), "hours")
+                    print("\t", (num_spec-i)*(elapsed/(60*60*24)), "days")
+                    print("-----------------------------------------------------")
                 finally:
                     lock.release()
 
@@ -304,11 +306,11 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
             lock.acquire(timeout=-1)    # Don't wait
         except (LockTimeout, AlreadyLocked) as e:
             # Some other process is writing this file, do not continue
-            print "Skipping", reference_list_filename, "already locked"
+            print("Skipping", reference_list_filename, "already locked")
         else:
             try:
                 ascii.write(reference_list, reference_list_filename, delimiter='\t', overwrite=True)
-                print "Written", reference_list_filename
+                print("Written", reference_list_filename)
             finally:
                 lock.release()
 
@@ -319,7 +321,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                 lock.acquire(timeout=-1)    # Don't wait
             except (LockTimeout, AlreadyLocked) as e:
                 # Some other process is computing this spectrum, do not continue
-                print "Skipping", reference_grid_filename, "already locked"
+                print("Skipping", reference_grid_filename, "already locked")
             else:
                 try:
                     reference_grid = None
@@ -347,7 +349,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
 
 
                         # Spectra in the grid is convolved to the specified resolution for fast comparison
-                        print "Quick grid:", reference_filename_out
+                        print("Quick grid:", reference_filename_out)
                         spectrum = read_spectrum(fits_dir + reference_filename_out)
 
                         segments = None
@@ -368,7 +370,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                         params_bintable_hdu = fits.BinTableHDU(complete_reference_list.as_array(), name="PARAMS")
                         fits_format = fits.HDUList([primary_hdu, wavelengths_hdu, params_bintable_hdu])
                         fits_format.writeto(reference_grid_filename, overwrite=True)
-                        print "Written", reference_grid_filename
+                        print("Written", reference_grid_filename)
                 finally:
                     lock.release()
 
@@ -399,9 +401,9 @@ def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks, defaul
             initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff = grid['PARAMS'].data[min_j]
             estimation_found = True
 
-        except Exception, e:
-            print "Initial parameters could not be estimated"
-            print type(e), e.message
+        except Exception as e:
+            print("Initial parameters could not be estimated")
+            print(type(e), e.message)
             pass
         finally:
             grid.close()

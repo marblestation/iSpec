@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -16,7 +17,7 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 import numpy as np
-import log
+from . import log
 import logging
 
 def read_segment_regions(segment_regions_filename):

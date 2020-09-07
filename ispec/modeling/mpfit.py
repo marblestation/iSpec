@@ -407,6 +407,7 @@ Perform Levenberg-Marquardt least-squares minimization, based on MINPACK-1.
    August, 2002.  Mark Rivers
    Converted from Numeric to numpy (Sergey Koposov, July 2008)
 """
+from __future__ import print_function
 
 import numpy
 import types
@@ -873,11 +874,11 @@ class mpfit:
 
         # Be sure that PARINFO is of the right type
         if parinfo is not None:
-            if type(parinfo) != types.ListType:
+            if type(parinfo) != list:
                 self.errmsg = 'ERROR: PARINFO must be a list of dictionaries.'
                 return
             else:
-                if type(parinfo[0]) != types.DictionaryType:
+                if type(parinfo[0]) != dict:
                     self.errmsg = 'ERROR: PARINFO must be a list of dictionaries.'
                     return
             if ((xall is not None) and (len(xall) != len(parinfo))):
@@ -1412,7 +1413,7 @@ class mpfit:
                        format=None, pformat='%.10g', dof=1):
 
         if self.debug:
-            print 'Entering defiter...'
+            print('Entering defiter...')
         if quiet:
             return
         if fnorm is None:
@@ -1421,18 +1422,18 @@ class mpfit:
 
         # Determine which parameters to print
         nprint = len(x)
-        print "Iter ", ('%6i' % iter),"   CHI-SQUARE = ",('%.10g' % fnorm)," DOF = ", ('%i' % dof)
+        print("Iter ", ('%6i' % iter),"   CHI-SQUARE = ",('%.10g' % fnorm)," DOF = ", ('%i' % dof))
         for i in range(nprint):
-            if (parinfo is not None) and (parinfo[i].has_key('parname')):
+            if (parinfo is not None) and ('parname' in parinfo[i]):
                 p = '   ' + parinfo[i]['parname'] + ' = '
             else:
                 p = '   P' + str(i) + ' = '
-            if (parinfo is not None) and (parinfo[i].has_key('mpprint')):
+            if (parinfo is not None) and ('mpprint' in parinfo[i]):
                 iprint = parinfo[i]['mpprint']
             else:
                 iprint = 1
             if iprint:
-                print p + (pformat % x[i]) + '  '
+                print(p + (pformat % x[i]) + '  ')
         return 0
 
     #  DO_ITERSTOP:
@@ -1455,7 +1456,7 @@ class mpfit:
     # Procedure to parse the parameter values in PARINFO, which is a list of dictionaries
     def parinfo(self, parinfo=None, key='a', default=None, n=0):
         if self.debug:
-            print 'Entering parinfo...'
+            print('Entering parinfo...')
         if (n == 0) and (parinfo is not None):
             n = len(parinfo)
         if n == 0:
@@ -1464,18 +1465,18 @@ class mpfit:
             return values
         values = []
         for i in range(n):
-            if (parinfo is not None) and (parinfo[i].has_key(key)):
+            if (parinfo is not None) and (key in parinfo[i]):
                 values.append(parinfo[i][key])
             else:
                 values.append(default)
 
         # Convert to numeric arrays if possible
         test = default
-        if type(default) == types.ListType:
+        if type(default) == list:
             test=default[0]
-        if isinstance(test, types.IntType):
+        if isinstance(test, int):
             values = numpy.asarray(values, int)
-        elif isinstance(test, types.FloatType):
+        elif isinstance(test, float):
             values = numpy.asarray(values, float)
         return values
 
@@ -1483,7 +1484,7 @@ class mpfit:
     # derivatives or not.
     def call(self, fcn, x, functkw, fjac=None):
         if self.debug:
-            print 'Entering call...'
+            print('Entering call...')
         if self.qanytied:
             x = self.tie(x, self.ptied)
         self.nfev = self.nfev + 1
@@ -1509,7 +1510,7 @@ class mpfit:
                functkw=None, xall=None, ifree=None, dstep=None):
 
         if self.debug:
-            print 'Entering fdjac2...'
+            print('Entering fdjac2...')
         machep = self.machar.machep
         if epsfcn is None:
             epsfcn = machep
@@ -1533,7 +1534,7 @@ class mpfit:
             [status, fp] = self.call(fcn, xall, functkw, fjac=fjac)
 
             if len(fjac) != m*nall:
-                print 'ERROR: Derivative matrix was not computed properly.'
+                print('ERROR: Derivative matrix was not computed properly.')
                 return None
 
             # This definition is consistent with CURVEFIT
@@ -1742,7 +1743,7 @@ class mpfit:
 
     def qrfac(self, a, pivot=0):
 
-        if self.debug: print 'Entering qrfac...'
+        if self.debug: print('Entering qrfac...')
         machep = self.machar.machep
         sz = a.shape
         m = sz[0]
@@ -1897,7 +1898,7 @@ class mpfit:
 
     def qrsolv(self, r, ipvt, diag, qtb, sdiag):
         if self.debug:
-            print 'Entering qrsolv...'
+            print('Entering qrsolv...')
         sz = r.shape
         m = sz[0]
         n = sz[1]
@@ -2069,7 +2070,7 @@ class mpfit:
     def lmpar(self, r, ipvt, diag, qtb, delta, x, sdiag, par=None):
 
         if self.debug:
-            print 'Entering lmpar...'
+            print('Entering lmpar...')
         dwarf = self.machar.minnum
         machep = self.machar.machep
         sz = r.shape
@@ -2185,7 +2186,7 @@ class mpfit:
     # Procedure to tie one parameter to another.
     def tie(self, p, ptied=None):
         if self.debug:
-            print 'Entering tie...'
+            print('Entering tie...')
         if ptied is None:
             return
         for i in range(len(ptied)):
@@ -2266,14 +2267,14 @@ class mpfit:
     def calc_covar(self, rr, ipvt=None, tol=1.e-14):
 
         if self.debug:
-            print 'Entering calc_covar...'
+            print('Entering calc_covar...')
         if numpy.ndim(rr) != 2:
-            print 'ERROR: r must be a two-dimensional matrix'
+            print('ERROR: r must be a two-dimensional matrix')
             return -1
         s = rr.shape
         n = s[0]
         if s[0] != s[1]:
-            print 'ERROR: r must be a square matrix'
+            print('ERROR: r must be a square matrix')
             return -1
 
         if ipvt is None:

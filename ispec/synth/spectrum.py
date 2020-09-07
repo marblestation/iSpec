@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -27,7 +28,7 @@ from ispec.abundances import write_solar_abundances, write_fixed_abundances, enh
 from ispec.atmospheres import write_atmosphere
 from ispec.lines import write_atomic_linelist, write_isotope_data
 from ispec.common import is_spectrum_support_enabled
-from effects import _filter_linelist, apply_post_fundamental_effects
+from .effects import _filter_linelist, apply_post_fundamental_effects
 
 
 def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, tmp_dir=None, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, isotope_file=None, regions=None):
