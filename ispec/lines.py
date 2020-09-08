@@ -1,6 +1,3 @@
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -19,13 +16,6 @@ from __future__ import division
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 
-from future import standard_library
-standard_library.install_aliases()
-from builtins import zip
-from builtins import str
-from builtins import map
-from builtins import range
-from past.utils import old_div
 from astropy.io import ascii
 import numpy as np
 import numpy.lib.recfunctions as rfn # Extra functions
@@ -118,7 +108,7 @@ def __get_upper_state(lower_state, wavelength):
     # Wavelength
     l = wavelength * 10e-9 # m
     # Frequency
-    f = old_div(c,l) # Hz
+    f = c/l # Hz
     # Energy
     E = h * f # Joules
     E = E * 6.24150974e18 # electron Volt (eV)
@@ -337,16 +327,16 @@ def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None, baseli
     # More weight to the deeper fluxes, the upper part tend to be more contaminated by other lines
     if min_flux < 0:
         weights = f + -1*(min_flux) + 0.01 # Above zero
-        weights = old_div(np.min(weights), weights)
+        weights = np.min(weights)/ weights
     else:
         weights = np.zeros(len(f))
         zeros = f == 0
-        weights[~zeros] = old_div(min_flux, f[~zeros])
+        weights[~zeros] = min_flux/ f[~zeros]
         weights[zeros] = np.min(weights[~zeros]) # They will be ignored
     weights -= np.min(weights)
     max_weight = np.max(weights)
     if max_weight != 0:
-        weights = old_div(weights, max_weight)
+        weights = weights/ max_weight
     model.fitData(x, y, parinfo=parinfo, weights=weights)
     #model.fitData(x, y, parinfo=parinfo)
 
@@ -369,7 +359,7 @@ def __fit_gaussian(spectrum_slice, continuum_model, mu, sig=None, A=None, baseli
         from scipy.optimize import curve_fit
         # Let's create a function to model and create data
         def func(x, a, mu, sig):
-            return a*np.exp(old_div(-(x-mu)**2,(2*sig**2)))
+            return a*np.exp(-(x-mu)**2/(2*sig**2))
             #return ((a*1.)/np.sqrt(2*np.pi*sig**2))*np.exp(-(x-mu)**2/(2*sig**2))
 
         # Executing curve_fit on noisy data
@@ -479,7 +469,7 @@ def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None
                 gaussian_model = __fit_gaussian(spectrum_slice, continuum_model, mu, sig=sig, A=A, baseline_margin=baseline_margin, free_mu=free_mu)
 
                 residuals = gaussian_model.residuals()
-                rms_gaussian = np.sqrt(old_div(np.sum(np.power(residuals, 2)), len(residuals)))
+                rms_gaussian = np.sqrt(np.sum(np.power(residuals, 2)) / len(residuals))
                 #minimization_value = gaussian_model.m.fnorm
                 #degrees_of_freedom = gaussian_model.m.dof,
                 #chisq = np.sum(np.power(residuals, 2) * gaussian_model.weights)
@@ -501,7 +491,7 @@ def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None
             try:
                 voigt_model = __fit_voigt(spectrum_slice, continuum_model, mu, sig=sig, A=A, gamma=gamma, baseline_margin=baseline_margin, free_mu=free_mu)
                 residuals = voigt_model.residuals()
-                rms_voigt = np.sqrt(old_div(np.sum(np.power(residuals, 2)), len(residuals)))
+                rms_voigt = np.sqrt(np.sum(np.power(residuals, 2))/ len(residuals))
                 discard_voigt = False
             except Exception as e:
                 pass
@@ -1062,7 +1052,7 @@ def find_linemasks(spectrum, continuum_model, atomic_linelist=None, max_atomic_w
     # - In case that the peak is higher than the continuum, depth < 0
     continuum_at_peak = continuum_model(spectrum['waveobs'][peaks])
     flux_at_peak = spectrum['flux'][peaks]
-    depth = 1 - (old_div(flux_at_peak,continuum_at_peak))
+    depth = 1 - (flux_at_peak/continuum_at_peak)
     dfilter = depth < 0.0
     depth[dfilter] = 0.0
 
@@ -1096,7 +1086,7 @@ def find_linemasks(spectrum, continuum_model, atomic_linelist=None, max_atomic_w
     # - In case that the mean base point is higher than the continuum, relative_depth < 0
     # - relative_depth < depth is always true
     flux_from_top_base_point_to_continuum = np.abs(continuum_at_peak - np.mean([spectrum['flux'][base_points[:-1]], spectrum['flux'][base_points[1:]]]))
-    linemasks['relative_depth'] = (old_div((continuum_at_peak - (flux_at_peak + flux_from_top_base_point_to_continuum)), continuum_at_peak))
+    linemasks['relative_depth'] = ((continuum_at_peak - (flux_at_peak + flux_from_top_base_point_to_continuum))/ continuum_at_peak)
 
     # To save computation time, exclude false positives and noise from the fitting process
     rejected_by_noise = __detect_false_and_noisy_features(spectrum, linemasks)
@@ -1177,7 +1167,7 @@ def __calculate_depths(regions, spectrum, continuum_model):
     base = regions['base']
     continuum_at_peak = continuum_model(spectrum['waveobs'][peaks])
     flux_at_peak = spectrum['flux'][peaks]
-    depth = 1 - (old_div(flux_at_peak,continuum_at_peak))
+    depth = 1 - (flux_at_peak/continuum_at_peak)
     dfilter = depth < 0.0
     depth[dfilter] = 0.0
     regions['depth'] = depth
@@ -1185,7 +1175,7 @@ def __calculate_depths(regions, spectrum, continuum_model):
     # - In case that the mean base point is higher than the continuum, relative_depth < 0
     # - relative_depth < depth is always true
     flux_from_top_base_point_to_continuum = np.abs(continuum_at_peak - np.mean((spectrum['flux'][base], spectrum['flux'][top])))
-    regions['relative_depth'] = (old_div((continuum_at_peak - (flux_at_peak + flux_from_top_base_point_to_continuum)), continuum_at_peak))
+    regions['relative_depth'] = ((continuum_at_peak - (flux_at_peak + flux_from_top_base_point_to_continuum))/ continuum_at_peak)
 
     return regions
 
@@ -1276,7 +1266,7 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
     i = 0
     wfilter = np.logical_and(spectrum['flux'] > 0., spectrum['err'] > 0.)
     if len(np.where(wfilter)[0]) > 0:
-        snr = np.median(old_div(spectrum['flux'][wfilter], spectrum['err'][wfilter]))
+        snr = np.median(spectrum['flux'][wfilter]/ spectrum['err'][wfilter])
     else:
         snr = None
     # Model: fit gaussian/voigt
@@ -1333,18 +1323,18 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                     inverted_fluxes_peak = 1e-10
                 if second_derivative_peak == 0:
                     second_derivative_peak = 1e-10
-                sharpness = old_div(second_derivative_peak, inverted_fluxes_peak)
+                sharpness = second_derivative_peak/ inverted_fluxes_peak
 
                 denominator = (1 - np.power(inverted_fluxes_peak, 2))
                 if denominator != 0:
-                    line_snr = old_div(np.power(inverted_fluxes_peak, 2), denominator)
+                    line_snr = np.power(inverted_fluxes_peak/ 2, denominator)
                 else:
                     line_snr = 0.
 
                 denominator = (nbins * sharpness * line_snr)
                 if denominator != 0:
                     # Use abs instead of a simple '-1*' because sometime the result is negative and the sqrt cannot be calculated
-                    error = np.sqrt(np.abs(old_div(1, denominator)))
+                    error = np.sqrt(np.abs(1/ denominator))
                 else:
                     error = 0
                 #print line_model.mu(), error, "=", nbins, sharpness, line_snr
@@ -1362,18 +1352,18 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                     regions['gamma'][i] = 9999.0
 
                 regions['fwhm'][i], regions['fwhm_kms'][i] = line_model.fwhm()
-                regions['R'][i] = old_div(regions['mu'][i], regions['fwhm'][i]) # Resolution
+                regions['R'][i] = regions['mu'][i]/ regions['fwhm'][i] # Resolution
 
                 # Depth of the peak with respect to the total continuum in % over the total continuum
                 # - In case that the peak is higher than the continuum, depth < 0
                 continuum = line_model.baseline()
                 flux = line_model(line_model.mu())
-                regions['depth_fit'][i] = 1. - (old_div(flux, continuum))
+                regions['depth_fit'][i] = 1. - (flux/ continuum)
                 # Relative depth is "peak - mean_base_point" with respect to the total continuum
                 # - In case that the mean base point is higher than the continuum, relative_depth < 0
                 # - relative_depth < depth is always true
                 flux_from_top_base_point_to_continuum = np.abs(continuum - np.max(spectrum_window['flux']))
-                regions['relative_depth_fit'][i] = (old_div((continuum - (flux + flux_from_top_base_point_to_continuum)), continuum))
+                regions['relative_depth_fit'][i] = ((continuum - (flux + flux_from_top_base_point_to_continuum))/ continuum)
 
                 # Equivalent Width
                 # - Include 99.9999998% of the gaussian area
@@ -1382,11 +1372,11 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                 if type(line_model) is GaussianModel:
                     # If it is a gaussian we can directly use a formule (but not if it is a voigt!)
                     regions['integrated_flux'][i] = -1.*regions['A'][i]*np.sqrt(2*np.pi*regions['sig'][i]**2) # nm
-                    regions['ew'][i] = old_div(regions['integrated_flux'][i], line_model.baseline()) # nm
+                    regions['ew'][i] = regions['integrated_flux'][i]/ line_model.baseline() # nm
                 else:
                     regions['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x) # nm^2
-                    regions['ew'][i] = old_div(regions['integrated_flux'][i], line_model.baseline()) # nm
-                regions['ewr'][i] = np.log10(old_div(regions['ew'][i], regions['mu'][i]))
+                    regions['ew'][i] = regions['integrated_flux'][i]/ line_model.baseline() # nm
+                regions['ewr'][i] = np.log10(regions['ew'][i]/ regions['mu'][i])
                 regions['ew'][i] *= 10000. # from nm to mA
                 # EW error from
                 # Vollmann & Eversberg, 2006: http://adsabs.harvard.edu/abs/2006AN....327..862V
@@ -1409,7 +1399,7 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                         local_waveobs = spectrum['waveobs'][regions['base_fit'][i]:regions['top_fit'][i]+1]
                     zeros = local_err == 0
                     if not np.all(zeros):
-                        local_snr = np.median(old_div(local_flux[~zeros], local_err[~zeros]))
+                        local_snr = np.median(local_flux[~zeros]/ local_err[~zeros])
                     else:
                         local_snr = snr
                     regions['snr'][i] = local_snr
@@ -1420,7 +1410,7 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                     regions['mean_flux'][i] = mean_flux
                     regions['mean_flux_continuum'][i] = mean_flux_continuum
                     if mean_flux != 0  and local_snr != 0:
-                        regions['ew_err'][i] = np.sqrt(1 + old_div(mean_flux_continuum, mean_flux)) * (old_div((diff_wavelength*10000 - (regions['ew'][i])),local_snr))
+                        regions['ew_err'][i] = np.sqrt(1 + mean_flux_continuum/ mean_flux) * ((diff_wavelength*10000 - (regions['ew'][i]))/local_snr)
                     else:
                         regions['ew_err'][i] = 0.
                     #print "%.2f\t%.2f\t%.2f" % (regions['ew'][i], regions['ew_err'][i], regions['ew_err'][i] / regions['ew'][i])
@@ -1431,7 +1421,7 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                 fitting_not_possible = True
 
 
-        current_work_progress = (old_div((i*1.0),total_regions)) * 100
+        current_work_progress = ((i*1.0)/total_regions) * 100
         if report_progress(current_work_progress, last_reported_progress):
             last_reported_progress = current_work_progress
             logging.info("%.2f%%" % current_work_progress)
@@ -1465,8 +1455,8 @@ def __fill_linemasks_with_telluric_info(linemasks, telluric_linelist, vel_tellur
         # Correct wavelength scale for radial velocity
         original_wave_peak = linemasks['wave_peak'].copy()
         original_mu = linemasks['mu'].copy()
-        linemasks['wave_peak'] = old_div(linemasks['wave_peak'], ((old_div(vel_telluric, c)) + 1))
-        linemasks['mu'] = old_div(linemasks['mu'], ((old_div(vel_telluric, c)) + 1))
+        linemasks['wave_peak'] = linemasks['wave_peak']/ ((vel_telluric/ c + 1))
+        linemasks['mu'] = linemasks['mu']/ ((vel_telluric/ c + 1))
 
     # The discarded flag in the telluric linelist is not a good one because there are clear lines mark as true (i.e. 628.0392 nm)
     #telluric_linelist = telluric_linelist[telluric_linelist['discarded'] != True]
@@ -1502,7 +1492,7 @@ def __fill_linemasks_with_telluric_info(linemasks, telluric_linelist, vel_tellur
                 linemasks["telluric_wave_peak"][j] = telluric_linelist['wave_peak'][i]
                 linemasks["telluric_depth"][j] = telluric_linelist["depth"][i]
                 linemasks["telluric_fwhm"][j] = telluric_linelist["fwhm"][i]
-                linemasks['telluric_R'][j] = old_div(linemasks['mu'][j], (linemasks['fwhm'][j] - linemasks['telluric_fwhm'][j])) # Resolution
+                linemasks['telluric_R'][j] = linemasks['mu'][j]/ (linemasks['fwhm'][j] - linemasks['telluric_fwhm'][j]) # Resolution
 
     if vel_telluric != 0:
         linemasks['wave_peak'] = original_wave_peak
@@ -1528,8 +1518,8 @@ def __fill_linemasks_with_atomic_data(linemasks, atomic_linelist, diff_limit=0.0
         # Correct wavelength scale for radial velocity
         original_wave_peak = linemasks['wave_peak'].copy()
         original_mu = linemasks['mu'].copy()
-        linemasks['wave_peak'] = old_div(linemasks['wave_peak'], ((old_div(vel_atomic, c)) + 1))
-        linemasks['mu'] = old_div(linemasks['mu'], ((old_div(vel_atomic, c)) + 1))
+        linemasks['wave_peak'] = linemasks['wave_peak']/ ((vel_atomic/ c + 1))
+        linemasks['mu'] = linemasks['mu']/ ((vel_atomic/ c + 1))
 
 
     ## Sort
@@ -1634,9 +1624,9 @@ def __improve_linemask_edges(xcoord, yvalues, base, top, peak):
     y = yvalues[base:top+1]
     x = xcoord[base:top+1]
     # First derivative (positive => flux increases, negative => flux decreases)
-    dy_dx = old_div((y[:-1] - y[1:]), (x[:-1] - x[1:]))
+    dy_dx = (y[:-1] - y[1:])/ (x[:-1] - x[1:])
     # Second derivative (positive => convex, negative => concave)
-    d2y_dx2 = old_div((dy_dx[:-1] - dy_dx[1:]), (x[:-2] - x[2:]))
+    d2y_dx2 = (dy_dx[:-1] - dy_dx[1:])/ (x[:-2] - x[2:])
     # Peak position inside the linemask region
     peak_relative_pos = peak - base
     # The peak should be in a convex region => the second derivative should be positive
@@ -1729,9 +1719,9 @@ def adjust_linemasks(spectrum, linemasks, max_margin=0.5, min_margin=0.0, check_
                 y = spectrum_window['flux'][:nearest_peak+1]
                 x = spectrum_window['waveobs'][:nearest_peak+1]
                 # First derivative (positive => flux increases, negative => flux decreases)
-                dy_dx = old_div((y[:-1] - y[1:]), (x[:-1] - x[1:]))
+                dy_dx = (y[:-1] - y[1:])/ (x[:-1] - x[1:])
                 # Second derivative (positive => convex, negative => concave)
-                d2y_dx2 = old_div((dy_dx[:-1] - dy_dx[1:]), (x[:-2] - x[2:]))
+                d2y_dx2 = (dy_dx[:-1] - dy_dx[1:])/ (x[:-2] - x[2:])
                 positions = np.where(np.logical_and(dy_dx[1:] > -1*first_derivative_limit, d2y_dx2 < 0)[::-1])[0]
                 if len(positions) > 0:
                     new_base = len(dy_dx) - positions[0]-1
@@ -1742,9 +1732,9 @@ def adjust_linemasks(spectrum, linemasks, max_margin=0.5, min_margin=0.0, check_
                 y = spectrum_window['flux'][nearest_peak:]
                 x = spectrum_window['waveobs'][nearest_peak:]
                 # First derivative (positive => flux increases, negative => flux decreases)
-                dy_dx = old_div((y[:-1] - y[1:]), (x[:-1] - x[1:]))
+                dy_dx = (y[:-1] - y[1:])/ (x[:-1] - x[1:])
                 # Second derivative (positive => convex, negative => concave)
-                d2y_dx2 = old_div((dy_dx[:-1] - dy_dx[1:]), (x[:-2] - x[2:]))
+                d2y_dx2 = (dy_dx[:-1] - dy_dx[1:])/ (x[:-2] - x[2:])
                 positions = np.where(np.logical_and(dy_dx[:-1] < first_derivative_limit, d2y_dx2 < 0))[0]
                 if len(positions) > 0:
                     new_top = nearest_peak + positions[0]
@@ -1835,7 +1825,7 @@ def __cross_correlation_function_template(spectrum, template, lower_velocity_lim
 
     velocity = np.arange(lower_velocity_limit, upper_velocity_limit+velocity_step, velocity_step)
     # 1 shift = 0.5 km/s (or the specified value)
-    shifts = np.int32(old_div(velocity, velocity_step))
+    shifts = np.int32(velocity/ velocity_step)
 
     num_shifts = len(shifts)
     # Cross-correlation function
@@ -1843,11 +1833,11 @@ def __cross_correlation_function_template(spectrum, template, lower_velocity_lim
     ccf_err = np.zeros(num_shifts)
     depth = np.abs(np.max(template['flux']) - template['flux'])
     for i, vel in enumerate(velocity):
-        factor = np.sqrt(old_div((1.-old_div((vel*1000.),c)),(1.+old_div((vel*1000.),c))))
-        shifted_template = np.interp(spectrum['waveobs'], old_div(template['waveobs'],factor), depth, left=0.0, right=0.0)
+        factor = np.sqrt((1.-(vel*1000.)/c)/(1.+(vel*1000./c)))
+        shifted_template = np.interp(spectrum['waveobs'], template['waveobs']/factor, depth, left=0.0, right=0.0)
         ccf[i] = np.correlate(spectrum['flux'], shifted_template)[0]
         ccf_err[i] = np.correlate(spectrum['err'], shifted_template)[0] # Propagate errors
-        current_work_progress = (old_div((i*1.0),num_shifts)) * 100
+        current_work_progress = ((i*1.0)/num_shifts) * 100
         if report_progress(current_work_progress, last_reported_progress):
             last_reported_progress = current_work_progress
             logging.info("%.2f%%" % current_work_progress)
@@ -1855,8 +1845,8 @@ def __cross_correlation_function_template(spectrum, template, lower_velocity_lim
                 frame.update_progress(current_work_progress)
 
     max_ccf = np.max(ccf)
-    ccf = old_div(ccf,max_ccf) # Normalize
-    ccf_err = old_div(ccf_err,max_ccf) # Propagate errors
+    ccf = ccf/max_ccf # Normalize
+    ccf_err = ccf_err/max_ccf # Propagate errors
 
     return velocity, ccf, ccf_err
 
@@ -1879,8 +1869,8 @@ def _sampling_uniform_in_velocity(wave_base, wave_top, velocity_step):
 
     ### Numpy optimized:
     # number of elements to go from wave_base to wave_top in increments of velocity_step
-    i = int(np.ceil( old_div((c * (wave_top - wave_base)), (wave_base*velocity_step))))
-    grid = wave_base * np.power((1 + (old_div(velocity_step, c))), np.arange(i)+1)
+    i = int(np.ceil( (c * (wave_top - wave_base))/ (wave_base*velocity_step)))
+    grid = wave_base * np.power((1 + (velocity_step/ c)), np.arange(i)+1)
 
     # Ensure wavelength limits since the "number of elements i" tends to be overestimated
     wfilter = grid <= wave_top
@@ -1926,7 +1916,7 @@ def __cross_correlation_function_uniform_in_velocity(spectrum, mask, lower_veloc
     c = 299792458.0
 
     # 1 shift = 1.0 km/s (or the specified value)
-    shifts = np.arange(np.int32(old_div(np.floor(lower_velocity_limit),velocity_step)), np.int32(old_div(np.ceil(upper_velocity_limit),velocity_step))+1)
+    shifts = np.arange(np.int32(np.floor(lower_velocity_limit)/velocity_step), np.int32(np.ceil(upper_velocity_limit)/velocity_step)+1)
     velocity = shifts * velocity_step
 
     waveobs = _sampling_uniform_in_velocity(np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), velocity_step)
@@ -1946,7 +1936,7 @@ def __cross_correlation_function_uniform_in_velocity(spectrum, mask, lower_veloc
         tflux = fft(flux)
         tresampled_mask = fft(resampled_mask)
         conj_tresampled_mask = np.conj(tresampled_mask)
-        num = old_div(len(resampled_mask),2)+1
+        num = len(resampled_mask)/2+1
         tmp = abs(ifft(tflux*conj_tresampled_mask))
         ccf = np.hstack((tmp[num:], tmp[:num]))
 
@@ -1998,7 +1988,7 @@ def __cross_correlation_function_uniform_in_velocity(spectrum, mask, lower_veloc
             #ccf[i] = np.average(np.tanh(flux*shifted_mask))
             #ccf_err[i] = np.average(np.tanh(err*shifted_mask)) # Propagate errors
 
-            current_work_progress = (old_div((i*1.0),num_shifts)) * 100
+            current_work_progress = ((i*1.0)/num_shifts) * 100
             if report_progress(current_work_progress, last_reported_progress):
                 last_reported_progress = current_work_progress
                 logging.info("%.2f%%" % current_work_progress)
@@ -2006,8 +1996,8 @@ def __cross_correlation_function_uniform_in_velocity(spectrum, mask, lower_veloc
                     frame.update_progress(current_work_progress)
 
     max_ccf = np.max(ccf)
-    ccf = old_div(ccf,max_ccf) # Normalize
-    ccf_err = old_div(ccf_err,max_ccf) # Propagate errors
+    ccf = ccf/max_ccf # Normalize
+    ccf_err = ccf_err/max_ccf # Propagate errors
 
     return velocity, ccf, ccf_err, len(flux)
 
@@ -2024,8 +2014,8 @@ def create_filter_for_regions_affected_by_tellurics(wavelengths, linelist_tellur
 
     tfilter = wavelengths == np.nan
     tfilter2 = wavelengths == np.nan
-    wave_bases = linelist_telluric['wave_peak'] * np.sqrt(old_div((1.-old_div((max_velocity*1000.),c)),(1.+old_div((max_velocity*1000.),c))))
-    wave_tops = linelist_telluric['wave_peak'] * np.sqrt(old_div((1.-old_div((min_velocity*1000.),c)),(1.+old_div((min_velocity*1000.),c))))
+    wave_bases = linelist_telluric['wave_peak'] * np.sqrt((1.-(max_velocity*1000.)/c)/(1.+(max_velocity*1000.)/c))
+    wave_tops = linelist_telluric['wave_peak'] * np.sqrt((1.-(min_velocity*1000.)/c)/(1.+(min_velocity*1000.)/c))
     last_reported_progress = -1
     total_regions = len(wave_bases)
     last = 0 # Optimization
@@ -2036,7 +2026,7 @@ def create_filter_for_regions_affected_by_tellurics(wavelengths, linelist_tellur
         #wfilter = np.logical_and(wavelengths >= wave_base, wavelengths <= wave_top)
         #tfilter = np.logical_or(wfilter, tfilter)
 
-        current_work_progress = (old_div((i*1.0),total_regions)) * 100
+        current_work_progress = ((i*1.0)/total_regions) * 100
         if report_progress(current_work_progress, last_reported_progress):
             last_reported_progress = current_work_progress
             logging.info("%.2f%%" % current_work_progress)
@@ -2068,7 +2058,7 @@ except:
         resampled_mask = np.zeros(len(spectrum_wave))
 
         # Mask limits
-        mask_wave_step = (mask_wave * (1.-np.sqrt(old_div((1.-old_div((velocity_mask_size*1000.),c)),(1.+old_div((velocity_mask_size*1000.),c))))))/2.0
+        mask_wave_step = (mask_wave * (1.-np.sqrt((1.-(velocity_mask_size*1000.)/c)/(1.+(velocity_mask_size*1000.)/c))))/2.0
         mask_wave_base = mask_wave - 1*mask_wave_step
         mask_wave_top = mask_wave + 1*mask_wave_step
 
@@ -2103,7 +2093,7 @@ def __select_lines_for_mask(linemasks, minimum_depth=0.01, velocity_mask_size = 
     c = 299792458.0
 
     # Mask limits
-    mask_wave_step = (linemasks['wave_peak'] * (1.-np.sqrt(old_div((1.-old_div((total_velocity_separation*1000.),c)),(1.+old_div((total_velocity_separation*1000.),c))))))/2.0
+    mask_wave_step = (linemasks['wave_peak'] * (1.-np.sqrt((1.-(total_velocity_separation*1000.)/c)/(1.+(total_velocity_separation*1000.)/c))))/2.0
     mask_wave_base = linemasks['wave_peak'] - 1*mask_wave_step
     mask_wave_top = linemasks['wave_peak'] + 1*mask_wave_step
     #mask_wave_base = linemasks['wave_base'] - 1*mask_wave_step
@@ -2413,11 +2403,11 @@ def __model_velocity_profile(ccf, nbins, only_one_peak=False, peak_probability=0
         # More weight to the deeper fluxes
         if min_flux < 0:
             weights = f + -1*(min_flux) + 0.01 # Above zero
-            weights = old_div(np.min(weights), weights)
+            weights = np.min(weights)/ weights
         else:
-            weights = old_div(min_flux, f)
+            weights = min_flux/ f
         weights -= np.min(weights)
-        weights = old_div(weights,np.max(weights))
+        weights = weights/np.max(weights)
 
 
         try:
@@ -2425,11 +2415,11 @@ def __model_velocity_profile(ccf, nbins, only_one_peak=False, peak_probability=0
             if model in ['2nd order polynomial + auto fit', '2nd order polynomial + gaussian fit']:
                 gaussian_model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=copy.deepcopy(parinfo[:4]), weights=weights)
                 #gaussian_model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=copy.deepcopy(parinfo[:4]))
-                rms_gaussian = np.sqrt(old_div(np.sum(np.power(gaussian_model.residuals(), 2)), len(gaussian_model.residuals())))
+                rms_gaussian = np.sqrt(np.sum(np.power(gaussian_model.residuals(), 2)) / len(gaussian_model.residuals()))
             if model in ['2nd order polynomial + auto fit', '2nd order polynomial + voigt fit']:
                 voigt_model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=copy.deepcopy(parinfo), weights=weights)
                 #voigt_model.fitData(xcoord[base[i]:top[i]+1], fluxes[base[i]:top[i]+1], parinfo=copy.deepcopy(parinfo))
-                rms_voigt = np.sqrt(old_div(np.sum(np.power(voigt_model.residuals(), 2)), len(voigt_model.residuals())))
+                rms_voigt = np.sqrt(np.sum(np.power(voigt_model.residuals(), 2)) / len(voigt_model.residuals()))
 
             if model == '2nd order polynomial + voigt fit' or (model == '2nd order polynomial + auto fit' and rms_gaussian > rms_voigt):
                 final_model = voigt_model
@@ -2456,10 +2446,10 @@ def __model_velocity_profile(ccf, nbins, only_one_peak=False, peak_probability=0
                 inverted_fluxes_peak = 1e-10
             if second_derivative_peak == 0:
                 second_derivative_peak = 1e-10
-            sharpness = old_div(second_derivative_peak, inverted_fluxes_peak)
-            line_snr = old_div(np.power(inverted_fluxes_peak, 2), (1 - np.power(inverted_fluxes_peak, 2)))
+            sharpness = second_derivative_peak/ inverted_fluxes_peak
+            line_snr = np.power(inverted_fluxes_peak, 2) / (1 - np.power(inverted_fluxes_peak, 2))
             # Use abs instead of a simple '-1*' because sometime the result is negative and the sqrt cannot be calculated
-            error = np.sqrt(np.abs(old_div(1, (nbins * sharpness * line_snr))))
+            error = np.sqrt(np.abs(1 / (nbins * sharpness * line_snr)))
 
             final_model.set_emu(error)
             logging.info("Peak found at %.2f km/s (fitted at %.2f +/- %.2f km/s)" % (xcoord[peaks[i]], final_model.mu(), final_model.emu()))
@@ -2885,7 +2875,7 @@ def update_ew_with_ares(spectrum, linelist, rejt="0.995", tmp_dir=None, verbose=
     linelist = linelist.copy()
     linelist['ew'] = ew
     linelist['ew_err'] = ew_err
-    linelist['ewr'] = np.log10(old_div(linelist['ew'], (1000.*linelist['wave_A'])))
+    linelist['ewr'] = np.log10(linelist['ew']/ (1000.*linelist['wave_A']))
 
     return linelist
 
@@ -2921,7 +2911,7 @@ def van_der_Waals_ABO_to_single_gamma_format(gamvdw, atomic_mass, temperature=10
 
         # Compute a single value for 10000K
         vbar = np.sqrt(8.*k*temperature/np.pi/m0*(1./1.008+1./atomic_mass))
-        gvw = gvw * ((old_div(vbar,1.E4))**(1.-alpha))
+        gvw = gvw * ((vbar/1.E4)**(1.-alpha))
 
         # Full width per perturber per cm^3
         gvw = gvw*1.E6*2.

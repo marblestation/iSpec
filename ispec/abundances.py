@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -16,11 +15,6 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
-from future import standard_library
-standard_library.install_aliases()
-from builtins import zip
-from builtins import str
-from builtins import map
 import numpy as np
 from .atmospheres import *
 from .lines import write_atomic_linelist

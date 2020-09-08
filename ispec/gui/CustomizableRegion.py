@@ -16,7 +16,6 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 
-from builtins import object
 class CustomizableRegion(object):
     min_width = 0.002 # nm
     mark = None

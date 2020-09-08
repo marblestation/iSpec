@@ -1,6 +1,3 @@
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -18,10 +15,6 @@ from __future__ import division
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
-from builtins import zip
-from builtins import str
-from builtins import range
-from past.utils import old_div
 import os
 import sys
 import time
@@ -376,15 +369,15 @@ class SynthModel(MPFitModel):
             super(SynthModel, self).fitData(waveobs[self.comparing_mask], fluxes[self.comparing_mask], weights=ones[self.comparing_mask], parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet)
 
         residuals = self.last_final_fluxes[self.comparing_mask] - fluxes[self.comparing_mask]
-        self.rms = np.sqrt(old_div(np.sum(np.power(residuals,2)),len(residuals)))
+        self.rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
 
         #### Unweighted (no errors considered):
         self.chisq = np.sum((residuals)**2)
-        self.reduced_chisq = old_div(self.chisq, self.m.dof)
+        self.reduced_chisq = self.chisq / self.m.dof
 
         #### Weighted (errors considered):
         self.wchisq = np.sum((weights[self.comparing_mask] * residuals)**2)
-        self.reduced_wchisq = old_div(self.wchisq, self.m.dof)
+        self.reduced_wchisq = self.wchisq / self.m.dof
 
         self.cache = {}
 

@@ -1,4 +1,3 @@
-from __future__ import absolute_import
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/

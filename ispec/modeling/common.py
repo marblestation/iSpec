@@ -1,5 +1,3 @@
-from __future__ import print_function
-from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -17,8 +15,6 @@ from __future__ import division
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
-from past.utils import old_div
-from builtins import object
 import numpy as np
 
 
@@ -111,15 +107,15 @@ def _get_stats_per_linemask(waveobs, fluxes, synthetic_fluxes, weights, free_par
         dof = len(waveobs[wfilter]) - len(free_params)
         if dof > 0:
             residuals = synthetic_fluxes[wfilter] - fluxes[wfilter]
-            rms = np.sqrt(old_div(np.sum(np.power(residuals,2)),len(residuals)))
+            rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
 
             # Unweighted
             chisq = np.sum((residuals)**2)
-            reduced_chisq = old_div(chisq, dof)
+            reduced_chisq = chisq / dof
 
             # Weighted
             wchisq = np.sum((weights[wfilter] * residuals)**2)
-            reduced_wchisq = old_div(wchisq, dof)
+            reduced_wchisq = wchisq / dof
         else:
             rms = -9999
             chisq = -9999

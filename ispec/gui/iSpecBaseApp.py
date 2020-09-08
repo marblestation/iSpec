@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -17,12 +15,6 @@ from __future__ import division
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
-from future import standard_library
-standard_library.install_aliases()
-from builtins import map
-from builtins import str
-from past.builtins import basestring
-from past.utils import old_div
 import tkinter
 import tkinter.messagebox
 import tkinter.filedialog
@@ -1008,7 +1000,7 @@ iSpec uses the following radiative transfer codes:
                 if sys.platform == "darwin":
                     ftypes = [] # Not working properly in MacOSX
                 answer = tkinter.filedialog.askopenfilename(title="Open %s..." % elements, initialdir=dirname, initialfile=filename, filetypes=ftypes, defaultextension=".txt")
-                if isinstance(answer, basestring) and len(answer) > 0:
+                if isinstance(answer, str) and len(answer) > 0:
                     answer_ok = True
                 else:
                     answer_ok = False
@@ -1114,7 +1106,7 @@ iSpec uses the following radiative transfer codes:
             if sys.platform == "darwin":
                 ftypes = [] # Not working properly in MacOSX
             answer = tkinter.filedialog.asksaveasfilename(title="Save plot as...", initialdir=dirname, initialfile=filename, filetypes=ftypes, defaultextension=".png")
-            if isinstance(answer, basestring) and len(answer) > 0:
+            if isinstance(answer, str) and len(answer) > 0:
                 answer_ok = True
             else:
                 answer_ok = False
@@ -1150,7 +1142,7 @@ iSpec uses the following radiative transfer codes:
             if sys.platform == "darwin":
                 ftypes = [] # Not working properly in MacOSX
             answer = tkinter.filedialog.asksaveasfilename(title="Save spectrum as...", initialdir=dirname, initialfile=filename, filetypes=ftypes, defaultextension=".txt")
-            if isinstance(answer, basestring) and len(answer) > 0:
+            if isinstance(answer, str) and len(answer) > 0:
                 answer_ok = True
             else:
                 answer_ok = False
@@ -1222,7 +1214,7 @@ iSpec uses the following radiative transfer codes:
             if sys.platform == "darwin":
                 ftypes = [] # Not working properly in MacOSX
             answer = tkinter.filedialog.asksaveasfilename(title="Save regions as...", initialdir=dirname, initialfile=filename, filetypes=ftypes, defaultextension=".txt")
-            if isinstance(answer, basestring) and len(answer) > 0:
+            if isinstance(answer, str) and len(answer) > 0:
                 answer_ok = True
             else:
                 answer_ok = False
@@ -1838,10 +1830,10 @@ iSpec uses the following radiative transfer codes:
                 A = region.line_model[self.active_spectrum].A()
                 sig = region.line_model[self.active_spectrum].sig()
                 ew = -1.*A*np.sqrt(2*np.pi*sig**2) # nm
-                integrated_flux = old_div(ew, region.line_model[self.active_spectrum].baseline()) # nm^2
+                integrated_flux = ew/ region.line_model[self.active_spectrum].baseline() # nm^2
             else:
                 integrated_flux = -1 * region.line_model[self.active_spectrum].integrate()
-                ew = old_div(integrated_flux, region.line_model[self.active_spectrum].baseline())
+                ew = integrated_flux/ region.line_model[self.active_spectrum].baseline()
             ew = ew * 10000 # From nm to mA
             self.add_stats("Gaussian fit Equivalent Width (EW)", "%.2f" % ew)
 
@@ -1868,7 +1860,7 @@ iSpec uses the following radiative transfer codes:
                 self.add_stats("Continuum mean for the region", "%.4f" % mean_continuum)
             try:
                 residuals = np.abs(self.active_spectrum.continuum_model.residuals())
-                rms = np.sqrt(old_div(np.sum(np.power(residuals,2)),len(residuals)))
+                rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
                 self.add_stats("Continuum fit root mean square (RMS)", "%.4f" % rms)
             except AttributeError:
                 # Only spline continuum models have "residuals" method
@@ -2263,8 +2255,8 @@ iSpec uses the following radiative transfer codes:
         # Limit to region of interest
         wmin = spectrum['waveobs'][0]
         wmax = spectrum['waveobs'][-1]
-        delta_wmin = wmin * (old_div(velocity_lower_limit, (c/1000.0)))
-        delta_wmax = wmax * (old_div(velocity_upper_limit, (c/1000.0)))
+        delta_wmin = wmin * (velocity_lower_limit/ (c/1000.0))
+        delta_wmax = wmax * (velocity_upper_limit/ (c/1000.0))
         wfilter = (telluric_linelist['wave_peak'] <= wmax + delta_wmax) & (telluric_linelist['wave_peak'] >= wmin + delta_wmin)
         linelist = telluric_linelist[wfilter]
         # Discard not fitted lines
@@ -2274,7 +2266,7 @@ iSpec uses the following radiative transfer codes:
         rfilter = (linelist['depth'] <= 0.9) & (linelist['depth'] >= 0.01)
         linelist = linelist[rfilter]
         # Discard outliers FWHM in km/s (which is not wavelength dependent)
-        telluric_fwhm = (old_div(c, (old_div(linelist['wave_peak'], linelist['fwhm'])))) / 1000.0 # km/s
+        telluric_fwhm = (c/ (linelist['wave_peak']/ linelist['fwhm'])) / 1000.0 # km/s
         fwhm_selected, fwhm_selected_filter = ispec.sigma_clipping(telluric_fwhm, meanfunc=np.median)
         linelist = linelist[fwhm_selected_filter]
         return linelist
@@ -2341,15 +2333,15 @@ iSpec uses the following radiative transfer codes:
             fwhm = models[0].fwhm()[0] # km/s (because xcoord is already velocity)
             if relative_to_atomic_data or relative_to_template:
                 telluric_fwhm = 0.0
-                R = np.int(old_div(c,(1000.0*fwhm)))
+                R = np.int(c/(1000.0*fwhm))
             else:
                 # If telluric lines have been used, we can substract its natural FWHM
                 # so that we get the real resolution of the instrument (based on the difference in FWHM)
                 c = 299792458.0 # m/s
-                telluric_fwhm = np.mean((old_div(c, (old_div(mask_linelist['wave_peak'], mask_linelist['fwhm'])))) / 1000.0) # km/s
+                telluric_fwhm = np.mean((c/ (mask_linelist['wave_peak']/ mask_linelist['fwhm'])) / 1000.0) # km/s
                 diff = np.round(fwhm - telluric_fwhm, 2)
                 if diff > 0:
-                    R = np.int(old_div(c,(1000.0*diff)))
+                    R = np.int(c/(1000.0*diff))
                 else:
                     R = 0
             # Velocity
@@ -2666,7 +2658,7 @@ iSpec uses the following radiative transfer codes:
         self.find_continuum_regions_sigma = sigma
         self.find_continuum_regions_max_continuum_diff = max_continuum_diff
         # Convert from % to over 1
-        max_continuum_diff = old_div(max_continuum_diff, 100)
+        max_continuum_diff = max_continuum_diff/ 100
 
         if in_segments and (self.region_widgets["segments"] is None or len(self.region_widgets["segments"]) == 0):
             self.queue.put((self.flash_status_message, ["No segments found."], {}))
@@ -3168,7 +3160,7 @@ iSpec uses the following radiative transfer codes:
             efilter = self.active_spectrum.data['err'] > 0
             spec = self.active_spectrum.data[efilter]
             if len(spec) > 1:
-                estimated_snr = np.median(old_div(spec['flux'], spec['err']))
+                estimated_snr = np.median(spec['flux']/ spec['err'])
                 self.on_estimate_snr_finnish(estimated_snr)
             else:
                 msg = 'All value errors are set to zero or negative numbers'
@@ -3226,7 +3218,7 @@ iSpec uses the following radiative transfer codes:
             self.error(title, msg)
             return
 
-        self.active_spectrum.data['err'] = old_div(self.active_spectrum.data['flux'], snr)
+        self.active_spectrum.data['err'] = self.active_spectrum.data['flux']/ snr
         self.active_spectrum.not_saved = True
 
         self.draw_active_spectrum()
@@ -3281,8 +3273,8 @@ iSpec uses the following radiative transfer codes:
         else:
             R = self.active_spectrum.resolution_telluric
         if key not in self.active_spectrum.dialog:
-            self.active_spectrum.dialog[key] = DegradeResolutionDialog(self, "Degrade spectrum resolution", R, old_div(R,2))
-        self.active_spectrum.dialog[key].show(updated_from_resolution=R, updated_to_resolution=old_div(R,2))
+            self.active_spectrum.dialog[key] = DegradeResolutionDialog(self, "Degrade spectrum resolution", R, R/2)
+        self.active_spectrum.dialog[key].show(updated_from_resolution=R, updated_to_resolution=R/2)
 
         if self.active_spectrum.dialog[key].results is None:
             self.active_spectrum.dialog[key].destroy()
@@ -3851,7 +3843,7 @@ iSpec uses the following radiative transfer codes:
                 #logging.warning("Division by zero may occur")
                 if i != active:
                     # Error propagation assuming that they are independent
-                    err = np.sqrt(np.power(old_div(flux, err), 2) + np.power(old_div(spec['flux'], spec['err']), 2)) * 0.7
+                    err = np.sqrt(np.power(flux/ err, 2) + np.power(spec['flux']/ spec['err'], 2)) * 0.7
                     flux = flux * (1. / spec['flux'])
                 i += 1
             combined_spectrum = ispec.create_spectrum_structure(xaxis, flux, err)

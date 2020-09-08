@@ -1,6 +1,3 @@
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -18,9 +15,6 @@ from __future__ import division
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
-from builtins import str
-from builtins import range
-from past.utils import old_div
 import sys
 import time
 from datetime import datetime, timedelta
@@ -592,13 +586,13 @@ class EquivalentWidthModel(MPFitModel):
 
         values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
         residuals = values_to_evaluate - target_values
-        self.rms = np.sqrt(old_div(np.sum(np.power(residuals,2)),len(residuals)))
+        self.rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
         # Unweighted
         self.chisq = np.sum((residuals)**2)
-        self.reduced_chisq = old_div(self.chisq, self.m.dof)
+        self.reduced_chisq = self.chisq/self.m.dof
         # Weighted
         self.wchisq = np.sum((weights * residuals)**2)
-        self.reduced_wchisq = old_div(self.wchisq, self.m.dof)
+        self.reduced_wchisq = self.wchisq/ self.m.dof
 
         #self.cache = {}
 

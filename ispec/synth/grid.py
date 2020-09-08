@@ -1,6 +1,3 @@
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -18,10 +15,6 @@ from __future__ import division
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
-from future import standard_library
-standard_library.install_aliases()
-from builtins import zip
-from past.utils import old_div
 import os
 import sys
 import time
@@ -257,9 +250,9 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                     print("-----------------------------------------------------")
                     print("Remaining time:")
                     print("\t", (num_spec-i)*elapsed, "seconds")
-                    print("\t", (num_spec-i)*(old_div(elapsed,60)), "minutes")
-                    print("\t", (num_spec-i)*(old_div(elapsed,(60*60))), "hours")
-                    print("\t", (num_spec-i)*(old_div(elapsed,(60*60*24))), "days")
+                    print("\t", (num_spec-i)*(elapsed/60), "minutes")
+                    print("\t", (num_spec-i)*(elapsed/(60*60)), "hours")
+                    print("\t", (num_spec-i)*(elapsed/(60*60*24)), "days")
                     print("-----------------------------------------------------")
                 finally:
                     lock.release()
@@ -444,7 +437,7 @@ def load_spectral_grid(input_path):
     # Divide grid in two using the temperature to reduce the number of data points
     # to be used by a single Delaunay Triangulation
     teff_limit = 10000
-    teff_margin = old_div(teff_limit,2)
+    teff_margin = teff_limit/2
     filter_cool_parameters = np.array(parameters['teff'] < teff_limit)
     filter_intermediate_parameters = np.array(np.logical_and(parameters['teff'] > teff_limit-teff_margin, parameters['teff'] < teff_limit+teff_margin))
     filter_hot_parameters = np.array(parameters['teff'] >= teff_limit)

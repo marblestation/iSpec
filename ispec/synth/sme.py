@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -17,11 +15,6 @@ from __future__ import division
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
-from future import standard_library
-standard_library.install_aliases()
-from builtins import map
-from builtins import range
-from past.utils import old_div
 import os
 import sys
 import ctypes
@@ -167,7 +160,7 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
         # It is better not to synthesize in a single run a big chunk of wavelength so
         # we split the computation in several pieces
         max_segment = 100. # nm
-        if old_div((region['wave_top'] - region['wave_base']),wave_step) > old_div(max_segment,wave_step):
+        if (region['wave_top'] - region['wave_base']) / wave_step > max_segment / wave_step:
             segment_wave_base = np.arange(region['wave_base'], region['wave_top'], max_segment)
             segments = np.recarray((len(segment_wave_base),),  dtype=[('wave_base', float), ('wave_top', float)])
             segments['wave_base'] = segment_wave_base
@@ -471,7 +464,7 @@ def _sme_inputmodel(sme, teff, logg, MH, microturbulence_vel, atmosphere_layers,
     k = 1.380658e-23      # boltzmanns constant J/K
     Pgas = atmosphere_layers[:,2] # dyn cm^-3
     Pgas = Pgas * 1e-7 # J cm^-3
-    xNa = old_div(Pgas, (k * T)) # cm^-3
+    xNa = Pgas / (k * T) # cm^-3
 
     amass= [ 1.008,  4.003,  6.941,  9.012, 10.811, 12.011, 14.007, 15.999,
             18.998, 20.179, 22.990, 24.305, 26.982, 28.086, 30.974, 32.060,
@@ -732,7 +725,7 @@ def _sme_transf(sme, sme_dir, nwmax, keep_lineop=False):
     cflx_seg = _sme_rtint(mu, cint_seg)
     flx_seg = _sme_rtint(mu, sint_seg)
 
-    return wint_seg, old_div(flx_seg,cflx_seg) # wavelengths in Armstrongs
+    return wint_seg, flx_seg / cflx_seg # wavelengths in Armstrongs
 
 
 

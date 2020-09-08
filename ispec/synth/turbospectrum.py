@@ -1,6 +1,3 @@
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -18,8 +15,6 @@ from __future__ import division
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
-from builtins import str
-from past.utils import old_div
 import os
 import sys
 import numpy as np
@@ -98,7 +93,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
     # Turbospectrum cannot compute in a single run a big chunk of wavelength so
     # we split the computation in several pieces
     max_segment = 100. # nm
-    if old_div((global_wave_top - global_wave_base),wave_step) > old_div(max_segment,wave_step):
+    if (global_wave_top - global_wave_base)/wave_step > max_segment/wave_step:
         segment_wave_base = np.arange(global_wave_base, global_wave_top, max_segment)
         segments = np.recarray((len(segment_wave_base),),  dtype=[('wave_base', float), ('wave_top', float)])
         segments['wave_base'] = segment_wave_base

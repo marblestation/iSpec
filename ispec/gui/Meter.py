@@ -1,4 +1,3 @@
-from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -16,10 +15,6 @@ from __future__ import division
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
-from future import standard_library
-standard_library.install_aliases()
-from builtins import str
-from past.utils import old_div
 import tkinter
 
 class Meter(tkinter.Frame):
@@ -33,7 +28,7 @@ class Meter(tkinter.Frame):
         self._canv.pack(fill='both', expand=1)
         self._rect = self._canv.create_rectangle(0, 0, 0, self._canv.winfo_reqheight(), fill=fillcolor,\
                                                  width=0)
-        self._text = self._canv.create_text(old_div(self._canv.winfo_reqwidth(),2), old_div(self._canv.winfo_reqheight(),2),\
+        self._text = self._canv.create_text(self._canv.winfo_reqwidth()/2, self._canv.winfo_reqheight()/2,\
                                             text='', fill=textcolor)
         if font:
             self._canv.itemconfigure(self._text, font=font)
@@ -47,7 +42,7 @@ class Meter(tkinter.Frame):
         # looks like we have to call update_idletasks() twice to make sure
         # to get the results we expect
         self._canv.update_idletasks()
-        self._canv.coords(self._text, old_div(self._canv.winfo_width(),2), old_div(self._canv.winfo_height(),2))
+        self._canv.coords(self._text, self._canv.winfo_width()/2, self._canv.winfo_height()/2)
         self._canv.coords(self._rect, 0, 0, self._canv.winfo_width()*self._value, self._canv.winfo_height())
         self._canv.update_idletasks()
 

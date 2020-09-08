@@ -16,9 +16,6 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
-from __future__ import print_function
-from __future__ import division
-from past.utils import old_div
 import os
 import sys
 import numpy as np
@@ -646,7 +643,7 @@ def estimate_snr_from_err():
     efilter = star_spectrum['err'] > 0
     filtered_star_spectrum = star_spectrum[efilter]
     if len(filtered_star_spectrum) > 1:
-        estimated_snr = np.median(old_div(filtered_star_spectrum['flux'], filtered_star_spectrum['err']))
+        estimated_snr = np.median(filtered_star_spectrum['flux']/ filtered_star_spectrum['err'])
     else:
         # All the errors are set to zero and we cannot calculate SNR using them
         estimated_snr = 0
@@ -656,7 +653,7 @@ def estimate_errors_from_snr():
     star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Calculate errors based on SNR ---------------------------------------------
     snr = 100
-    star_spectrum['err'] = old_div(star_spectrum['flux'], snr)
+    star_spectrum['err'] = star_spectrum['flux']/ snr
 
 
 def clean_spectrum():
@@ -2776,7 +2773,7 @@ def generate_and_plot_YY_isochrone():
     import matplotlib.pyplot as plt
 
     logage = 9.409
-    age = old_div(np.power(10, logage), 1e9) # Gyrs
+    age = np.power(10/ logage, 1e9) # Gyrs
     MH = 0.0 # [M/H] (dex)
     isochrone = isochrones.interpolate_isochrone(ispec_dir, age, MH)
 

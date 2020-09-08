@@ -24,10 +24,7 @@ askfloat -- get a float from the user
 
 askstring -- get a string from the user
 '''
-from __future__ import print_function
 
-from future import standard_library
-standard_library.install_aliases()
 from tkinter import *
 import os
 

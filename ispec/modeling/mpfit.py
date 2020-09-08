@@ -407,13 +407,7 @@ Perform Levenberg-Marquardt least-squares minimization, based on MINPACK-1.
    August, 2002.  Mark Rivers
    Converted from Numeric to numpy (Sergey Koposov, July 2008)
 """
-from __future__ import print_function
-from __future__ import division
 
-from builtins import str
-from builtins import range
-from builtins import object
-from past.utils import old_div
 import numpy
 import types
 import scipy.linalg.blas
@@ -1125,7 +1119,7 @@ class mpfit(object):
                     fj = fjac[j:,lj]
                     wj = wa4[j:]
                     # *** optimization wa4(j:*)
-                    wa4[j:] = wj - old_div(fj * sum(fj*wj), temp3)
+                    wa4[j:] = wj - fj * sum(fj*wj) / temp3
                 fjac[j,lj] = wa1[j]
                 qtf[j] = wa4[j]
             # From this point on, only the square matrix, consisting of the
@@ -1150,8 +1144,8 @@ class mpfit(object):
                 for j in range(n):
                     l = ipvt[j]
                     if wa2[l] != 0:
-                        sum0 = old_div(sum(fjac[0:j+1,j]*qtf[0:j+1]),self.fnorm)
-                        gnorm = numpy.max([gnorm,numpy.abs(old_div(sum0,wa2[l]))])
+                        sum0 = sum(fjac[0:j+1,j]*qtf[0:j+1])/self.fnorm
+                        gnorm = numpy.max([gnorm,numpy.abs(sum0/wa2[l])])
 
             # Test for convergence of the gradient norm
             if gnorm <= gtol:
@@ -1198,13 +1192,13 @@ class mpfit(object):
                         dwa1 = numpy.abs(wa1) > machep
                         whl = (numpy.nonzero(((dwa1!=0.) & qllim) & ((x + wa1) < llim)))[0]
                         if len(whl) > 0:
-                            t = (old_div((llim[whl] - x[whl]),
-                                  wa1[whl]))
+                            t = ((llim[whl] - x[whl]) /
+                                  wa1[whl])
                             alpha = numpy.min([alpha, numpy.min(t)])
                         whu = (numpy.nonzero(((dwa1!=0.) & qulim) & ((x + wa1) > ulim)))[0]
                         if len(whu) > 0:
-                            t = (old_div((ulim[whu] - x[whu]),
-                                  wa1[whu]))
+                            t = ((ulim[whu] - x[whu]) /
+                                  wa1[whu])
                             alpha = numpy.min([alpha, numpy.min(t)])
 
                     # Obey any max step values.
@@ -1213,10 +1207,10 @@ class mpfit(object):
                         whmax = (numpy.nonzero((qmax != 0.) & (maxstep > 0)))[0]
                         whmax = numpy.where(ifree == whmax)[0]
                         if len(whmax) > 0:
-                            mrat = numpy.max(old_div(numpy.abs(nwa1[whmax]),
-                                       numpy.abs(maxstep[ifree[whmax]])))
+                            mrat = numpy.max(numpy.abs(nwa1[whmax]) /
+                                       numpy.abs(maxstep[ifree[whmax]]))
                             if mrat > 1:
-                                alpha = old_div(alpha, mrat)
+                                alpha = alpha / mrat
 
                     # Scale the resulting vector
                     wa1 = wa1 * alpha
@@ -1259,7 +1253,7 @@ class mpfit(object):
                 catch_msg = 'computing convergence criteria'
                 actred = -1.
                 if (0.1 * fnorm1) < self.fnorm:
-                    actred = - (old_div(fnorm1,self.fnorm))**2 + 1.
+                    actred = - (fnorm1 / self.fnorm)**2 + 1.
 
                 # Compute the scaled predicted reduction and the scaled directional
                 # derivative
@@ -1269,15 +1263,15 @@ class mpfit(object):
 
                 # Remember, alpha is the fraction of the full LM step actually
                 # taken
-                temp1 = old_div(self.enorm(alpha*wa3),self.fnorm)
-                temp2 = old_div((numpy.sqrt(alpha*par)*pnorm),self.fnorm)
+                temp1 = self.enorm(alpha*wa3)/self.fnorm
+                temp2 = (numpy.sqrt(alpha*par)*pnorm)/self.fnorm
                 prered = temp1*temp1 + (temp2*temp2)/0.5
                 dirder = -(temp1*temp1 + temp2*temp2)
 
                 # Compute the ratio of the actual to the predicted reduction.
                 ratio = 0.
                 if prered != 0:
-                    ratio = old_div(actred,prered)
+                    ratio = actred/prered
 
                 # Update the step bound
                 if ratio <= 0.25:
@@ -1288,7 +1282,7 @@ class mpfit(object):
                     if ((0.1*fnorm1) >= self.fnorm) or (temp < 0.1):
                         temp = 0.1
                     delta = temp*numpy.min([delta,pnorm/0.1])
-                    par = old_div(par,temp)
+                    par = par/temp
                 else:
                     if (par == 0) or (ratio >= 0.75):
                         delta = pnorm/.5
@@ -1499,7 +1493,7 @@ class mpfit(object):
                 # Apply the damping if requested.  This replaces the residuals
                 # with their hyperbolic tangent.  Thus residuals larger than
                 # DAMP are essentially clipped.
-                f = numpy.tanh(old_div(f,self.damp))
+                f = numpy.tanh(f/self.damp)
             return [status, f]
         else:
             return fcn(x, fjac=fjac, **functkw)
@@ -1597,7 +1591,7 @@ class mpfit(object):
             if numpy.abs(dside[ifree[j]]) <= 1:
                 # COMPUTE THE ONE-SIDED DERIVATIVE
                 # Note optimization fjac(0:*,j)
-                fjac[0:,j] = old_div((fp-fvec),h[j])
+                fjac[0:,j] = (fp-fvec)/h[j]
 
             else:
                 # COMPUTE THE TWO-SIDED DERIVATIVE
@@ -1609,7 +1603,7 @@ class mpfit(object):
                     return None
 
                 # Note optimization fjac(0:*,j)
-                fjac[0:,j] = old_div((fp-fm),(2*h[j]))
+                fjac[0:,j] = (fp-fm)/(2*h[j])
         return fjac
 
 
@@ -1793,7 +1787,7 @@ class mpfit(object):
             if a[j,lj] < 0:
                 ajnorm = -ajnorm
 
-            ajj = old_div(ajj, ajnorm)
+            ajj = ajj / ajnorm
             ajj[0] = ajj[0] + 1
             # *** Note optimization a(j:*,j)
             a[j:,lj] = ajj
@@ -1811,11 +1805,11 @@ class mpfit(object):
                     # *** Note optimization a(j:*,lk)
                     # (corrected 20 Jul 2000)
                     if a[j,lj] != 0:
-                        a[j:,lk] = ajk - old_div(ajj * sum(ajk*ajj),a[j,lj])
+                        a[j:,lk] = ajk - ajj * sum(ajk*ajj)/a[j,lj]
                         if (pivot != 0) and (rdiag[k] != 0):
-                            temp = old_div(a[j,lk],rdiag[k])
+                            temp = a[j,lk]/rdiag[k]
                             rdiag[k] = rdiag[k] * numpy.sqrt(numpy.max([(1.-temp**2), 0.]))
-                            temp = old_div(rdiag[k],wa[k])
+                            temp = rdiag[k]/wa[k]
                             if (0.05*temp*temp) <= machep:
                                 rdiag[k] = self.enorm(a[j+1:,lk])
                                 wa[k] = rdiag[k]
@@ -1933,11 +1927,11 @@ class mpfit(object):
                 if sdiag[k] == 0:
                     break
                 if numpy.abs(r[k,k]) < numpy.abs(sdiag[k]):
-                    cotan  = old_div(r[k,k],sdiag[k])
+                    cotan  = r[k,k]/sdiag[k]
                     sine   = 0.5/numpy.sqrt(.25 + .25*cotan*cotan)
                     cosine = sine*cotan
                 else:
-                    tang   = old_div(sdiag[k],r[k,k])
+                    tang   = sdiag[k]/r[k,k]
                     cosine = 0.5/numpy.sqrt(.25 + .25*tang*tang)
                     sine   = cosine*tang
 
@@ -1965,11 +1959,11 @@ class mpfit(object):
             wa[nsing:] = 0
 
         if nsing >= 1:
-            wa[nsing-1] = old_div(wa[nsing-1],sdiag[nsing-1]) # Degenerate case
+            wa[nsing-1] = wa[nsing-1]/sdiag[nsing-1] # Degenerate case
             # *** Reverse loop ***
             for j in range(nsing-2,-1,-1):
                 sum0 = sum(r[j+1:nsing,j]*wa[j+1:nsing])
-                wa[j] = old_div((wa[j]-sum0),sdiag[j])
+                wa[j] = (wa[j]-sum0)/sdiag[j]
 
         # Permute the components of z back to components of x
         x[ipvt] = wa
@@ -2094,7 +2088,7 @@ class mpfit(object):
         if nsing >= 1:
             # *** Reverse loop ***
             for j in range(nsing-1,-1,-1):
-                wa1[j] = old_div(wa1[j],r[j,j])
+                wa1[j] = wa1[j]/r[j,j]
                 if j-1 >= 0:
                     wa1[0:j] = wa1[0:j] - r[0:j,j]*wa1[j]
 
@@ -2116,23 +2110,23 @@ class mpfit(object):
 
         parl = 0.
         if nsing >= n:
-            wa1 = old_div(diag[ipvt] * wa2[ipvt], dxnorm)
-            wa1[0] = old_div(wa1[0], r[0,0]) # Degenerate case
+            wa1 = diag[ipvt] * wa2[ipvt]/ dxnorm
+            wa1[0] = wa1[0] / r[0,0] # Degenerate case
             for j in range(1,n):   # Note "1" here, not zero
                 sum0 = sum(r[0:j,j]*wa1[0:j])
-                wa1[j] = old_div((wa1[j] - sum0),r[j,j])
+                wa1[j] = (wa1[j] - sum0)/r[j,j]
 
             temp = self.enorm(wa1)
-            parl = old_div((old_div((old_div(fp,delta)),temp)),temp)
+            parl = ((fp/delta)/temp)/temp
 
         # Calculate an upper bound, paru, for the zero of the function
         for j in range(n):
             sum0 = sum(r[0:j+1,j]*qtb[0:j+1])
-            wa1[j] = old_div(sum0,diag[ipvt[j]])
+            wa1[j] = sum0/diag[ipvt[j]]
         gnorm = self.enorm(wa1)
-        paru = old_div(gnorm,delta)
+        paru = gnorm/delta
         if paru == 0:
-            paru = old_div(dwarf,numpy.min([delta,0.1]))
+            paru = dwarf/numpy.min([delta,0.1])
 
         # If the input par lies outside of the interval (parl,paru), set
         # par to the closer endpoint
@@ -2140,7 +2134,7 @@ class mpfit(object):
         par = numpy.max([par,parl])
         par = numpy.min([par,paru])
         if par == 0:
-            par = old_div(gnorm,dxnorm)
+            par = gnorm/dxnorm
 
         # Beginning of an interation
         while(1):
@@ -2163,15 +2157,15 @@ class mpfit(object):
                break;
 
             # Compute the newton correction
-            wa1 = old_div(diag[ipvt] * wa2[ipvt], dxnorm)
+            wa1 = diag[ipvt] * wa2[ipvt] / dxnorm
 
             for j in range(n-1):
-                wa1[j] = old_div(wa1[j],sdiag[j])
+                wa1[j] = wa1[j]/sdiag[j]
                 wa1[j+1:n] = wa1[j+1:n] - r[j+1:n,j]*wa1[j]
-            wa1[n-1] = old_div(wa1[n-1],sdiag[n-1]) # Degenerate case
+            wa1[n-1] = wa1[n-1]/sdiag[n-1] # Degenerate case
 
             temp = self.enorm(wa1)
-            parc = old_div((old_div((old_div(fp,delta)),temp)),temp)
+            parc = ((fp/delta)/temp)/temp
 
             # Depending on the sign of the function, update parl or paru
             if fp > 0:
