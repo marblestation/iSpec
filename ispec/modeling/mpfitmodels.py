@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -16,6 +17,8 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from builtins import object
+from past.utils import old_div
 from . import mpfit
 import numpy as np
 from scipy.integrate import quad
@@ -89,7 +92,7 @@ class MPFitModel(object):
         self.m = m
         # Save RMS
         residuals = self.residuals()
-        self.rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
+        self.rms = np.sqrt(old_div(np.sum(np.power(residuals,2)),len(residuals)))
 
     def residuals(self):
         model = self._model_function(self.x)
@@ -118,7 +121,7 @@ class GaussianModel(MPFitModel):
             return self.baseline()
         else:
             #return self.baseline() + ((self.A()*1.)/np.sqrt(2*np.pi*self.sig()**2))*np.exp(-(x-self.mu())**2/(2*self.sig()**2))
-            return self.baseline() + self.A()*np.exp(-(x-self.mu())**2/(2*self.sig()**2))
+            return self.baseline() + self.A()*np.exp(old_div(-(x-self.mu())**2,(2*self.sig()**2)))
 
     def fitData(self, x, y, weights=None, parinfo=None):
         if len(parinfo) != 4:
@@ -150,7 +153,7 @@ class GaussianModel(MPFitModel):
     def _make_gauss(self):
         #k = self.A() / (self.sig() * np.sqrt(2*np.pi))
         k = self.A()
-        s = -1.0 / (2 * self.sig() * self.sig())
+        s = old_div(-1.0, (2 * self.sig() * self.sig()))
         def f(x):
             return k * np.exp(s * (x - self.mu())*(x - self.mu()))
         return f
@@ -173,12 +176,12 @@ class GaussianModel(MPFitModel):
         # Light speed in vacuum
         c = 299792458.0 # m/s
         fwhm = self.sig() * (2*np.sqrt(2*np.log(2))) # nm
-        fwhm_kms = (c / (self.mu() / fwhm)) / 1000.0 # km/s
+        fwhm_kms = (old_div(c, (old_div(self.mu(), fwhm)))) / 1000.0 # km/s
         return fwhm, fwhm_kms
 
     def resolution(self):
         fwhm, fwhm_kms = self.fwhm()
-        return self.mu() / fwhm
+        return old_div(self.mu(), fwhm)
 
 
 
@@ -200,12 +203,12 @@ class VoigtModel(MPFitModel):
             self._parinfo[4]['value'] = p[4]
         if self.sig == 0:
             # Equivalent to a Lorentzian model
-            voigt_result = self.baseline() + (self.A()*self.gamma()/np.pi/(x*x - 2*x*self.mu()+self.mu()*self.mu()+self.gamma()*self.gamma()))
+            voigt_result = self.baseline() + (old_div(self.A()*self.gamma(),np.pi/(x*x - 2*x*self.mu()+self.mu()*self.mu()+self.gamma()*self.gamma())))
         else:
             # Voigt model (Gaussian and Lorentzian)
             from scipy.special import wofz
-            w = wofz(((x - self.mu()) + 1j*self.gamma())* 2**-0.5/self.sig())
-            voigt_result = self.baseline() + (self.A() * w.real*(2*np.pi)**-0.5/self.sig())
+            w = wofz(old_div(((x - self.mu()) + 1j*self.gamma())* 2**-0.5,self.sig()))
+            voigt_result = self.baseline() + (old_div(self.A() * w.real*(2*np.pi)**-0.5,self.sig()))
         return voigt_result
 
     def fitData(self, x, y, weights=None, parinfo=None):
@@ -240,14 +243,14 @@ class VoigtModel(MPFitModel):
     def _make_voigt(self):
         if self.sig == 0:
             # Equivalent to a Lorentzian model
-            k = self.A()*self.gamma()/np.pi
+            k = old_div(self.A()*self.gamma(),np.pi)
             s = self.mu()*self.mu()+self.gamma()*self.gamma()
             def f(x):
-                return k/(x*x - 2*x*self.mu()+s)
+                return old_div(k,(x*x - 2*x*self.mu()+s))
         else:
             # Voigt model (Gaussian and Lorentzian)
-            k = self.A() * (2*np.pi)**-0.5/self.sig()
-            s = 2**-0.5/self.sig()
+            k = old_div(self.A() * (2*np.pi)**-0.5,self.sig())
+            s = old_div(2**-0.5,self.sig())
             def f(x):
                 from scipy.special import wofz
                 return k * wofz(((x - self.mu()) + 1j*self.gamma())*s).real
@@ -277,17 +280,17 @@ class VoigtModel(MPFitModel):
         c = 299792458.0 # m/s
         fwhm_gaussian = self.sig() * (2*np.sqrt(2*np.log(2))) # nm
         fwhm_lorentzian = 2*self.gamma()
-        phi = fwhm_lorentzian / fwhm_gaussian
+        phi = old_div(fwhm_lorentzian, fwhm_gaussian)
 
         c0 = 2.0056
         c1 = 1.0593
         fwhm = fwhm_gaussian * (1 - c0*c1 + np.sqrt(np.power(phi, 2) + 2*c1*phi + c0*c0*c1*c1)) # nm
-        fwhm_kms = (c / (self.mu() / fwhm)) / 1000.0 # km/s
+        fwhm_kms = (old_div(c, (old_div(self.mu(), fwhm)))) / 1000.0 # km/s
         return fwhm, fwhm_kms
 
     def resolution(self):
         fwhm, fwhm_kms = self.fwhm()
-        return self.mu() / fwhm
+        return old_div(self.mu(), fwhm)
 
     # Returns fwhm in nm and kms
     def fwhm_olivero(self):
@@ -302,11 +305,11 @@ class VoigtModel(MPFitModel):
         fwhm_lorentzian = 2*self.gamma()
 
         fwhm = 0.5346*(2*fwhm_lorentzian) + np.sqrt(0.2166*np.power(fwhm_lorentzian, 2) + np.power(fwhm_gaussian, 2)) # nm
-        fwhm_kms = (c / (self.mu() / fwhm)) / 1000.0 # km/s
+        fwhm_kms = (old_div(c, (old_div(self.mu(), fwhm)))) / 1000.0 # km/s
         return fwhm, fwhm_kms
 
     def resolution_olivero(self):
         fwhm, fwhm_kms = self.fwhm_olivero()
-        return self.mu() / fwhm
+        return old_div(self.mu(), fwhm)
 
 

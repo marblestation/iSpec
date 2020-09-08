@@ -16,7 +16,8 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 
-class Spectrum():
+from builtins import object
+class Spectrum(object):
     def __init__(self, data, name, color='b', not_saved=False, plot_id=None, continuum_model=None, continuum_data=None, continuum_plot_id=None, path=None):
         self.data = data
         self.name = name

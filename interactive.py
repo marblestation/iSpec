@@ -17,6 +17,7 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 from __future__ import print_function
+from builtins import str
 import sys
 import os
 import getopt

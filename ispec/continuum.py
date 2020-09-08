@@ -1,5 +1,6 @@
 from __future__ import print_function
 from __future__ import absolute_import
+from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -17,6 +18,9 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from builtins import map
+from builtins import object
+from past.utils import old_div
 import numpy as np
 from .common import *
 from .spectrum import *
@@ -70,10 +74,10 @@ class KnotSplineModel(object):
             #    - x=0.98 means wavelength where we reach the 98% of the total number of points
             # 5) Use those interpolated wavelengths for putting the knots, therefore we will have a knot
             #    in those regions were there are an increment on the number of points (avoiding empty regions)
-            cdf,xcdf = np.histogram(x,bins=max(10,max(2*self.nknots,int(len(x)/10))))
+            cdf,xcdf = np.histogram(x,bins=max(10,max(2*self.nknots,int(old_div(len(x),10)))))
             mask = cdf!=0
             cdf,xcdf = cdf[mask],xcdf[np.hstack((True,mask))]
-            cdf = np.hstack((0,(1.0*np.cumsum(cdf))/np.sum(cdf))) # Multiply by 1.0 to convert to float and have a good division result
+            cdf = np.hstack((0,old_div((1.0*np.cumsum(cdf)),np.sum(cdf)))) # Multiply by 1.0 to convert to float and have a good division result
             self.iknots = np.interp(np.linspace(0,1,self.nknots+2)[1:-1],cdf,xcdf)
         else:
             self.iknots = np.linspace(x[0],x[-1],self.nknots+2)[1:-1]
@@ -147,7 +151,7 @@ def __find_a_value_per_wavelength_range(spectrum, base_points, wave_range=1, med
     wave_top = np.max(waveobs)
 
     # Group points in bins and use only the one with the higher flux
-    num_candidate_base_points = int((wave_top-wave_base)/wave_step) + 1
+    num_candidate_base_points = int(old_div((wave_top-wave_base),wave_step)) + 1
     candidate_base_points = -9999 * np.ones(num_candidate_base_points, dtype=int)
     i = 0
     while wave_base < wave_top:
@@ -181,8 +185,8 @@ def __discard_outliers_for_continuum_candidates(spectrum, candidate_base_points,
     """
     # The change between consecutive base points for continuum fitting should not be very strong,
     # identify outliers (first and last base point are excluded in this operation):
-    flux_diff1 = (spectrum['flux'][candidate_base_points][:-1] - spectrum['flux'][candidate_base_points][1:]) / (spectrum['waveobs'][candidate_base_points][:-1] - spectrum['waveobs'][candidate_base_points][1:])
-    flux_diff2 = (spectrum['flux'][candidate_base_points][1:] - spectrum['flux'][candidate_base_points][:-1]) / (spectrum['waveobs'][candidate_base_points][1:] - spectrum['waveobs'][candidate_base_points][:-1])
+    flux_diff1 = old_div((spectrum['flux'][candidate_base_points][:-1] - spectrum['flux'][candidate_base_points][1:]), (spectrum['waveobs'][candidate_base_points][:-1] - spectrum['waveobs'][candidate_base_points][1:]))
+    flux_diff2 = old_div((spectrum['flux'][candidate_base_points][1:] - spectrum['flux'][candidate_base_points][:-1]), (spectrum['waveobs'][candidate_base_points][1:] - spectrum['waveobs'][candidate_base_points][:-1]))
     # Recover first and last
     flux_diff1 = np.asarray(flux_diff1.tolist() + [flux_diff2[-1]])
     flux_diff2 = np.asarray([flux_diff1[0]] + flux_diff2.tolist())
@@ -225,7 +229,7 @@ def __determine_continuum_base_points(spectrum, discard_outliers=True, median_wa
 
     return continuum_base_points
 
-class IndependentContinuum:
+class IndependentContinuum(object):
     def __init__(self, continuum, placement_errors):
         self.continuum = continuum
         self.placement_errors = placement_errors
@@ -498,7 +502,7 @@ def __create_gap_regions(spectrum):
         right_side = np.hstack((gap_index[np.where(gap_index[1:] - gap_index[:-1] != 1)[0]], [gap_index[-1]]))
         left_side = np.hstack(([gap_index[0]], gap_index[np.where(gap_index[1:] - gap_index[:-1] != 1)[0] + 1]))
         gap_limits_index = np.transpose(np.vstack((left_side, right_side)))
-        gap_regions = np.recarray((len(gap_limits_index),),  dtype=[('wave_peak', float), ('wave_base', float), ('wave_top', float), ('note', '|S100')])
+        gap_regions = np.recarray((len(gap_limits_index),),  dtype=[('wave_peak', float), ('wave_base', float), ('wave_top', float), ('note', '|U100')])
         for i, gap_limit in enumerate(gap_limits_index):
             # If the spectrum is interpolated, the values between the first good flux
             # and the gap are not going to be reliable, so we should select as
@@ -514,7 +518,7 @@ def __create_gap_regions(spectrum):
             gap_regions['note'][i] = ""
     else:
         # No gaps found
-        gap_regions = np.recarray((0,),  dtype=[('wave_peak', float), ('wave_base', float), ('wave_top', float), ('note', '|S100')])
+        gap_regions = np.recarray((0,),  dtype=[('wave_peak', float), ('wave_base', float), ('wave_top', float), ('note', '|U100')])
     return gap_regions
 
 
@@ -530,7 +534,7 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
     if model == 'Fixed value' and fixed_value is None:
         raise Exception("Fixed value needed!")
 
-    class ConstantValue:
+    class ConstantValue(object):
         def __init__(self, value):
             self.value = value
 
@@ -544,7 +548,7 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
                 # It's not an array, return a single value
                 return self.value
 
-    class PolyContinuum:
+    class PolyContinuum(object):
         def __init__(self, poly1d):
             self.poly1d = poly1d
 
@@ -595,13 +599,13 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
     # Resample to the minimum sampling required regarding its resolution
     # (avoid oversampling that leads to slower fitting process)
     if from_resolution is not None:
-        wave_step = np.min(spectrum['waveobs']) / from_resolution
+        wave_step = old_div(np.min(spectrum['waveobs']), from_resolution)
         wavelengths = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs'])+wave_step, wave_step)
         resampling_log_message = "Resampling spectrum to wave_step: %.5f nm (R = %i)" % (wave_step, from_resolution)
     else:
         spectrum.sort(order='waveobs')
         wave_step = np.median(np.abs(spectrum['waveobs'][1:] - spectrum['waveobs'][:-1]))
-        infered_resolution = np.min(spectrum['waveobs']) / wave_step
+        infered_resolution = old_div(np.min(spectrum['waveobs']), wave_step)
         wavelengths = np.arange(np.min(spectrum['waveobs']), np.max(spectrum['waveobs'])+wave_step, wave_step)
         resampling_log_message = "Resampling spectrum to wave_step: %.5f nm (R ~ %i)" % (wave_step, infered_resolution)
 
@@ -618,8 +622,8 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
 
         # Divide the observed spectrum by the template and smooth the result
         wave_step = np.median(np.abs(spectrum['waveobs'][1:] - spectrum['waveobs'][:-1]))
-        med_filter_step = np.max((int(np.round(median_wave_range / wave_step)), 3))
-        smoothed_continuum_tmp1 = median_filter(spectrum['flux'][useful] / template['flux'][useful], med_filter_step)
+        med_filter_step = np.max((int(np.round(old_div(median_wave_range, wave_step))), 3))
+        smoothed_continuum_tmp1 = median_filter(old_div(spectrum['flux'][useful], template['flux'][useful]), med_filter_step)
         smoothed_continuum_tmp2 = np.interp(template['waveobs'], template['waveobs'][useful], smoothed_continuum_tmp1)
         continuum_flux = gaussian_filter(smoothed_continuum_tmp2, 2*nknots)
 
@@ -642,7 +646,7 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
     # Filter the spectrum to get the continuum
     if order == "max+median":
         ##### First maximum, secondly median
-        max_filter_step = int(np.round(max_wave_range / wave_step))
+        max_filter_step = int(np.round(old_div(max_wave_range, wave_step)))
         if max_filter_step > 1:
             smooth1 = __max_filter(resampled_spectrum, max_filter_step)
         else:
@@ -653,7 +657,7 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
             smooth1, outliers = __clean_outliers(smooth1, np.min(spectrum['waveobs']), np.max(spectrum['waveobs']), max_wave_range, ignored_regions, probability=strong_line_probability)
             #wave_step = max_wave_range
 
-        med_filter_step = int(np.round(median_wave_range / wave_step))
+        med_filter_step = int(np.round(old_div(median_wave_range, wave_step)))
         if med_filter_step > 1:
             smooth2 = __median_filter(smooth1, med_filter_step)
         else:
@@ -667,14 +671,14 @@ def __fit_continuum(spectrum, from_resolution=None, ignore=None, continuum_regio
         #smooth3['err'] = maximum_filter(resampled_spectrum['err'], med_filter_step)
     elif order == "median+max":
         ##### First median, secondly maximum
-        med_filter_step = int(np.round(median_wave_range / wave_step))
+        med_filter_step = int(np.round(old_div(median_wave_range, wave_step)))
         if med_filter_step > 1:
             smooth1 = __median_filter(resampled_spectrum, med_filter_step)
         else:
             smooth1 = resampled_spectrum
         smooth1 = __clean_ignored_regions(smooth1, ignored_regions)
 
-        max_filter_step = int(np.round(max_wave_range / wave_step))
+        max_filter_step = int(np.round(old_div(max_wave_range, wave_step)))
         if max_filter_step > 1:
             smooth2 = __max_filter(smooth1, max_filter_step)
         else:
@@ -784,7 +788,7 @@ def find_continuum(spectrum, resolution, segments=None, max_std_continuum = 0.00
         if fixed_wave_step is not None:
             wave_increment = fixed_wave_step
         else:
-            wave_increment = (wave_base / resolution) * 4
+            wave_increment = (old_div(wave_base, resolution)) * 4
         wave_top = wave_base + wave_increment
 
         i = 0
@@ -803,11 +807,11 @@ def find_continuum(spectrum, resolution, segments=None, max_std_continuum = 0.00
             # Continuum_model can be a fitted model or a fixed number
             if isinstance(continuum_model, float) or isinstance(continuum_model, int):
                 cont_diff = median_flux - continuum_model
-                cont_diff_percentage = np.abs(cont_diff) / continuum_model
+                cont_diff_percentage = old_div(np.abs(cont_diff), continuum_model)
             else:
                 c = continuum_model(wave_base)
                 cont_diff = median_flux - c
-                cont_diff_percentage = np.abs(cont_diff) / c
+                cont_diff_percentage = old_div(np.abs(cont_diff), c)
             # Flux should be above the continuum model but no more than a given limit (1% by default)
             near_continuum = (cont_diff_percentage <= max_continuum_diff)
 
@@ -823,13 +827,13 @@ def find_continuum(spectrum, resolution, segments=None, max_std_continuum = 0.00
             if fixed_wave_step is not None:
                 wave_increment = fixed_wave_step
             else:
-                wave_increment = (wave_base / resolution) * 4
+                wave_increment = (old_div(wave_base, resolution)) * 4
             if not last_accepted:
-                wave_increment = wave_increment / 2 # Half increase
+                wave_increment = old_div(wave_increment, 2) # Half increase
             wave_top = wave_base + wave_increment
 
 
-            current_work_progress = ((wave_base - min_wave) / total_work_progress) * 100
+            current_work_progress = (old_div((wave_base - min_wave), total_work_progress)) * 100
             if report_progress(current_work_progress, last_reported_progress):
                 last_reported_progress = current_work_progress
                 logging.info("%.2f%%" % current_work_progress)
@@ -904,9 +908,9 @@ def generate_random_continuum(waveobs, nknots=None):
 
     # Add a sinusodial shape
     fs = len(waveobs) # sample rate
-    f = nknots/10 # the frequency of the signal
+    f = old_div(nknots,10) # the frequency of the signal
     x = np.arange(fs) # the points on the x axis for plotting
-    y *= 1+((1+np.sin(2 * np.pi * f * x / fs))/2.)*0.1
+    y *= 1+((1+np.sin(old_div(2 * np.pi * f * x, fs)))/2.)*0.1
 
     y /= np.max(y)
 

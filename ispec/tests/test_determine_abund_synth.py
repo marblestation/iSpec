@@ -174,8 +174,8 @@ class TestDetermineAbundSynth(unittest.TestCase):
                             'vrad0007': -0.16016986490598595,
                             'vsini': 1.6
                            }
-        for k, v in expected_params.items():
-            self.assertAlmostEquals(params[k], v)
+        for k, v in list(expected_params.items()):
+            self.assertAlmostEqual(params[k], v)
         expected_errors = {
                             'MH': 0.0,
                             'R': 0.0,
@@ -195,11 +195,11 @@ class TestDetermineAbundSynth(unittest.TestCase):
                             'vrad0007': 0.23844625288619709,
                             'vsini': 0.0
                           }
-        for k, v in expected_errors.items():
-            self.assertAlmostEquals(errors[k], v)
-        self.assertEquals(len(stats_linemasks), 8)
-        self.assertEquals(abundances_found['element'][0], 'Ca')
-        self.assertAlmostEquals(abundances_found['[X/H]'][0], -0.003417007071945477)
-        self.assertAlmostEquals(abundances_found['[X/Fe]'][0], -0.003417007071945477)
-        self.assertAlmostEquals(abundances_found['e[X/H]'][0], 0.02708655339373642)
-        self.assertAlmostEquals(abundances_found['e[X/Fe]'][0], 0.02708655339373642)
+        for k, v in list(expected_errors.items()):
+            self.assertAlmostEqual(errors[k], v)
+        self.assertEqual(len(stats_linemasks), 8)
+        self.assertEqual(abundances_found['element'][0], 'Ca')
+        self.assertAlmostEqual(abundances_found['[X/H]'][0], -0.003417007071945477)
+        self.assertAlmostEqual(abundances_found['[X/Fe]'][0], -0.003417007071945477)
+        self.assertAlmostEqual(abundances_found['e[X/H]'][0], 0.02708655339373642)
+        self.assertAlmostEqual(abundances_found['e[X/Fe]'][0], 0.02708655339373642)

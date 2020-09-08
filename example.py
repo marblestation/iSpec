@@ -17,6 +17,8 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 from __future__ import print_function
+from __future__ import division
+from past.utils import old_div
 import os
 import sys
 import numpy as np
@@ -644,7 +646,7 @@ def estimate_snr_from_err():
     efilter = star_spectrum['err'] > 0
     filtered_star_spectrum = star_spectrum[efilter]
     if len(filtered_star_spectrum) > 1:
-        estimated_snr = np.median(filtered_star_spectrum['flux'] / filtered_star_spectrum['err'])
+        estimated_snr = np.median(old_div(filtered_star_spectrum['flux'], filtered_star_spectrum['err']))
     else:
         # All the errors are set to zero and we cannot calculate SNR using them
         estimated_snr = 0
@@ -654,7 +656,7 @@ def estimate_errors_from_snr():
     star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     #--- Calculate errors based on SNR ---------------------------------------------
     snr = 100
-    star_spectrum['err'] = star_spectrum['flux'] / snr
+    star_spectrum['err'] = old_div(star_spectrum['flux'], snr)
 
 
 def clean_spectrum():
@@ -2164,9 +2166,9 @@ def determine_loggf_line_by_line_using_synth_spectra(code="spectrum"):
         for key in ['wave_nm', 'lower_state_eV', 'loggf', 'stark', 'rad', 'waals']:
             lfilter = np.logical_and(lfilter, np.abs(atomic_linelist[key] - linelist_free_loggf[key][0]) < 1e-9)
         if len(atomic_linelist[lfilter]) > 1:
-            logging.warn("Filtering more than one line!")
+            logging.warning("Filtering more than one line!")
         if len(atomic_linelist[lfilter]) == 1:
-            logging.warn("No line filtered!")
+            logging.warning("No line filtered!")
 
         # Segment
         segments = ispec.create_segments_around_lines(individual_line_regions, margin=0.25)
@@ -2774,7 +2776,7 @@ def generate_and_plot_YY_isochrone():
     import matplotlib.pyplot as plt
 
     logage = 9.409
-    age = np.power(10, logage) / 1e9 # Gyrs
+    age = old_div(np.power(10, logage), 1e9) # Gyrs
     MH = 0.0 # [M/H] (dex)
     isochrone = isochrones.interpolate_isochrone(ispec_dir, age, MH)
 

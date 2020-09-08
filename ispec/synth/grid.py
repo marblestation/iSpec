@@ -1,5 +1,6 @@
 from __future__ import print_function
 from __future__ import absolute_import
+from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -17,6 +18,10 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from future import standard_library
+standard_library.install_aliases()
+from builtins import zip
+from past.utils import old_div
 import os
 import sys
 import time
@@ -29,7 +34,7 @@ from lockfile import FileLock, LockTimeout, AlreadyLocked
 from astropy.io import fits
 from astropy.io import ascii
 from astropy.table import Table, Column
-import cPickle as pickle
+import pickle as pickle
 import logging
 
 from ispec.atmospheres import interpolate_atmosphere_layers, valid_atmosphere_target, _interpolate
@@ -94,7 +99,7 @@ def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, M
 
     import dill # To allow pickle of lambda functions (e.g., one element in modeled_layers_pack)
     import pickle
-    modeled_layers_pack = pickle.loads(pickled_modeled_layers_pack)
+    modeled_layers_pack = dill.loads(pickled_modeled_layers_pack)
 
     if valid_atmosphere_target(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}):
         if not locked:
@@ -158,7 +163,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
 
     import dill # To allow pickle of lambda functions (e.g., one element in modeled_layers_pack)
     import pickle
-    pickled_modeled_layers_pack = pickle.dumps(modeled_layers_pack)
+    pickled_modeled_layers_pack = dill.dumps(modeled_layers_pack)
 
     # For code != "grid", ranges are always in position 7 (for grid it would be in position 8)
     valid_ranges = modeled_layers_pack[7]
@@ -252,9 +257,9 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
                     print("-----------------------------------------------------")
                     print("Remaining time:")
                     print("\t", (num_spec-i)*elapsed, "seconds")
-                    print("\t", (num_spec-i)*(elapsed/60), "minutes")
-                    print("\t", (num_spec-i)*(elapsed/(60*60)), "hours")
-                    print("\t", (num_spec-i)*(elapsed/(60*60*24)), "days")
+                    print("\t", (num_spec-i)*(old_div(elapsed,60)), "minutes")
+                    print("\t", (num_spec-i)*(old_div(elapsed,(60*60))), "hours")
+                    print("\t", (num_spec-i)*(old_div(elapsed,(60*60*24))), "days")
                     print("-----------------------------------------------------")
                 finally:
                     lock.release()
@@ -291,7 +296,7 @@ def precompute_synthetic_grid(output_dirname, ranges, wavelengths, to_resolution
         reference_list.add_column(Column(name='fixed_vmic', dtype=float))
     else:
         reference_list.add_column(Column(name='vmic', dtype=float))
-    reference_list.add_column(Column(name='filename', dtype='|S100'))
+    reference_list.add_column(Column(name='filename', dtype='|U100'))
     for teff, logg, MH, alpha, vmic in ranges:
         # Only use the first spectra generated for each combination
         zero_vmac = 0.0
@@ -383,7 +388,7 @@ def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks, defaul
     reference_grid_filename = precomputed_dir + "/convolved_grid_%i.fits.gz" % resolution
     estimation_found = False
     if not os.path.exists(reference_grid_filename):
-        logging.warn("Pre-computed grid does not exists for R = %i" % resolution)
+        logging.warning("Pre-computed grid does not exists for R = %i" % resolution)
     else:
         try:
             grid = fits.open(reference_grid_filename)
@@ -439,7 +444,7 @@ def load_spectral_grid(input_path):
     # Divide grid in two using the temperature to reduce the number of data points
     # to be used by a single Delaunay Triangulation
     teff_limit = 10000
-    teff_margin = teff_limit/2
+    teff_margin = old_div(teff_limit,2)
     filter_cool_parameters = np.array(parameters['teff'] < teff_limit)
     filter_intermediate_parameters = np.array(np.logical_and(parameters['teff'] > teff_limit-teff_margin, parameters['teff'] < teff_limit+teff_margin))
     filter_hot_parameters = np.array(parameters['teff'] >= teff_limit)
@@ -448,8 +453,8 @@ def load_spectral_grid(input_path):
     filenames = base_dirname + "/" + parameters['filename']
     filenames = np.asarray(filenames)
     ranges = {}
-    free_parameters = parameters.columns.get_values().tolist()
-    free_parameters = filter(lambda x: not x.startswith("fixed_") and x != "filename", free_parameters)
+    free_parameters = parameters.columns.to_numpy().tolist()
+    free_parameters = [x for x in free_parameters if not x.startswith("fixed_") and x != "filename"]
     for free_param in free_parameters:
         free_param_range = np.unique(parameters[free_param])
         ranges[free_param] = free_param_range

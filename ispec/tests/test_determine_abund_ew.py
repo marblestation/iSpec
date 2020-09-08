@@ -35,7 +35,7 @@ class TestDetermineAbundEW(unittest.TestCase):
     def test_determine_abundances_from_ew_with_turbospectrum(self):
         linemasks, x_over_h = self._determine_abundances_from_ew(code="turbospectrum")
         bad = np.isnan(x_over_h)
-        self.assertEquals(len(np.where(bad)[0]), 2)
+        self.assertEqual(len(np.where(bad)[0]), 2)
         self.assertEqual(len(x_over_h), len(linemasks))
         np.testing.assert_almost_equal(x_over_h[:10], np.array([  np.nan, -0.09,  0.14, -0.37,  0.46,  0.22, -0.09, -0.46, -0.06, -0.18]))
 

@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -16,6 +17,11 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from future import standard_library
+standard_library.install_aliases()
+from builtins import map
+from builtins import range
+from past.utils import old_div
 import os
 import sys
 import ctypes
@@ -24,7 +30,7 @@ import tempfile
 import shutil
 from multiprocessing import Process
 from multiprocessing import Queue
-from Queue import Empty
+from queue import Empty
 import logging
 
 from ispec.common import is_sme_support_enabled
@@ -69,7 +75,7 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
         else:
             sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.Win32.x86.32")
 
-    #logging.warn("SME does not support isotope modifications")
+    #logging.warning("SME does not support isotope modifications")
 
     waveobs = waveobs.copy()
     waveobs.sort()
@@ -117,7 +123,7 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
         logging.info("SME InputLineList")
     msg = _sme_inputlinelist(sme, linelist)
     if msg != "''":
-        logging.warn(msg)
+        logging.warning(msg)
 
     #---------------------------------------------------------------------------
     # 1.- Entry.InputModel (passmodel.pro)
@@ -125,7 +131,7 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
         logging.info("SME InputModel")
     msg = _sme_inputmodel(sme, teff, logg, MH, microturbulence_vel, atmosphere_layers, atom_abundances, spherical_model)
     if msg != "''":
-        logging.warn(msg)
+        logging.warning(msg)
 
     #---------------------------------------------------------------------------
     # 2.- Entry.InputNLTE
@@ -136,7 +142,7 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
         logging.info("SME InputAbund")
     msg = _sme_inputabund(sme, atom_abundances, MH)
     if msg != "''":
-        logging.warn(msg)
+        logging.warning(msg)
 
     #---------------------------------------------------------------------------
     # 4.- Entry.Ionization
@@ -144,7 +150,7 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
         logging.info("SME Ionization")
     msg = _sme_ionization(sme)
     if msg != "''":
-        logging.warn(msg)
+        logging.warning(msg)
 
     #---------------------------------------------------------------------------
     # 5.- Entry.SetVWscale
@@ -152,7 +158,7 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
         logging.info("SME SetVWscale")
     msg = _sme_setvwscale(sme)
     if msg != "''":
-        logging.warn(msg)
+        logging.warning(msg)
 
 
     synth_fluxes = []
@@ -161,7 +167,7 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
         # It is better not to synthesize in a single run a big chunk of wavelength so
         # we split the computation in several pieces
         max_segment = 100. # nm
-        if (region['wave_top'] - region['wave_base'])/wave_step > max_segment/wave_step:
+        if old_div((region['wave_top'] - region['wave_base']),wave_step) > old_div(max_segment,wave_step):
             segment_wave_base = np.arange(region['wave_base'], region['wave_top'], max_segment)
             segments = np.recarray((len(segment_wave_base),),  dtype=[('wave_base', float), ('wave_top', float)])
             segments['wave_base'] = segment_wave_base
@@ -185,7 +191,7 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
                 logging.info("SME InputWaveRange")
             msg = _sme_inputwaverange(sme, wave_base*10., wave_top*10.)
             if msg != "''":
-                logging.warn(msg)
+                logging.warning(msg)
 
             #---------------------------------------------------------------------------
             # 7.- Entry.Opacity
@@ -193,7 +199,7 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
                 logging.info("SME Opacity")
             msg = _sme_opacity(sme)
             if msg != "''":
-                logging.warn(msg)
+                logging.warning(msg)
 
             #---------------------------------------------------------------------------
             # 8.- Entry.Transf
@@ -202,9 +208,9 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
             first_execution = i == 0
             #nwmax = int((wave_top - wave_base) / wave_step) * 2
             nwmax = 200000
-            synth_waveobs_tmp, synth_fluxes_tmp = _sme_transf(sme, sme_shorter_dir, nwmax, keep_lineop=not first_execution)
+            synth_waveobs_tmp, synth_fluxes_tmp = _sme_transf(sme, sme_shorter_dir.encode('utf-8'), nwmax, keep_lineop=not first_execution)
             if msg != "''":
-                logging.warn(msg)
+                logging.warning(msg)
 
             synth_waveobs = np.hstack((synth_waveobs, synth_waveobs_tmp))
             synth_fluxes = np.hstack((synth_fluxes, synth_fluxes_tmp))
@@ -381,7 +387,7 @@ def _sme_rtint(mu,inten):
     ###Loop through annuli, constructing and convolving with rotation kernels.
     flux = np.zeros(inten.shape[0])
 
-    for imu in xrange(nmu):      #loop thru integration annuli
+    for imu in range(nmu):      #loop thru integration annuli
         ###Add contribution from current annulus to the running total.
         flux = flux + wt[imu] * inten[:, isort[imu]]
 
@@ -393,14 +399,14 @@ def _sme_librrayversion(sme):
     sme.SMELibraryVersion.restype = ctypes.POINTER(ctypes.c_char_p)
     # External call:
     ptr_err_string = sme.SMELibraryVersion()
-    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value)
+    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value.decode('utf-8'))
     return msg
 
 def _sme_inputlinelist(sme, atomic_linelist):
     nlines = atomic_linelist.shape[0]
     atomic = np.zeros((8, nlines))
     # atomic number, ionization state, wavelength (in A), excitation energy of lower level (in eV), log(gf), radiative, Stark, and van der Waals damping parameters
-    atomic[0] = np.round(map(float,  atomic_linelist['spectrum_moog_species']))
+    atomic[0] = np.round(list(map(float,  atomic_linelist['spectrum_moog_species'])))
     atomic[1] = atomic_linelist['ion']
     atomic[2] = atomic_linelist['wave_A']
     atomic[3] = atomic_linelist['lower_state_eV']
@@ -424,7 +430,7 @@ def _sme_inputlinelist(sme, atomic_linelist):
         if "TiO" in element_s:
             element_s = "TiO 1   "
         element_s = "%-8s" % (element_s)
-        element = IDL_STRING(len(element_s), 0, ctypes.cast(ctypes.create_string_buffer(element_s + " "), ctypes.c_char_p))
+        element = IDL_STRING(len(element_s), 0, ctypes.cast(ctypes.create_string_buffer((element_s + " ").encode('utf-8')), ctypes.c_char_p))
         elements.append(element)
 
     # Transform to ctypes
@@ -442,7 +448,7 @@ def _sme_inputlinelist(sme, atomic_linelist):
     # External call:
     sme.InputLineList.restype = ctypes.POINTER(ctypes.c_char_p)
     ptr_err_string = sme.InputLineList(ctypes.c_int(3), ctypes.byref(InputLineList_arguments))
-    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value)
+    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value.decode('utf-8'))
     return msg
 
 
@@ -458,13 +464,14 @@ def _sme_inputmodel(sme, teff, logg, MH, microturbulence_vel, atmosphere_layers,
         MoTypeT_s = 'SPH'
     else:
         MoTypeT_s = 'RHOX'
+    MoTypeT_s = MoTypeT_s.encode('utf-8')
     T = atmosphere_layers[:,1]
     xNe = atmosphere_layers[:,3]
 
     k = 1.380658e-23      # boltzmanns constant J/K
     Pgas = atmosphere_layers[:,2] # dyn cm^-3
     Pgas = Pgas * 1e-7 # J cm^-3
-    xNa = Pgas / (k * T) # cm^-3
+    xNa = old_div(Pgas, (k * T)) # cm^-3
 
     amass= [ 1.008,  4.003,  6.941,  9.012, 10.811, 12.011, 14.007, 15.999,
             18.998, 20.179, 22.990, 24.305, 26.982, 28.086, 30.974, 32.060,
@@ -533,7 +540,7 @@ def _sme_inputmodel(sme, teff, logg, MH, microturbulence_vel, atmosphere_layers,
         # External call:
         sme.InputModel.restype = ctypes.POINTER(ctypes.c_char_p)
         ptr_err_string = sme.InputModel(ctypes.c_int(12), ctypes.byref(InputModel_arguments))
-    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value)
+    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value.decode('utf-8'))
     return msg
 
 def _sme_inputabund(sme, solar_abundances, MH):
@@ -553,7 +560,7 @@ def _sme_inputabund(sme, solar_abundances, MH):
     # External call:
     sme.InputAbund.restype = ctypes.POINTER(ctypes.c_char_p)
     ptr_err_string = sme.InputAbund(ctypes.c_int(1), ctypes.byref(ptr_Abund))
-    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value)
+    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value.decode('utf-8'))
     return msg
 
 def _sme_ionization(sme):
@@ -577,7 +584,7 @@ def _sme_ionization(sme):
     # External call:
     sme.Ionization.restype = ctypes.POINTER(ctypes.c_char_p)
     ptr_err_string = sme.Ionization(ctypes.c_int(1), ctypes.byref(ptr_adopt_eos))
-    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value)
+    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value.decode('utf-8'))
     return msg
 
 
@@ -592,7 +599,7 @@ def _sme_setvwscale(sme):
     # External call:
     sme.SetVWscale.restype = ctypes.POINTER(ctypes.c_char_p)
     ptr_err_string = sme.SetVWscale(ctypes.c_int(1), ctypes.byref(SetVWscale_arguments))
-    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value)
+    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value.decode('utf-8'))
     return msg
 
 
@@ -608,7 +615,7 @@ def _sme_inputwaverange(sme, wave_base, wave_top):
     # External call:
     sme.InputWaveRange.restype = ctypes.POINTER(ctypes.c_char_p)
     ptr_err_string = sme.InputWaveRange(ctypes.c_int(2), ctypes.byref(InputWaveRange_arguments))
-    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value)
+    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value.decode('utf-8'))
     return msg
 
 def _sme_opacity(sme):
@@ -618,7 +625,7 @@ def _sme_opacity(sme):
     # External call:
     sme.Opacity.restype = ctypes.POINTER(ctypes.c_char_p)
     ptr_err_string = sme.Opacity(ctypes.c_int(0), None)
-    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value)
+    msg = repr(ctypes.cast(ptr_err_string, ctypes.c_char_p).value.decode('utf-8'))
     return msg
 
 
@@ -725,7 +732,7 @@ def _sme_transf(sme, sme_dir, nwmax, keep_lineop=False):
     cflx_seg = _sme_rtint(mu, cint_seg)
     flx_seg = _sme_rtint(mu, sint_seg)
 
-    return wint_seg, flx_seg/cflx_seg # wavelengths in Armstrongs
+    return wint_seg, old_div(flx_seg,cflx_seg) # wavelengths in Armstrongs
 
 
 

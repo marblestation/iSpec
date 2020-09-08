@@ -1,3 +1,4 @@
+from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -15,6 +16,7 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from builtins import zip
 import numpy as np
 from scipy import spatial
 from scipy.signal import fftconvolve

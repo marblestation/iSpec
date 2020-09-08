@@ -30,4 +30,4 @@ class TestMisc(unittest.TestCase):
         barycentric_vel = ispec.calculate_barycentric_velocity_correction((year, month, day, \
                                         hours, minutes, seconds), (ra_hours, ra_minutes, \
                                         ra_seconds, dec_degrees, dec_minutes, dec_seconds))
-        self.assertAlmostEquals(barycentric_vel, -10.32)
+        self.assertAlmostEqual(barycentric_vel, -10.32)

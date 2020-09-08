@@ -37,9 +37,9 @@ class TestRadialVelocity(unittest.TestCase):
         # First component:
         rv = models[0].mu() # km/s
         rv_err = models[0].emu() # km/s
-        self.assertEquals(components, 1)
-        self.assertAlmostEquals(rv, -96.43)
-        self.assertAlmostEquals(rv_err, 0.03736164048308909)
+        self.assertEqual(components, 1)
+        self.assertAlmostEqual(rv, -96.43)
+        self.assertAlmostEqual(rv_err, 0.03736164048308909)
 
     def determine_radial_velocity_with_template(self):
         mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_muCas.txt.gz")
@@ -59,16 +59,16 @@ class TestRadialVelocity(unittest.TestCase):
         # First component:
         rv = models[0].mu() # km/s
         rv_err = models[0].emu() # km/s
-        self.assertEquals(components, 1)
-        self.assertAlmostEquals(rv, -96.43)
-        self.assertAlmostEquals(rv_err, 0.03736164048308909)
+        self.assertEqual(components, 1)
+        self.assertAlmostEqual(rv, -96.43)
+        self.assertAlmostEqual(rv_err, 0.03736164048308909)
 
     def test_correct_radial_velocity(self):
         mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_muCas.txt.gz")
         #--- Radial Velocity correction ------------------------------------------------
         rv = -96.40 # km/s
         mu_cas_spectrum = ispec.correct_velocity(mu_cas_spectrum, rv)
-        self.assertAlmostEquals(mu_cas_spectrum['waveobs'][0], 480.15547196)
-        self.assertAlmostEquals(mu_cas_spectrum['flux'][0], 0.19076)
-        self.assertAlmostEquals(mu_cas_spectrum['err'][0], 0.00095993)
+        self.assertAlmostEqual(mu_cas_spectrum['waveobs'][0], 480.15547196)
+        self.assertAlmostEqual(mu_cas_spectrum['flux'][0], 0.19076)
+        self.assertAlmostEqual(mu_cas_spectrum['err'][0], 0.00095993)
 

@@ -1,5 +1,6 @@
 from __future__ import print_function
 from __future__ import absolute_import
+from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -17,6 +18,9 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from builtins import str
+from builtins import range
+from past.utils import old_div
 import sys
 import time
 from datetime import datetime, timedelta
@@ -176,7 +180,7 @@ class EquivalentWidthModel(MPFitModel):
         # The model function with parameters p required by mpfit library
         if p is not None:
             # Update internal structure for fitting:
-            for i in xrange(len(p)):
+            for i in range(len(p)):
                 self._parinfo[i]['value'] = p[i]
 
         key = "%.0f %.2f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.alpha(), self.vmic())
@@ -433,7 +437,7 @@ class EquivalentWidthModel(MPFitModel):
                 sigma = np.std(corrected_y)
                 reject_filter1 = np.logical_or(corrected_y > + self.sigma_level*sigma, corrected_y < -self.sigma_level*sigma)
             else:
-                logging.warn("Unknown outlier detection technique: %s" % (self.outliers_detection))
+                logging.warning("Unknown outlier detection technique: %s" % (self.outliers_detection))
                 reject_filter1 = np.asarray([False]*len(x))
             #import matplotlib.pyplot as plt
             #plt.scatter(self.linemasks['lower_state_eV'], x_over_h)
@@ -473,7 +477,7 @@ class EquivalentWidthModel(MPFitModel):
                 sigma = np.std(corrected_y)
                 reject_filter2 = np.logical_or(corrected_y > self.sigma_level*sigma, corrected_y < -self.sigma_level*sigma)
             else:
-                logging.warn("Unknown outlier detection technique: %s" % (self.outliers_detection))
+                logging.warning("Unknown outlier detection technique: %s" % (self.outliers_detection))
                 reject_filter2 = np.asarray([False]*len(x))
             #import matplotlib.pyplot as plt
             #plt.scatter(self.linemasks['ewr'], x_over_h)
@@ -588,13 +592,13 @@ class EquivalentWidthModel(MPFitModel):
 
         values_to_evaluate, x_over_h, selected_x_over_h, fitted_lines_params = self.last_final_values
         residuals = values_to_evaluate - target_values
-        self.rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
+        self.rms = np.sqrt(old_div(np.sum(np.power(residuals,2)),len(residuals)))
         # Unweighted
         self.chisq = np.sum((residuals)**2)
-        self.reduced_chisq = self.chisq / self.m.dof
+        self.reduced_chisq = old_div(self.chisq, self.m.dof)
         # Weighted
         self.wchisq = np.sum((weights * residuals)**2)
-        self.reduced_wchisq = self.wchisq / self.m.dof
+        self.reduced_wchisq = old_div(self.wchisq, self.m.dof)
 
         #self.cache = {}
 

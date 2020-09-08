@@ -16,6 +16,7 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from builtins import range
 import numpy as np
 import matplotlib.pyplot as plt
 from .CustomDialog import *
@@ -63,7 +64,7 @@ class AbundancesDialog(CustomDialog):
         vmic = float(self.__components[8]["default"])
 
         ## Stats
-        for i in xrange(len(self.__stats)):
+        for i in range(len(self.__stats)):
             self.__stats.pop()
         self.__stats.append("%-50s: %10.2f" % ("Effective temperature (k)", np.round(teff, 1)))
         self.__stats.append("%-50s: %10.2f" % ("Surface gravity (log g)", np.round(logg, 2)))

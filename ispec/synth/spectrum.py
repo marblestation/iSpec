@@ -16,12 +16,14 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from future import standard_library
+standard_library.install_aliases()
 import os
 import numpy as np
 from multiprocessing import Process
 #from multiprocessing import Queue
 from multiprocessing import JoinableQueue
-from Queue import Empty
+from queue import Empty
 import logging
 
 from ispec.abundances import write_solar_abundances, write_fixed_abundances, enhance_solar_abundances
@@ -67,7 +69,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
         raise Exception("Linelist too big for SPECTRUM: %i (limit 500000)" % (len(linelist)))
     if fixed_abundances is None:
         # No fixed abundances
-        fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float), ('element', '|S30')])
+        fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float), ('element', '|U30')])
 
     if regions is None:
         global_wave_base = np.min(waveobs)
@@ -177,7 +179,7 @@ def __spectrum_true_generate_spectrum(process_communication_queue, waveobs, wave
         verbose = 1
     else:
         verbose = 0
-    fluxes = ispec.synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file, linelist_file, isotope_file, abundances_file, fixed_abundances_file, microturbulence_vel, 0, 0, 0, 0, nlayers, verbose, update_progress_func)
+    fluxes = ispec.synthesizer.spectrum(waveobs*10., waveobs_mask, atmosphere_model_file.encode('utf-8'), linelist_file.encode('utf-8'), isotope_file.encode('utf-8'), abundances_file.encode('utf-8'), fixed_abundances_file.encode('utf-8'), microturbulence_vel, 0, 0, 0, 0, nlayers, verbose, update_progress_func)
 
     # Zero values, when convolved, remain zero so we give a very tiny flux to avoid this problem
     fluxes[fluxes <= 0] = 10e-9
@@ -201,7 +203,7 @@ def __calculate_ew_and_depth(process_communication_queue, atmosphere_model_file,
 
     #update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
     update_progress_func = lambda v: __enqueue_progress(process_communication_queue, v)
-    output_wave, output_code, output_ew, output_depth = ispec.synthesizer.calculate_ew_and_depth(atmosphere_model_file, linelist_file, isotope_file, abundances_file, num_lines, microturbulence_vel, nlayers, start, end, verbose, update_progress_func)
+    output_wave, output_code, output_ew, output_depth = ispec.synthesizer.calculate_ew_and_depth(atmosphere_model_file.encode('utf-8'), linelist_file.encode('utf-8'), isotope_file.encode('utf-8'), abundances_file.encode('utf-8'), num_lines, microturbulence_vel, nlayers, start, end, verbose, update_progress_func)
     process_communication_queue.put((output_wave, output_code, output_ew, output_depth))
 
 def __enqueue_progress(process_communication_queue, v):

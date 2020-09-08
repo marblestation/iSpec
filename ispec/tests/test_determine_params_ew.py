@@ -217,8 +217,8 @@ class TestDetermineParamsEW(unittest.TestCase):
                             'teff': 5816.815035823323,
                             'vmic': 1.15562084457677
                            }
-        for k, v in expected_params.items():
-            self.assertAlmostEquals(params[k], v)
+        for k, v in list(expected_params.items()):
+            self.assertAlmostEqual(params[k], v)
         expected_errors = {
                             'MH': 0.06311918023966583,
                             'alpha': 0.0,
@@ -226,6 +226,6 @@ class TestDetermineParamsEW(unittest.TestCase):
                             'teff': 60.97370070760989,
                             'vmic': 0.03611148017625298
                           }
-        for k, v in expected_errors.items():
-            self.assertAlmostEquals(errors[k], v)
+        for k, v in list(expected_errors.items()):
+            self.assertAlmostEqual(errors[k], v)
 

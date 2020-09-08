@@ -16,19 +16,23 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import range
 import sys
-import Tkinter
-import tkMessageBox
+import tkinter
+import tkinter.messagebox
 from .tkSimpleDialog import Dialog
 
 try:
-    import ttk
+    import tkinter.ttk
 except:
     pass
 
 import numpy as np
 
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg as FigCanvas, NavigationToolbar2TkAgg as NavigationToolbar
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg as FigCanvas, NavigationToolbar2Tk as NavigationToolbar
 from matplotlib.figure import Figure
 from matplotlib.ticker import ScalarFormatter
 
@@ -37,7 +41,7 @@ class CustomDialog(Dialog):
     def __init__(self, parent, title, components):
 
         if not parent:
-            parent = Tkinter._default_root
+            parent = tkinter._default_root
 
         self.results = None
         self.components = components
@@ -50,67 +54,67 @@ class CustomDialog(Dialog):
     def body(self, master):
         first_entry = None
         row = 0
-        grid_frame = Tkinter.Frame(master) # Form
-        plot_frame = Tkinter.Frame(master) # Plot
-        stats_frame = Tkinter.Frame(master) # Listbox
+        grid_frame = tkinter.Frame(master) # Form
+        plot_frame = tkinter.Frame(master) # Plot
+        stats_frame = tkinter.Frame(master) # Listbox
         for i, component in enumerate(self.components):
             row += i
             if component["type"].lower() == "label":
-                component["object"] = Tkinter.Label(grid_frame, text=component["text"])
+                component["object"] = tkinter.Label(grid_frame, text=component["text"])
                 component["object"].grid(row=row, columnspan=2)
             if component["type"].lower() == "entry":
-                Tkinter.Label(grid_frame, text=component["text"]).grid(row=row, sticky=Tkinter.W)
-                component["object"] = Tkinter.Entry(grid_frame, justify=Tkinter.RIGHT)
-                component["object"].delete(0, Tkinter.END)
+                tkinter.Label(grid_frame, text=component["text"]).grid(row=row, sticky=tkinter.W)
+                component["object"] = tkinter.Entry(grid_frame, justify=tkinter.RIGHT)
+                component["object"].delete(0, tkinter.END)
                 component["object"].insert(0, str(component["default"]))
                 component["object"].grid(row=row, column=1)
                 if first_entry is None:
                     first_entry = component["object"]
             elif component["type"].lower() == "checkbutton":
-                component["variable"] = Tkinter.IntVar() # set to 1 if the button is selected, and 0 otherwise
+                component["variable"] = tkinter.IntVar() # set to 1 if the button is selected, and 0 otherwise
                 component["variable"].set(component["default"])
-                component["object"] = Tkinter.Checkbutton(grid_frame, text=component["text"], variable=component["variable"])
-                component["object"].grid(row=row, columnspan=2, sticky=Tkinter.E)
+                component["object"] = tkinter.Checkbutton(grid_frame, text=component["text"], variable=component["variable"])
+                component["object"].grid(row=row, columnspan=2, sticky=tkinter.E)
             #elif component["type"].lower() == "combobox":
             elif component["type"].lower() == "optionmenu":
                 if len(component["options"]) <= 0:
                     raise Exception("Options needed!")
-                Tkinter.Label(grid_frame, text=component["text"]).grid(row=row, sticky=Tkinter.W)
-                component["variable"] = Tkinter.StringVar()
+                tkinter.Label(grid_frame, text=component["text"]).grid(row=row, sticky=tkinter.W)
+                component["variable"] = tkinter.StringVar()
 
-                if "ttk" in sys.modules.keys():
+                if "ttk" in list(sys.modules.keys()):
                     # It supports better long lists of options
                     max_width = 20
                     for value in component["options"]:
                         if len(value) > max_width:
                             max_width = len(value)+1
                     component["variable"].set(component["default"])
-                    component["object"] = ttk.Combobox(grid_frame, textvariable=component["variable"], state='readonly', width=max_width)
+                    component["object"] = tkinter.ttk.Combobox(grid_frame, textvariable=component["variable"], state='readonly', width=max_width)
                     component["object"]['values'] = tuple(component["options"])
-                    component["object"].grid(row=row, column=1, sticky=Tkinter.W)
+                    component["object"].grid(row=row, column=1, sticky=tkinter.W)
                 else:
-                    Tkinter.Label(grid_frame, text=component["text"]).grid(row=row, sticky=Tkinter.W)
-                    component["variable"] = Tkinter.StringVar()
+                    tkinter.Label(grid_frame, text=component["text"]).grid(row=row, sticky=tkinter.W)
+                    component["variable"] = tkinter.StringVar()
                     component["variable"].set(component["default"])
-                    component["object"] = Tkinter.OptionMenu(*(grid_frame, component["variable"]) + tuple(component["options"]))
-                    component["object"].grid(row=row, column=1, sticky=Tkinter.W)
+                    component["object"] = tkinter.OptionMenu(*(grid_frame, component["variable"]) + tuple(component["options"]))
+                    component["object"].grid(row=row, column=1, sticky=tkinter.W)
             elif component["type"].lower() == "radiobutton":
-                Tkinter.Label(grid_frame, text=component["text"]).grid(row=row, sticky=Tkinter.W)
-                component["variable"] = Tkinter.StringVar()
+                tkinter.Label(grid_frame, text=component["text"]).grid(row=row, sticky=tkinter.W)
+                component["variable"] = tkinter.StringVar()
                 objects = []
                 for j, text in enumerate(component["options"]):
-                    objects.append(Tkinter.Radiobutton(grid_frame, text=text, variable=component["variable"], value=text))
-                    objects[-1].grid(row=row, column=1, sticky=Tkinter.W)
+                    objects.append(tkinter.Radiobutton(grid_frame, text=text, variable=component["variable"], value=text))
+                    objects[-1].grid(row=row, column=1, sticky=tkinter.W)
                     row += 1
                 component["variable"].set(component["default"])
             elif component["type"].lower() == "listbox" and component["options"] is not None and len(component["options"]) > 0:
-                stats_scrollbar = Tkinter.Scrollbar(stats_frame, orient=Tkinter.VERTICAL)
-                component["object"] = Tkinter.Listbox(stats_frame, height=5, yscrollcommand=stats_scrollbar.set, font=('courier',10,'normal'), selectmode=Tkinter.EXTENDED)
-                stats_scrollbar.pack(side=Tkinter.RIGHT, fill=Tkinter.Y)
-                component["object"].delete(0, Tkinter.END) # Delete all
+                stats_scrollbar = tkinter.Scrollbar(stats_frame, orient=tkinter.VERTICAL)
+                component["object"] = tkinter.Listbox(stats_frame, height=5, yscrollcommand=stats_scrollbar.set, font=('courier',10,'normal'), selectmode=tkinter.EXTENDED)
+                stats_scrollbar.pack(side=tkinter.RIGHT, fill=tkinter.Y)
+                component["object"].delete(0, tkinter.END) # Delete all
                 for text in component["options"]:
-                    component["object"].insert(Tkinter.END, text)
-                component["object"].pack(fill=Tkinter.BOTH, expand=1)
+                    component["object"].insert(tkinter.END, text)
+                component["object"].pack(fill=tkinter.BOTH, expand=1)
             elif component["type"].lower() == "plot" and component["function"] is not None:
                 # Create the mpl Figure and FigCanvas objects.
                 # 5x4 inches, 100 dots-per-inch
@@ -118,7 +122,7 @@ class CustomDialog(Dialog):
                 self.dpi = 100
                 self.fig = Figure((6.0, 3.0), dpi=self.dpi)
                 self.canvas = FigCanvas(self.fig, master=plot_frame)
-                self.canvas.show()
+                self.canvas.draw()
                 #self.canvas.get_tk_widget().grid(row = 0, column = 0)  # or .grid(row = 0)
 
                 ### Since we have only one plot, we can use add_axes
@@ -136,10 +140,10 @@ class CustomDialog(Dialog):
                     self.toolbar = NavigationToolbar(self.canvas, plot_frame)
                     self.toolbar.update()
 
-                    self.canvas._tkcanvas.pack(side=Tkinter.TOP, fill=Tkinter.BOTH, expand=1)
+                    self.canvas._tkcanvas.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=1)
                 elif component["axes"] > 1:
                     self.axes = []
-                    for i in xrange(component["axes"]):
+                    for i in range(component["axes"]):
                         self.axes.append(self.fig.add_subplot(2, 1, i+1))
                         #### Avoid using special notation that are not easy to understand in axis for big zoom
                         myyfmt = ScalarFormatter(useOffset=False)
@@ -149,14 +153,14 @@ class CustomDialog(Dialog):
                     self.toolbar = NavigationToolbar(self.canvas, plot_frame)
                     self.toolbar.update()
 
-                    self.canvas._tkcanvas.pack(side=Tkinter.TOP, fill=Tkinter.BOTH, expand=1)
+                    self.canvas._tkcanvas.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=1)
 
                 # Plotting function
                 component["function"](*(self.axes, component))
 
-        plot_frame.pack(side=Tkinter.TOP, fill=Tkinter.BOTH, expand=1)
-        stats_frame.pack(side=Tkinter.TOP, fill=Tkinter.BOTH, expand=1)
-        grid_frame.pack(side=Tkinter.TOP, fill=Tkinter.BOTH, expand=1)
+        plot_frame.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=1)
+        stats_frame.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=1)
+        grid_frame.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=1)
 
         # Which should receive focus:
         return first_entry
@@ -172,14 +176,14 @@ class CustomDialog(Dialog):
                     else:
                         value = eval(component["text-type"] + "(%s)" % component["object"].get())
                 except Exception:
-                    tkMessageBox.showwarning(
+                    tkinter.messagebox.showwarning(
                         "Illegal value",
                         "Illegal value for " + component["text"] + "\nPlease try again",
                         parent = self
                     )
                     return 0
                 if component["minvalue"] is not None and value < component["minvalue"]:
-                    tkMessageBox.showwarning(
+                    tkinter.messagebox.showwarning(
                         "Too small",
                         "'%s': "
                         "The allowed minimum value is %s. "
@@ -188,7 +192,7 @@ class CustomDialog(Dialog):
                     )
                     return 0
                 if component["maxvalue"] is not None and value > component["maxvalue"]:
-                    tkMessageBox.showwarning(
+                    tkinter.messagebox.showwarning(
                         "Too big",
                         "'%s': "
                         "The allowed maximum value is %s. "

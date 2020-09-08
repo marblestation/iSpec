@@ -16,6 +16,9 @@ from __future__ import print_function
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from future import standard_library
+standard_library.install_aliases()
+from builtins import object
 import os
 import sampy
 import tempfile
@@ -23,7 +26,7 @@ import signal
 import sys
 from astropy.io.votable import parse
 from astropy.io.votable.tree import VOTableFile, Resource, Table, Field, Group
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 import numpy as np
 from astropy.io import fits as pyfits
 import threading
@@ -31,7 +34,7 @@ import logging
 
 
 
-class SAMPManager():
+class SAMPManager(object):
     def __init__(self, callback, check_connection_period=1):
         self.callback = callback
         self.dirname = os.path.dirname(os.path.abspath(__file__))
@@ -114,10 +117,10 @@ class SAMPManager():
             #print "Metadata:", params['id'], "=", params['metadata']['samp.name']
             pass
         elif mtype == 'samp.hub.event.subscriptions':
-            if 'spectrum.load.ssa-generic' in params['subscriptions'].keys():
+            if 'spectrum.load.ssa-generic' in list(params['subscriptions'].keys()):
                 #print params['id'], "supports spectrum"
                 pass
-            if 'table.load.votable' in params['subscriptions'].keys():
+            if 'table.load.votable' in list(params['subscriptions'].keys()):
                 #print params['id'], "supports votable"
                 pass
             #print params
@@ -215,25 +218,25 @@ class SAMPManager():
 
         if target_table is not None:
             spectrum = np.recarray((len(target_table.array),), dtype=[('waveobs', float),('flux', float),('err', float)])
-            if 'waveobs' in target_table.array.dtype.fields.keys():
+            if 'waveobs' in list(target_table.array.dtype.fields.keys()):
                 spectrum['waveobs'] = target_table.array['waveobs']
-            elif 'wave' in target_table.array.dtype.fields.keys():
+            elif 'wave' in list(target_table.array.dtype.fields.keys()):
                 spectrum['waveobs'] = target_table.array['wave']
             else:
                 # the first column
                 spectrum['waveobs'] = target_table.array[target_table.array.dtype.names[0]]
-            if 'flux' in target_table.array.dtype.fields.keys():
+            if 'flux' in list(target_table.array.dtype.fields.keys()):
                 spectrum['flux'] = target_table.array['flux']
             else:
                 # the second column
                 spectrum['flux'] = target_table.array[target_table.array.dtype.names[1]]
-            if 'err' in target_table.array.dtype.fields.keys():
+            if 'err' in list(target_table.array.dtype.fields.keys()):
                 spectrum['err'] = target_table.array['err']
-            elif 'error' in target_table.array.dtype.fields.keys():
+            elif 'error' in list(target_table.array.dtype.fields.keys()):
                 spectrum['err'] = target_table.array['error']
-            elif 'errors' in target_table.array.dtype.fields.keys():
+            elif 'errors' in list(target_table.array.dtype.fields.keys()):
                 spectrum['err'] = target_table.array['errors']
-            if 'sigma' in target_table.array.dtype.fields.keys():
+            if 'sigma' in list(target_table.array.dtype.fields.keys()):
                 spectrum['err'] = target_table.array['sigma']
             elif len(table.fields) >= 3:
                 # the third column if exists
@@ -248,8 +251,8 @@ class SAMPManager():
     def __read_votable(self, url):
         votable = None
         if url.startswith('http://'):
-            u = urllib2.urlopen(url)
-            tmp = tempfile.NamedTemporaryFile(suffix=".xml", delete=False)
+            u = urllib.request.urlopen(url)
+            tmp = tempfile.NamedTemporaryFile(mode="wt", suffix=".xml", delete=False, encoding='utf-8')
             tmp.write(u.read())
             tmp.close()
             #print tmp.name
@@ -268,8 +271,8 @@ class SAMPManager():
         spectrum = None
         #print url
         if url.startswith('http://localhost/'):
-            u = urllib2.urlopen(url)
-            tmp = tempfile.NamedTemporaryFile(suffix=".xml", delete=False)
+            u = urllib.request.urlopen(url)
+            tmp = tempfile.NamedTemporaryFile(mode="wt", suffix=".xml", delete=False, encoding='utf-8')
             tmp.write(u.read())
             tmp.close()
             #print tmp.name
@@ -285,14 +288,14 @@ class SAMPManager():
         # Find hdu containing data
         target_hdu = None
         for hdu in hdulist:
-            if hdu.data is not None and len(hdu.data) > 0 and len(hdu.data.dtype.fields.keys()) >= 2:
+            if hdu.data is not None and len(hdu.data) > 0 and len(list(hdu.data.dtype.fields.keys())) >= 2:
                 target_hdu = hdu
         spectrum = np.recarray((len(target_hdu.data),), dtype=[('waveobs', float),('flux', float),('err', float)])
         # the first column
         spectrum['waveobs'] = target_hdu.data[target_hdu.data.dtype.names[0]]
         # the second column
         spectrum['flux'] = target_hdu.data[target_hdu.data.dtype.names[1]]
-        if len(hdu.data.dtype.fields.keys()) >= 3:
+        if len(list(hdu.data.dtype.fields.keys())) >= 3:
             # the third column if exists
             spectrum['err'] = target_hdu.data[target_hdu.data.dtype.names[2]]
         else:
@@ -352,8 +355,8 @@ class SAMPManager():
             if self.samp_client.isConnected():
                 subscribers1 = self.samp_client.getSubscribedClients("table.load.votable")
                 subscribers2 = self.samp_client.getSubscribedClients("spectrum.load.ssa-generic")
-                subscribers = dict(subscribers1.items() + subscribers2.items())
-                for subscriber in subscribers.keys():
+                subscribers = dict(list(subscribers1.items()) + list(subscribers2.items()))
+                for subscriber in list(subscribers.keys()):
                     metadata = self.samp_client.getMetadata(subscriber)
                     name = ""
                     if 'samp.name' in metadata:
@@ -361,7 +364,7 @@ class SAMPManager():
                     ids.append(subscriber)
                     names.append(name)
                     # Prefered form: "spectrum.load.ssa-generic"
-                    if subscriber in subscribers2.keys():
+                    if subscriber in list(subscribers2.keys()):
                         as_tables.append(False)
                     else:
                         as_tables.append(True)
@@ -384,7 +387,7 @@ class SAMPManager():
             suffix = ".fits"
         else:
             suffix = ".xml"
-        tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+        tmp = tempfile.NamedTemporaryFile(mode="wt", suffix=suffix, delete=False, encoding='utf-8')
         tmp.close()
 
         if not as_fits:

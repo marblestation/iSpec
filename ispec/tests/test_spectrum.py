@@ -1,3 +1,4 @@
+from builtins import range
 import os
 import sys
 import unittest
@@ -20,8 +21,8 @@ class TestSpectrum(unittest.TestCase):
         np.testing.assert_equal(star_spectrum['flux'], star_spectrum_air['flux'])
         np.testing.assert_equal(star_spectrum['err'], star_spectrum_air['err'])
         np.testing.assert_almost_equal(star_spectrum['waveobs'], star_spectrum_air['waveobs'])
-        self.assertAlmostEquals(star_spectrum_vacuum['waveobs'][0], 480.12574305216896)
-        self.assertAlmostEquals(star_spectrum_vacuum['waveobs'][-1], 680.175349351457)
+        self.assertAlmostEqual(star_spectrum_vacuum['waveobs'][0], 480.12574305216896)
+        self.assertAlmostEqual(star_spectrum_vacuum['waveobs'][-1], 680.175349351457)
 
     def test_cut_spectrum_from_segments(self):
         star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -30,13 +31,13 @@ class TestSpectrum(unittest.TestCase):
         segments = ispec.read_segment_regions(ispec_dir + "/input/regions/fe_lines_segments.txt")
         wfilter = ispec.create_wavelength_filter(star_spectrum, regions=segments)
         cutted_star_spectrum = star_spectrum[wfilter]
-        self.assertEquals(len(segments), 132)
-        self.assertAlmostEquals(segments['wave_base'][0], 480.01937)
-        self.assertAlmostEquals(segments['wave_top'][0], 481.08295)
-        self.assertEquals(len(cutted_star_spectrum), 33722)
-        self.assertAlmostEquals(cutted_star_spectrum['waveobs'][0], 480.02156956)
-        self.assertAlmostEquals(cutted_star_spectrum['flux'][0], 0.81984)
-        self.assertAlmostEquals(cutted_star_spectrum['err'][0], 0.0023458)
+        self.assertEqual(len(segments), 132)
+        self.assertAlmostEqual(segments['wave_base'][0], 480.01937)
+        self.assertAlmostEqual(segments['wave_top'][0], 481.08295)
+        self.assertEqual(len(cutted_star_spectrum), 33722)
+        self.assertAlmostEqual(cutted_star_spectrum['waveobs'][0], 480.02156956)
+        self.assertAlmostEqual(cutted_star_spectrum['flux'][0], 0.81984)
+        self.assertAlmostEqual(cutted_star_spectrum['err'][0], 0.0023458)
 
     def test_degrade_resolution(self):
         star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -46,10 +47,10 @@ class TestSpectrum(unittest.TestCase):
         convolved_star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, \
                                                         from_resolution=from_resolution)
         np.testing.assert_equal(star_spectrum['waveobs'], convolved_star_spectrum['waveobs'])
-        self.assertAlmostEquals(convolved_star_spectrum['flux'][0], 0.7109576121207318)
-        self.assertAlmostEquals(convolved_star_spectrum['flux'][-1], 2.2237382541838007)
-        self.assertAlmostEquals(convolved_star_spectrum['err'][0], 0.0021974272902411723)
-        self.assertAlmostEquals(convolved_star_spectrum['err'][-1], 0.004453852796214372)
+        self.assertAlmostEqual(convolved_star_spectrum['flux'][0], 0.7109576121207318)
+        self.assertAlmostEqual(convolved_star_spectrum['flux'][-1], 2.2237382541838007)
+        self.assertAlmostEqual(convolved_star_spectrum['err'][0], 0.0021974272902411723)
+        self.assertAlmostEqual(convolved_star_spectrum['err'][-1], 0.004453852796214372)
 
     def test_smooth_spectrum(self):
         star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -57,10 +58,10 @@ class TestSpectrum(unittest.TestCase):
         resolution = 80000
         smoothed_star_spectrum = ispec.convolve_spectrum(star_spectrum, resolution)
         np.testing.assert_equal(star_spectrum['waveobs'], smoothed_star_spectrum['waveobs'])
-        self.assertAlmostEquals(smoothed_star_spectrum['flux'][0], 0.6973069596669491)
-        self.assertAlmostEquals(smoothed_star_spectrum['flux'][-1], 2.2207560753191666)
-        self.assertAlmostEquals(smoothed_star_spectrum['err'][0], 0.002174423029777254)
-        self.assertAlmostEquals(smoothed_star_spectrum['err'][-1], 0.004451564365118501)
+        self.assertAlmostEqual(smoothed_star_spectrum['flux'][0], 0.6973069596669491)
+        self.assertAlmostEqual(smoothed_star_spectrum['flux'][-1], 2.2207560753191666)
+        self.assertAlmostEqual(smoothed_star_spectrum['err'][0], 0.002174423029777254)
+        self.assertAlmostEqual(smoothed_star_spectrum['err'][-1], 0.004451564365118501)
 
     def test_resample_spectrum(self):
         star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -68,13 +69,13 @@ class TestSpectrum(unittest.TestCase):
         wavelengths = np.arange(480.0, 680.0, 0.001)
         resampled_star_spectrum = ispec.resample_spectrum(star_spectrum, wavelengths, method="linear", zero_edges=True)
         #resampled_star_spectrum = ispec.resample_spectrum(star_spectrum, wavelengths, method="bessel", zero_edges=True)
-        self.assertEquals(len(resampled_star_spectrum), 200000)
-        self.assertAlmostEquals(resampled_star_spectrum['waveobs'][0], 480.)
-        self.assertAlmostEquals(resampled_star_spectrum['waveobs'][-1], 680.-0.001)
-        self.assertAlmostEquals(resampled_star_spectrum['flux'][0], 0.7957469310344828)
-        self.assertAlmostEquals(resampled_star_spectrum['flux'][-1], 0.0)
-        self.assertAlmostEquals(resampled_star_spectrum['err'][0], 0.002313683448275862)
-        self.assertAlmostEquals(resampled_star_spectrum['err'][-1], 0.0)
+        self.assertEqual(len(resampled_star_spectrum), 200000)
+        self.assertAlmostEqual(resampled_star_spectrum['waveobs'][0], 480.)
+        self.assertAlmostEqual(resampled_star_spectrum['waveobs'][-1], 680.-0.001)
+        self.assertAlmostEqual(resampled_star_spectrum['flux'][0], 0.7957469310344828)
+        self.assertAlmostEqual(resampled_star_spectrum['flux'][-1], 0.0)
+        self.assertAlmostEqual(resampled_star_spectrum['err'][0], 0.002313683448275862)
+        self.assertAlmostEqual(resampled_star_spectrum['err'][-1], 0.0)
 
     def test_filter_cosmic_rays(self):
         star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -128,7 +129,7 @@ class TestSpectrum(unittest.TestCase):
 
         number = 10
         random_realization_spectra = ispec.random_realizations(star_spectrum, number, distribution="poisson")
-        self.assertEquals(len(random_realization_spectra), number)
+        self.assertEqual(len(random_realization_spectra), number)
         np.testing.assert_almost_equal(random_realization_spectra[0]['flux'][:10], np.array([0.67014417, 0.74121144, 0.78384863, 0.79379749, 0.80003082, 0.78786734, 0.74521218, 0.72019732, 0.73934592, 0.78538714]))
         for i in range(number):
             np.testing.assert_equal(random_realization_spectra[i]['waveobs'], star_spectrum['waveobs'])
@@ -141,5 +142,5 @@ class TestSpectrum(unittest.TestCase):
         #--- Estimate SNR from flux ----------------------------------------------------
         num_points = 10
         estimated_snr = ispec.estimate_snr(star_spectrum['flux'], num_points=num_points)
-        self.assertAlmostEquals(estimated_snr, 139.92497450174938)
+        self.assertAlmostEqual(estimated_snr, 139.92497450174938)
 

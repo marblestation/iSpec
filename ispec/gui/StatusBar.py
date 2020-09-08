@@ -15,13 +15,15 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
-import Tkinter
+from future import standard_library
+standard_library.install_aliases()
+import tkinter
 
-class StatusBar(Tkinter.Frame):
+class StatusBar(tkinter.Frame):
     def __init__(self, master):
-        Tkinter.Frame.__init__(self, master)
-        self.label = Tkinter.Label(self, bd=1, relief=Tkinter.SUNKEN, anchor=Tkinter.W)
-        self.label.pack(fill=Tkinter.X)
+        tkinter.Frame.__init__(self, master)
+        self.label = tkinter.Label(self, bd=1, relief=tkinter.SUNKEN, anchor=tkinter.W)
+        self.label.pack(fill=tkinter.X)
 
     def set(self, format, *args):
         self.label.config(text=format % args)

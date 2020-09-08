@@ -1,5 +1,6 @@
 from __future__ import print_function
 from __future__ import absolute_import
+from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -17,6 +18,7 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from past.utils import old_div
 import os
 import sys
 import numpy as np
@@ -47,7 +49,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
 
     #molecules = linelist['molecule'] == "T"
     #if len(np.where(molecules)[0]) > 0:
-        #logging.warn("The molecules have been removed from the linelist because if not MOOG is unreasonably slow")
+        #logging.warning("The molecules have been removed from the linelist because if not MOOG is unreasonably slow")
         #linelist = linelist[~molecules]
 
 
@@ -72,9 +74,9 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
 
     # MOOG does not have hard-coded lines, we use a external file:
     #hydrogen_lines_file = moog_dir + "/hydrogen_moog_lines.txt"
-    #hydrogen_lines = ascii.read(hydrogen_lines_file, names=["wave_A", "spectrum_moog_species", "lower_state_eV", "loggf"])
+    #hydrogen_lines = ascii.read(hydrogen_lines_file, names=["wave_A", "spectrum_moog_species", "lower_state_eV", "loggf"], encoding='utf-8')
     hydrogen_lines_file = moog_dir + "DATA/Hlinedata"
-    hydrogen_lines = ascii.read(hydrogen_lines_file, names=["wave_A", "spectrum_moog_species", "lower_state_eV", "loggf", "designation"])
+    hydrogen_lines = ascii.read(hydrogen_lines_file, names=["wave_A", "spectrum_moog_species", "lower_state_eV", "loggf", "designation"], encoding='utf-8')
 
     # MOOG is not going to scale the abundances because we are indicating
     # our abundances in the input and that overrides any other prescription, thus
@@ -97,7 +99,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
         # It is better not to synthesize in a single run a big chunk of wavelength so
         # we split the computation in several pieces
         max_segment = 100. # nm
-        if (region['wave_top'] - region['wave_base'])/wave_step > max_segment/wave_step:
+        if old_div((region['wave_top'] - region['wave_base']),wave_step) > old_div(max_segment,wave_step):
             segment_wave_base = np.arange(region['wave_base'], region['wave_top'], max_segment)
             segments = np.recarray((len(segment_wave_base),),  dtype=[('wave_base', float), ('wave_top', float)])
             segments['wave_base'] = segment_wave_base
@@ -170,7 +172,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
             out = open(stronglinelist_file, "w")
             for line in selected_hydrogen_lines:
                 out.write("%10.3f%10s%10.3f%10.3f%10s%10s%10s%10s\n" \
-                        % (line['wave_A'], line['spectrum_moog_species'], line['lower_state_eV'], line['loggf'], "", "", "", ""))
+                        % (line['wave_A'], line['spectrum_moog_species'].decode('utf-8'), line['lower_state_eV'], line['loggf'], "", "", "", ""))
             out.close()
 
             par_file = open(tmp_execution_dir + "/batch.par", "w")
@@ -187,7 +189,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
             #else:
                 #par_file.write("molecules   0\n")
             # molecules should be always on or moog does not run
-            par_file.write("molecules   1\n") # controls the molecular equilibrium calculations (1 = do molecular equilibrium but do not print results)
+            par_file.write("molecules   1\n") # controls the molecular equilibrium calculations (1 = do molecular equilibrium but do not print results
             par_file.write("lines       1\n") # controls the output of line data (print out standard information about the input line list)
             par_file.write("strong      1\n")
             par_file.write("flux/int    0\n") # choses integrated flux or central intensity (0 = integrated flux calculations)
@@ -224,7 +226,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
             #else:
             proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
             # wait for the process to terminate
-            out, err = proc.communicate(input=command_input)
+            out, err = proc.communicate(input=command_input.encode('utf-8'))
             errcode = proc.returncode
 
             if errcode == 124: # TIMEOUT
@@ -238,6 +240,8 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
             except:
                 print(out)
                 sys.stdout.flush()
+                import pudb
+                pudb.set_trace()
                 raise Exception("Synthesis failed!")
             #synth_waveobs_tmp = np.linspace(wave_base, wave_top, len(synth_fluxes_tmp)) # Not exactly identical to turbospectrum wavelengths
             synth_waveobs_tmp = data[:,0] / 10. # Armstrong to nm

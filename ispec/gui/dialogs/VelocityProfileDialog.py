@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -16,6 +17,9 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from builtins import str
+from builtins import range
+from past.utils import old_div
 import numpy as np
 from .CustomDialog import *
 
@@ -56,7 +60,7 @@ class VelocityProfileDialog(CustomDialog):
         self.__components[0]["function"] = self.plot
 
         ## Stats
-        for i in xrange(len(self.__stats)):
+        for i in range(len(self.__stats)):
             self.__stats.pop()
         if self.__template is not None:
             self.__stats.append("%-50s: %s" % ("Template", str(self.__template)))
@@ -81,7 +85,7 @@ class VelocityProfileDialog(CustomDialog):
                 self.__stats.append("%-50s: %10.2f" % ("Corrected FWHM (km/s)", np.round(fwhm - telluric_fwhm, 2)))
             c = 299792458.0 # m/s
             if (fwhm - telluric_fwhm > 0.0):
-                R = np.int(c/(1000.0*(fwhm - telluric_fwhm)))
+                R = np.int(old_div(c,(1000.0*(fwhm - telluric_fwhm))))
                 self.__stats.append("%-50s: %10.i" % ("Estimated resolution (R)", np.round(R)))
 
             self.__stats.append("%-50s: %10.5f" % ("RMS", np.round(model.rms, 5)))

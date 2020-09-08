@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -16,6 +17,7 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from past.utils import old_div
 import os
 import sys
 import numpy as np
@@ -51,9 +53,9 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
         rotate_executable = atmos_dir + "bin.amd64/rotate.exe"
         syntoascanga_executable = atmos_dir + "bin.amd64/syntoascanga.exe"
     else:
-        logging.warn("*************************************************")
-        logging.warn("Synthe does not work properly in 32 bits systems!")
-        logging.warn("*************************************************")
+        logging.warning("*************************************************")
+        logging.warning("Synthe does not work properly in 32 bits systems!")
+        logging.warning("*************************************************")
         xnfpelsyn_executable = atmos_dir + "bin.ia32/xnfpelsyn.exe"
         synbeg_executable = atmos_dir + "bin.ia32/synbeg.exe"
         #rline2.exe # It does not exist in the source code!
@@ -104,7 +106,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
         # It is better not to synthesize in a single run a big chunk of wavelength so
         # we split the computation in several pieces
         max_segment = 100. # nm
-        if (region['wave_top'] - region['wave_base'])/wave_step > max_segment/wave_step:
+        if old_div((region['wave_top'] - region['wave_base']),wave_step) > old_div(max_segment,wave_step):
             segment_wave_base = np.arange(region['wave_base'], region['wave_top'], max_segment)
             segments = np.recarray((len(segment_wave_base),),  dtype=[('wave_base', float), ('wave_top', float)])
             segments['wave_base'] = segment_wave_base
@@ -205,7 +207,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
             #else:
             proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
             # wait for the process to terminate
-            out, err = proc.communicate(input=command_input)
+            out, err = proc.communicate(input=command_input.encode('utf-8'))
             errcode = proc.returncode
             #print out
 
@@ -242,7 +244,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
 
             proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
             # wait for the process to terminate
-            out, err = proc.communicate(input=command_input)
+            out, err = proc.communicate(input=command_input.encode('utf-8'))
             errcode = proc.returncode
             #print out
 
@@ -329,7 +331,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
 
             proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
             # wait for the process to terminate
-            out, err = proc.communicate(input=command_input)
+            out, err = proc.communicate(input=command_input.encode('utf-8'))
             errcode = proc.returncode
 
             if errcode == 124: # TIMEOUT
@@ -364,7 +366,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
 
             proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
             # wait for the process to terminate
-            out, err = proc.communicate(input=command_input)
+            out, err = proc.communicate(input=command_input.encode('utf-8'))
             errcode = proc.returncode
 
             if errcode == 124: # TIMEOUT

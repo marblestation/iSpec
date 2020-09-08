@@ -43,11 +43,11 @@ class TestRegions(unittest.TestCase):
                                             max_continuum_diff=max_continuum_diff, \
                                             fixed_wave_step=fixed_wave_step)
         #ispec.write_continuum_regions(star_continuum_regions, "example_star_fe_lines_continuum.txt")
-        self.assertEquals(len(star_continuum_regions), 2)
-        self.assertAlmostEquals(star_continuum_regions['wave_base'][0], 528.6665701)
-        self.assertAlmostEquals(star_continuum_regions['wave_top'][0], 528.6915701)
-        self.assertAlmostEquals(star_continuum_regions['wave_base'][1], 608.4415701)
-        self.assertAlmostEquals(star_continuum_regions['wave_top'][1], 608.4665701)
+        self.assertEqual(len(star_continuum_regions), 2)
+        self.assertAlmostEqual(star_continuum_regions['wave_base'][0], 528.6665701)
+        self.assertAlmostEqual(star_continuum_regions['wave_top'][0], 528.6915701)
+        self.assertAlmostEqual(star_continuum_regions['wave_base'][1], 608.4415701)
+        self.assertAlmostEqual(star_continuum_regions['wave_top'][1], 608.4665701)
 
 
     def test_find_continuum_regions_in_segments(self):
@@ -85,7 +85,7 @@ class TestRegions(unittest.TestCase):
                                                 fixed_wave_step=fixed_wave_step)
         #ispec.write_continuum_regions(limited_star_continuum_regions, \
                 #"example_limited_star_continuum_region.txt")
-        self.assertEquals(len(limited_star_continuum_regions), 504)
+        self.assertEqual(len(limited_star_continuum_regions), 504)
 
 
     def test_find_linemasks(self):
@@ -184,12 +184,12 @@ class TestRegions(unittest.TestCase):
         iron = np.logical_or(iron, star_linemasks['element'] == "Fe 2")
         iron_star_linemasks = star_linemasks[iron]
 
-        self.assertEquals(len(star_linemasks), 1731)
-        self.assertEquals(len(iron_star_linemasks), 883)
-        self.assertAlmostEquals(iron_star_linemasks['ew'][0], 15.82970157775808)
-        self.assertAlmostEquals(iron_star_linemasks['ew'][-1], 15.545342323635188)
-        self.assertAlmostEquals(iron_star_linemasks['ew_err'][0], 1.1187509030236669)
-        self.assertAlmostEquals(iron_star_linemasks['ew_err'][-1], 1.3221015426240295)
+        self.assertEqual(len(star_linemasks), 1731)
+        self.assertEqual(len(iron_star_linemasks), 883)
+        self.assertAlmostEqual(iron_star_linemasks['ew'][0], 15.82970157775808)
+        self.assertAlmostEqual(iron_star_linemasks['ew'][-1], 15.545342323635188)
+        self.assertAlmostEqual(iron_star_linemasks['ew_err'][0], 1.1187509030236669)
+        self.assertAlmostEqual(iron_star_linemasks['ew_err'][-1], 1.3221015426240295)
 
         tmp_filename = tempfile.mktemp()
         # Write regions with masks limits, cross-matched atomic data and fit data
@@ -213,17 +213,17 @@ class TestRegions(unittest.TestCase):
         smoothed_star_spectrum = ispec.convolve_spectrum(star_spectrum, resolution)
         line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines.txt")
         linemasks = ispec.adjust_linemasks(smoothed_star_spectrum, line_regions, max_margin=0.5)
-        self.assertAlmostEquals(line_regions['wave_base'][0], 480.26937)
-        self.assertAlmostEquals(line_regions['wave_top'][0], 480.28771)
+        self.assertAlmostEqual(line_regions['wave_base'][0], 480.26937)
+        self.assertAlmostEqual(line_regions['wave_top'][0], 480.28771)
         self.assertEqual(len(linemasks), 315)
         np.testing.assert_equal(line_regions['wave_peak'], linemasks['wave_peak'])
-        self.assertAlmostEquals(linemasks['wave_base'][0], 480.269365109)
-        self.assertAlmostEquals(linemasks['wave_top'][0], 480.319964199)
+        self.assertAlmostEqual(linemasks['wave_base'][0], 480.269365109)
+        self.assertAlmostEqual(linemasks['wave_top'][0], 480.319964199)
 
     def test_create_segments_around_linemasks(self):
         #---Create segments around linemasks -------------------------------------------
         line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/fe_lines.txt")
         segments = ispec.create_segments_around_lines(line_regions, margin=0.25)
-        self.assertEquals(len(segments), 132)
-        self.assertAlmostEquals(segments['wave_base'][0], 480.01937)
-        self.assertAlmostEquals(segments['wave_top'][0], 481.08295)
+        self.assertEqual(len(segments), 132)
+        self.assertAlmostEqual(segments['wave_base'][0], 480.01937)
+        self.assertAlmostEqual(segments['wave_top'][0], 481.08295)

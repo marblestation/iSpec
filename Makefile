@@ -19,7 +19,7 @@ ispec/synthesizer.so: synthesizer/synthesizer.pyx synthesizer/synthesizer_func.c
 	rm -f synthesizer/synthesizer.c
 	rm -rf synthesizer/build/
 	cd synthesizer/ ; python setup.py build_ext --inplace
-	mv -f synthesizer/synthesizer.so ispec/
+	mv -f synthesizer/synthesizer*.so ispec/synthesizer.so
 	rm -f synthesizer/synthesizer.c
 	rm -rf synthesizer/build/
 
@@ -79,7 +79,7 @@ clean:
 	rm -f synthesizer/turbospectrum/bin/eqwidt_lu
 	rm -f synthesizer/synthesizer.c
 	rm -rf synthesizer/build/
-	rm -f synthesizer/synthesizer.so
+	rm -f synthesizer/synthesizer*.so
 	rm -f ispec/synthesizer.so
 	rm -f isochrones/YYmix2
 	rm -f synthesizer/ARES/bin/ARES

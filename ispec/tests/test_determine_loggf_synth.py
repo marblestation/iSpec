@@ -166,9 +166,9 @@ class TestDetermineLoggfSynth(unittest.TestCase):
                     tmp_dir = None, \
                     code=code)
 
-            self.assertAlmostEquals(loggf_found['loggf'][0], -1.0794949759801327)
-            self.assertAlmostEquals(loggf_found['eloggf'][0], 0.11403936780212467)
-            self.assertEquals(len(loggf_found['loggf']), 1)
-            self.assertEquals(individual_line_regions['lower_state_eV'][0], loggf_found['linelist']['lower_state_eV'][0])
+            self.assertAlmostEqual(loggf_found['loggf'][0], -1.0794949759801327)
+            self.assertAlmostEqual(loggf_found['eloggf'][0], 0.11403936780212467)
+            self.assertEqual(len(loggf_found['loggf']), 1)
+            self.assertEqual(individual_line_regions['lower_state_eV'][0], loggf_found['linelist']['lower_state_eV'][0])
             break
 

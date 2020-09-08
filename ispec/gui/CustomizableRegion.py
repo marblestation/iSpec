@@ -16,7 +16,8 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 
-class CustomizableRegion:
+from builtins import object
+class CustomizableRegion(object):
     min_width = 0.002 # nm
     mark = None
 
@@ -251,7 +252,7 @@ class CustomizableRegion:
         if self.note is not None:
             self.note.set_visible(False)
         if self.line_plot_id is not None:
-            for plot_id in self.line_plot_id.values():
+            for plot_id in list(self.line_plot_id.values()):
                 if plot_id is not None:
                     self.frame.axes.lines.remove(plot_id)
 

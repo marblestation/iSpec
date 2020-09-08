@@ -15,6 +15,7 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from builtins import str
 import logging
 import logging.handlers
 
@@ -44,4 +45,4 @@ except IOError as e:
 else:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
-# It is accessible via import logging; logging.warn("x")
+# It is accessible via import logging; logging.warning("x")

@@ -132,13 +132,13 @@ class TestLineFit(unittest.TestCase):
             snr = 50
             linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="%s" % (snr), tmp_dir=None, verbose=0)
 
-        self.assertEquals(len(linemasks), 277)
-        self.assertAlmostEquals(linemasks['ew'][0], 68.48284586882163)
-        self.assertAlmostEquals(linemasks['ew'][-1], 14.277490920046171)
-        self.assertEquals(linemasks['element'][0], 'Fe 1')
-        self.assertEquals(linemasks['element'][1], 'Ni 1')
-        self.assertAlmostEquals(linemasks['loggf'][0], -1.028)
-        self.assertAlmostEquals(linemasks['loggf'][-1], -2.326)
+        self.assertEqual(len(linemasks), 277)
+        self.assertAlmostEqual(linemasks['ew'][0], 68.48284586882163)
+        self.assertAlmostEqual(linemasks['ew'][-1], 14.277490920046171)
+        self.assertEqual(linemasks['element'][0], 'Fe 1')
+        self.assertEqual(linemasks['element'][1], 'Ni 1')
+        self.assertAlmostEqual(linemasks['loggf'][0], -1.028)
+        self.assertAlmostEqual(linemasks['loggf'][-1], -2.326)
 
     def test_fit_lines_already_crossmatched_with_atomic_data_and_determine_ew(self):
         use_ares = False
@@ -257,10 +257,10 @@ class TestLineFit(unittest.TestCase):
             snr = 50
             linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="%s" % (snr), tmp_dir=None, verbose=0)
 
-        self.assertEquals(len(linemasks), 277)
-        self.assertAlmostEquals(linemasks['ew'][0], 68.62459244466727)
-        self.assertAlmostEquals(linemasks['ew'][-1], 14.29079898585822)
-        self.assertEquals(linemasks['element'][0], 'Fe 1')
-        self.assertEquals(linemasks['element'][1], 'Ni 1')
-        self.assertAlmostEquals(linemasks['loggf'][0], -1.028)
-        self.assertAlmostEquals(linemasks['loggf'][-1], -2.326)
+        self.assertEqual(len(linemasks), 277)
+        self.assertAlmostEqual(linemasks['ew'][0], 68.62459244466727)
+        self.assertAlmostEqual(linemasks['ew'][-1], 14.29079898585822)
+        self.assertEqual(linemasks['element'][0], 'Fe 1')
+        self.assertEqual(linemasks['element'][1], 'Ni 1')
+        self.assertAlmostEqual(linemasks['loggf'][0], -1.028)
+        self.assertAlmostEqual(linemasks['loggf'][-1], -2.326)

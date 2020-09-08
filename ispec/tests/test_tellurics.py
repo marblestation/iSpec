@@ -25,8 +25,8 @@ class TestTellurics(unittest.TestCase):
 
         bv = models[0].mu() # km/s
         bv_err = models[0].emu() # km/s
-        self.assertAlmostEquals(bv, 8.139999999999954)
-        self.assertAlmostEquals(bv_err, 0.031123202937016047)
+        self.assertAlmostEqual(bv, 8.139999999999954)
+        self.assertAlmostEqual(bv_err, 0.031123202937016047)
 
     def test_determine_tellurics_shift_with_template(self):
         star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
@@ -41,8 +41,8 @@ class TestTellurics(unittest.TestCase):
 
         bv = models[0].mu() # km/s
         bv_err = models[0].emu() # km/s
-        self.assertAlmostEquals(bv, 8.169999999999954)
-        self.assertAlmostEquals(bv_err, 0.6605884013888695)
+        self.assertAlmostEqual(bv, 8.169999999999954)
+        self.assertAlmostEqual(bv_err, 0.6605884013888695)
 
     def test_clean_telluric_regions(self):
         star_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")

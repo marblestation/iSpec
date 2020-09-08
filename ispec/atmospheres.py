@@ -16,6 +16,12 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import zip
+from builtins import map
+from builtins import object
 import os
 import sys
 import numpy as np
@@ -23,7 +29,7 @@ from subprocess import Popen, PIPE
 import math
 from datetime import datetime
 import tempfile
-import cPickle as pickle
+import pickle as pickle
 from . import log
 import logging
 import subprocess
@@ -39,7 +45,7 @@ from .common import is_turbospectrum_support_enabled, is_spectrum_support_enable
 # The first layer represents the surface.
 # Elemental abundances in the stdatom.dat file are used (and scaled with the [M/H] value)
 
-class ConstantValue:
+class ConstantValue(object):
     """ Constant class used for microturbulent velocities because they are
         constant for all layers and atmospheres """
     def __init__(self, value):
@@ -108,7 +114,7 @@ def _interpolate(delaunay_triangulations, kdtree, existing_points, filenames, re
             target_point_cannot_be_interpolated = False
             break
     if target_point_cannot_be_interpolated:
-        logging.warn("Target point '{}' is out of bound, using the closest".format(" ".join(map(str, target_point))))
+        logging.warning("Target point '{}' is out of bound, using the closest".format(" ".join(map(str, target_point))))
         return __closest(kdtree, existing_points, filenames, read_point_value, target_point)
     index = delaunay_triangulation.simplices[simplex]
     points = []
@@ -201,7 +207,7 @@ def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None
         atm_file = open(atmosphere_filename, "w")
     else:
         # Temporary file
-        atm_file = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
+        atm_file = tempfile.NamedTemporaryFile(mode="wt", delete=False, dir=tmp_dir, encoding='utf-8')
 
     if code == "moog":
         atm_file.write("KURUCZ\n")
@@ -253,7 +259,7 @@ def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None
     elif code == "spectrum":
         # Spectrum
         # mass depth, temperature in kelvin, gas pressure, electron density, Rosseland mean absorption coefficient, radiation pressure, microturbulent velocity in meters/second.
-        atm_file.write("%.1f  %.5f  %.2f  %i\n" % (teff, logg, MH, len(atmosphere_layers)) )
+        atm_file.write("%.1f  %.5f  %.2f  %i\n" % (teff, logg, MH, len(atmosphere_layers)))
         #atm_file.write("\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], layer[6]))) for layer in atmosphere_layers]))
         atm_file.write("\n".join(["  ".join(map(str, (layer[0], layer[1], layer[2], layer[3], layer[4], layer[5], 1.0))) for layer in atmosphere_layers]))
         #for layer in layers:
@@ -331,8 +337,8 @@ def load_modeled_layers_pack(input_path):
     filenames = base_dirname + "/" + parameters['filename']
     filenames = np.asarray(filenames)
     ranges = {}
-    free_parameters = parameters.columns.get_values().tolist()
-    free_parameters = filter(lambda x: not x.startswith("fixed_") and x != "filename", free_parameters)
+    free_parameters = parameters.columns.to_numpy().tolist()
+    free_parameters = [x for x in free_parameters if not x.startswith("fixed_") and x != "filename"]
     for free_param in free_parameters:
         free_param_range = np.unique(parameters[free_param])
         ranges[free_param] = free_param_range
@@ -355,7 +361,7 @@ def load_modeled_layers_pack(input_path):
 
     if not os.path.exists(cache_filename) or not use_dump:
         delaunay_triangulations = {'subsets': parameters_subsets, 'precomputed': []}
-        for parameters_subset in parameters_subsets:
+        for i, parameters_subset in enumerate(parameters_subsets):
             logging.info("Pre-computing [{}/{}]...".format(i+1, len(parameters_subsets)))
             if len(existing_points[parameters_subset]) > 0:
                 delaunay_triangulations['precomputed'].append(spatial.Delaunay(existing_points[parameters_subset]))
@@ -387,7 +393,7 @@ def calculate_opacities(atmosphere_layers_file, abundances, MH, microturbulence_
 
     if opacities_filename is None:
         # Temporary file
-        out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
+        out = tempfile.NamedTemporaryFile(mode="wt", delete=False, dir=tmp_dir, encoding='utf-8')
         out.close()
         opacities_filename = out.name
 
@@ -427,7 +433,7 @@ def calculate_opacities(atmosphere_layers_file, abundances, MH, microturbulence_
     else:
         proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     # wait for the process to terminate
-    out, err = proc.communicate(input=command_input)
+    out, err = proc.communicate(input=command_input.encode('utf-8'))
     errcode = proc.returncode
 
     os.chdir(previous_cwd)

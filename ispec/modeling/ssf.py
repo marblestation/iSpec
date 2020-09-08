@@ -1,5 +1,6 @@
 from __future__ import print_function
 from __future__ import absolute_import
+from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -17,6 +18,10 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from builtins import zip
+from builtins import str
+from builtins import range
+from past.utils import old_div
 import os
 import sys
 import time
@@ -173,7 +178,7 @@ class SynthModel(MPFitModel):
         # The model function with parameters p required by mpfit library
         if p is not None:
             # Update internal structure for fitting:
-            for i in xrange(len(p)):
+            for i in range(len(p)):
                 self._parinfo[i]['value'] = p[i]
 
         key = "%.0f %.2f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.alpha(), self.vmic())
@@ -182,7 +187,7 @@ class SynthModel(MPFitModel):
         # Consider new loggf
         linelist_free_loggf = self.generate_linelist_free_loggf()
 
-        loggf_key = " ".join(map(lambda x: "%.3f" % (x), linelist_free_loggf['loggf']))
+        loggf_key = " ".join(["%.3f" % (x) for x in linelist_free_loggf['loggf']])
         complete_key += " loggf [" + loggf_key + "]"
         key += loggf_key
 
@@ -195,13 +200,13 @@ class SynthModel(MPFitModel):
         # Consider new abundances as fixed
         fixed_abundances = self.free_abundances()
 
-        abundances_key = " ".join(map(lambda x: "%.2f" % (x), fixed_abundances['Abund']))
+        abundances_key = " ".join(["%.2f" % (x) for x in fixed_abundances['Abund']])
         complete_key += " abund [" + abundances_key + "]"
         key += abundances_key
 
         # vrad
         vrad = self.vrad()
-        vrad_key = " ".join(map(lambda x: "%.2f" % (x), vrad))
+        vrad_key = " ".join(["%.2f" % (x) for x in vrad])
         complete_key += " vrad [" + vrad_key + "]"
 
         ##### [start] Check precomputed (solar abundance)
@@ -371,15 +376,15 @@ class SynthModel(MPFitModel):
             super(SynthModel, self).fitData(waveobs[self.comparing_mask], fluxes[self.comparing_mask], weights=ones[self.comparing_mask], parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet)
 
         residuals = self.last_final_fluxes[self.comparing_mask] - fluxes[self.comparing_mask]
-        self.rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
+        self.rms = np.sqrt(old_div(np.sum(np.power(residuals,2)),len(residuals)))
 
         #### Unweighted (no errors considered):
         self.chisq = np.sum((residuals)**2)
-        self.reduced_chisq = self.chisq / self.m.dof
+        self.reduced_chisq = old_div(self.chisq, self.m.dof)
 
         #### Weighted (errors considered):
         self.wchisq = np.sum((weights[self.comparing_mask] * residuals)**2)
-        self.reduced_wchisq = self.wchisq / self.m.dof
+        self.reduced_wchisq = old_div(self.wchisq, self.m.dof)
 
         self.cache = {}
 
@@ -424,7 +429,7 @@ class SynthModel(MPFitModel):
         base = 9
         if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
             top = base+len(self.segments)
-            for i in xrange(base, top):
+            for i in range(base, top):
                 vrad.append(self._parinfo[i]['value'])
         return vrad
     def free_loggf(self):
@@ -432,7 +437,7 @@ class SynthModel(MPFitModel):
         if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
             base += len(self.segments)
         loggf = []
-        for i in xrange(base, base+len(self.linelist_free_loggf)):
+        for i in range(base, base+len(self.linelist_free_loggf)):
             loggf.append(self._parinfo[i]['value'])
         return loggf
     def free_abundances(self):
@@ -440,8 +445,8 @@ class SynthModel(MPFitModel):
         if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
             base += len(self.segments)
         base += len(self.linelist_free_loggf)
-        fixed_abundances = np.recarray((len(self._parinfo)-base, ), dtype=[('code', int),('Abund', float), ('element', '|S30')])
-        for i in xrange(len(self._parinfo)-base):
+        fixed_abundances = np.recarray((len(self._parinfo)-base, ), dtype=[('code', int),('Abund', float), ('element', '|U30')])
+        for i in range(len(self._parinfo)-base):
             fixed_abundances['code'][i] = int(self._parinfo[base+i]['parname'])
             fixed_abundances['Abund'][i] = self._parinfo[base+i]['value']
             fixed_abundances['element'][i] = ""
@@ -461,7 +466,7 @@ class SynthModel(MPFitModel):
         evrad = []
         if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
             top = base+len(self.segments)
-            for i in xrange(base, top):
+            for i in range(base, top):
                 evrad.append(self.m.perror[i])
         return evrad
     def efree_loggf(self):
@@ -469,7 +474,7 @@ class SynthModel(MPFitModel):
         if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
             base += len(self.segments)
         eloggf = []
-        for i in xrange(base, base+len(self.linelist_free_loggf)):
+        for i in range(base, base+len(self.linelist_free_loggf)):
             eloggf.append(self.m.perror[i])
         return eloggf
     def efree_abundances(self):
@@ -478,14 +483,14 @@ class SynthModel(MPFitModel):
             base += len(self.segments)
         base += len(self.linelist_free_loggf)
         eabundances = []
-        for i in xrange(len(self._parinfo)-base):
+        for i in range(len(self._parinfo)-base):
             eabundances.append(self.m.perror[base+i])
         return eabundances
 
     def generate_linelist_free_loggf(self):
         linelist_free_loggf = self.linelist_free_loggf.copy()
         new_loggf = self.free_loggf()
-        for i in xrange(len(linelist_free_loggf)):
+        for i in range(len(linelist_free_loggf)):
             linelist_free_loggf['loggf'][i] = new_loggf[i]
         return linelist_free_loggf
 
@@ -500,7 +505,7 @@ class SynthModel(MPFitModel):
         free_abundances = self.free_abundances()
         efree_abundances = self.efree_abundances()
 
-        transformed_abund = np.recarray((len(free_abundances), ), dtype=[('code', int),('Abund', float), ('element', '|S5'), ('[X/H]', float), ('A(X)', float), ('[X/Fe]', float), ('eAbund', float), ('e[X/H]', float), ('e[X/Fe]', float), ('eA(X)', float)])
+        transformed_abund = np.recarray((len(free_abundances), ), dtype=[('code', int),('Abund', float), ('element', '|U5'), ('[X/H]', float), ('A(X)', float), ('[X/Fe]', float), ('eAbund', float), ('e[X/H]', float), ('e[X/Fe]', float), ('eA(X)', float)])
 
         #function abundances, sme, solar_relative
         #abund = sme.abund
@@ -513,7 +518,7 @@ class SynthModel(MPFitModel):
         #return, alog10(abund / abund[0]) + 12
         #end
         sun_log_Nh_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == 1]
-        for i in xrange(len(free_abundances)):
+        for i in range(len(free_abundances)):
             sun_log_Nx_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == free_abundances['code'][i]]
             x_absolute = free_abundances['Abund'][i] + 12. - sun_log_Nh_over_Ntotal # absolute, A(X)
             #x_over_fe = free_abundances['Abund'][i] - sun_log_Nx_over_Ntotal
@@ -557,7 +562,7 @@ class SynthModel(MPFitModel):
 
         if self.code != "grid":
             transformed_abund = self.transformed_free_abundances()
-            for i in xrange(len(transformed_abund)):
+            for i in range(len(transformed_abund)):
                 element = transformed_abund['element'][i]
                 x_absolute_name = "A(" + element + ")"
                 x_over_h_name = "[" + element + "/H]"
@@ -605,7 +610,7 @@ class SynthModel(MPFitModel):
             if len(transformed_linelist_free_loggf) > 0:
                 loggf_header = "          %8s\t%8s\t%8s\t%8s" % ("wave_base","wave_top","log(gf)","error")
                 loggf_stats = ""
-                for i in xrange(len(transformed_linelist_free_loggf)):
+                for i in range(len(transformed_linelist_free_loggf)):
                     loggf_stats += "log(gf)     %8.4f\t%8s\t%8.3f\t%8.3f\n" % (transformed_linelist_free_loggf['wave_nm'][i], transformed_linelist_free_loggf['element'][i], loggf[i], eloggf[i])
                 print("")
                 print(loggf_header)
@@ -745,7 +750,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
     # VRAD
     if "vrad" in free_params or np.any(initial_vrad != 0):
         base = 9
-        for i in xrange(len(initial_vrad)):
+        for i in range(len(initial_vrad)):
             parinfo[base+i]['parname'] = "vrad%03i" % (i)
             parinfo[base+i]['value'] = initial_vrad[i]
             parinfo[base+i]['fixed'] = not "vrad" in free_params
@@ -759,7 +764,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
     else:
         base = 9
     # ABUNDANCES
-    for i in xrange(len(free_abundances)):
+    for i in range(len(free_abundances)):
         parinfo[base+i]['parname'] = str(free_abundances['code'][i])
         parinfo[base+i]['value'] = free_abundances['Abund'][i]
         parinfo[base+i]['fixed'] = not parinfo[base+i]['parname'].lower() in free_params
@@ -773,7 +778,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
         base = 9 + len(initial_vrad) + len(free_abundances)
     else:
         base = 9 + len(free_abundances)
-    for i in xrange(len(linelist_free_loggf)):
+    for i in range(len(linelist_free_loggf)):
         parinfo[base+i]['parname'] = str(linelist_free_loggf['wave_nm'][i])
         parinfo[base+i]['value'] = linelist_free_loggf['loggf'][i]
         parinfo[base+i]['fixed'] = not "loggf" in free_params
@@ -834,7 +839,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
 
     if free_abundances is None:
         # No free abundances
-        free_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float), ('element', '|S30')])
+        free_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float), ('element', '|U30')])
     else:
         if code == "grid":
             raise Exception("There cannot be free abundances when using a spectral grid for interpolation")
@@ -886,15 +891,15 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
 
     if "alpha" in free_params and enhance_abundances:
         enhance_abundances = False
-        logging.warn("'enhance_abundances' changed to False because alpha is a free parameter")
+        logging.warning("'enhance_abundances' changed to False because alpha is a free parameter")
 
     if "vmic" in free_params and vmic_from_empirical_relation:
         vmic_from_empirical_relation = False
-        logging.warn("'vmic_from_empirical_relation' changed to False because vmic is a free parameter")
+        logging.warning("'vmic_from_empirical_relation' changed to False because vmic is a free parameter")
 
     if "vmac" in free_params and vmac_from_empirical_relation:
         vmac_from_empirical_relation = False
-        logging.warn("'vmac_from_empirical_relation' changed to False because vmac is a free parameter")
+        logging.warning("'vmac_from_empirical_relation' changed to False because vmac is a free parameter")
 
     if segments is None:
         segments = np.recarray((1,),  dtype=[('wave_base', float), ('wave_top', float)])
@@ -925,12 +930,12 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     num_bad_fluxes = len(np.where(bad_fluxes)[0])
     # Do not compare negative or zero fluxes
     if num_bad_fluxes > 0:
-        logging.warn("%i fluxes have been discarded because they are negative or zero" % num_bad_fluxes)
+        logging.warning("%i fluxes have been discarded because they are negative or zero" % num_bad_fluxes)
         comparing_mask[negative_zero_flux] = 0.0
 
     ## Errors
     if use_errors and np.all(err[comparing_mask == 1] <= 0):
-        logging.warn("Use of errors has been desactivated because all of them are set to zero.")
+        logging.warning("Use of errors has been desactivated because all of them are set to zero.")
         use_errors = False
 
     negative_zero_err = err <= 0.0
@@ -938,7 +943,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     num_bad_errors = len(np.where(bad_errors)[0])
     ## Do not compare negative or zero errors
     if use_errors and num_bad_errors > 0:
-        logging.warn("%i fluxes have been discarded because their ERRORS are negative or zero" % num_bad_errors)
+        logging.warning("%i fluxes have been discarded because their ERRORS are negative or zero" % num_bad_errors)
         comparing_mask[negative_zero_err] = 0.0
 
 
@@ -1045,7 +1050,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     errors['R'] *= error_scale_factor
     for i, evrad in enumerate(synth_model.evrad()):
         errors['vrad%04i' % (i)] *= error_scale_factor
-    for i in xrange(len(free_abundances)):
+    for i in range(len(free_abundances)):
         free_abundances['eAbund'][i] *= error_scale_factor
         free_abundances['e[X/H]'][i] *= error_scale_factor
         free_abundances['e[X/Fe]'][i] *= error_scale_factor

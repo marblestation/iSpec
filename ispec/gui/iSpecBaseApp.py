@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -16,22 +17,28 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
-import Tkinter
-import tkMessageBox
-import tkFileDialog
-import tkSimpleDialog
+from future import standard_library
+standard_library.install_aliases()
+from builtins import map
+from builtins import str
+from past.builtins import basestring
+from past.utils import old_div
+import tkinter
+import tkinter.messagebox
+import tkinter.filedialog
+import tkinter.simpledialog
 import matplotlib
 #matplotlib.use('TkAgg')
 
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg as FigCanvas, NavigationToolbar2TkAgg as NavigationToolbar
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg as FigCanvas, NavigationToolbar2Tk as NavigationToolbar
 from matplotlib.figure import Figure
 from matplotlib.ticker import ScalarFormatter
 import matplotlib.pyplot as plt
 
 #import Queue
 #from multiprocessing import Queue
-from Queue import Queue
-from Queue import Empty
+from queue import Queue
+from queue import Empty
 from astropy.io import ascii
 import os
 import sys
@@ -91,7 +98,7 @@ def resource_path(relative):
     return os.path.join(basedir, relative)
 
 
-class iSpecBaseApp(Tkinter.Tk):
+class iSpecBaseApp(tkinter.Tk):
 
     def __init_attributes__(self):
         self.velocity_telluric_lower_limit = -100 # km/s
@@ -284,11 +291,11 @@ class iSpecBaseApp(Tkinter.Tk):
         self.after(100, self.__periodic_queue_check)
 
     def __init__(self, spectra, regions, filenames):
-        Tkinter.Tk.__init__(self)
+        tkinter.Tk.__init__(self)
         self.protocol('WM_DELETE_WINDOW', self.on_close)
 
         # Window icon
-        img = Tkinter.PhotoImage(file=resource_path("images/iSpec.gif"))
+        img = tkinter.PhotoImage(file=resource_path("images/iSpec.gif"))
         self.tk.call('wm', 'iconphoto', self._w, img)
         #self.iconbitmap(bitmap="@"+resource_path("images/iSpec.xbm")) # Black and white
 
@@ -328,7 +335,7 @@ class iSpecBaseApp(Tkinter.Tk):
         for i in np.arange(len(spectra)):
             path = filenames["spectra"][i]
             name = path.split('/')[-1]
-            name = self.get_name(name).encode('string_escape') # If it already exists, add a suffix
+            name = self.get_name(name) # If it already exists, add a suffix
             color = self.get_color()
             self.active_spectrum = Spectrum(spectra[i], name, path=path, color=color)
             self.spectra.append(self.active_spectrum)
@@ -388,7 +395,7 @@ class iSpecBaseApp(Tkinter.Tk):
         for root in glob.glob(os.path.join(dirname, "*")):
             if os.path.isdir(root) and os.path.exists(os.path.join(root, match)):
                 filelist.append((os.path.basename(root), resource_path(os.path.join(root, match))))
-        filelist = np.array(filelist, dtype=[('name', '|S100'), ('path', '|S500')])
+        filelist = np.array(filelist, dtype=[('name', '|U100'), ('path', '|U500')])
         filelist.sort(order=['name'])
         return filelist
 
@@ -401,16 +408,16 @@ class iSpecBaseApp(Tkinter.Tk):
         self.create_statusbar()
 
     def create_window(self ):
-        self.frame = Tkinter.Frame(self)
-        self.frame.pack(fill=Tkinter.BOTH, expand=1)
+        self.frame = tkinter.Frame(self)
+        self.frame.pack(fill=tkinter.BOTH, expand=1)
         self.wm_title("iSpec")
 
     def create_menu(self):
         # create a menu
-        menu = Tkinter.Menu(self)
+        menu = tkinter.Menu(self)
         self.config(menu=menu)
 
-        filemenu = Tkinter.Menu(menu)
+        filemenu = tkinter.Menu(menu)
         menu.add_cascade(label="Files", menu=filemenu)
         filemenu.add_command(label="Open spectra", command=self.on_open_spectra)
         filemenu.add_command(label="Open continuum regions", command=self.on_open_continuum)
@@ -419,7 +426,7 @@ class iSpecBaseApp(Tkinter.Tk):
         filemenu.add_separator()
         filemenu.add_command(label="Save plot image as...", command=self.on_save_plot)
         filemenu.add_command(label="Save spectrum as...", command=self.on_save_spectrum)
-        self.spectrum_function_items.append((filemenu, filemenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((filemenu, filemenu.entrycget(tkinter.END, "label")))
         filemenu.add_command(label="Save continuum regions as...", command=self.on_save_continuum_regions)
         filemenu.add_command(label="Save line regions as...", command=self.on_save_line_regions)
         filemenu.add_command(label="Save segment as...", command=self.on_save_segments)
@@ -428,26 +435,26 @@ class iSpecBaseApp(Tkinter.Tk):
         filemenu.add_separator()
         filemenu.add_command(label="Exit", command=self.on_close)
 
-        operationmenu = Tkinter.Menu(menu)
+        operationmenu = tkinter.Menu(menu)
         menu.add_cascade(label="Operations", menu=operationmenu)
 
-        continuummenu = Tkinter.Menu(operationmenu)
+        continuummenu = tkinter.Menu(operationmenu)
         operationmenu.add_cascade(label="Fit continuum...", menu=continuummenu)
         continuummenu.add_command(label="Splines", command=self.on_fit_continuum)
-        self.spectrum_function_items.append((continuummenu, continuummenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((continuummenu, continuummenu.entrycget(tkinter.END, "label")))
         continuummenu.add_command(label="Polynomy", command=self.on_fit_continuum_polynomy)
-        self.spectrum_function_items.append((continuummenu, continuummenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((continuummenu, continuummenu.entrycget(tkinter.END, "label")))
         continuummenu.add_command(label="Template", command=self.on_fit_continuum_template)
-        self.spectrum_function_items.append((continuummenu, continuummenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((continuummenu, continuummenu.entrycget(tkinter.END, "label")))
         continuummenu.add_command(label="Fixed value", command=self.on_fit_continuum_fixed_value)
-        self.spectrum_function_items.append((continuummenu, continuummenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((continuummenu, continuummenu.entrycget(tkinter.END, "label")))
 
         if len(self.lists['atomic_lines']) > 0:
             operationmenu.add_command(label="Fit lines", command=self.on_fit_lines)
-            self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+            self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
         operationmenu.add_separator()
 
-        clearmenu = Tkinter.Menu(operationmenu)
+        clearmenu = tkinter.Menu(operationmenu)
         operationmenu.add_cascade(label="Clear...", menu=clearmenu)
         clearmenu.add_command(label="Fitted continuum", command=self.on_remove_fitted_continuum)
         clearmenu.add_command(label="Fitted lines", command=self.on_remove_fitted_lines)
@@ -457,76 +464,76 @@ class iSpecBaseApp(Tkinter.Tk):
 
         operationmenu.add_separator()
         operationmenu.add_command(label="Find continuum regions", command=self.on_find_continuum)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
         if len(self.lists['atomic_lines']) > 0:
             operationmenu.add_command(label="Find line masks", command=self.on_find_lines)
-            self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+            self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
         operationmenu.add_command(label="Adjust line masks", command=self.on_adjust_lines)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
         operationmenu.add_command(label="Create segments around line masks", command=self.on_create_segments_around_lines)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
 
         operationmenu.add_separator()
 
 
-        velocitymenu = Tkinter.Menu(operationmenu)
+        velocitymenu = tkinter.Menu(operationmenu)
         operationmenu.add_cascade(label="Correct velocity relative to...", menu=velocitymenu)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
 
         velocitymenu.add_command(label="Atomic line mask (radial velocity)", command=self.on_correct_velocity_atomic)
-        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(tkinter.END, "label")))
         velocitymenu.add_command(label="Telluric line mask  (barycentric velocity)", command=self.on_correct_velocity_telluric)
-        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(tkinter.END, "label")))
         velocitymenu.add_command(label="Template", command=self.on_correct_velocity_template)
-        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(tkinter.END, "label")))
 
         operationmenu.add_separator()
 
         operationmenu.add_command(label="Calculate errors based on SNR", command=self.on_calculate_errors)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
         operationmenu.add_command(label="Add noise to spectrum fluxes", command=self.on_add_noise)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
         operationmenu.add_separator()
         operationmenu.add_command(label="Degrade resolution", command=self.on_degrade_resolution)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
         operationmenu.add_command(label="Continuum normalization", command=self.on_continuum_normalization)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
         operationmenu.add_command(label="Clean fluxes and errors", command=self.on_clean_spectrum)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
         operationmenu.add_command(label="Clean telluric regions", command=self.on_clean_tellurics)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
         operationmenu.add_command(label="Wavelength range reduction", command=self.on_cut_spectrum)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
         operationmenu.add_command(label="Apply mathematical expression", command=self.on_operate_spectrum)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
         operationmenu.add_command(label="Resample spectrum", command=self.on_resample_spectrum)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
         operationmenu.add_command(label="Combine all spectra", command=self.on_combine_spectra)
-        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((operationmenu, operationmenu.entrycget(tkinter.END, "label")))
 
 
-        parametersmenu = Tkinter.Menu(menu)
+        parametersmenu = tkinter.Menu(menu)
         menu.add_cascade(label="Parameters", menu=parametersmenu)
 
-        velocitymenu = Tkinter.Menu(operationmenu)
+        velocitymenu = tkinter.Menu(operationmenu)
         parametersmenu.add_cascade(label="Determine velocity relative to...", menu=velocitymenu)
-        self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(tkinter.END, "label")))
 
         if len(self.lists['masks']) > 1: # More than one because 1 for tellurics and 1 for stellar lines at least
             velocitymenu.add_command(label="Atomic line mask (radial velocity)", command=self.on_determine_velocity_atomic)
-            self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
+            self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(tkinter.END, "label")))
             velocitymenu.add_command(label="Telluric line mask  (barycentric velocity)", command=self.on_determine_velocity_telluric)
-            self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
+            self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(tkinter.END, "label")))
         velocitymenu.add_command(label="Template", command=self.on_determine_velocity_template)
-        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((velocitymenu, velocitymenu.entrycget(tkinter.END, "label")))
         parametersmenu.add_command(label="Calculate barycentric velocity", command=self.on_determine_barycentric_vel)
         parametersmenu.add_separator()
         parametersmenu.add_command(label="Estimate SNR", command=self.on_estimate_snr)
-        self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(tkinter.END, "label")))
         parametersmenu.add_separator()
         if len(self.lists['grid']) > 0:
             parametersmenu.add_command(label="Determine parameters and abundances with grid", command=self.on_determine_parameters_with_grid)
-            self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
+            self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(tkinter.END, "label")))
         if (ispec.is_spectrum_support_enabled() \
                 #or ispec.is_turbospectrum_support_enabled() \
                 #or ispec.is_moog_support_enabled() \
@@ -534,26 +541,26 @@ class iSpecBaseApp(Tkinter.Tk):
                 ) and \
                 len(self.lists['atmospheres']) > 0 and len(self.lists['abundances']) > 0 and len(self.lists['atomic_lines']) > 0:
             parametersmenu.add_command(label="Determine parameters and abundances with synthesis", command=self.on_determine_parameters)
-            self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
+            self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(tkinter.END, "label")))
             parametersmenu.add_command(label="Determine abundances with equivalent widths", command=self.on_determine_abundances_from_ew)
-            self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
+            self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(tkinter.END, "label")))
             parametersmenu.add_command(label="Determine parameters with equivalent widths", command=self.on_determine_parameters_from_ew)
-            self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(Tkinter.END, "label")))
+            self.spectrum_function_items.append((parametersmenu, parametersmenu.entrycget(tkinter.END, "label")))
 
-        self.menu_active_spectrum_num = Tkinter.IntVar()
+        self.menu_active_spectrum_num = tkinter.IntVar()
         self.menu_active_spectrum_num.set('1')
 
-        self.menu_active_spectrum = Tkinter.Menu(menu)
+        self.menu_active_spectrum = tkinter.Menu(menu)
         menu.add_cascade(label="Spectra", menu=self.menu_active_spectrum)
 
         self.menu_active_spectrum.add_command(label="Duplicate spectrum", command=self.on_duplicate_spectrum)
-        self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(tkinter.END, "label")))
         self.menu_active_spectrum.add_command(label="Close spectrum", command=self.on_close_spectrum)
-        self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(tkinter.END, "label")))
         self.menu_active_spectrum.add_command(label="Close all spectra", command=self.on_close_all_spectra)
-        self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(tkinter.END, "label")))
         self.menu_active_spectrum.add_command(label="Close all spectra except the active one", command=self.on_close_all_spectra_except_active)
-        self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(tkinter.END, "label")))
         self.menu_active_spectrum.add_separator()
 
         if len(self.lists['grid']) > 0:
@@ -570,16 +577,16 @@ class iSpecBaseApp(Tkinter.Tk):
 
         if self.samp_manager is not None:
             self.menu_active_spectrum.add_command(label="Send spectrum to...", command=self.on_send_spectrum)
-            self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(Tkinter.END, "label")))
-        self.show_errors = Tkinter.BooleanVar()
+            self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(tkinter.END, "label")))
+        self.show_errors = tkinter.BooleanVar()
         self.menu_active_spectrum.add_checkbutton(label="Show errors in plot", onvalue=True, offvalue=False, variable=self.show_errors, command=self.on_show_errors)
-        self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(Tkinter.END, "label")))
+        self.spectrum_function_items.append((self.menu_active_spectrum, self.menu_active_spectrum.entrycget(tkinter.END, "label")))
         self.menu_active_spectrum.add_separator()
 
         # Base reference from where to update the spectra list
         self.menu_active_spectrum_base = self.menu_active_spectrum.index("Show errors in plot") + 2
 
-        helpmenu = Tkinter.Menu(menu)
+        helpmenu = tkinter.Menu(menu)
         menu.add_cascade(label="Help", menu=helpmenu)
 
         helpmenu.add_command(label="License", command=self.on_license)
@@ -590,7 +597,7 @@ class iSpecBaseApp(Tkinter.Tk):
         # Create the mpl Figure and FigCanvas objects.
         # 5x4 inches, 100 dots-per-inch
         #
-        self.plot_frame = Tkinter.Frame(self.frame)
+        self.plot_frame = tkinter.Frame(self.frame)
         self.dpi = 100
         self.fig = Figure((5.0, 5.0), dpi=self.dpi)
         self.canvas = FigCanvas(self.fig, master=self.plot_frame)
@@ -604,8 +611,8 @@ class iSpecBaseApp(Tkinter.Tk):
         self.axes = self.fig.add_subplot(1, 1, 1)
         # Avoid using special notation that are not easy to understand in axis for big zoom
         myyfmt = ScalarFormatter(useOffset=False)
-    	self.axes.get_xaxis().set_major_formatter(myyfmt)
-    	self.axes.get_yaxis().set_major_formatter(myyfmt)
+        self.axes.get_xaxis().set_major_formatter(myyfmt)
+        self.axes.get_yaxis().set_major_formatter(myyfmt)
 
         # Make space for the legend
         box = self.axes.get_position()
@@ -616,55 +623,55 @@ class iSpecBaseApp(Tkinter.Tk):
 
         self.toolbar = NavigationToolbar(self.canvas, self.plot_frame)
         self.toolbar.update()
-        self.canvas._tkcanvas.pack(side=Tkinter.TOP, fill=Tkinter.BOTH, expand=1)
-        self.plot_frame.pack(side=Tkinter.TOP, fill=Tkinter.BOTH, expand=1)
+        self.canvas._tkcanvas.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=1)
+        self.plot_frame.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=1)
 
     def create_controls(self):
         # controls
-        self.control_frame = Tkinter.Frame(self.frame)
+        self.control_frame = tkinter.Frame(self.frame)
 
         self.canvas.mpl_connect('button_release_event', self.on_release)
         self.canvas.mpl_connect('motion_notify_event', self.on_motion)
 
-        label = Tkinter.Label(self.control_frame, text="Action:")
-        label.pack(side=Tkinter.LEFT)
-        self.action_entry = Tkinter.StringVar()
+        label = tkinter.Label(self.control_frame, text="Action:")
+        label.pack(side=tkinter.LEFT)
+        self.action_entry = tkinter.StringVar()
         self.action_entry.set("Stats")
         self.action_buttons = {}
         for text in ["Stats", "Create", "Modify", "Remove"]:
-            self.action_buttons[text] = Tkinter.Radiobutton(self.control_frame, text=text, variable=self.action_entry, value=text, command=self.on_action_change)
-            self.action_buttons[text].pack(side=Tkinter.LEFT)
+            self.action_buttons[text] = tkinter.Radiobutton(self.control_frame, text=text, variable=self.action_entry, value=text, command=self.on_action_change)
+            self.action_buttons[text].pack(side=tkinter.LEFT)
 
-        label = Tkinter.Label(self.control_frame, text=" || Element:")
-        label.pack(side=Tkinter.LEFT)
-        self.elements_entry = Tkinter.StringVar()
+        label = tkinter.Label(self.control_frame, text=" || Element:")
+        label.pack(side=tkinter.LEFT)
+        self.elements_entry = tkinter.StringVar()
         self.elements_entry.set("Continuum")
         self.elements_buttons = {}
         for text in ["Continuum", "Lines", "Line marks", "Segments"]:
             if text == "Line marks":
-                self.elements_buttons[text] = Tkinter.Radiobutton(self.control_frame, text=text, variable=self.elements_entry, value=text, command=self.on_element_change, state=Tkinter.DISABLED)
+                self.elements_buttons[text] = tkinter.Radiobutton(self.control_frame, text=text, variable=self.elements_entry, value=text, command=self.on_element_change, state=tkinter.DISABLED)
             else:
-                self.elements_buttons[text] = Tkinter.Radiobutton(self.control_frame, text=text, variable=self.elements_entry, value=text, command=self.on_element_change)
-            self.elements_buttons[text].pack(side=Tkinter.LEFT)
+                self.elements_buttons[text] = tkinter.Radiobutton(self.control_frame, text=text, variable=self.elements_entry, value=text, command=self.on_element_change)
+            self.elements_buttons[text].pack(side=tkinter.LEFT)
 
         #self.button = Tkinter.Button(self.control_frame, text="QUIT", fg="red", command=self.on_close)
         #self.button.pack(side=Tkinter.LEFT)
 
         self.progress_bar = Meter(self.control_frame)
-        self.progress_bar.pack(side=Tkinter.LEFT)
+        self.progress_bar.pack(side=tkinter.LEFT)
         self.control_frame.pack()
 
-        frame = Tkinter.Frame(self)
-        self.stats_scrollbar = Tkinter.Scrollbar(frame, orient=Tkinter.VERTICAL)
-        self.stats = Tkinter.Listbox(frame, height=5, yscrollcommand=self.stats_scrollbar.set, font=('courier',10,'normal'), selectmode=Tkinter.EXTENDED)
-        self.stats_scrollbar.pack(side=Tkinter.RIGHT, fill=Tkinter.Y)
-        self.stats.pack(fill=Tkinter.BOTH, expand=1)
-        frame.pack(fill=Tkinter.X)
+        frame = tkinter.Frame(self)
+        self.stats_scrollbar = tkinter.Scrollbar(frame, orient=tkinter.VERTICAL)
+        self.stats = tkinter.Listbox(frame, height=5, yscrollcommand=self.stats_scrollbar.set, font=('courier',10,'normal'), selectmode=tkinter.EXTENDED)
+        self.stats_scrollbar.pack(side=tkinter.RIGHT, fill=tkinter.Y)
+        self.stats.pack(fill=tkinter.BOTH, expand=1)
+        frame.pack(fill=tkinter.X)
 
     def create_statusbar(self):
         ## create a statusbar
         self.status = StatusBar(self)
-        self.status.pack(side=Tkinter.BOTTOM, fill=Tkinter.X)
+        self.status.pack(side=tkinter.BOTTOM, fill=tkinter.X)
         self.status.set("hi!")
 
 
@@ -704,6 +711,8 @@ class iSpecBaseApp(Tkinter.Tk):
 
     # Check if exists a spectrum with that name, in that case add a suffix
     def get_name(self, name):
+        if isinstance(name, bytes):
+            name = name.decode('utf-8')
         num_repeated = 0
         max_num = 0
         for spec in self.spectra:
@@ -792,11 +801,11 @@ iSpec uses the following radiative transfer codes:
 
     def on_action_change(self):
         self.enable_elements()
-        self.stats.delete(0, Tkinter.END) # Delete all
+        self.stats.delete(0, tkinter.END) # Delete all
 
         self.action = self.action_entry.get()
         if self.action in ["Stats", "Create"]:
-            self.elements_buttons['Line marks'].config(state=Tkinter.DISABLED)
+            self.elements_buttons['Line marks'].config(state=tkinter.DISABLED)
             if self.elements_entry.get() == "Line marks":
                 self.elements_entry.set("continuum")
                 self.elements = "continuum"
@@ -804,7 +813,7 @@ iSpec uses the following radiative transfer codes:
 
     def enable_elements(self):
         for text in ["Continuum", "Lines", "Line marks", "Segments"]:
-            self.elements_buttons[text].config(state=Tkinter.NORMAL)
+            self.elements_buttons[text].config(state=tkinter.NORMAL)
 
     def on_element_change(self):
         if self.elements_entry.get() == "Lines":
@@ -988,7 +997,7 @@ iSpec uses the following radiative transfer codes:
                 ftypes = [('All files', '*'), ('FITS', '*.fit *.fits'), ('Plain text', '*.txt')]
                 if sys.platform == "darwin":
                     ftypes = [] # Not working properly in MacOSX
-                answer = tkFileDialog.askopenfilenames(title="Open %s..." % elements, initialdir=dirname, filetypes=ftypes, defaultextension=".txt")
+                answer = tkinter.filedialog.askopenfilenames(title="Open %s..." % elements, initialdir=dirname, filetypes=ftypes, defaultextension=".txt")
                 unique_answer = np.unique(answer)
                 if len(unique_answer) > 0 and len(unique_answer[0]) > 0:
                     answer_ok = True
@@ -998,7 +1007,7 @@ iSpec uses the following radiative transfer codes:
                 ftypes = [('All files', '*'), ('Plain text', '*.txt')]
                 if sys.platform == "darwin":
                     ftypes = [] # Not working properly in MacOSX
-                answer = tkFileDialog.askopenfilename(title="Open %s..." % elements, initialdir=dirname, initialfile=filename, filetypes=ftypes, defaultextension=".txt")
+                answer = tkinter.filedialog.askopenfilename(title="Open %s..." % elements, initialdir=dirname, initialfile=filename, filetypes=ftypes, defaultextension=".txt")
                 if isinstance(answer, basestring) and len(answer) > 0:
                     answer_ok = True
                 else:
@@ -1104,7 +1113,7 @@ iSpec uses the following radiative transfer codes:
             ftypes = [('PNG (*.png)', '*.png')]
             if sys.platform == "darwin":
                 ftypes = [] # Not working properly in MacOSX
-            answer = tkFileDialog.asksaveasfilename(title="Save plot as...", initialdir=dirname, initialfile=filename, filetypes=ftypes, defaultextension=".png")
+            answer = tkinter.filedialog.asksaveasfilename(title="Save plot as...", initialdir=dirname, initialfile=filename, filetypes=ftypes, defaultextension=".png")
             if isinstance(answer, basestring) and len(answer) > 0:
                 answer_ok = True
             else:
@@ -1140,7 +1149,7 @@ iSpec uses the following radiative transfer codes:
             ftypes = [('All files', '*'), ('FITS', '*.fit *.fits'), ('Plain text', '*.txt'), ('Compressed plain text', '*.gz')]
             if sys.platform == "darwin":
                 ftypes = [] # Not working properly in MacOSX
-            answer = tkFileDialog.asksaveasfilename(title="Save spectrum as...", initialdir=dirname, initialfile=filename, filetypes=ftypes, defaultextension=".txt")
+            answer = tkinter.filedialog.asksaveasfilename(title="Save spectrum as...", initialdir=dirname, initialfile=filename, filetypes=ftypes, defaultextension=".txt")
             if isinstance(answer, basestring) and len(answer) > 0:
                 answer_ok = True
             else:
@@ -1212,7 +1221,7 @@ iSpec uses the following radiative transfer codes:
             ftypes = [('All files', '*')]
             if sys.platform == "darwin":
                 ftypes = [] # Not working properly in MacOSX
-            answer = tkFileDialog.asksaveasfilename(title="Save regions as...", initialdir=dirname, initialfile=filename, filetypes=ftypes, defaultextension=".txt")
+            answer = tkinter.filedialog.asksaveasfilename(title="Save regions as...", initialdir=dirname, initialfile=filename, filetypes=ftypes, defaultextension=".txt")
             if isinstance(answer, basestring) and len(answer) > 0:
                 answer_ok = True
             else:
@@ -1399,11 +1408,11 @@ iSpec uses the following radiative transfer codes:
 
     def update_menu_active_spectrum(self):
         # Remove everything from the list (but keep commands, last one is show errors)
-        self.menu_active_spectrum.delete(self.menu_active_spectrum_base, Tkinter.END)
+        self.menu_active_spectrum.delete(self.menu_active_spectrum_base, tkinter.END)
 
         if len(self.spectra) == 0:
             # No spectra loaded
-            self.menu_active_spectrum.add_radiobutton(label="None", variable=self.menu_active_spectrum_num, value=str(1), indicatoron=0, state=Tkinter.DISABLED)
+            self.menu_active_spectrum.add_radiobutton(label="None", variable=self.menu_active_spectrum_num, value=str(1), indicatoron=0, state=tkinter.DISABLED)
         else:
             # Add as many options as spectra
             for i in np.arange(len(self.spectra)):
@@ -1418,11 +1427,11 @@ iSpec uses the following radiative transfer codes:
         if len(self.spectra) > 0:
             for menu, label in self.spectrum_function_items:
                 index = menu.index(label)
-                menu.entryconfig(index, state=Tkinter.NORMAL)
+                menu.entryconfig(index, state=tkinter.NORMAL)
         else:
             for menu, label in self.spectrum_function_items:
                 index = menu.index(label)
-                menu.entryconfig(index, state=Tkinter.DISABLED)
+                menu.entryconfig(index, state=tkinter.DISABLED)
 
     def draw_active_spectrum(self):
         if self.active_spectrum is not None:
@@ -1457,7 +1466,7 @@ iSpec uses the following radiative transfer codes:
 
 
     def add_stats(self, k, v):
-        self.stats.insert(Tkinter.END, "%-40s: %s" % (str(k), str(v)))
+        self.stats.insert(tkinter.END, "%-40s: %s" % (str(k), str(v)))
 
     ############################################################################
     def on_change_active_spectrum(self):
@@ -1663,7 +1672,7 @@ iSpec uses the following radiative transfer codes:
     def __update_numpy_arrays_from_widgets(self, elements):
         total_regions = len(self.region_widgets[elements])
         if elements == "lines":
-            self.regions[elements] = np.recarray((total_regions, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100')])
+            self.regions[elements] = np.recarray((total_regions, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|U100')])
             i = 0
             for region in self.region_widgets[elements]:
                 if region.axvspan.get_visible():
@@ -1707,21 +1716,19 @@ iSpec uses the following radiative transfer codes:
         return True
 
     def error(self, title, msg):
-        tkMessageBox.showerror(title, msg)
+        tkinter.messagebox.showerror(title, msg)
 
     def info(self, title, msg):
-        tkMessageBox.showinfo(title, msg)
+        tkinter.messagebox.showinfo(title, msg)
 
     def question(self, title, msg):
-        answer_yes = tkMessageBox.askquestion(title, msg) == 'yes'
+        answer_yes = tkinter.messagebox.askquestion(title, msg) == 'yes'
         if not answer_yes:
             self.flash_status_message("Discarded")
         return answer_yes
 
     def ask_value(self, text, title, default_value):
-        response = tkSimpleDialog.askstring(title, text, initialvalue=default_value)
-        if isinstance(response, Tkinter.NoneType):
-            response = None
+        response = tkinter.simpledialog.askstring(title, text, initialvalue=default_value)
         return response
 
     def update_progress(self, value):
@@ -1772,8 +1779,8 @@ iSpec uses the following radiative transfer codes:
         # Recover the line marks in case they existed before
         self.show_marks()
         # Recover initial view
-      	self.axes.set_ylim(ylim)
-      	self.axes.set_xlim(xlim)
+        self.axes.set_ylim(ylim)
+        self.axes.set_xlim(xlim)
         self.toolbar.push_current() # Save the view in the history
         self.canvas.draw()
 
@@ -1788,7 +1795,7 @@ iSpec uses the following radiative transfer codes:
         if not self.check_active_spectrum_exists():
             return
 
-        self.stats.delete(0, Tkinter.END) # Delete all
+        self.stats.delete(0, tkinter.END) # Delete all
 
         wave_base = region.get_wave_base()
         wave_top = region.get_wave_top()
@@ -1831,10 +1838,10 @@ iSpec uses the following radiative transfer codes:
                 A = region.line_model[self.active_spectrum].A()
                 sig = region.line_model[self.active_spectrum].sig()
                 ew = -1.*A*np.sqrt(2*np.pi*sig**2) # nm
-                integrated_flux = ew / region.line_model[self.active_spectrum].baseline() # nm^2
+                integrated_flux = old_div(ew, region.line_model[self.active_spectrum].baseline()) # nm^2
             else:
                 integrated_flux = -1 * region.line_model[self.active_spectrum].integrate()
-                ew = integrated_flux / region.line_model[self.active_spectrum].baseline()
+                ew = old_div(integrated_flux, region.line_model[self.active_spectrum].baseline())
             ew = ew * 10000 # From nm to mA
             self.add_stats("Gaussian fit Equivalent Width (EW)", "%.2f" % ew)
 
@@ -1861,7 +1868,7 @@ iSpec uses the following radiative transfer codes:
                 self.add_stats("Continuum mean for the region", "%.4f" % mean_continuum)
             try:
                 residuals = np.abs(self.active_spectrum.continuum_model.residuals())
-                rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
+                rms = np.sqrt(old_div(np.sum(np.power(residuals,2)),len(residuals)))
                 self.add_stats("Continuum fit root mean square (RMS)", "%.4f" % rms)
             except AttributeError:
                 # Only spline continuum models have "residuals" method
@@ -2110,7 +2117,7 @@ iSpec uses the following radiative transfer codes:
             if template is not None:
                 if template.startswith("i:"):
                     # Internal template (solar type)
-                    if not template in self.ccf_template.keys():
+                    if not template in list(self.ccf_template.keys()):
                         i = np.where(self.lists['templates']['name'] == template[2:])[0][0]
                         self.ccf_template[template] = ispec.read_spectrum(self.lists['templates']['path'][i])
                     template_spectrum = self.ccf_template[template]
@@ -2256,8 +2263,8 @@ iSpec uses the following radiative transfer codes:
         # Limit to region of interest
         wmin = spectrum['waveobs'][0]
         wmax = spectrum['waveobs'][-1]
-        delta_wmin = wmin * (velocity_lower_limit / (c/1000.0))
-        delta_wmax = wmax * (velocity_upper_limit / (c/1000.0))
+        delta_wmin = wmin * (old_div(velocity_lower_limit, (c/1000.0)))
+        delta_wmax = wmax * (old_div(velocity_upper_limit, (c/1000.0)))
         wfilter = (telluric_linelist['wave_peak'] <= wmax + delta_wmax) & (telluric_linelist['wave_peak'] >= wmin + delta_wmin)
         linelist = telluric_linelist[wfilter]
         # Discard not fitted lines
@@ -2267,7 +2274,7 @@ iSpec uses the following radiative transfer codes:
         rfilter = (linelist['depth'] <= 0.9) & (linelist['depth'] >= 0.01)
         linelist = linelist[rfilter]
         # Discard outliers FWHM in km/s (which is not wavelength dependent)
-        telluric_fwhm = (c / (linelist['wave_peak'] / linelist['fwhm'])) / 1000.0 # km/s
+        telluric_fwhm = (old_div(c, (old_div(linelist['wave_peak'], linelist['fwhm'])))) / 1000.0 # km/s
         fwhm_selected, fwhm_selected_filter = ispec.sigma_clipping(telluric_fwhm, meanfunc=np.median)
         linelist = linelist[fwhm_selected_filter]
         return linelist
@@ -2277,7 +2284,7 @@ iSpec uses the following radiative transfer codes:
         self.queue.put((self.status_message, ["Determining velocity..."], {}))
 
         if relative_to_atomic_data or relative_to_telluric_data:
-            if not mask_name in self.ccf_mask.keys():
+            if not mask_name in list(self.ccf_mask.keys()):
                 i = np.where(self.lists['masks']['name'] == mask_name)[0][0]
                 self.ccf_mask[mask_name] = ispec.read_cross_correlation_mask(self.lists['masks']['path'][i])
             mask_linelist = self.ccf_mask[mask_name]
@@ -2289,7 +2296,7 @@ iSpec uses the following radiative transfer codes:
         if relative_to_template:
             if template.startswith("i:"):
                 # Internal template (solar type)
-                if not template in self.ccf_template.keys():
+                if not template in list(self.ccf_template.keys()):
                     i = np.where(self.lists['templates']['name'] == template[2:])[0][0]
                     self.ccf_template[template] = ispec.read_spectrum(self.lists['templates']['path'][i])
                 template_spectrum = self.ccf_template[template]
@@ -2334,15 +2341,15 @@ iSpec uses the following radiative transfer codes:
             fwhm = models[0].fwhm()[0] # km/s (because xcoord is already velocity)
             if relative_to_atomic_data or relative_to_template:
                 telluric_fwhm = 0.0
-                R = np.int(c/(1000.0*fwhm))
+                R = np.int(old_div(c,(1000.0*fwhm)))
             else:
                 # If telluric lines have been used, we can substract its natural FWHM
                 # so that we get the real resolution of the instrument (based on the difference in FWHM)
                 c = 299792458.0 # m/s
-                telluric_fwhm = np.mean((c / (mask_linelist['wave_peak'] / mask_linelist['fwhm'])) / 1000.0) # km/s
+                telluric_fwhm = np.mean((old_div(c, (old_div(mask_linelist['wave_peak'], mask_linelist['fwhm'])))) / 1000.0) # km/s
                 diff = np.round(fwhm - telluric_fwhm, 2)
                 if diff > 0:
-                    R = np.int(c/(1000.0*diff))
+                    R = np.int(old_div(c,(1000.0*diff)))
                 else:
                     R = 0
             # Velocity
@@ -2425,9 +2432,9 @@ iSpec uses the following radiative transfer codes:
             self.molecules = ispec.read_molecular_symbols(molecules_file)
         if self.chemical_elements is None:
             self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
-        if not selected_linelist in self.atomic_linelist.keys():
+        if not selected_linelist in list(self.atomic_linelist.keys()):
             self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file)
-            logging.warn("Limiting linelist to lines that have at least 0.01 depth in the Sun")
+            logging.warning("Limiting linelist to lines that have at least 0.01 depth in the Sun")
             solar = self.atomic_linelist[selected_linelist]['theoretical_depth'] >= 0.01
             self.atomic_linelist[selected_linelist] = self.atomic_linelist[selected_linelist][solar]
 
@@ -2489,7 +2496,7 @@ iSpec uses the following radiative transfer codes:
             diff_num_regions = len(self.region_widgets["lines"]) - len(linemasks)
             # Find regions that has been discarded due to a bad fit or other reason
             # in order to recover them
-            recovered_regions = np.recarray((diff_num_regions, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100')])
+            recovered_regions = np.recarray((diff_num_regions, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|U100')])
             i = 0
             for region in self.region_widgets["lines"]:
                 lost_region = True
@@ -2514,7 +2521,7 @@ iSpec uses the following radiative transfer codes:
 
         if linemasks is not None and len(linemasks) > 0:
             total_regions = len(linemasks)
-            line_regions = np.recarray((total_regions, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100')])
+            line_regions = np.recarray((total_regions, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|U100')])
             line_regions['wave_peak'] = linemasks['mu']
             # If no edge limit improvement has been applied (i.e. fit_lines does not do it)
             line_regions['wave_base'] = linemasks['wave_base']
@@ -2659,7 +2666,7 @@ iSpec uses the following radiative transfer codes:
         self.find_continuum_regions_sigma = sigma
         self.find_continuum_regions_max_continuum_diff = max_continuum_diff
         # Convert from % to over 1
-        max_continuum_diff = max_continuum_diff / 100
+        max_continuum_diff = old_div(max_continuum_diff, 100)
 
         if in_segments and (self.region_widgets["segments"] is None or len(self.region_widgets["segments"]) == 0):
             self.queue.put((self.flash_status_message, ["No segments found."], {}))
@@ -2673,7 +2680,7 @@ iSpec uses the following radiative transfer codes:
     def update_numpy_arrays_from_widgets(self, elements):
         total_regions = len(self.region_widgets[elements])
         if elements == "lines":
-            self.regions[elements] = np.recarray((total_regions, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|S100')])
+            self.regions[elements] = np.recarray((total_regions, ), dtype=[('wave_peak', float),('wave_base', float), ('wave_top', float), ('note', '|U100')])
             i = 0
             for region in self.region_widgets[elements]:
                 if region.axvspan.get_visible():
@@ -2835,9 +2842,9 @@ iSpec uses the following radiative transfer codes:
             self.molecules = ispec.read_molecular_symbols(molecules_file)
         if self.chemical_elements is None:
             self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
-        if not selected_linelist in self.atomic_linelist.keys():
+        if not selected_linelist in list(self.atomic_linelist.keys()):
             self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file)
-            logging.warn("Limiting linelist to lines that have at least 0.01 depth in the Sun")
+            logging.warning("Limiting linelist to lines that have at least 0.01 depth in the Sun")
             solar = self.atomic_linelist[selected_linelist]['theoretical_depth'] >= 0.01
             self.atomic_linelist[selected_linelist] = self.atomic_linelist[selected_linelist][solar]
         if self.telluric_linelist is None:
@@ -3101,10 +3108,10 @@ iSpec uses the following radiative transfer codes:
         self.dialog[key].destroy()
 
         try:
-            day, month, year = map(float, date_string.split("/"))
-            hours, minutes, seconds = map(float, time_string.split(":"))
-            ra_hours, ra_minutes, ra_seconds = map(float, ra.split(":"))
-            dec_degree, dec_minutes, dec_seconds = map(float, dec.split(":"))
+            day, month, year = list(map(float, date_string.split("/")))
+            hours, minutes, seconds = list(map(float, time_string.split(":")))
+            ra_hours, ra_minutes, ra_seconds = list(map(float, ra.split(":")))
+            dec_degree, dec_minutes, dec_seconds = list(map(float, dec.split(":")))
         except:
             msg = 'Some input values are not in the expected data format.'
             title = "Bad values"
@@ -3161,7 +3168,7 @@ iSpec uses the following radiative transfer codes:
             efilter = self.active_spectrum.data['err'] > 0
             spec = self.active_spectrum.data[efilter]
             if len(spec) > 1:
-                estimated_snr = np.median(spec['flux'] / spec['err'])
+                estimated_snr = np.median(old_div(spec['flux'], spec['err']))
                 self.on_estimate_snr_finnish(estimated_snr)
             else:
                 msg = 'All value errors are set to zero or negative numbers'
@@ -3219,7 +3226,7 @@ iSpec uses the following radiative transfer codes:
             self.error(title, msg)
             return
 
-        self.active_spectrum.data['err'] = self.active_spectrum.data['flux'] / snr
+        self.active_spectrum.data['err'] = old_div(self.active_spectrum.data['flux'], snr)
         self.active_spectrum.not_saved = True
 
         self.draw_active_spectrum()
@@ -3274,8 +3281,8 @@ iSpec uses the following radiative transfer codes:
         else:
             R = self.active_spectrum.resolution_telluric
         if key not in self.active_spectrum.dialog:
-            self.active_spectrum.dialog[key] = DegradeResolutionDialog(self, "Degrade spectrum resolution", R, R/2)
-        self.active_spectrum.dialog[key].show(updated_from_resolution=R, updated_to_resolution=R/2)
+            self.active_spectrum.dialog[key] = DegradeResolutionDialog(self, "Degrade spectrum resolution", R, old_div(R,2))
+        self.active_spectrum.dialog[key].show(updated_from_resolution=R, updated_to_resolution=old_div(R,2))
 
         if self.active_spectrum.dialog[key].results is None:
             self.active_spectrum.dialog[key].destroy()
@@ -3841,10 +3848,10 @@ iSpec uses the following radiative transfer codes:
             err = resampled_spectra[active]['err'].copy()
             i = 0
             for spec in resampled_spectra:
-                #logging.warn("Division by zero may occur")
+                #logging.warning("Division by zero may occur")
                 if i != active:
                     # Error propagation assuming that they are independent
-                    err = np.sqrt(np.power(flux / err, 2) + np.power(spec['flux'] / spec['err'], 2)) * 0.7
+                    err = np.sqrt(np.power(old_div(flux, err), 2) + np.power(old_div(spec['flux'], spec['err']), 2)) * 0.7
                     flux = flux * (1. / spec['flux'])
                 i += 1
             combined_spectrum = ispec.create_spectrum_structure(xaxis, flux, err)
@@ -4306,16 +4313,16 @@ iSpec uses the following radiative transfer codes:
                 self.molecules = ispec.read_molecular_symbols(molecules_file)
             if self.chemical_elements is None:
                 self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
-            if not selected_linelist in self.atomic_linelist.keys():
+            if not selected_linelist in list(self.atomic_linelist.keys()):
                 self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file)
-                logging.warn("Limiting linelist to lines that have at least 0.01 depth in the Sun")
+                logging.warning("Limiting linelist to lines that have at least 0.01 depth in the Sun")
                 solar = self.atomic_linelist[selected_linelist]['theoretical_depth'] >= 0.01
                 self.atomic_linelist[selected_linelist] = self.atomic_linelist[selected_linelist][solar]
             isotopes = ispec.read_isotope_data(isotope_file)
             linelist = self.atomic_linelist[selected_linelist]
 
             # Load SPECTRUM abundances
-            if not abundances_file in self.solar_abundances.keys():
+            if not abundances_file in list(self.solar_abundances.keys()):
                 self.solar_abundances[abundances_file] = ispec.read_solar_abundances(abundances_file)
             abundances = self.solar_abundances[abundances_file]
 
@@ -4492,7 +4499,7 @@ iSpec uses the following radiative transfer codes:
             return
 
         # Load SPECTRUM abundances
-        if not abundances_file in self.solar_abundances.keys():
+        if not abundances_file in list(self.solar_abundances.keys()):
             self.solar_abundances[abundances_file] = ispec.read_solar_abundances(abundances_file)
         abundances = self.solar_abundances[abundances_file]
 
@@ -4625,7 +4632,7 @@ iSpec uses the following radiative transfer codes:
             return
 
         # Load SPECTRUM abundances
-        if not abundances_file in self.solar_abundances.keys():
+        if not abundances_file in list(self.solar_abundances.keys()):
             self.solar_abundances[abundances_file] = ispec.read_solar_abundances(abundances_file)
         abundances = self.solar_abundances[abundances_file]
 
@@ -4841,16 +4848,16 @@ iSpec uses the following radiative transfer codes:
             self.molecules = ispec.read_molecular_symbols(molecules_file)
         if self.chemical_elements is None:
             self.chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
-        if not selected_linelist in self.atomic_linelist.keys():
+        if not selected_linelist in list(self.atomic_linelist.keys()):
             self.atomic_linelist[selected_linelist] = ispec.read_atomic_linelist(atomic_linelist_file)
-            logging.warn("Limiting linelist to lines that have at least 0.01 depth in the Sun")
+            logging.warning("Limiting linelist to lines that have at least 0.01 depth in the Sun")
             solar = self.atomic_linelist[selected_linelist]['theoretical_depth'] >= 0.01
             self.atomic_linelist[selected_linelist] = self.atomic_linelist[selected_linelist][solar]
         linelist = self.atomic_linelist[selected_linelist]
         isotopes = ispec.read_isotope_data(isotope_file)
 
         # Load SPECTRUM abundances
-        if not abundances_file in self.solar_abundances.keys():
+        if not abundances_file in list(self.solar_abundances.keys()):
             self.solar_abundances[abundances_file] = ispec.read_solar_abundances(abundances_file)
         abundances = self.solar_abundances[abundances_file]
 

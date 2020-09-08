@@ -16,6 +16,11 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from future import standard_library
+standard_library.install_aliases()
+from builtins import zip
+from builtins import str
+from builtins import map
 import numpy as np
 from .atmospheres import *
 from .lines import write_atomic_linelist
@@ -23,7 +28,7 @@ from .common import is_turbospectrum_support_enabled, is_spectrum_support_enable
 from multiprocessing import Process
 from multiprocessing import Queue
 from multiprocessing import JoinableQueue
-from Queue import Empty
+from queue import Empty
 import subprocess
 import shutil
 
@@ -53,7 +58,7 @@ def __spectrum_write_abundance_lines(linemasks, filename=None, tmp_dir=None):
         out = open(filename, "w")
     else:
         # Temporary file
-        out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
+        out = tempfile.NamedTemporaryFile(mode="wt", delete=False, dir=tmp_dir, encoding='utf-8')
     with_ew = 'ew' in linemasks.dtype.names
     line_ew = 0
     for line in linemasks:
@@ -124,7 +129,7 @@ def create_free_abundances_structure(free_abundance_elements, chemical_elements,
     Create the needed structure to determine elemental abundances for a given
     list of elements (i.e. ["Fe"] or ["Fe", "Mg", "Ca"]).
     """
-    free_abundances = np.recarray((len(free_abundance_elements), ), dtype=[('code', int),('Abund', float), ('element', '|S30')])
+    free_abundances = np.recarray((len(free_abundance_elements), ), dtype=[('code', int),('Abund', float), ('element', '|U30')])
     for i, element_name in enumerate(free_abundance_elements):
         specie = __get_element_specie(element_name, chemical_elements, molecules=None)
         if "." in specie:
@@ -153,7 +158,7 @@ def write_fixed_abundances(fixed_abundances, filename=None, tmp_dir=None):
         out = open(filename, "w")
     else:
         # Temporary file
-        out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
+        out = tempfile.NamedTemporaryFile(mode="wt", delete=False, dir=tmp_dir, encoding='utf-8')
     out.write("TOTAL\n")
     out.write("\n".join([" ".join(map(str, (line['code'], line['Abund']))) for line in fixed_abundances]))
     out.close()
@@ -230,9 +235,9 @@ def enhance_solar_abundances(abundances, alpha_enhancement, MH_compensantion=0.)
     # 10|Ne|Neon|18|2|10|5|5
     # 12|Mg|Magnesium|2|3|12|7|6
     alpha = np.logical_or(abundances['code'] == 10, abundances['code'] == 12)
-    # 14|Si|Silicon|14|3|14|8|7
+    # 14|Ui|Uilicon|14|3|14|8|7
     alpha = np.logical_or(alpha, abundances['code'] == 14)
-    # 16|S|Sulfur|16|3|16|10|9
+    # 16|U|Uulfur|16|3|16|10|9
     alpha = np.logical_or(alpha, abundances['code'] == 16)
     # 18|Ar|Argon|18|3|18|14|11
     alpha = np.logical_or(alpha, abundances['code'] == 18)
@@ -266,7 +271,7 @@ def write_solar_abundances(abundances, abundances_filename=None, tmp_dir=None):
         out = open(abundances_filename, "w")
     else:
         # Temporary file
-        out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
+        out = tempfile.NamedTemporaryFile(mode="wt", delete=False, dir=tmp_dir, encoding='utf-8')
     out.write("code   Abund   Amass   I1/D0   I2/rdmass     I3         I4     maxcharge\n")
     out.write("\n".join(["  ".join(map(str, (line['code'], line['Abund'], line['Amass'], line['I1/D0'], line['I2/rdmass'], line['I3'], line['I4'], line['maxcharge']))) for line in abundances]))
     out.close()
@@ -299,7 +304,7 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, ab
                 # MOOG ERROR: CANNOT DECIDE ON LINE WAVELENGTH STEP SIZE FOR   5158.62   I QUIT!
                 if "CANNOT DECIDE ON LINE WAVELENGTH STEP SIZE FOR" in str(e):
                     logging.error(str(e))
-                    logging.warn("Re-executing MOOG without the problematic line (it is recommended to manually remove that line to improve execution time)")
+                    logging.warning("Re-executing MOOG without the problematic line (it is recommended to manually remove that line to improve execution time)")
                     wave_A = float(str(e).split()[-3])
                     bad_idx = np.argmin(np.abs(linemasks['wave_A'][~bad] - wave_A))
                     bad[np.where(~bad)[0][bad_idx]] = True
@@ -332,7 +337,7 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, ab
             except Exception as e:
                 # WIDTH ERROR: 515.8551 -2.379  3.5  108707.400  2.0*********************01
                 if "WIDTH ERROR:" in str(e):
-                    logging.warn("Re-executing WIDTH without the problematic line (it is recommended to manually remove that line to improve execution time)")
+                    logging.warning("Re-executing WIDTH without the problematic line (it is recommended to manually remove that line to improve execution time)")
                     wave_nm = float(str(e).split()[2])
                     bad_idx = np.argmin(np.abs(linemasks['wave_nm'][~bad] - wave_nm))
                     bad[np.where(~bad)[0][bad_idx]] = True
@@ -415,8 +420,6 @@ def __spectrum_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, li
                 #abundances = enhance_solar_abundances(abundances, -1.*alpha)
                 x_over_h = __correct_enhance_solar_abundances(linemasks, x_over_h, alpha)
 
-                #import pudb
-                #pudb.set_trace()
                 #sun_log_Nx_over_Ntotal = abundances['Abund'][abundances['code'] == 26]]
                 #x_absolute = free_abundances['Abund'][i] + 12. - sun_log_Nh_over_Ntotal # absolute, A(X)
                 ##x_over_fe = free_abundances['Abund'][i] - sun_log_Nx_over_Ntotal
@@ -465,7 +468,7 @@ def __spectrum_determine_abundances_internal(process_communication_queue, atmosp
 
     from . import synthesizer
     update_progress_func = lambda v: __enqueue_progress(process_communication_queue, v)
-    abundances = synthesizer.abundances(atmosphere_model_file, linelist_file, num_measures, ignore, abundances_file, microturbulence_vel, nlayers, verbose, update_progress_func)
+    abundances = synthesizer.abundances(atmosphere_model_file.encode('utf-8'), linelist_file.encode('utf-8'), num_measures, ignore, abundances_file.encode('utf-8'), microturbulence_vel, nlayers, verbose, update_progress_func)
     process_communication_queue.put(abundances)
 
 
@@ -480,7 +483,7 @@ def __turbospectrum_read_abund_results(abundances_filename):
     atomic_line_pattern = re.compile("^\s*(\w+)\s+(\d+)\s+("+f+")\s+("+f+")\s+("+f+")\s+((?:"+f+"|\*+))\s+("+f+")\s+\+-\s+("+f+")\s+("+f+")\s+("+f+")\s+("+f+")\s+("+f+")(.*)\n$")
     nlines_read = 0
     data = []
-    with open(abundances_filename, "ro") as f:
+    with open(abundances_filename, "rt") as f:
         for line_number, line in enumerate(f):
             if nlines_read >= 2:
                 atomic_line = atomic_line_pattern.match(line)
@@ -488,8 +491,8 @@ def __turbospectrum_read_abund_results(abundances_filename):
                     element, ion, wave_a, lower_state_eV, loggf, ew0, ew, ew_err, x_over_h, lower_abund, absolute_abund, upper_abund, comment = atomic_line.groups()
                     element = element + " " + ion
                     wave_a, lower_state_eV, loggf, ew, ew_err, \
-                            x_over_h, lower_abund, absolute_abund, upper_abund = map(float, (wave_a, lower_state_eV, \
-                            loggf, ew, ew_err, x_over_h, lower_abund, absolute_abund, upper_abund))
+                            x_over_h, lower_abund, absolute_abund, upper_abund = list(map(float, (wave_a, lower_state_eV, \
+                            loggf, ew, ew_err, x_over_h, lower_abund, absolute_abund, upper_abund)))
                     data.append((element, wave_a, wave_a/10., lower_state_eV, loggf, ew, ew_err, \
                             x_over_h, lower_abund, absolute_abund, upper_abund, comment))
                 else:
@@ -499,8 +502,8 @@ def __turbospectrum_read_abund_results(abundances_filename):
     if len(data) == 0:
         abundances = data
     else:
-        abundances = np.rec.fromarrays(zip(*data), dtype=[ \
-                ('element', '|S4'), \
+        abundances = np.rec.fromarrays(list(zip(*data)), dtype=[ \
+                ('element', '|U4'), \
                 ('wave_A', '<f8'), ('wave_nm', '<f8'), \
                 ('lower_state_eV', float), \
                 ('loggf', '<f8'), \
@@ -510,7 +513,7 @@ def __turbospectrum_read_abund_results(abundances_filename):
                 ('lower absolute abundance', float), \
                 ('absolute abundance', float), \
                 ('upper absolute abundance', float), \
-                ('comment', '|S100') \
+                ('comment', '|U100') \
                 ])
     return abundances
 
@@ -577,7 +580,7 @@ def __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, alph
         linelist_filename = write_atomic_linelist(sublinemasks, linelist_filename=None, code="turbospectrum", tmp_dir=tmp_dir)
 
         # Temporary file
-        out = tempfile.NamedTemporaryFile(delete=False, dir=tmp_dir)
+        out = tempfile.NamedTemporaryFile(mode="wt", delete=False, dir=tmp_dir, encoding='utf-8')
         out.close()
         abundances_filename = out.name
 
@@ -631,7 +634,7 @@ def __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, alph
         else:
             proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
         # wait for the process to terminate
-        out, err = proc.communicate(input=command_input)
+        out, err = proc.communicate(input=command_input.encode('utf-8'))
         errcode = proc.returncode
 
         os.chdir(previous_cwd)
@@ -777,10 +780,10 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linema
     #else:
     proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     # wait for the process to terminate
-    out, err = proc.communicate(input=command_input)
+    out, err = proc.communicate(input=command_input.encode('utf-8'))
     errcode = proc.returncode
 
-    for line in out.split("\n"):
+    for line in out.decode('utf-8').split("\n"):
         if "I QUIT" in line:
             # MOOG ERROR: CANNOT DECIDE ON LINE WAVELENGTH STEP SIZE FOR   5158.62   I QUIT!
             logging.error("MOOG ERROR: %s" % (line))
@@ -800,17 +803,17 @@ def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linema
     for i, line in enumerate(results_lines):
         atomic_line = atomic_line_pattern.match(line)
         if atomic_line:
-            values = map(float, line.split())
+            values = list(map(float, line.split()))
             # Make sure we recover the abundance for the good line by checking the wavelength
             wave = values[0] # A
             while filtered[line_number] or np.abs(sorted_tmp_linemasks['wave_A'][line_number] - wave) > 0.001:
                 absolute_abund.append(np.nan)
                 x_over_h.append(np.nan)
                 if filtered[line_number]:
-                    #logging.warn("Missed line %.3f because of NaN equivalent width, not supported by MOOG or requested to be ignored" % (sorted_tmp_linemasks['wave_A'][line_number]))
+                    #logging.warning("Missed line %.3f because of NaN equivalent width, not supported by MOOG or requested to be ignored" % (sorted_tmp_linemasks['wave_A'][line_number]))
                     pass
                 else:
-                    logging.warn("Missed line %.3f" % (sorted_tmp_linemasks['wave_A'][line_number], wave))
+                    logging.warning("Missed line %.3f" % (sorted_tmp_linemasks['wave_A'][line_number], wave))
                 line_number += 1
             absolute_abund.append(values[-2])
             #x_over_h.append(values[-1]) # This MOOG value is not consistent with absolute_abund - solar abundance
@@ -971,13 +974,11 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linem
     #else:
     proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     # wait for the process to terminate
-    out, err = proc.communicate(input=command_input)
+    out, err = proc.communicate(input=command_input.encode('utf-8'))
     errcode = proc.returncode
     #c = open("conf.txt", "w")
     #c.writelines(command_input)
     #c.close()
-    #import pudb
-    #pudb.set_trace()
 
     line_number = 0
     not_converged = False
@@ -1005,7 +1006,7 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linem
     #          1.00     EW    0.848    0.993    1.095    1.140    1.097
     #                          7.04     9.84    12.43    13.80    12.50
     #                DEPTH     0.10    -0.09    -0.18    -0.20    -0.18
-    out_lines = out.split("\n")
+    out_lines = out.decode('utf-8').split("\n")
     for i, line in enumerate(out_lines):
         if "BETTER LUCK NEXT TIME" in line:
             logging.error("WIDTH" + out_lines[i-2])
@@ -1046,10 +1047,10 @@ def __width_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linem
             x_over_h[line_number] = np.nan
             x_over_fe[line_number] = np.nan
             if filtered[line_number]:
-                #logging.warn("Missed line %.3f because of NaN equivalent width, bad atomic information or not supported by WIDTH" % (linemasks['wave_A'][line_number]))
+                #logging.warning("Missed line %.3f because of NaN equivalent width, bad atomic information or not supported by WIDTH" % (linemasks['wave_A'][line_number]))
                 pass
             else:
-                logging.warn("Missed line %.3f [%.3f]" % (linemasks['wave_A'][line_number], wave))
+                logging.warning("Missed line %.3f [%.3f]" % (linemasks['wave_A'][line_number], wave))
             line_number += 1
 
         values = line.split()
@@ -1072,7 +1073,7 @@ def __correct_enhance_solar_abundances(linemasks, abundances, alpha_enhancement)
     Descales alpha elements and CNO abundances.
     """
     abundances = abundances.copy()
-    code = map(int, map(float, linemasks['spectrum_moog_species'])) # Convert from '26.0' or '26.1' to 26
+    code = list(map(int, list(map(float, linemasks['spectrum_moog_species'])))) # Convert from '26.0' or '26.1' to 26
 
     #  6|C|Carbon|14|2|6|4|4
     c = code == 6
@@ -1084,9 +1085,9 @@ def __correct_enhance_solar_abundances(linemasks, abundances, alpha_enhancement)
     # 10|Ne|Neon|18|2|10|5|5
     # 12|Mg|Magnesium|2|3|12|7|6
     alpha = np.logical_or(code == 10, code == 12)
-    # 14|Si|Silicon|14|3|14|8|7
+    # 14|Ui|Uilicon|14|3|14|8|7
     alpha = np.logical_or(alpha, code == 14)
-    # 16|S|Sulfur|16|3|16|10|9
+    # 16|U|Uulfur|16|3|16|10|9
     alpha = np.logical_or(alpha, code == 16)
     # 18|Ar|Argon|18|3|18|14|11
     alpha = np.logical_or(alpha, code == 18)

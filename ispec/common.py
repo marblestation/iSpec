@@ -1,5 +1,6 @@
 from __future__ import print_function
 from __future__ import absolute_import
+from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -17,6 +18,14 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from future import standard_library
+standard_library.install_aliases()
+from builtins import map
+from builtins import str
+from builtins import zip
+from builtins import range
+from past.builtins import basestring
+from past.utils import old_div
 from scipy.interpolate import UnivariateSpline
 import numpy.lib.recfunctions as rfn # Extra functions
 import numpy as np
@@ -31,7 +40,7 @@ import random
 import sys
 from . import log
 import logging
-import cPickle as pickle
+import pickle as pickle
 import gzip
 
 def is_spectrum_support_enabled():
@@ -274,7 +283,7 @@ def find_max_win(x, span=3):
     """
     ret = []
     n = len(x)
-    dist = (span + 1) / 2;
+    dist = old_div((span + 1), 2);
     m = 0;
     for i in np.arange(n):
         l_min = np.max([i-dist+1, 0])
@@ -309,7 +318,7 @@ def find_min_win(x, span=3):
     """
     ret = []
     n = len(x)
-    dist = (span + 1) / 2;
+    dist = old_div((span + 1), 2);
     m = 0;
     for i in np.arange(n):
         l_min = np.max([i-dist+1, 0])
@@ -450,8 +459,8 @@ def __precession_matrix(equinox1, equinox2, fk4=False):
     The code has been copied from: `astrolib <http://code.google.com/p/astrolibpy/source/browse/trunk/astrolib/>`_
     """
 
-    deg_to_rad = np.pi / 180.0e0
-    sec_to_rad = deg_to_rad / 3600.e0
+    deg_to_rad = old_div(np.pi, 180.0e0)
+    sec_to_rad = old_div(deg_to_rad, 3600.e0)
 
     t = 0.001e0 * (equinox2 - equinox1)
 
@@ -546,7 +555,7 @@ def __baryvel(datetime, deq=0):
     dc1mme = 0.99999696e0
 
     #Time arguments.
-    dt = (dje - dcto) / dcjul
+    dt = old_div((dje - dcto), dcjul)
     tvec = np.array([1e0, dt, dt * dt])
 
     #Values of all elements for the instant(aneous?) dje.
@@ -579,13 +588,13 @@ def __baryvel(datetime, deq=0):
             pertrd = pertrd + (ccamps[k,3] * cosa - ccamps[k,2] * sina) * ccamps[k,4]
 
     #Elliptic part of the motion of the emb.
-    phi = (e * e / 4e0) * (((8e0 / e) - e) * np.sin(g) + 5 * np.sin(2 * g) + (13 / 3e0) * e * np.sin(3 * g))
+    phi = (old_div(e * e, 4e0)) * (((old_div(8e0, e)) - e) * np.sin(g) + 5 * np.sin(2 * g) + (old_div(13, 3e0)) * e * np.sin(3 * g))
     f = g + phi
     sinf = np.sin(f)
     cosf = np.cos(f)
-    dpsi = (dc1 - e * e) / (dc1 + e * cosf)
+    dpsi = old_div((dc1 - e * e), (dc1 + e * cosf))
     phid = 2 * e * ccsgd * ((1 + 1.5 * e * e) * cosf + e * (1.25 - 0.5 * sinf * sinf))
-    psid = ccsgd * e * sinf / np.sqrt(dc1 - e * e)
+    psid = old_div(ccsgd * e * sinf, np.sqrt(dc1 - e * e))
 
     #Perturbed heliocentric motion of the emb.
     d1pdro = dc1 + pertr
@@ -616,7 +625,7 @@ def __baryvel(datetime, deq=0):
     tl = forbel[1] + pertl
     sinlm = np.sin(tl)
     coslm = np.cos(tl)
-    sigma = cckm / (1.0 + pertp)
+    sigma = old_div(cckm, (1.0 + pertp))
     a = sigma * (ccmld + pertld)
     b = sigma * pertpd
     dxhd = dxhd + a * sinlm + b * coslm
@@ -653,7 +662,7 @@ def __baryvel(datetime, deq=0):
         return (dvelh,dvelb)
 
     #General precession from epoch dje to deq.
-    deqdat = (dje - dcto - dcbes) / dctrop + dc1900
+    deqdat = old_div((dje - dcto - dcbes), dctrop) + dc1900
     prema = __precession_matrix(deqdat, deq, fk4=True)
 
     dvelh = au * (np.transpose(np.dot(np.transpose(prema), np.transpose(np.array([dxhd, dyahd, dzahd])))))
@@ -666,16 +675,16 @@ def calculate_barycentric_velocity_correction(datetime, coordinates, deq=0):
     Calculates barycentric velocity correction for a given star.
     The code is based on: `astrolib <http://code.google.com/p/astrolibpy/source/browse/astrolib/baryvel.py>`_
     """
-    datetime = map(float, datetime)
-    coordinates = map(float, coordinates)
+    datetime = list(map(float, datetime))
+    coordinates = list(map(float, coordinates))
     dvelh, dvelb = __baryvel(datetime, deq=2000) # J2000.0
 
     # Calculate velocity toward a star in a given position
     ra_hours, ra_minutes, ra_seconds, dec_degrees,  dec_minutes, dec_seconds = coordinates
-    ra = (ra_hours + ra_minutes/60. + ra_seconds/(60.*60)) # hours
-    ra = ra * 360./24 # degrees
+    ra = (ra_hours + ra_minutes/60. + old_div(ra_seconds,(60.*60))) # hours
+    ra = old_div(ra * 360.,24) # degrees
     ra = ra * ((2*np.pi) / 360.) # radians
-    dec = (dec_degrees + dec_minutes/60. + dec_seconds/(60.*60)) # degrees
+    dec = (dec_degrees + dec_minutes/60. + old_div(dec_seconds,(60.*60))) # degrees
     dec = dec * ((2*np.pi) / 360.) # radians
 
     # Project velocity toward star
@@ -724,7 +733,7 @@ def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None,mjd=Fals
         jd += .5
     else:
         rounding = int(rounding)
-        roundingfrac = rounding/86400000000
+        roundingfrac = old_div(rounding,86400000000)
         jd += .5 + roundingfrac
 
     z = np.floor(jd).astype(int)
@@ -897,7 +906,7 @@ def calendar_to_jd(caltime,tz=None,gregorian=True,mjd=False):
             if utcdt is None:
                 utcoffset.append(0)
             else:
-                utcoffset.append(utcdt.days*24 + (utcdt.seconds + utcdt.microseconds*1e-6)/3600)
+                utcoffset.append(utcdt.days*24 + old_div((utcdt.seconds + utcdt.microseconds*1e-6),3600))
     else:
         utcoffset = tz
 
@@ -1015,12 +1024,12 @@ def estimate_mass_radius(teff, logg, feh):
 
     # Teff and logg: http://vizier.cfa.harvard.edu/viz-bin/VizieR-3?-source=J/other/A%2bARV/18.67/table1
     if teff > 38000 or teff < 3120:
-        logging.warn("Teff {} is out of the Teff range used to derive the empirical relation".format(teff))
+        logging.warning("Teff {} is out of the Teff range used to derive the empirical relation".format(teff))
     if logg > 5.009 or logg < 2.122:
-        logging.warn("logg {} is out of the logg range used to derive the empirical relation".format(logg))
+        logging.warning("logg {} is out of the logg range used to derive the empirical relation".format(logg))
     # Metallicities: http://vizier.cfa.harvard.edu/viz-bin/VizieR-3?-source=J/other/A%2bARV/18.67/table2
     if feh > 0.40 or feh < -0.60:
-        logging.warn("Metallicity {} is out of the metallicity range used to derive the empirical relation".format(feh))
+        logging.warning("Metallicity {} is out of the metallicity range used to derive the empirical relation".format(feh))
 
     X = np.log10(teff) - 4.1
 

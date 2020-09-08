@@ -145,8 +145,8 @@ class TestDetermineParamsSynth(unittest.TestCase):
                              'vmic': 0.5264263067022638,
                              'vsini': 2.0
                            }
-        for k, v in expected_params.items():
-            self.assertAlmostEquals(params[k], v)
+        for k, v in list(expected_params.items()):
+            self.assertAlmostEqual(params[k], v)
         expected_errors = {
                              'MH': 0.005430463222962008,
                              'R': 3407.062101968946,
@@ -158,9 +158,9 @@ class TestDetermineParamsSynth(unittest.TestCase):
                              'vmic': 0.03613363175565518,
                              'vsini': 0.0
                            }
-        for k, v in expected_errors.items():
-            self.assertAlmostEquals(errors[k], v)
-        self.assertEquals(len(stats_linemasks), 348)
+        for k, v in list(expected_errors.items()):
+            self.assertAlmostEqual(errors[k], v)
+        self.assertEqual(len(stats_linemasks), 348)
 
     def test_determine_astrophysical_parameters_using_synth_spectra(self):
         code = "spectrum"
@@ -323,8 +323,8 @@ class TestDetermineParamsSynth(unittest.TestCase):
                              'vmic': 1.1941244695651667,
                              'vsini': 2.0
                            }
-        for k, v in expected_params.items():
-            self.assertAlmostEquals(params[k], v)
+        for k, v in list(expected_params.items()):
+            self.assertAlmostEqual(params[k], v)
         expected_errors = {
                              'MH': 0.08094624971130629,
                              'R': 3679.9816888237833,
@@ -336,6 +336,6 @@ class TestDetermineParamsSynth(unittest.TestCase):
                              'vmic': 0.10864222142154868,
                              'vsini': 0.0
                           }
-        for k, v in expected_errors.items():
-            self.assertAlmostEquals(errors[k], v)
-        self.assertEquals(len(stats_linemasks), 29)
+        for k, v in list(expected_errors.items()):
+            self.assertAlmostEqual(errors[k], v)
+        self.assertEqual(len(stats_linemasks), 29)

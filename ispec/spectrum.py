@@ -1,5 +1,6 @@
 from __future__ import print_function
 from __future__ import absolute_import
+from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -17,6 +18,10 @@ from __future__ import absolute_import
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+from builtins import str
+from builtins import map
+from builtins import range
+from past.utils import old_div
 import numpy as np
 import numpy.lib.recfunctions as rfn # Extra functions
 from astropy.io import fits as pyfits
@@ -30,7 +35,7 @@ import logging
 try:
     from .plotting import *
 except:
-    logging.warn("Plotting could not be loaded!")
+    logging.warning("Plotting could not be loaded!")
     pass
 
 def __read_fits_spectrum(spectrum_filename):
@@ -118,7 +123,7 @@ def __read_fits_spectrum(spectrum_filename):
 
         # Try to find the errors in the extensions (HDU different than the PRIMARY):
         spectrum['err'] = np.zeros(len(flux))
-        for i in xrange(len(hdulist)):
+        for i in range(len(hdulist)):
             name = hdulist[i].name.upper()
             if name == str('PRIMARY') or len(hdulist[i].data.flatten()) != len(flux) or type(hdulist[i]) is pyfits.hdu.table.BinTableHDU:
                 continue
@@ -137,7 +142,7 @@ def __read_fits_spectrum(spectrum_filename):
     elif data is None:
         # Try to find a binary table with an irregular spectra and 3 columns
         spectrum = None
-        for i in xrange(len(hdulist)):
+        for i in range(len(hdulist)):
             if type(hdulist[i]) is pyfits.hdu.table.BinTableHDU:
                 data = hdulist[i].data
                 if len(data) == 1:
@@ -408,7 +413,7 @@ def normalize_spectrum(spectrum, continuum_model, consider_continuum_errors=True
     zeros = continuum_flux == 0
     normalized_spectrum['flux'][zeros] = 1.
     normalized_spectrum['err'][zeros] = 0.
-    normalized_spectrum['flux'][~zeros] = spectrum['flux'][~zeros] / continuum_flux[~zeros]
+    normalized_spectrum['flux'][~zeros] = old_div(spectrum['flux'][~zeros], continuum_flux[~zeros])
 
     # Error propagation considering errors in continuum (most conservative operation)
     if (consider_continuum_errors and np.all(continuum_errors == 0)) or np.all(spectrum['err'] == 0):
@@ -416,12 +421,12 @@ def normalize_spectrum(spectrum, continuum_model, consider_continuum_errors=True
     else:
         if consider_continuum_errors:
             zeros = np.logical_or(spectrum['flux'] == 0, continuum_flux == 0)
-            normalized_spectrum['err'][~zeros] = normalized_spectrum['flux'][~zeros] * ((spectrum['err'][~zeros] / spectrum['flux'][~zeros]) + (continuum_errors[~zeros] / continuum_flux[~zeros]))
+            normalized_spectrum['err'][~zeros] = normalized_spectrum['flux'][~zeros] * ((old_div(spectrum['err'][~zeros], spectrum['flux'][~zeros])) + (old_div(continuum_errors[~zeros], continuum_flux[~zeros])))
             # Non-correlated errors:
             #normalized_spectrum['err'][~zeros] = normalized_spectrum['flux'][~zeros] * np.sqrt(np.power(spectrum['err'][~zeros] / spectrum['flux'][~zeros], 2) + np.power(continuum_errors[~zeros] / continuum_flux[~zeros], 2))
             normalized_spectrum['err'][zeros] = 0.
         else:
-            normalized_spectrum['err'][~zeros] = spectrum['err'][~zeros] / continuum_flux[~zeros]
+            normalized_spectrum['err'][~zeros] = old_div(spectrum['err'][~zeros], continuum_flux[~zeros])
 
 
     return normalized_spectrum
@@ -437,7 +442,7 @@ def estimate_snr(flux, num_points=10, frame=None):
     #flux, f = interquartile_range_filtering(flux, k=1.5)
     last_reported_progress = -1
     if num_points == 1:
-        snr = np.mean(flux) / np.std(flux)
+        snr = old_div(np.mean(flux), np.std(flux))
     else:
         snr = []
         total_num_blocks = len(flux)-num_points
@@ -445,9 +450,9 @@ def estimate_snr(flux, num_points=10, frame=None):
             values = flux[i:i+num_points]
             stdev = np.std(values)
             if stdev != 0:
-                snr.append(np.mean(values) / stdev)
+                snr.append(old_div(np.mean(values), stdev))
 
-            current_work_progress = ((i*1.0 / total_num_blocks) * 100.0)
+            current_work_progress = ((old_div(i*1.0, total_num_blocks)) * 100.0)
             if report_progress(current_work_progress, last_reported_progress):
                 last_reported_progress = current_work_progress
                 logging.info("%.2f%%" % current_work_progress)
@@ -468,8 +473,8 @@ def __get_fwhm(lambda_peak, from_resolution, to_resolution):
     """
     if from_resolution <= to_resolution:
         raise Exception("This method cannot deal with final resolutions that are equal or bigger than original")
-    from_delta_lambda = (1.0*lambda_peak) / from_resolution
-    to_delta_lambda = (1.0*lambda_peak) / to_resolution
+    from_delta_lambda = old_div((1.0*lambda_peak), from_resolution)
+    to_delta_lambda = old_div((1.0*lambda_peak), to_resolution)
     fwhm = np.sqrt(to_delta_lambda**2 - from_delta_lambda**2)
     return fwhm
 
@@ -477,7 +482,7 @@ def __fwhm_to_sigma(fwhm):
     """
     Calculate the sigma value from the FWHM.
     """
-    sigma = fwhm / (2*np.sqrt(2*np.log(2)))
+    sigma = old_div(fwhm, (2*np.sqrt(2*np.log(2))))
     return sigma
 
 try:
@@ -558,10 +563,10 @@ except:
                         # http://en.wikipedia.org/wiki/Linear_interpolation#Linear_interpolation_between_two_known_points
                         d1 = (objective_wavelength - waveobs[index-1])
                         d2 = (waveobs[index]-waveobs[index-1])
-                        resampled_flux[i] = fluxes[index-1] + d1 * ((fluxes[index]-fluxes[index-1])/d2)
+                        resampled_flux[i] = fluxes[index-1] + d1 * (old_div((fluxes[index]-fluxes[index-1]),d2))
                         # Same formula as for interpolation but I have re-arranged the terms to make
                         # clear that it is valid for error propagation (sum of errors multiplied by constant values)
-                        resampled_err[i] = (err[index-1] * (d2 - d1)  + (err[index] * d1)) / d2
+                        resampled_err[i] = old_div((err[index-1] * (d2 - d1)  + (err[index] * d1)), d2)
                         # Do not allow negative fluxes or errors
                         if resampled_err[i] < 0:
                             resampled_err[i] = 1e-10
@@ -599,8 +604,8 @@ except:
                         resampled_flux[i] = 0.0
                         resampled_err[i] = 0.0
                     else:
-                        p = (objective_wavelength - wave_x0) / (wave_x1 - wave_x0)
-                        factor = (p * (p - 1) / 4)
+                        p = old_div((objective_wavelength - wave_x0), (wave_x1 - wave_x0))
+                        factor = (old_div(p * (p - 1), 4))
                         resampled_flux[i] = flux_x0 + p * (flux_x1 - flux_x0) + factor * (flux_x2 - flux_x1 - flux_x0 + flux_x_1)
                         # Same formula as for interpolation but I have re-arranged the terms to make
                         # clear that it is valid for error propagation (sum of errors multiplied by constant values)
@@ -615,7 +620,7 @@ except:
             if index > 4:
                 from_index = index - 4
 
-            current_work_progress = np.min([(i*1.0 / new_total_points) * 100, 90.0])
+            current_work_progress = np.min([(old_div(i*1.0, new_total_points)) * 100, 90.0])
             if report_progress(current_work_progress, last_reported_progress):
                 last_reported_progress = current_work_progress
                 #logging.info("%.2f%%" % current_work_progress)
@@ -639,7 +644,7 @@ except:
         # FWHM of the gaussian for the given resolution
         if from_resolution is None:
             # Convolve using instrumental resolution (smooth but not degrade)
-            fwhm = waveobs / to_resolution
+            fwhm = old_div(waveobs, to_resolution)
         else:
             # Degrade resolution
             fwhm = __get_fwhm(waveobs, from_resolution, to_resolution)
@@ -659,8 +664,8 @@ except:
             flux_window = flux[wave_filter_base:wave_filter_top]
 
             # Construct the gaussian
-            gaussian = np.exp(- ((waveobs_window - lambda_peak)**2) / (2*sigma[i]**2)) / np.sqrt(2*np.pi*sigma[i]**2)
-            gaussian = gaussian / np.sum(gaussian)
+            gaussian = old_div(np.exp(old_div(- ((waveobs_window - lambda_peak)**2), (2*sigma[i]**2))), np.sqrt(2*np.pi*sigma[i]**2))
+            gaussian = old_div(gaussian, np.sum(gaussian))
             # Convolve
             convolved_flux[i] = np.sum(flux_window * gaussian)
             if err[i] > 0:
@@ -673,7 +678,7 @@ except:
                 err_window = err[wave_filter_base:wave_filter_top]
                 convolved_err[i] = np.sum(err_window * gaussian)
 
-            current_work_progress = (i*1.0 / total_points) * 100
+            current_work_progress = (old_div(i*1.0, total_points)) * 100
             if report_progress(current_work_progress, last_reported_progress):
                 last_reported_progress = current_work_progress
                 logging.info("%.2f%%" % current_work_progress)
@@ -725,13 +730,13 @@ except:
         # FWHM of the gaussian for the given resolution
         if from_resolution is None:
             # Convolve using instrumental resolution (smooth but not degrade)
-            fwhm = waveobs / to_resolution
+            fwhm = old_div(waveobs, to_resolution)
         else:
             # Degrade resolution
             fwhm = __get_fwhm(waveobs, from_resolution, to_resolution)
         sigma = __fwhm_to_sigma(fwhm)
         # Convert from wavelength units to bins
-        fwhm_bin = fwhm / bin_width
+        fwhm_bin = old_div(fwhm, bin_width)
 
         # Round number of bins per FWHM
         nbins = np.ceil(fwhm_bin) #npixels
@@ -755,8 +760,8 @@ except:
             waveobs_segment = waveobs[lower_pos:upper_pos+1]
 
             # Build the gaussian corresponding to the instrumental spread function
-            gaussian = np.exp(- ((waveobs_segment - current_center)**2) / (2*current_sigma**2)) / np.sqrt(2*np.pi*current_sigma**2)
-            gaussian = gaussian / np.sum(gaussian)
+            gaussian = old_div(np.exp(old_div(- ((waveobs_segment - current_center)**2), (2*current_sigma**2))), np.sqrt(2*np.pi*current_sigma**2))
+            gaussian = old_div(gaussian, np.sum(gaussian))
 
             # Convolve the current position by using the segment and the gaussian
             if flux[i] > 0:
@@ -782,7 +787,7 @@ except:
             else:
                 convolved_err[i] = 0.0
 
-            current_work_progress = (i*1.0 / total_points) * 100
+            current_work_progress = (old_div(i*1.0, total_points)) * 100
             if report_progress(current_work_progress, last_reported_progress):
                 last_reported_progress = current_work_progress
                 #logging.info("%.2f%%" % current_work_progress)
@@ -878,7 +883,7 @@ def resample_spectrum(spectrum, xaxis, method="linear", zero_edges=True, frame=N
         # iSpec linear interpolation:
         waveobs, flux, err = __interpolation(spectrum['waveobs'], spectrum['flux'], spectrum['err'], xaxis, bessel=False, zero_edges=zero_edges, frame=frame)
     elif method.lower() == "spline":
-        logging.warn("Spline interpolation not recommended.")
+        logging.warning("Spline interpolation not recommended.")
         f = interpolate.InterpolatedUnivariateSpline(spectrum['waveobs'], spectrum['flux'], k=3)
         e = interpolate.InterpolatedUnivariateSpline(spectrum['waveobs'], spectrum['err'], k=3)
         flux = f(xaxis)
@@ -908,7 +913,7 @@ def correct_velocity(spectrum, velocity, segments=None):
     ##velocity = velocity * 1000
     #spectrum['waveobs'] = spectrum['waveobs'] / ((velocity / c) + 1)
     # - Relativistic version:
-    spectrum['waveobs'] = spectrum['waveobs'] * np.sqrt((1.-(velocity*1000.)/c)/(1.+(velocity*1000.)/c))
+    spectrum['waveobs'] = spectrum['waveobs'] * np.sqrt(old_div((1.-old_div((velocity*1000.),c)),(1.+old_div((velocity*1000.),c))))
     return spectrum
 
 def correct_velocity_regions(regions, velocity, with_peak=False):
@@ -920,10 +925,10 @@ def correct_velocity_regions(regions, velocity, with_peak=False):
     # Radial/barycentric velocity from km/s to m/s
     velocity = velocity * 1000
 
-    regions['wave_base'] = regions['wave_base'] / ((velocity / c) + 1)
-    regions['wave_top'] = regions['wave_top'] / ((velocity / c) + 1)
+    regions['wave_base'] = old_div(regions['wave_base'], ((old_div(velocity, c)) + 1))
+    regions['wave_top'] = old_div(regions['wave_top'], ((old_div(velocity, c)) + 1))
     if with_peak:
-        regions['wave_peak'] = regions['wave_peak'] / ((velocity / c) + 1)
+        regions['wave_peak'] = old_div(regions['wave_peak'], ((old_div(velocity, c)) + 1))
     return regions
 
 def add_noise(spectrum, snr, distribution="poisson"):
@@ -933,18 +938,18 @@ def add_noise(spectrum, snr, distribution="poisson"):
     """
     noisy_spectrum = create_spectrum_structure(spectrum['waveobs'], spectrum['flux'], spectrum['err'])
     if distribution.lower() == "gaussian":
-        sigma = spectrum['flux']/snr
+        sigma = old_div(spectrum['flux'],snr)
         sigma[sigma <= 0.0] = 1.0e-10
         noisy_spectrum['flux'] += np.random.normal(0, sigma, len(spectrum))
         noisy_spectrum['err'] += sigma
     else:
         # poison
         sigma = 1./snr
-        lamb = spectrum['flux'] / (sigma * sigma)
+        lamb = old_div(spectrum['flux'], (sigma * sigma))
         lamb[lamb < 0.0] = 0.0
         noisy_spectrum['flux'] = np.random.poisson(lamb)
         noisy_spectrum['flux'] *= sigma*sigma
-        noisy_spectrum['err'] += noisy_spectrum['flux'] / np.sqrt(lamb)
+        noisy_spectrum['err'] += old_div(noisy_spectrum['flux'], np.sqrt(lamb))
     return noisy_spectrum
 
 def random_realizations(spectrum, number, distribution="poisson"):
@@ -954,7 +959,7 @@ def random_realizations(spectrum, number, distribution="poisson"):
     The distribution can be "poisson" or "gaussian"
     """
     realizations = []
-    for i in xrange(number):
+    for i in range(number):
         new_derived_spectrum = create_spectrum_structure(spectrum['waveobs'], spectrum['flux'], spectrum['err'])
         if distribution.lower() == "gaussian":
             sigma = spectrum['err']
@@ -964,7 +969,7 @@ def random_realizations(spectrum, number, distribution="poisson"):
         else:
             # poison
             sigma = spectrum['err']
-            lamb = spectrum['flux'] / np.power(sigma, 2)
+            lamb = old_div(spectrum['flux'], np.power(sigma, 2))
             lamb[lamb < 0.0] = 0.0
             new_derived_spectrum['flux'] = np.random.poisson(lamb)
             new_derived_spectrum['flux'] *= sigma*sigma
@@ -1005,7 +1010,7 @@ def air_to_vacuum(spectrum):
     """
     # Following the air to vacuum conversion from VALD3 (computed by N. Piskunov) http://www.astro.uu.se/valdwiki/Air-to-vacuum%20conversion
     wave_air = spectrum['waveobs'] * 10. # Angstroms
-    s_square = np.power(1.e4 / wave_air, 2)
+    s_square = np.power(old_div(1.e4, wave_air), 2)
     n2 = 1. + 0.00008336624212083 + 0.02408926869968 / (130.1065924522 - s_square) + 0.0001599740894897 / (38.92568793293 - s_square)
     wave_vacuum = wave_air*n2 # Angstroms
     converted_spectrum = create_spectrum_structure(wave_vacuum / 10., spectrum['flux'], spectrum['err'])
@@ -1019,9 +1024,9 @@ def vacuum_to_air(spectrum):
     # Following the vacuum to air conversion the formula from Donald Morton (2000, ApJ. Suppl., 130, 403) which is also a IAU standard
     # - More info: http://www.astro.uu.se/valdwiki/Air-to-vacuum%20conversion
     wave_vacuum = spectrum['waveobs'] * 10. # Angstroms
-    s_square = np.power(1.e4 / wave_vacuum, 2)
+    s_square = np.power(old_div(1.e4, wave_vacuum), 2)
     n = 1 + 0.0000834254 + 0.02406147 / (130 - s_square) + 0.00015998 / (38.9 - s_square)
-    wave_air = wave_vacuum/n # Angstroms
+    wave_air = old_div(wave_vacuum,n) # Angstroms
     converted_spectrum = create_spectrum_structure(wave_air / 10., spectrum['flux'], spectrum['err'])
 
     return converted_spectrum
@@ -1046,8 +1051,8 @@ def create_filter_cosmic_rays(spectrum, continuum_model, resampling_wave_step=0.
     resampled_smooth['flux'] = scipy.signal.medfilt(resampled_spectrum['flux'], 15)
     smooth = resample_spectrum(resampled_smooth, spectrum['waveobs'])
 
-    cosmics = (spectrum['flux'] - smooth['flux'])/ continuum_model(spectrum['waveobs']) > variation_limit
-    cosmics = np.logical_and(cosmics, (spectrum['flux'] / continuum_model(spectrum['waveobs'])) > 1.0)
+    cosmics = old_div((spectrum['flux'] - smooth['flux']), continuum_model(spectrum['waveobs'])) > variation_limit
+    cosmics = np.logical_and(cosmics, (old_div(spectrum['flux'], continuum_model(spectrum['waveobs']))) > 1.0)
     return cosmics
 
 

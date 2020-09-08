@@ -1,3 +1,4 @@
+from __future__ import division
 #
 #    This file is part of iSpec.
 #    Copyright Sergi Blanco-Cuaresma - http://www.blancocuaresma.com/s/
@@ -15,20 +16,24 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
-import Tkinter
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from past.utils import old_div
+import tkinter
 
-class Meter(Tkinter.Frame):
+class Meter(tkinter.Frame):
     def __init__(self, master, width=100, height=20, bg='white', fillcolor='grey',\
                  value=0.0, text=None, font=None, textcolor='black', *args, **kw):
-        Tkinter.Frame.__init__(self, master, bg=bg, width=width, height=height, *args, **kw)
+        tkinter.Frame.__init__(self, master, bg=bg, width=width, height=height, *args, **kw)
         self._value = value
 
-        self._canv = Tkinter.Canvas(self, bg=self['bg'], width=self['width'], height=self['height'],\
+        self._canv = tkinter.Canvas(self, bg=self['bg'], width=self['width'], height=self['height'],\
                                     highlightthickness=0, relief='flat', bd=0)
         self._canv.pack(fill='both', expand=1)
         self._rect = self._canv.create_rectangle(0, 0, 0, self._canv.winfo_reqheight(), fill=fillcolor,\
                                                  width=0)
-        self._text = self._canv.create_text(self._canv.winfo_reqwidth()/2, self._canv.winfo_reqheight()/2,\
+        self._text = self._canv.create_text(old_div(self._canv.winfo_reqwidth(),2), old_div(self._canv.winfo_reqheight(),2),\
                                             text='', fill=textcolor)
         if font:
             self._canv.itemconfigure(self._text, font=font)
@@ -42,7 +47,7 @@ class Meter(Tkinter.Frame):
         # looks like we have to call update_idletasks() twice to make sure
         # to get the results we expect
         self._canv.update_idletasks()
-        self._canv.coords(self._text, self._canv.winfo_width()/2, self._canv.winfo_height()/2)
+        self._canv.coords(self._text, old_div(self._canv.winfo_width(),2), old_div(self._canv.winfo_height(),2))
         self._canv.coords(self._rect, 0, 0, self._canv.winfo_width()*self._value, self._canv.winfo_height())
         self._canv.update_idletasks()
 
