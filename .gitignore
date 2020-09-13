@@ -19,3 +19,6 @@ synthesizer/moog/*.o
 synthesizer/moog/MOOGSILENT
 synthesizer/moog/fake_sm-2.4.35/lib/*
 synthesizer/moog/fake_sm-2.4.35/src/*.o
+python/*
+venv/*
+virtualenv/*
