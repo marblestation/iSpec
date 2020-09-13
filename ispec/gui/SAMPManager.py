@@ -16,12 +16,12 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 import os
-import sampy
 import tempfile
 import signal
 import sys
 from astropy.io.votable import parse
 from astropy.io.votable.tree import VOTableFile, Resource, Table, Field, Group
+from astropy.samp import SAMPIntegratedClient
 import urllib.request, urllib.error, urllib.parse
 import numpy as np
 from astropy.io import fits as pyfits
@@ -42,14 +42,14 @@ class SAMPManager(object):
                         'samp.description.text' : 'iSpec',
                         'samp.icon.url' : 'file://'+self.dirname+'/images/iSpec.png',
                         }
-        self.samp_client = sampy.SAMPIntegratedClient(metadata=self.metadata, addr='localhost')
+        self.samp_client = SAMPIntegratedClient(metadata=self.metadata, addr='localhost')
         self.check_connection_period = check_connection_period # seconds
         self.__check_connection()
         signal.signal(signal.SIGINT, self.__signal_handler)
 
     def is_connected(self):
         working_connection = False
-        if self.samp_client is not None and self.samp_client.isConnected():
+        if self.samp_client is not None and self.samp_client.is_connected():
             try:
                 self.samp_client.ping()
                 working_connection = True
@@ -60,10 +60,10 @@ class SAMPManager(object):
     def __check_connection(self):
         status = "Status: "
         if not self.is_connected():
-            if self.samp_client is not None and self.samp_client.isConnected():
+            if self.samp_client is not None and self.samp_client.is_connected():
                 # Destroy old client to completely reset the connection status
                 del self.samp_client
-                self.samp_client = sampy.SAMPIntegratedClient(metadata=self.metadata, addr='localhost')
+                self.samp_client = SAMPIntegratedClient(metadata=self.metadata, addr='localhost')
                 logging.info("SAMP Connection lost")
             status += "Disconnected"
             self.__connect()
@@ -94,14 +94,14 @@ class SAMPManager(object):
         else:
             #samp_client.bindReceiveNotification("*", self.__samp_receive_notification)
             #samp_client.bindReceiveCall("*", self.__samp_receive_call)
-            self.samp_client.bindReceiveNotification("samp.hub.event.register", self.__samp_receive_notification)
-            self.samp_client.bindReceiveNotification("samp.hub.event.metadata", self.__samp_receive_notification)
-            self.samp_client.bindReceiveNotification("samp.hub.event.subscriptions", self.__samp_receive_notification)
-            self.samp_client.bindReceiveNotification("samp.hub.event.unregister", self.__samp_receive_notification)
-            self.samp_client.bindReceiveNotification("table.load.votable", self.__samp_receive_notification)
-            self.samp_client.bindReceiveNotification("spectrum.load.ssa-generic", self.__samp_receive_notification)
-            self.samp_client.bindReceiveCall("table.load.votable", self.__samp_receive_call)
-            self.samp_client.bindReceiveCall("spectrum.load.ssa-generic", self.__samp_receive_call)
+            self.samp_client.bind_receive_notification("samp.hub.event.register", self.__samp_receive_notification)
+            self.samp_client.bind_receive_notification("samp.hub.event.metadata", self.__samp_receive_notification)
+            self.samp_client.bind_receive_notification("samp.hub.event.subscriptions", self.__samp_receive_notification)
+            self.samp_client.bind_receive_notification("samp.hub.event.unregister", self.__samp_receive_notification)
+            self.samp_client.bind_receive_notification("table.load.votable", self.__samp_receive_notification)
+            self.samp_client.bind_receive_notification("spectrum.load.ssa-generic", self.__samp_receive_notification)
+            self.samp_client.bind_receive_call("table.load.votable", self.__samp_receive_call)
+            self.samp_client.bind_receive_call("spectrum.load.ssa-generic", self.__samp_receive_call)
 
 
     def __samp_receive_notification(self, private_key, sender_id, mtype, params, extra):
@@ -168,7 +168,7 @@ class SAMPManager(object):
 
     def shutdown(self):
         if self.timer is not None: self.timer.cancel()
-        if self.samp_client.isConnected():
+        if self.samp_client.is_connected():
             try:
                 self.samp_client.disconnect()
             except Exception:
@@ -177,9 +177,9 @@ class SAMPManager(object):
         sys.exit(0)
 
     def __get_target_client(self, target_client_name):
-        neighbours = samp_client.getRegisteredClients()
+        neighbours = samp_client.get_registered_clients()
         for neighbour in neighbours:
-            metadata = self.samp_client.getMetadata(neighbour)
+            metadata = self.samp_client.get_metadata(neighbour)
             try:
                 if (metadata['samp.name'] == target_client_name):
                     return neighbour
@@ -348,12 +348,12 @@ class SAMPManager(object):
         as_tables = []
 
         try:
-            if self.samp_client.isConnected():
-                subscribers1 = self.samp_client.getSubscribedClients("table.load.votable")
-                subscribers2 = self.samp_client.getSubscribedClients("spectrum.load.ssa-generic")
+            if self.samp_client.is_connected():
+                subscribers1 = self.samp_client.get_subscribed_clients("table.load.votable")
+                subscribers2 = self.samp_client.get_subscribed_clients("spectrum.load.ssa-generic")
                 subscribers = dict(list(subscribers1.items()) + list(subscribers2.items()))
                 for subscriber in list(subscribers.keys()):
-                    metadata = self.samp_client.getMetadata(subscriber)
+                    metadata = self.samp_client.get_metadata(subscriber)
                     name = ""
                     if 'samp.name' in metadata:
                         name = metadata['samp.name']
