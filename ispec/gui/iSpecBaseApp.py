@@ -1158,7 +1158,7 @@ iSpec uses the following radiative transfer codes:
                 # Change name and path
                 self.active_spectrum.path = path
                 name = self.get_name(path.split('/')[-1]) # If it already exists, add a suffix
-                self.active_spectrum.name = name.encode('string_escape')
+                self.active_spectrum.name = name
                 self.active_spectrum.plot_id.set_label("[A] " + self.active_spectrum.name)
                 self.update_legend()
                 self.canvas.draw()
