@@ -20,6 +20,7 @@ import sys
 import time
 import numpy as np
 from scipy import spatial
+from scipy.spatial.qhull import QhullError
 import pandas as pd
 import multiprocessing
 from multiprocessing import Pool
@@ -475,7 +476,19 @@ def load_spectral_grid(input_path):
         for i, parameters_subset in enumerate(parameters_subsets):
             logging.info("Pre-computing [{}/{}]...".format(i+1, len(parameters_subsets)))
             if len(existing_points[parameters_subset]) > 0:
-                delaunay_triangulations['precomputed'].append(spatial.Delaunay(existing_points[parameters_subset]))
+                if existing_points[parameters_subset].shape[1] > 4:
+                    # Typically our case since we usually have 5 parameters: teff, logg, MH, alpha, vmic
+                    default_qhull_options = "Qbb Qc Qz Qx Q12"
+                else:
+                    default_qhull_options = "Qbb Qc Qz Q12"
+                try:
+                    delaunay = spatial.Delaunay(existing_points[parameters_subset], qhull_options=default_qhull_options)
+                except QhullError:
+                    logging.info("...failed")
+                    logging.info("Retrying pre-computing [{}/{}] joggling input to avoid precision problems (using QJ Qhull parameter)...".format(i+1, len(parameters_subsets)))
+                    alternative_qhull_options = "Qbb Qc Qz Q12 QJ"  # Use same parameters as for dimension < 4 + QJ
+                    delaunay = spatial.Delaunay(existing_points[parameters_subset], qhull_options=alternative_qhull_options)
+                delaunay_triangulations['precomputed'].append(delaunay)
             else:
                 delaunay_triangulations['precomputed'].append(None)
         kdtree = spatial.cKDTree(existing_points)
