@@ -210,20 +210,20 @@ class TestDetermineParamsEW(unittest.TestCase):
         params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params, used_linemasks = results
 
         expected_params = {
-                            'MH': 0.02800000000000047,
+                            'teff': 5819.250588553438,
+                            'logg': 4.392804463584955,
+                            'MH': 0.031500000000000306,
                             'alpha': 0.0,
-                            'logg': 4.394728420202205,
-                            'teff': 5816.815035823323,
-                            'vmic': 1.15562084457677
-                           }
+                            'vmic': 1.1597711196954221
+        }
         for k, v in list(expected_params.items()):
             self.assertAlmostEqual(params[k], v)
         expected_errors = {
-                            'MH': 0.06311918023966583,
+                            'teff': 59.11343402326322,
+                            'logg': 0.0873053971927779,
+                            'MH': 0.06316132907329224,
                             'alpha': 0.0,
-                            'logg': 0.08667507551783957,
-                            'teff': 60.97370070760989,
-                            'vmic': 0.03611148017625298
+                            'vmic': 0.04061817174954727
                           }
         for k, v in list(expected_errors.items()):
             self.assertAlmostEqual(errors[k], v)

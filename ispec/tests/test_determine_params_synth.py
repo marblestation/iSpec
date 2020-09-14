@@ -135,29 +135,29 @@ class TestDetermineParamsSynth(unittest.TestCase):
                 code=code, precomputed_grid_dir=precomputed_grid_dir)
 
         expected_params = {
-                             'MH': 0.02043942249382868,
-                             'R': 73171.62188014528,
-                             'alpha': 0.0,
-                             'limb_darkening_coeff': 0.6,
-                             'logg': 4.396102311860471,
-                             'teff': 5828.927122943987,
-                             'vmac': 4.41,
-                             'vmic': 0.5264263067022638,
-                             'vsini': 2.0
-                           }
+                            'teff': 5687.853585498881,
+                            'logg': 4.200690433567511,
+                            'MH': -0.0365710637310875,
+                            'alpha': 0.0,
+                            'vmic': 0.5612848853141451,
+                            'vmac': 3.95,
+                            'vsini': 2.0,
+                            'limb_darkening_coeff': 0.6,
+                            'R': 59940.062674656656
+        }
         for k, v in list(expected_params.items()):
             self.assertAlmostEqual(params[k], v)
         expected_errors = {
-                             'MH': 0.005430463222962008,
-                             'R': 3407.062101968946,
-                             'alpha': 0.0,
-                             'limb_darkening_coeff': 0.0,
-                             'logg': 0.03379805400871714,
-                             'teff': 17.382032406487095,
-                             'vmac': 0.0,
-                             'vmic': 0.03613363175565518,
-                             'vsini': 0.0
-                           }
+                            'teff': 16.232321168204415,
+                            'logg': 0.023941667520824196,
+                            'MH': 0.008528187478657197,
+                            'alpha': 0.0,
+                            'vmic': 0.03753100996572769,
+                            'vmac': 0.0,
+                            'vsini': 0.0,
+                            'limb_darkening_coeff': 0.0,
+                            'R': 1579.2869032822312
+        }
         for k, v in list(expected_errors.items()):
             self.assertAlmostEqual(errors[k], v)
         self.assertEqual(len(stats_linemasks), 348)
@@ -313,29 +313,29 @@ class TestDetermineParamsSynth(unittest.TestCase):
                 code=code)
 
         expected_params = {
-                             'MH': -0.16487847855167367,
-                             'R': 49370.32798017713,
-                             'alpha': 0.06595139142066947,
-                             'limb_darkening_coeff': 0.6,
-                             'logg': 4.219314773087276,
-                             'teff': 5674.879689392149,
-                             'vmac': 4.04,
-                             'vmic': 1.1941244695651667,
-                             'vsini': 2.0
-                           }
+                            'teff': 5662.030274734316,
+                            'logg': 4.202751488289012,
+                            'MH': -0.17506302938782214,
+                            'alpha': 0.07002521175512887,
+                            'vmic': 1.1756501858542001,
+                            'vmac': 4.01,
+                            'vsini': 2.0,
+                            'limb_darkening_coeff': 0.6,
+                            'R': 48976.71190355286
+        }
         for k, v in list(expected_params.items()):
             self.assertAlmostEqual(params[k], v)
         expected_errors = {
-                             'MH': 0.08094624971130629,
-                             'R': 3679.9816888237833,
-                             'alpha': 0.0,
-                             'limb_darkening_coeff': 0.0,
-                             'logg': 0.15747133274510208,
-                             'teff': 73.53314264614156,
-                             'vmac': 0.0,
-                             'vmic': 0.10864222142154868,
-                             'vsini': 0.0
-                          }
+                            'teff': 76.33547792971667,
+                            'logg': 0.1697922974299602,
+                            'MH': 0.08621953417789983,
+                            'alpha': 0.0,
+                            'vmic': 0.10980199038358686,
+                            'vmac': 0.0,
+                            'vsini': 0.0,
+                            'limb_darkening_coeff': 0.0,
+                            'R': 3773.619236185364
+        }
         for k, v in list(expected_errors.items()):
             self.assertAlmostEqual(errors[k], v)
         self.assertEqual(len(stats_linemasks), 29)

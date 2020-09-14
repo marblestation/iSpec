@@ -160,7 +160,7 @@ class TestSynthesis(unittest.TestCase):
                 macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, \
                 R=resolution, regions=regions, verbose=1,
                 code=code, grid=grid)
-        np.testing.assert_almost_equal(interpolated_spectrum['flux'][:10], np.array([1.00000000e-10, 9.29308407e-01, 9.21892388e-01, 9.11929100e-01, 9.01350821e-01, 8.89488008e-01, 8.75318514e-01, 8.57946158e-01, 8.36730900e-01, 8.11337422e-01]))
+        np.testing.assert_almost_equal(interpolated_spectrum['flux'][:10], np.array([1.0000000e-10, 9.3520813e-01, 9.2910456e-01, 9.2112858e-01, 9.1283452e-01, 9.0342249e-01, 8.9173492e-01, 8.7670338e-01, 8.5749592e-01, 8.3359273e-01]))
         np.testing.assert_almost_equal(interpolated_spectrum['waveobs'][:10], np.array([515.   , 515.001, 515.002, 515.003, 515.004, 515.005, 515.006, 515.007, 515.008, 515.009]))
 
 
