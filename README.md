@@ -21,9 +21,9 @@ iSpec is capable of determining atmospheric parameters (i.e effective temperatur
 - [Synthe/WIDTH9](http://atmos.obspm.fr) Kurucz/Atmos
 
 
-## Python powered automatized analyses.
+## Python 3 powered automatized analyses.
 
-The user-friendly interface is perfect for learning and testing. However, to take advantage of the full potential, iSpec can be used from Python. This is the recommended way to use iSpec for complex scientific studies, it ensures reproducibility and give access to a wider range of functionalities and options.
+The user-friendly interface is perfect for learning and testing. However, to take advantage of the full potential, iSpec can be used from Python 3. This is the recommended way to use iSpec for complex scientific studies, it ensures reproducibility and give access to a wider range of functionalities and options.
 
 
 ## Citations
