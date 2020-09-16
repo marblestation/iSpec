@@ -30,6 +30,7 @@ c*****clear the arrays
       enddo
 
 
+c*****the number of species to be considered has been defined in "Inmodel";
 c*****either read in the dissociation data for a molecular species
       do jmol=1,nmol                                                   
          if (amol(jmol) .ge. 100.) then
@@ -108,7 +109,7 @@ c*****now begin the loop that goes through all the atmosphere tau layers
 c*****calculate *xfic* and make a first guess at *xatom*                    
       i = ntau + 1 - kev                                           
       lev = i
-      tk = 1.38054d-16*t(i)                                             
+      tk = 1.38065d-16*t(i)                                             
       do k=1,neq                                                      
          korder = iorder(k)                                             
          xfic(k) = xabund(korder)*nhtot(i)                              
@@ -144,7 +145,7 @@ c        Kp - dissociation constant, Q - partition functions, M - masses
 c        P - partial pressures, N - number densities, T - temperature,
 c        D - dissociation energy, h - plank constant. Remember to use
 c        masses in grams (1 amu = 1.660540E-24 g) and energy in ergs
-c        (1 eV = 1.60219E-12 ergs). Also, k = 1.38066E-16 erg/K,
+c        (1 eV = 1.60219E-12 ergs). Also, k = 1.38065E-16 erg/K,
 c        h = 6.626076E-27 erg s, and pi = 3.1415926536.
 27    do jmol=1,nmol                                                  
          atom = amol(jmol)                                              
@@ -167,7 +168,7 @@ c        h = 6.626076E-27 erg s, and pi = 3.1415926536.
                hion = 10.0*(amol(jmol) - dint(amol(jmol)))  
                th = 5040./t(i)
                lth = log10(th)
-               xmol(jmol,i) = xmol(jmol,i)*(((1.38066d-16 * t(i))**
+               xmol(jmol,i) = xmol(jmol,i)*(((1.38065d-16 * t(i))**
      .             (count-1.0))/(10.0**(const(2,jmol)+(const(3,jmol)*
      .             lth)+(const(4,jmol)*(lth**2))+(const(5,jmol)*
      .             (lth**3))+(const(6,jmol)*(lth**4))-
@@ -263,6 +264,10 @@ c*****number density for each neutral atom
 
 c*****here the big loop in tau ends
 21    continue                                                          
+
+
+c*****finally, transfer some of this number density output to other arrays
+      call setmols
       return                                                            
 
 

@@ -24,51 +24,62 @@ c******************************************************************************
       include 'Mol.com'
 
 
-c*****Here is the default small list of ions and molecules.
+c*****Here is the default small list of ions and molecules; 
+c     there are 30 of them
 c     P(H)  = p(H) + p(H+) + 2p(H_2) + p(CH) + p(NH) + p(OH) + p(MgH) + 2p(H_2O) + p(HF)
-c     P(C)  = p(C) + p(C+) + p(CH) + p(C_2) + p(CN) + p(CO) + p(CO_2)
-c     P(N)  = p(N) + p(N+) + p(NH) + p(CN) + 2p(N_2) + p(NO)
-c     P(O)  = p(O) + p(O+) + p(OH) + p(CO) + p(ON) + 2p(O_2) + 2p(CO_2)
-c     P(F)  = p(F) + p(F+) + p(HF)
+c     P(C)  = p(C)  + p(C+)  + p(CH)  + p(C_2) + p(CN) + p(CO) + p(CO_2)
+c     P(N)  = p(N)  + p(N+)  + p(NH)  + p(CN) + 2p(N_2) + p(NO)
+c     P(O)  = p(O)  + p(O+)  + p(OH)  + p(CO) + p(ON) + 2p(O_2) + 2p(CO_2)
+c     P(F)  = p(F)  + p(F+)  + p(HF)
 c     P(Mg) = p(Mg) + p(Mg+) + p(MgH) + p(MgO)
-c     P(Ti) = p(Ti) + p(Ti+) + p(TiO)
+c     P(Al) = p(Al) + p(Al+) + p(AlH) + p(AlOH)
+c     P(Si) = p(Si) + p(Si+) + p(SiH) + p(SiO)
+c     P(Ti) = p(Ti) + p(Ti+) + p(TiH) + p(TiO)
+c     p(Fe) = p(Fe) + p(Fe+) + p(FeH) + p(FeO)
       data (smallmollist(i),i=1,110)/
-     .       1.1,     6.1,     7.1,     8.1,    12.1,    22.1,
-     .     101.0,   106.0,   107.0,   108.0,   109.0,   112.0,   
-     .     606.0,   607.0,   608.0,   707.0,   708.0,   808.0, 
-     .   10108.0, 60808.0,   812.0,   822.0,
-     .    88*0.0/
+     .       1.1,     2.1,     6.1,     7.1,     8.1,     9.1,    
+     .      12.1,    13.1,    14.1,    22.1,    26.1,   101.0,   
+     .     106.0,   107.0,   108.0,   109.0,   112.0,   113.0,
+     .     114.0,   126.0,   606.0,   607.0,   608.0,   707.0,   
+     .     708.0,   808.0, 10108.0, 60808.0,   812.0,   822.0,
+     .    80*0.0/
+c      data (smallmollist(i),i=1,110)/
+c     .       1.1,     6.1,     7.1,     8.1,   101.0,   106.0,   
+c     .     107.0,   108.0,   606.0,   607.0,   608.0,   707.0,   
+c     .     708.0,   808.0, 10108.0, 60808.0,
+c     .    94*0.0/
 
 
-c*****Here is the default large list of ions and molecules.
-c     P(H)  = p(H) + p(H+) + 2p(H_2) + p(CH) + p(NH) + p(OH) + p(MgH) + p(AlH)
-c                  + p(SiH) + p(PH) + p(SH) + p(ClH) + p(CaH) + p(CrH) 
-c                  + p(FeH) + 2p(CH_2) + 2p(NH_2) + 2p(H_2O) + 2p(PH_2) 
-c                  + 2p(SH_2) + p(HCO) + p(MgOH) + p(AlOH) + p(CaOH) + p(HF)
+c*****Here is the default large list of ions and molecules;
+c     there are 59 of them
+c     P(H)  = p(H)  + p(H+) + 2p(H_2) + p(CH) + p(NH) + p(OH) + p(MgH) + p(AlH)
+c                   + p(SiH) + p(PH) + p(SH) + p(ClH) + p(CaH) + p(CrH) 
+c                   + p(FeH) + 2p(CH_2) + 2p(NH_2) + 2p(H_2O) + 2p(PH_2) 
+c                   + 2p(SH_2) + p(HCO) + p(MgOH) + p(AlOH) + p(CaOH) + p(HF)
 c     P(He) = p(He) + p(He+)
-c     P(C)  = p(C) + p(C+) + p(CO) + p(CH) + 2p(CH_2) + p(HCO) + p(CN)
-c                  + p(CS) + p(CO_2)
-c     P(N)  = p(N) + p(N+) + 2p(N_2) + p(NH) + p(NH_2) + p(CN) + p(NO) 
-c                  + p(SiO) + p(PN) + p(SN) 
-c     P(O)  = p(O) + p(O+) + p(CO) + p(OH) + p(H_2O) + p(HCO) + p(MgOH) 
-c                  + p(AlOH) + p(CaOH) + 2p(CO_2) + p(NO) + 2p(O_2)
-c                  + p(MgO) + p(SiO) + p(PO) + p(SO) + p(TiO) + p(VO) + p(FeO)
-c     P(F)  = p(F) + p(F+) + p(HF)
+c     P(C)  = p(C)  + p(C+) + p(CO) + p(CH) + 2p(CH_2) + p(HCO) + p(CN)
+c                   + p(CS) + p(CO_2)
+c     P(N)  = p(N)  + p(N+) + 2p(N_2) + p(NH) + p(NH_2) + p(CN) + p(NO) 
+c                   + p(SiO) + p(PN) + p(SN) 
+c     P(O)  = p(O)  + p(O+) + p(CO) + p(OH) + p(H_2O) + p(HCO) + p(MgOH) 
+c                   + p(AlOH) + p(CaOH) + 2p(CO_2) + p(NO) + 2p(O_2)
+c                   + p(MgO) + p(SiO) + p(PO) + p(SO) + p(TiO) + p(VO) + p(FeO)
+c     P(F)  = p(F)  + p(F+) + p(HF)
 c     P(Mg) = p(Mg) + p(Mg+) + p(MgH) + p(MGOH) + p(MgO)
 c     P(Al) = p(Al) + p(Al+) + p(AlH) + p(AlOH) 
 c     P(Si) = p(Si) + p(Si+) + p(SiH) + p(SiO) + p(SiS)
-c     P(P)  = p(P) + p(P+) + p(PH) + p(PH_2) + p(PN) + p(PO)
-c     P(S)  = p(S) + p(S+) + p(SH) + p(SH_2) + p(SC) + p(SN) + P(SO) + p(SiS)
+c     P(P)  = p(P)  + p(P+) + p(PH) + p(PH_2) + p(PN) + p(PO)
+c     P(S)  = p(S)  + p(S+) + p(SH) + p(SH_2) + p(SC) + p(SN) + P(SO) + p(SiS)
 c     P(Cl) = p(Cl) + p(Cl+) + p(ClH)                         
-c     P(Ca) = p(Ca) + P(Ca+) + p(CaH) + p(CaOH)               
-c     P(Ti) = p(Ti) + p(Ti+) + p(TiO)                         
-c     P(V)  = p(V) + p(V+) + p(VO)                            
+c     P(Ca) = p(Ca) + P(Ca+) + p(CaH) + p(CaO)               
+c     P(Ti) = p(Ti) + p(Ti+) + p(TiH) + p(TiO)                         
+c     P(V)  = p(V)  + p(V+) + p(VO)                            
 c     P(Cr) = p(Cr) + p(Cr+) + p(CrH)                         
 c     p(Fe) = p(Fe) + p(Fe+) + p(FeH) + p(FeO)                
       data (largemollist(i),i=1,110)/                         
-     .       1.1,     2.1,     6.1,     7.1,     8.1,    12.1,
-     .      13.1,    14.1,    15.1,    16.1,    17.1,    20.1,
-     .      22.1,    23.1,    24.1,    26.1,                  
+     .       1.1,     2.1,     6.1,     7.1,     8.1,     9.1,
+     .      12.1,    13.1,    14.1,    15.1,    16.1,    17.1,
+     .      20.1,    22.1,    23.1,    24.1,    26.1,                  
      .     101.0,   106.0,   107.0,   108.0,   109.0,   112.0,   
      .     113.0,   114.0,   115.0,   116.0,   117.0,   120.0,
      .     124.0,   126.0, 10106.0, 10107.0, 10108.0, 10115.0,
@@ -76,7 +87,17 @@ c     p(Fe) = p(Fe) + p(Fe+) + p(FeH) + p(FeO)
      .     607.0,   608.0,   616.0, 60808.0,   707.0,   708.0,
      .     714.0,   715.0,   716.0,   808.0,   812.0,   814.0,
      .     815.0,   816.0,   822.0,   823.0,   826.0,  1416.0,         
-     .     52*0.0/ 
+     .     51*0.0/ 
+
+c*****Here are polynomial coefficients to match the partition functions
+c     for H_2O and CO_2 that are found at the HITRAN site:
+c     https://hitran.org/data/Q/q1.txt  and  https://hitran.org/data/Q/q7.txt
+c     These are expressed as simple polynomials or the form:
+c     u(T) = c(1)*T^0 + c(2)*T^1 + c(3)*T^2 + c(4)*T^3 + c(5)*T^4
+      data (h2ocoeff(i),i=1,5)/ 2.01999d+00,  1.36468d-03,
+     .           -3.70508d-07,  6.74255d-11, -4.94970d-15/
+      data (co2coeff(i),i=1,5)/ 2.00071d+00,  1.79927d-03,
+     .           -4.06396d-07,  6.00864d-11, -3.84741d-15/
 
 
       data ((datmol(i,j),i=1,7),j=1,10)/                 

@@ -15,7 +15,7 @@ class TestDetermineAbundEW(unittest.TestCase):
         bad = np.isnan(x_over_h)
         self.assertFalse(np.any(bad))
         self.assertEqual(len(x_over_h), len(linemasks))
-        np.testing.assert_almost_equal(x_over_h[:10], np.array([-0.022,  0.07 ,  0.091, -0.047,  0.192, -0.025,  0.079,  0.091, 0.133,  0.066]))
+        np.testing.assert_almost_equal(x_over_h[:10], np.array([-0.016,  0.073,  0.094, -0.043,  0.194, -0.02 ,  0.082,  0.096, 0.137,  0.07 ]))
 
     def test_determine_abundances_from_ew_with_width(self):
         linemasks, x_over_h = self._determine_abundances_from_ew(code="width")

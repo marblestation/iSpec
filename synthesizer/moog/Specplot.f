@@ -225,7 +225,8 @@ c     find the starting and stopping points in the arrays for the deviations
 
 c  compute the deviations; linear interpolation in the wavelength array
 c  of the synthetic spectra is considered sufficient
-165   do j=1,nsyn
+165   open (222,file='devfile')
+      do j=1,nsyn
          lpoint = lim1syn
          devsigma = 0.
          do i=lim3obs,lim4obs
@@ -240,6 +241,10 @@ c  of the synthetic spectra is considered sufficient
             devsigma = devsigma + dev(i)**2
          enddo
          devsigma = dsqrt(devsigma/(lim4obs-lim3obs-1))
+         write (222,1222) j
+1222     format ('deviation array ', i1)
+         write (222,1223) (xobs(i),dev(i),i=lim3obs,lim4obs)
+1223     format (f10.3, f8.3)
          
       
 c  from first set of deviations, define the plot limits, draw and label box
@@ -303,6 +308,7 @@ c  plot the array of deviations
             write (nf6out,3003) devsigma, velsh
          endif
       enddo
+      close (unit=222)
 
 
 c  reset the spectrum plot boundaries before exiting

@@ -20,7 +20,6 @@ c     generate a reminder of this necessity
       write (moogpath,1001)
       moogpath = 
      . 'DATA/'
-c     .  '/astro/users/sakaricm/MOOG2015'
 
 
 c*****What kind of machine are you using?  Possible ones are:
@@ -45,7 +44,7 @@ c     will be queried on all occasions that might call for user input;
 c     DON'T CHANGE THIS VARIABLE; 
 c     if silent = 'n', the normal interactive MOOG is run;
 c     if silent = 'y', the non-interactive MOOG is run
-      silent = 'n'
+      silent = 'y'
 
 
 c*****invoke the overall starting routine
@@ -53,7 +52,7 @@ c*****invoke the overall starting routine
       call begin
 
 
-c*****use one of the standard driver routines ("isotop" is obsolete):
+c*****use one of the standard driver routines
       if     (control .eq. 'synplot') then
          call plotit
       elseif (control .eq. 'synth  ') then
@@ -107,8 +106,6 @@ c*****or else you are out of luck!
 
 c*****format statements
 1001  format (60(' '))
-1002  format ('The "isotop" driver is obsolete; "synth" does ',
-     .        'its functions now!')
 1003  format (22x,'MOOG IS CONTROLLED BY DRIVER ',a7)
 1017  format ('x11 -bg black -title MOOGplot -geom 700x800+650+000')
 1018  format ('x11 -bg black -title MOOGplot -geom 1200x350+20+450')

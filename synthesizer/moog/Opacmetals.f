@@ -446,7 +446,7 @@ c  set up some data upon first entrance with a new model atmosphere
       if (modelnum .ne. modcount) then
          modcount = modelnum
          do i=1,ntau
-            hkt = 6.6256d-27/(1.38054d-16*t(i))
+            hkt = 6.6256d-27/(1.38065d-16*t(i))
             do k=1,48
                bolt(k,i) = gg(k)*dexp(-ee(k)*2.99792458d10*hkt)
             enddo

@@ -76,7 +76,7 @@ c*****either: compute lower state number densities for atomic lines;
 c     q21 is the ion/neutral ratio, etc., and q is the ratio of the total
 c     to the species of interest; do the Saha equation first, then
 c     the Boltzmann equation
-         if (iatom .lt. 100) then
+         if     (iatom .lt. 100) then
             do i=1,ntau
                q21 = 4.825d15*u(iatom,2,i)/(u(iatom,1,i)*ne(i))*
      .               t(i)**1.5*dexp(-chi(j,1)/tkev(i)) 
@@ -118,7 +118,7 @@ c     the Boltzmann equation
 
 
 c*****or: compute lower state number densities for molecular lines
-         else
+         elseif (iatom .lt. 10000) then
             call sunder(atom1(j),iaa,ibb)
             do n=1,neq
                if(iorder(n) .eq. iaa) ia = n
@@ -126,12 +126,25 @@ c*****or: compute lower state number densities for molecular lines
             enddo
             do i=1,ntau
                psipri = 
-     .             1.38054d-16*t(i)*10.0**(d0(j)*theta(i)-13.670)*
+     .             1.38065d-16*t(i)*10.0**(d0(j)*theta(i)-13.670)*
      .             theta(i)**2.5/
      .             (rdmass(j)**1.5*u(iaa,1,i)*u(ibb,1,i)) 
                xnum(i) = dexp(-e(j,1)/tkev(i))*psipri*
      .                   xamol(ia,i)*xamol(ib,i)
             enddo
+         else
+            if     (iatom .eq. 10108) then
+               do i=1,ntau
+                  xnum(i) = xnh2o(i)/uh2o(i)*dexp(-e(j,1)/tkev(i))
+               enddo
+            elseif (iatom .eq. 60808) then
+               do i=1,ntau
+                  xnum(i) = xnco2(i)/uco2(i)*dexp(-e(j,1)/tkev(i))
+               enddo
+            else
+               write (*,1001) iatom
+               stop
+            endif
          endif
 
 
@@ -161,6 +174,11 @@ c     if appropriate; exit routine normally
          endif
       endif
       return
+
+
+c*****format statements
+1001  format (i6, 'IS NOT AN ALLOWED TRIATOMIC (H_2O AND CO_2);',
+     .        ' I QUIT!')
 
 
       end

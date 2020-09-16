@@ -236,8 +236,6 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
             except:
                 print(out)
                 sys.stdout.flush()
-                import pudb
-                pudb.set_trace()
                 raise Exception("Synthesis failed!")
             #synth_waveobs_tmp = np.linspace(wave_base, wave_top, len(synth_fluxes_tmp)) # Not exactly identical to turbospectrum wavelengths
             synth_waveobs_tmp = data[:,0] / 10. # Armstrong to nm

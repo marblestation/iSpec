@@ -17,7 +17,7 @@ c*****initialization
       freq = 2.997925d18/waveop 
       freqlg = dlog(freq)
       do i = 1,ntau
-         hkt = 6.6256d-27/(1.38054d-16*t(i))
+         hkt = 6.6256d-27/(1.38065d-16*t(i))
          evhkt(i) = dexp(-freq*hkt)
       enddo
       do i=1,ntau

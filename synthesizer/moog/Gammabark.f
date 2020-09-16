@@ -60,9 +60,6 @@ c     the input line list
             exit
          endif
       enddo
-      nummax = nummin ! SBC: If not nummax = 0 when Barklem.dat and
-                      ! lines.in contain only one line, and then MOOG 
-                      ! does not match both data
       do k=nummin,numbark
          if (wavebk(k)-wavemax .gt. 1.0) then
             nummax = k
@@ -78,7 +75,6 @@ c*****search for Barklem data
          gamrad(j)  = -1.
          if (atom1(j) .gt. 100.) cycle
          iatom10 = nint(10.*atom1(j))
-c        write (*,*) nummin, nummax
          do k=nummin,nummax
             waveerror = -(wave1(j) - wavebk(k))/wavebk(k)
             iii = nint(10.*idbk(k))
