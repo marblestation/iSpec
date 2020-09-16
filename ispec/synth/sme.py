@@ -52,19 +52,19 @@ def __sme_true_generate_spectrum(process_communication_queue, waveobs, atmospher
     if _platform == "linux" or _platform == "linux2":
         # linux
         if system_64bits:
-            sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.linux.x86_64.64")
+            sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.linux.x86_64.64g")
         else:
-            sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.linux.x86.32")
+            sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.linux.x86.32g")
     elif _platform == "darwin":
         # OS X
         if system_64bits:
-            sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.darwin.x86_64.64")
+            sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.darwin.x86_64.64g")
         else:
             sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.darwin.i386.32")
     else:
         # Windows
         if system_64bits:
-            sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.Win32.x86_64.64")
+            sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.Win32.x86_64.64g")
         else:
             sme = ctypes.CDLL(sme_shorter_dir + "/sme_synth.so.Win32.x86.32")
 

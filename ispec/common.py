@@ -145,19 +145,19 @@ def is_sme_support_enabled():
     if _platform == "linux" or _platform == "linux2":
         # linux
         if system_64bits:
-            sme_lib = sme_dir + "/sme_synth.so.linux.x86_64.64"
+            sme_lib = sme_dir + "/sme_synth.so.linux.x86_64.64g"
         else:
             sme_lib = sme_dir + "/sme_synth.so.linux.x86.32"
     elif _platform == "darwin":
         # OS X
         if system_64bits:
-            sme_lib = sme_dir + "/sme_synth.so.darwin.x86_64.64"
+            sme_lib = sme_dir + "/sme_synth.so.darwin.x86_64.64g"
         else:
             sme_lib = sme_dir + "/sme_synth.so.darwin.i386.32"
     else:
         # Windows
         if system_64bits:
-            sme_lib = sme_dir + "/sme_synth.so.Win32.x86_64.64"
+            sme_lib = sme_dir + "/sme_synth.so.Win32.x86_64.64g"
         else:
             sme_lib = sme_dir + "/sme_synth.so.Win32.x86.32"
 

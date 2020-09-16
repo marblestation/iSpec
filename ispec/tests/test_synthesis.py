@@ -22,7 +22,7 @@ class TestSynthesis(unittest.TestCase):
 
     def test_synthesize_spectrum_with_sme(self):
         synth_spectrum = self._synthesize_spectrum(code="sme")
-        np.testing.assert_almost_equal(synth_spectrum['flux'][:10], np.array([1.00000000e-10, 9.66205259e-01, 9.66583367e-01, 9.68499306e-01, 9.71398442e-01, 9.73687695e-01, 9.73901693e-01, 9.70988650e-01, 9.64237832e-01, 9.53080035e-01]))
+        np.testing.assert_almost_equal(synth_spectrum['flux'][:10], np.array([1.00000000e-10, 9.66138868e-01, 9.66511968e-01, 9.68428863e-01, 9.71345740e-01, 9.73680458e-01, 9.73981839e-01, 9.71215757e-01, 9.64690956e-01, 9.53855275e-01]))
         np.testing.assert_almost_equal(synth_spectrum['waveobs'][:10], np.array([515.   , 515.001, 515.002, 515.003, 515.004, 515.005, 515.006, 515.007, 515.008, 515.009]))
 
     def test_synthesize_spectrum_with_moog(self):
