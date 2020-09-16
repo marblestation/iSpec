@@ -5,7 +5,6 @@ tests/*
 *.so
 *.o
 *.log
-*.txt
 *.s
 *.gz
 synthesizer/discard/*
