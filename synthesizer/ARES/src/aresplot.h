@@ -10,9 +10,13 @@
 
 // 1- for plot_utils
 // 2- for gnuplot
+// 3- for gnuplot saving png plots in plotdir
 #define PLOT_TYPE 2
 
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <stdio.h>
 
 #ifdef	__cplusplus
@@ -23,7 +27,22 @@ void plotxy(double *, double *, long, double, double);
 void plotxyover(double *, double *, long, double *, double *, long, double, double);
 void plotxyover2(double *, double *, long, double *, double *, long, double, double);
 void plotxyover3(double *, double *, long, double *, double *, long, double *, double *, long, double, double);
+void create_dir_plot();
 
+
+void create_dir_plot(){
+
+    if (PLOT_TYPE == 3){
+		struct stat st = {0};
+
+		if (stat("plotdir", &st) == -1) {
+    		mkdir("plotdir", 0700);
+		} else{
+        system("rm -rf plotdir");
+        mkdir("plotdir", 0700);
+		}
+    }
+}
 
 void plotxy(double xvec[], double yvec[], long np, double xi, double xf){
     FILE * pFile2;
@@ -112,9 +131,22 @@ void plotxyover2(double xvec[], double yvec[],long np, double xvec2[], double yv
     	system(str);
     } else {
 //  GNUPLOT:
-		FILE *pipe = popen("gnuplot -persist","w");
-		fprintf(pipe, "plot 'tmp' with lines, 'tmp2' with lines, 'tmp3' with lines \n");	
-		pclose(pipe);
+		if (PLOT_TYPE == 3) {
+            double line = xi + (xf-xi)/2.;
+			FILE *pipe = popen("gnuplot -persist","w");
+			fprintf(pipe, "set term png \n");	
+			fprintf(pipe, "set output \"plotdir/plot_%08.2f.png\" \n", line);	
+			fprintf(pipe, "plot 'tmp' with lines, 'tmp2' with lines, 'tmp3' with lines \n");	
+			fprintf(pipe, "set term x11 \n");	
+			pclose(pipe);
+            char str_norm[300];
+            sprintf(str_norm, "cp tmp plotdir/spec_%08.2f.dat", line);
+            system(str_norm);
+		} else { 
+			FILE *pipe = popen("gnuplot -persist","w");
+			fprintf(pipe, "plot 'tmp' with lines, 'tmp2' with lines, 'tmp3' with lines \n");	
+			pclose(pipe);
+		}
 	}
 
 //    system("rm tmp tmp2 tmp3");

@@ -668,9 +668,7 @@ void fitngauss(double t[], double y[], double sigma[], long nvec, double acoef[]
     }
   while (status == GSL_CONTINUE && iter < 5000);
 
-  gsl_matrix *J = gsl_matrix_alloc(n, p);
-  gsl_multifit_fdfsolver_jac(s, J);
-  gsl_multifit_covar (J, 0.0, covar);
+  gsl_multifit_covar (s->J, 0.0, covar);
 
 #define FIT(i) gsl_vector_get(s->x, i)
 #define ERR(i) sqrt(gsl_matrix_get(covar,i,i))

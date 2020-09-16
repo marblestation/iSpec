@@ -1,4 +1,4 @@
-/* 
+/*
  * File:   rvcor.h
  * Author: sousasag
  *
@@ -12,8 +12,6 @@
 extern "C" {
 #endif
 
-
-#include "areslib.h"    
 #include <gsl/gsl_interp.h>
 
 struct maskstruct{
@@ -21,8 +19,8 @@ struct maskstruct{
     double space;
     double* lines;
     int nl;
-};    
-    
+};
+
 void correct_lambda(double * lambda , int np, double vrad);
 int get_local_rvo(double *lambda, double* flux, long np, double * mask, int nmask, double* rvel);
 int get_local_rv(double *lambda, double* flux, long np, struct maskstruct mask, double* rvel);
@@ -36,13 +34,13 @@ double get_rv(double *lambda, double* flux, long np, char* rvmask){
     int rvflag;
     pch = strtok (rvmask,",");
     rvflag=atoi(pch);
-    
+
     if (rvflag == 0) {
         pch = strtok (NULL, " ");
         radvel=atof(pch);
         return radvel;
     } else {
-        struct maskstruct mask;        
+        struct maskstruct mask;
         double masklocal[rvflag];
         int i;
         for (i=0; i<rvflag; i++){
@@ -56,8 +54,8 @@ double get_rv(double *lambda, double* flux, long np, char* rvmask){
         mask.nl=rvflag;
         mask.lines=masklocal;
         int flag=0;
-        flag=get_local_rv(lambda, flux, np, mask, &radvel);        
-        if (flag == 1) 
+        flag=get_local_rv(lambda, flux, np, mask, &radvel);
+        if (flag == 1)
             return radvel;
         else {
             printf("Radial Velocity not determined.\n");
@@ -75,12 +73,12 @@ void correct_lambda(double * lambda, int np, double vrad){
         lambda[i]=lambda[i]/(1+vrad/3.e5);
     }
 }
-    
+
 //mask
 //0-> center
 //1-> space
 //2--n+2-> center of the lines in the mask
-// return {-1,0} if no radial velocity derived 
+// return {-1,0} if no radial velocity derived
 int get_local_rvo(double *lambda, double* flux, long np, double * mask, int nmask, double* rvel){
     int radvel[2];
     radvel[0]=-1;
@@ -88,15 +86,15 @@ int get_local_rvo(double *lambda, double* flux, long np, double * mask, int nmas
     // we can change the space accordingly with the mask
     double linecenter=mask[0];
     double spacerv=mask[1];
-    
+
     double lambdai=lambda[0];
     double lambdaf=lambda[np-1];
-    
+
     // get center line for mask
-    
+
     if ( (linecenter > lambdai+2*spacerv) && (linecenter < lambdaf-2*spacerv) ){
-            long indexi=find_pixel_line(lambda, linecenter-spacerv);
-            long indexf=find_pixel_line(lambda, linecenter+spacerv);
+            long indexi=find_pixel_line(lambda, np, linecenter-spacerv);
+            long indexf=find_pixel_line(lambda, np, linecenter+spacerv);
             long nl=indexf-indexi;
             double lambda_loc[nl], flux_loc[nl];
             arraysubcp(lambda_loc, lambda,indexi,indexf);
@@ -128,23 +126,23 @@ int get_local_rvo(double *lambda, double* flux, long np, double * mask, int nmas
                     ccfflx[i]=lambdaflxv[0]+lambdaflxv[1]+lambdaflxv[2];
 
 //                    printf("%d - %f, %f - %f -- %f - %f ::: %f\n",i,ccfvel[i], lambdaccfv[0], lambdaccfv[1], lambdaflxv[0], lambdaflxv[1],ccfflx[i] );
-                    
-                    if (ccfflx[i] < cflxmin) { 
-                        vmin=ccfvel[i]; 
+
+                    if (ccfflx[i] < cflxmin) {
+                        vmin=ccfvel[i];
                         cflxmin=ccfflx[i];
                     }
             }
-            
+
 //            plotxy(ccfvel, ccfflx, nccf, -400., 400.);
             printf("Velocidade radial: %f\n", vmin);
             radvel[0]=1;
             *rvel=vmin;
-            
+
     }
-    
+
     return radvel[0];
 }
-    
+
 
 int get_local_rv(double *lambda, double* flux, long np, struct maskstruct mask, double* rvel){
     int flag=-1;
@@ -152,15 +150,15 @@ int get_local_rv(double *lambda, double* flux, long np, struct maskstruct mask, 
     // we can change the space accordingly with the mask
     double linecenter=mask.center;
     double spacerv=mask.space;
-    
+
     double lambdai=lambda[0];
     double lambdaf=lambda[np-1];
-    
+
     // get center line for mask
-    
+
     if ( (linecenter > lambdai+2*spacerv) && (linecenter < lambdaf-2*spacerv) ){
-            long indexi=find_pixel_line(lambda, linecenter-spacerv);
-            long indexf=find_pixel_line(lambda, linecenter+spacerv);
+            long indexi=find_pixel_line(lambda, np, linecenter-spacerv);
+            long indexf=find_pixel_line(lambda, np, linecenter+spacerv);
             long nl=indexf-indexi;
             double lambda_loc[nl], flux_loc[nl];
             arraysubcp(lambda_loc, lambda,indexi,indexf);
@@ -195,13 +193,13 @@ int get_local_rv(double *lambda, double* flux, long np, struct maskstruct mask, 
                     for (oo=0; oo < nlm; oo++)
                         ccfflx[i]+=lambdaflxv[oo];
 //                    printf("%d   %f   %f   %f   %f   %f   %f\n",i,ccfvel[i], lambdaccfv[0], lambdaccfv[1], lambdaflxv[0], lambdaflxv[1],ccfflx[i] );
-                    
-                    if (ccfflx[i] < cflxmin) { 
-                        vmin=ccfvel[i]; 
+
+                    if (ccfflx[i] < cflxmin) {
+                        vmin=ccfvel[i];
                         cflxmin=ccfflx[i];
                     }
             }
-            
+
 //            plotxy(ccfvel, ccfflx, nccf, -400., 400.);
 //            int pausav;
 //            scanf("%i", &pausav);
@@ -209,7 +207,7 @@ int get_local_rv(double *lambda, double* flux, long np, struct maskstruct mask, 
             flag=1;
             *rvel=vmin;
     }
-    
+
     return flag;
 }
 
@@ -223,17 +221,17 @@ void interpollin(double* x,double* y,double* xi, double* yi, int n, int ni){
       //get interpolation for x = 1981
 	int i;
 	for (i=0; i<ni; i++){
-		yi[i] = gsl_interp_eval(interpolation, x, y, xi[i], accelerator); 
+		yi[i] = gsl_interp_eval(interpolation, x, y, xi[i], accelerator);
 //		printf("%f\n",yi[i]);
 	}
       gsl_interp_free (interpolation);
       gsl_interp_accel_free (accelerator);
 }
-  
-    
-    
-    
-    
+
+
+
+
+
 
 
 #ifdef	__cplusplus
@@ -241,4 +239,3 @@ void interpollin(double* x,double* y,double* xi, double* yi, int n, int ni){
 #endif
 
 #endif	/* RVCOR_H */
-

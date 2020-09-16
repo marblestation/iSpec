@@ -97,4 +97,3 @@ expb_fdf (const gsl_vector * x, void *data,
 
   return GSL_SUCCESS;
 }
-

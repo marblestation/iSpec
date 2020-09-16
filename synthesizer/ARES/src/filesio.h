@@ -13,6 +13,7 @@ extern "C" {
 #endif
 
 #include <string.h>
+#include "fitsio.h"
 
     /* leitura das opcoes , mine.opt file read*/
 //void read_mine(char * mine, char* filetest, char* fileleitura, char* fileout, double* lambdai, double* lambdaf, double* smoothder, double* tree, double* space, double* tree, double* distlinha, double* miniline, int* plots_flag);
@@ -21,13 +22,45 @@ long file_lines(char * file);
 char* getFileExtension(char * name);
 int set_tipo_espectro(char * extensao);
 
-
+long find_pixel_line(double * xpixels, long npoints, double linha);
 void read_mine(char * mine, char* filetest, char* fileleitura, char* fileout, double* lambdai, double* lambdaf, double* smoothder, double* space, char* tree, double* distlinha, double* miniline, int* plots_flag, char* rvmask);
 void read_spectrum_file(char * filetest, long* npoints, double** pixels2, double** xpixels2, double* cdelta1, double* crval1, int spectrum_type);
 void read_fits_file(char * filetest, long* npoints, double** pixels2, double** xpixels2, double* cdelta1, double* crval1);
 void read_ascii_file(char * filetest, long* npoints, double** pixels2, double** xpixels2, double* cdelta1mean, double* crval1);
 void read_lines_list(char * fileleitura, long* nl2, double** linhas);
 void write_outfile(char *fileout, double* aponta, int nl, int miniline);
+
+
+long find_pixel_line(double * xpixels, long npoints, double linha){
+    long nctest;
+    double restest[2];
+    double cdelta1=xpixels[1]-xpixels[0];
+    double cdelta_last=xpixels[npoints-1]-xpixels[npoints-2];
+    double cdelta_mid=xpixels[npoints/2]-xpixels[npoints/2-1];
+    double crval1=xpixels[0];
+//    restest[0]=1./cdelta1;
+    restest[0]=1./cdelta_mid;
+    restest[1]=-crval1/cdelta1;
+    nctest=(long) (restest[0]*linha+restest[1]);
+    nctest++;
+    // implementar verificação de proximidade da linha. Para o caso de cdeltas nao equidistantes. Neste caso podemos implementar um if para ver se está suficientemente perto.
+    // Se nao estiver perto um while até se encontrar perto depois de verificar se tem de somar ou subtrair (cuidado com os limites)
+    // Tive de mudar o cdelta para o meio do espectro pois para o ESPRESSO ficava muito longe..
+    if (cdelta1 != cdelta_last || nctest < 0 || nctest > npoints -1) {
+      if (nctest < 0)  nctest = 0;
+      if (nctest > npoints-1)  nctest = npoints-1;
+      printf("\nRefining search for central wavelenght: Inicial wavelenght: %f, index: %ld\n", xpixels[nctest], nctest);
+      if (xpixels[nctest] < linha) {
+        while(xpixels[nctest] < linha)
+          nctest++;
+      } else {
+        while(xpixels[nctest] > linha)
+          nctest--;
+      }
+    }
+    return nctest;
+}
+
 
 void write_outfile(char *fileout, double* aponta, int nl, int miniline){
    
@@ -37,7 +70,7 @@ void write_outfile(char *fileout, double* aponta, int nl, int miniline){
     int ilinha;
     for (ilinha=0;ilinha<nl;ilinha++) {
         if (aponta[ilinha*9+4] > miniline && aponta[ilinha*9+4] < 500. && aponta[ilinha*9+1] > 0)
-            fprintf(pFile2," %10.2f  %ld  %10.5f  %10.5f  %10.5f  %10.5f  %10.5f  %10.5f  %10.2f\n", aponta[ilinha*9+0], (long) aponta[ilinha*9+1], aponta[ilinha*9+2], aponta[ilinha*9+3], aponta[ilinha*9+4], aponta[ilinha*9+8], aponta[ilinha*9+5], aponta[ilinha*9+6], aponta[ilinha*9+7]);
+            fprintf(pFile2," %10.3f  %ld  %10.5f  %10.5f  %10.5f  %10.5f  %10.5f  %10.5f  %10.2f\n", aponta[ilinha*9+0], (long) aponta[ilinha*9+1], aponta[ilinha*9+2], aponta[ilinha*9+3], aponta[ilinha*9+4], aponta[ilinha*9+8], aponta[ilinha*9+5], aponta[ilinha*9+6], aponta[ilinha*9+7]);
 
     }
     fclose (pFile2);
@@ -205,6 +238,11 @@ void read_fits_file(char * filetest, long* npoints, double** pixels2, double** x
                     status=fits_read_key(fptr, TDOUBLE, "CRVAL1", &caga, card, &status);
                     *crval1=caga;
                     *npoints=naxes[0];
+                    if (*crval1 < 2500){
+                        printf("Assuming that input units are nanometers instead of Angstroms...\n");
+                        *crval1 = *crval1 * 10.;
+                        *cdelta1 = *cdelta1 * 10.;
+                    }
 
                     for (fpixel[1] = naxes[1]; fpixel[1] >= 1; fpixel[1]--) {
                         if (fits_read_pix(fptr, TDOUBLE, fpixel, naxes[0], NULL, pixels, NULL, &status) )  /* read row of pixels */
@@ -226,7 +264,7 @@ void read_mine(char * mine, char* filetest, char* fileleitura, char* fileout, do
     
     long nl;
     
-    nl = file_lines("mine.opt")-1;
+    nl = file_lines(mine)-1;
     printf("number of options: %ld\n", nl);
     
     FILE * pFile3;
@@ -235,7 +273,7 @@ void read_mine(char * mine, char* filetest, char* fileleitura, char* fileout, do
 
 
     
-    FILE * fopt = fopen("mine.opt","rt");
+    FILE * fopt = fopen(mine,"rt");
     char str[200];
     system("clear");
     printf("Input Parameters:\n\n");
