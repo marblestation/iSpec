@@ -1,4 +1,4 @@
-      SUBROUTINE eqwidtbplatt(lmin,lmax,eqwidth)
+      SUBROUTINE eqwidtbplatt(lmin,lmax,step,eqwidth)
 *
 *-----------------------------------------------------------------------
 *
@@ -9,20 +9,12 @@
 *
       include 'spectrum.inc'
 *
-      INTEGER    MAXNL
-      PARAMETER (MAXNL=200)
-      INTEGER    NLBL
-      PARAMETER (NLBL=100)
-*
-      CHARACTER*20  LELE(100)
       character*50 mcode
-      DIMENSION ION(100),SRXLAL(2*MAXNL),
-     &          GFELOG(100),ABUND(100),ETAK(2*MAXNL),ETAR(ndp*2*MAXNL),
-     &          ETAD(ndp),XC(ndp),CHIE(100),UTREC(103)
-      dimension fluxme(nlbl)
+      real  maxetad,etad(ndp),xc(ndp)
+      dimension fluxme(lpoint)
       real mum,eqwidth
       doubleprecision XL1,XL2
-      doubleprecision XLBEG,XLEND,DEL,XLB(100),XL(100),XLAL(2*MAXNL)
+      doubleprecision DEL,step
       COMMON/ATMOS/ T(NDP),PE(NDP),PG(NDP),XI(NDP),MUM(NDP),RO(NDP),
      &  nnNTAU
 *
@@ -36,7 +28,7 @@
 * extension for large number of wavelengths and lines (monster II)
       doubleprecision xlambda
       common/large/ xlambda(lpoint),maxlam,ABSO(NDP,lpoint),
-     & absos(ndp,lpoint),absocont(ndp,lpoint)
+     & absos(ndp,lpoint),absocont(ndp,lpoint),absoscont(ndp,lpoint)
 *
       dimension fcfc(lpoint),y1cy1c(lpoint),
      & xlm(lpoint),jlcont(lpoint)
@@ -50,14 +42,13 @@
       DATA first/.true./
 *
       if (first) then
-* Initiate angle quadrature points and number of wavelengths
-* per block (NLBL)
+* Initiate angle quadrature points
 *
         NMY=NMX
         CALL GAUSI(NMY,0.,1.,WMY,XMY)
-        DO 1 I=1,NMY
+        DO I=1,NMY
           XMY2(I)=XMY(I)*XMY(I)
-    1   CONTINUE
+        enddo
 *
 * Initiate mode of calculation
 * IINT =1  : intensity at MY=XMYC
@@ -81,110 +72,71 @@
       profold=0.e0
       eqwidth=0.e0
 *
-* Read model atmosphere
+      do j=lmin,lmax
+        xlsingle=xlambda(j)
 *
-      REWIND 14
-      READ(14) MCODE,nlcont,xlm(1),BPLAN,XC,S,XI
-      REWIND 14
-      WRITE(7,203) MCODE(1:lenstr(mcode))
+* continuum calculations:
 *
-* Continuum calculations:
+        do k=1,ntau
+          x(k)=absocont(k,j)
+          s(k)=absoscont(k,j)
+          bplan(k)=bpl(t(k),xlsingle)
+        enddo
+        call traneqplatt(0)
+        y1cy1c(j)=y1(nmy)
+        fcfc(j)=4.*hsurf
+*            
+* line calculations
 *
-      do 1963 jc=1,nlcont
-        READ(14) MCODE,idum,xlm(jc),BPLAN,XC,S,XI
-        DO 9 K=1,NTAU
-          X(K)=XC(K)
-    9   CONTINUE
-        CALL traneqplatt(0)
-        Y1CY1C(jc)=Y1(NMY)
-        FCFC(jc)=4.*HSURF
-        IF(IINT.LE.0) WRITE(7,204) fcFC(jc),xlm(jc)
-        IF(IINT.GT.0) WRITE(7,205) Y1Cy1c(jc),xlm(jc)
-1963  continue
-*
-*
-        DO 39 j=lmin,lmax
-          xlsingle=xlambda(j)
-          IF(IWEAK.LE.0.OR.IINT.LE.0) THEN
-            DO 30 K=1,NTAU
-* the continuum opacity is already included in abso
-ccc              X(K)=XC(K)+ABSO(K,J)
-              X(K)=ABSO(K,J)
+        if (iweak.le.0.or.iint.le.0) then
+          do k=1,ntau
+            x(k)=abso(k,j)
+            s(k)=absos(k,j)
+          enddo
+          call traneqplatt(0)
+          prf=4.*hsurf/fcfc(j)
+          if(iint.gt.0) then
+            prf=y1(nmy)/y1cy1c(j)
+          endif
+          prof=1.-prf
+        else
+          maxetad=0.
+          do k=1,ntau
+            etad(k)=abso(k,j)
+            maxetad=max(maxetad,etad(k))
+          enddo
+          if (maxetad.le.eps) then
+            call tranw(ntau,tau,xmyc,bplan,xc,etad,deli)
+            prof=deli/y1cy1c(j)
+          else
+            do k=1,ntau
+              x(k)=abso(k,j)
               s(k)=absos(k,j)
-              BPLAN(k)=BPL(T(k),xlsingle)
-   30       CONTINUE
-            CALL traneqplatt(0)
-* interpolate continuum flux
-            do 3691 jc=2,nlcont
-              if(xlm(jc)-xlsingle.gt.0.) then
-                jjc=jc-1
-                goto 3692
-              endif
-3691        continue
-3692        continue
-	    if (nlcont.gt.1) then
-              jjc=min(jjc,nlcont-1)
-              fc=(fcfc(jjc+1)-fcfc(jjc))/
-     &           (xlm(jjc+1)-xlm(jjc))*(xlsingle-xlm(jjc)) + fcfc(jjc)
-              y1c=(y1cy1c(jjc+1)-y1cy1c(jjc))/
-     &           (xlm(jjc+1)-xlm(jjc))*(xlsingle-xlm(jjc)) + y1cy1c(jjc)
-	    else
-              fc=fcfc(1)
-              y1c=y1cy1c(1)
-            endif
-            PRF=4.*HSURF/FC
-            IF(IINT.GT.0) then
-              PRF=Y1(NMY)/Y1C
-            endif
-            PROF=1.-PRF
-          ELSE
-            DO 31 K=1,NTAU
-              ETAD(K)=ABSO(K,J)
-              IF(ETAD(K).GT.EPS) GOTO 32
-   31       CONTINUE
-            CALL TRANW(NTAU,TAU,XMYC,BPLAN,XC,ETAD,DELI)
-            PROF=DELI/Y1C
-            GOTO 39
-   32       DO 33 K=1,NTAU
-              X(K)=ABSO(K,J)
-              s(k)=absos(k,j)
-              BPLAN(k)=BPL(T(k),xlsingle)
-   33       CONTINUE
-            CALL traneqplatt(0)
-* interpolate continuum flux
-            do 3693 jc=2,nlcont
-              if(xlm(jc)-xlsingle.gt.0.) then
-                jjc=jc-1
-                goto 3694
-              endif
-3693        continue
-3694        continue
-	    if (nlcont.gt.1) then
-              jjc=min(jjc,nlcont-1)
-              fc=(fcfc(jjc+1)-fcfc(jjc))/
-     &           (xlm(jjc+1)-xlm(jjc))*(xlsingle-xlm(jjc)) + fcfc(jjc)
-              y1c=(y1cy1c(jjc+1)-y1cy1c(jjc))/
-     &           (xlm(jjc+1)-xlm(jjc))*(xlsingle-xlm(jjc)) + y1cy1c(jjc)
-            else
-              fc=fcfc(1)
-              y1c=y1cy1c(1)
-	    endif
-            PRF=4.*HSURF/FC
-cc            fluxme(j)=hsurf*4.
-            IF(IINT.GT.0) then
-              PRF=Y1(NMY)/Y1C
+            enddo
+            call traneqplatt(0)
+            prf=4.*hsurf/fcfc(j)
+            if(iint.gt.0) then
+              prf=y1(nmy)/y1cy1c(j)
               fluxme(j)=y1(nmy)
             endif
-            PROF=1.-PRF
-          END IF
-          eqwidth=eqwidth+(prof+profold)*del/2.
-          profold=prof
+            prof=1.-prf
+          endif
+        endif
+        eqwidth=eqwidth+(prof+profold)*step/2.
+        profold=prof
 *
-39      CONTINUE
+      enddo
+* add small contribution past last point of the profile.
+      eqwidth=eqwidth+profold*step/2.
+      if (profold.gt.0.0001) then
+        print*,' WARNING! last point of calculated profile has depth ',
+     &         profold
+      endif
+
 ccc      print 1111,eqwidth*1000.
 1111    format(' eqwidth: ',f9.1,' mA')
         call clock
-      RETURN
+      return
 *
   100 FORMAT(4X,I1,6X,I3)
   207 FORMAT(' SPECTRUM CALCULATED FOR THE FOLLOWING ',I3,' LINES'

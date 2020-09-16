@@ -14,7 +14,7 @@
       logical tsuji,spherical,limbdark,abfind,multidump,xifix,mrxf,
      &        hydrovelo,pureLTE
       integer iint,k
-      real    isoch(400),isochfact(400),xic,xmyc,scattfrac
+      real    isoch(1000),isochfact(1000),xic,xmyc,scattfrac
       doubleprecision xl1,xl2,del,xlmarg,xlboff
       integer nsegments_lambda_min, nsegments_lambda_max !SBC
       doubleprecision segments_lambda_min(400), segments_lambda_max(400)
@@ -27,10 +27,7 @@
      &                 helium,alpha,rabund,sabund,xifix,xic,mrxf,
      &                 inpmod,continopac,filwavel,hydrovelo,
      &                 xl1,xl2,del,xlmarg,xlboff,iint,xmyc,scattfrac,
-     &                 pureLTE,
-     &                 nsegments_lambda_min,nsegments_lambda_max,
-     &                 segments_lambda_min, segments_lambda_max
-
+     &                 pureLTE
       common/species/atominclude
       data atominclude 
      &   /'H ','He','Li','Be','B ','C ','N ','O ','F ','Ne',
@@ -165,6 +162,9 @@ ccc        read(iread,*) filterfil
         read(charvalue,*) multidump
       else if (keyword(1:8).eq.'ISOTOPES') then
         read(charvalue,*) niso
+        if (niso.gt.1000) then
+          stop 'Error! too many isotopic changes requested'
+        endif
         do i=1,niso
           read(iread,*) isoch(i),isochfact(i)
         enddo

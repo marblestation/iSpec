@@ -45,6 +45,10 @@ C
       COMMON /TRDBUG/IDEBUG
       LOGICAL debug
       DIMENSION A(ITMAX)
+      logical hydrovelo,computeIplus
+      real velocity
+      common/velo/velocity(ndp),hydrovelo,computeIplus
+
       DATA debug/.false./
 C
 C INITIATE, XJ IS SET TO THE DIFFUSION LIMIT VALUE
@@ -78,6 +82,11 @@ C CALCULATE THE MATRIX ELEMENTS
       IF (DEBUG) PRINT 132,XJ,SOURCE,ERROR,FJ
      & ,((PFEAU(I,K),K=1,NDP),I=1,NIMP1)
       IF (IDEBUG.GT.1) GO TO 150
+      if (computeIplus) then
+* skip iteration on S, BPz 06/06-2018
+        itm=1
+        goto 141
+      endif
 C
 C ITERATION LOOP
       DO 110 IT=1,ITMAX

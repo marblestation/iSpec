@@ -8,7 +8,7 @@
 *
       include 'spectrum.inc'
 *
-      DIMENSION TAU(1),BPLAN(1),X(1),XL(1),ARG(ndp)
+      DIMENSION TAU(ndp),BPLAN(ndp),X(ndp),XL(ndp),ARG(ndp)
 *
       P=0.0
       R=0.0

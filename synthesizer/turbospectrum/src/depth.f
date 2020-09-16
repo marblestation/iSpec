@@ -225,7 +225,7 @@ cc          endif
 *     gam6=gam6 + gam4
 **********************************************************************************
       FUNCTION gammln(xx) 
-* returns ln gamma(xx) The Gamma function, Numerical recipes, 2nd ed, p 206
+* returns ln gamma(xx) The Gamma function,
       REAL gammln,xx 
       INTEGER j 
       DOUBLE PRECISION ser,stp,tmp,x,y,cof(6) 
@@ -245,6 +245,4 @@ cc          endif
       gammln=tmp+log(stp*ser/x) 
       return 
       END 
-C  (C) Copr. 1986-92 Numerical Recipes Software 1"n26@1kN. 
-* see link ~/smallcalc/Numerical.recipes
 *

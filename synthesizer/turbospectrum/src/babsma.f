@@ -19,10 +19,13 @@
       doubleprecision rrr(ndp)
 
       DIMENSION TAU(NDP),PGL(NDP),XI(NDP),X(20*numbset),
-     &          S(20*numbset),TAUS(NDP)
+     &          S(20*numbset),TAUS(NDP),taur(ndp)
       DIMENSION XLP(20*numbset),RHO(NDP),DUMDUM(NDP),RR(NDP),drr(ndp)
+      real dumdumm(ndp)
+      real Teff,metallicity,kboltz,mh
       dimension rhobow(ndp),coldens(ndp),xe(ndp),ghoefner(ndp)
       dimension comparison(30),iidum(16),xlr(20)
+      real abskk(ndp),spridd(ndp),pgk(ndp)
       character*8 abname,source
       character*9 key
       character*1 bla
@@ -42,7 +45,7 @@
       common/pieces/ xl1,xl2,del,eeps,nmy,nlbldu,iint,xmyc,iweak
       doubleprecision xlambda(lpoint)
 cc      common/large/ xlambda,maxlam,ABSO(NDP,lpoint),
-cc     & absos(ndp,lpoint),absocont(ndp,lpoint)
+cc     & absos(ndp,lpoint),absocont(ndp,lpoint),absoscont(ndp,lpoint)
 
 ********
       COMMON/CFIL/   IRESET(numbset),ISLASK,IREAT
@@ -91,7 +94,7 @@ cc     & absos(ndp,lpoint),absocont(ndp,lpoint)
      &        datmultidump,datxifix,datmrxf,dathydrovelo,
      &        datpureLTE,pureLTE
       integer datiint
-      real    datisoch(400),datisochfact(400),datxmyc
+      real    datisoch(1000),datisochfact(1000),datxmyc
       doubleprecision  datxl1,datxl2,datdel,datxlmarg,datxlboff
       common/inputdata/datmmaxfil,dattsuji,datfilmet,datfilmol,
      &                 datnoffil,datlinefil(maxfil),datspherical,
@@ -124,7 +127,9 @@ cc      data edge/ 912.00, 3647.98, 8209.26, 14591.99, 22800.22, 32923.98/ ! vac
 cc      data edge /912., 3647., 8207., 14588., 22794., 32915./
 cc* air edges from continuous opacity file.
       integer version
-      data version /151/
+      data version /191/
+      data kboltz / 1.3806e-16 /
+      data mh / 1.660e-24 /
 
       print*
       print*,'***********************'
@@ -380,24 +385,31 @@ C     &     ,RECL=152600)
 * single precision
 *      BPz 17/09-2007
 *
-          read(imod,err=999) ntau,jdum,dum,ddum,dddum,(rrr(i),i=1,ntau)
-          do i=1,ntau
-            rr(i)=sngl(rrr(i))
-          enddo
-          goto 998
-999       backspace(imod)
+****** THIS DOES NOT WORK ANYMORE WITH THE NEW INTEL COMPILER????  BPz 26/03-2018
+* Error condition does not happen with single precision RR() models
+******** REMOVED !!
+*          read(imod,err=999) ntau,jdum,dum,ddum,dddum,(rrr(i),i=1,ntau)
+*          do i=1,ntau
+*            rr(i)=sngl(rrr(i))
+*          enddo
+*          goto 998
+*999       backspace(imod)
+*********** END OF REMOVED
+
           read(imod) ntau,jdum,dum,ddum,dddum,(rr(i),i=1,ntau)
 998       continue
           if (ntau.gt.ndp) then
             print*,' ndp = ',ndp,'       ntau = ', ntau
             stop 'ndp too small!'
           endif
-          read(imod) ntau,(dumdum(i),i=1,ntau),(dumdum(i),i=1,ntau)
+cccc          read(imod) ntau,(dumdumm(i),i=1,ntau),(dumdum(i),i=1,ntau)
+cccc          print*,'reading ntau again ',ntau
+          read(imod) 
           pi=3.14159
           do k=1,ntau
 * tau is tau (xls). The 2nd dum is tauross.
 * nmol+1 is TiO
-            read(imod) dum,dum,tau(k),dum,t(k),pe(k),pgl(k),dum,dum,
+            read(imod) dum,taur(k),tau(k),dum,t(k),pe(k),pgl(k),dum,dum,
      &       dum,rho(k),dum,dum,dum,dum,dum,dum,dum,dum,dum,nmol,
      &       (pressure(k,i),i=1,nmol+1)
           enddo
@@ -422,19 +434,24 @@ C     &     ,RECL=152600)
           open(unit=imod,file=datinpmod,status='old')
           read(imod,'(a)') mocode
           print*,mocode
-          if (mocode(1:1).eq.'s') then
-            print*,' this model is SPHERICALLY SYMMETRIC'
-          else if (mocode(1:1).eq.'p') then
-            print*,' this model is PLANE PARALLEL'
-          else 
+          if (mocode(1:1).eq.'s'.or.mocode(1:1).eq.'p') then
+            print*,'This model seems to be aan ascii MARCS model'
+          else
             print*,' This model may not be a MARCS model!'
           endif
+
           read(imod,'(a)') blabla
           do while (blabla(14:19).ne.'Radius'.and.
      &              blabla(19:24).ne.'radius')
             read(imod,'(a)') blabla
           enddo
           read(blabla,*) radius
+          if (radius.ge.2.) then
+            print*,' this model is SPHERICALLY SYMMETRIC'
+          else if (radius.lt.2.) then
+            print*,' this model is PLANE PARALLEL'
+          endif
+
           do while (blabla.ne.'Model structure')
             read(imod,'(a)') blabla
           enddo
@@ -474,7 +491,7 @@ C     &     ,RECL=152600)
       else
         print*,' This is an ascii model '
         open(unit=imod,file=datinpmod,status='old')
-        read(imod,*) mocode,ntau,xls,gravl,intryc,scale
+        read(imod,*,err=765) mocode,ntau,xls,gravl,intryc,scale
         if (ntau.gt.ndp) then
             print*,' ndp = ',ndp,'       ntau = ', ntau
             stop 'ndp too small!'
@@ -487,6 +504,33 @@ C     &     ,RECL=152600)
 * GRAVL IS LOGARITHMIC GRAVITY
 * INTRYC GT O IF PRESSURE INTEGRATION IS WANTED
 *
+        goto 764
+765     continue
+* We try if this might be an ATLAS model
+        backspace(imod)
+        read(imod,'(a4)',err=762) mocode
+        if (mocode.eq.'TEFF') then
+          do while (mocode.ne.'READ')
+            read(imod,'(a4)') mocode
+          enddo
+          backspace(imod)
+          read(imod,763) ntau
+763       format(10x,i3)
+          if (ntau.gt.ndp) then
+            print*,' ntau = ',ntau,' > ndp = ',ndp
+            stop 'increase ndp!'
+          endif
+        endif
+        mocode='KURUCZ'
+        xls=5000.
+        gravl=0.0
+        intryc=0
+        scale=0.
+        goto 764
+762     stop 'COULD NOT READ MODEL ATMOSPHERE FILE !!!'
+764     continue
+
+***********************************************
         if (mocode(1:3).eq.'sph') then
           do k=1,ntau
             read(imod,*) tau(k),t(k),pe(k),pgl(k),xi(k),rr(k)
@@ -496,6 +540,7 @@ C     &     ,RECL=152600)
             pgl(k)=10.**pgl(k)
           enddo
 
+***********************************************
         else if (mocode(1:4).eq.'bowe'.or.mocode(1:4).eq.'BOWE') then
           mocode(1:4)='bowe'
           do k=1,12
@@ -506,15 +551,16 @@ C     &     ,RECL=152600)
 cccLuttermoser            read(imod,1963) iii,rr(k),velocity(k),t(k),rhobow(k),
 cccLuttermoser     &                 coldens(k),xe(k)
 cccLuttermoser1963        format(i3,6e12.0)
-            read(imod,1963) iii,rr(k),drr(k),t(k),rhobow(k),
+            read(imod,*) iii,rr(k),drr(k),t(k),rhobow(k),
      &                     velocity(k),xe(k)
-1963        format(i3,2x,6(e12.0))
+cc1963        format(i3,2x,6(e12.0))
 * xe is ne/ntot * 0.908. Pending confirmation for Bowen's new models. (1996)
 * Bowen's says this xe should not be used, esp. not outside hot regions.
 * guess pg and pe
             pgl(k)=rhobow(k)*1.38e-16*T(k)/1.26/1.67e-24
             pe(k)=xe(k)*0.908*pgl(k)
           enddo
+***********************************************
         else if (mocode(1:4).eq.'alva') then
 * modeles de Rodrigo sans echelle de profondeur optique.
 * Initially from R. Alvarez. Models without tau scale.
@@ -569,7 +615,20 @@ cccLuttermoser1963        format(i3,6e12.0)
             drr(k)=rr(k)-rr(k+1)
           enddo
           drr(ntau)=drr(ntau-1)
+***********************************************
+        else if (mocode(1:7).eq.'Stagger') then
+* Stagger average <3D> model containing: depth, T, rho, averaged on constant tau surfaces
+* added by BPz 16/04-2018
+          read(imod,*) Teff,gravl,metallicity,ntau
+          do k=1,ntau
+            read(imod,*) rr(k),T(k),rhobow(k)
+            pe(k)=1.e-10                                                  ! guess value only
+            pgl(k)=rhobow(k)*kboltz*t(k)/1.3/mh                           ! guess value only
+          enddo
+          intryc=0
+          scale=0.
 
+***********************************************
         else if (mocode(1:7).eq.'Hoefner') then
 * S. hoefner models, with velocity. BPz 04/03-2002
 * read header!
@@ -656,31 +715,20 @@ cccLuttermoser1963        format(i3,6e12.0)
           enddo
           drr(ntau)=drr(ntau-1)
 
+***********************************************
         else if (mocode(1:6).eq.'KURUCZ') then
+*
 * Kurucz models. Reading + rinteg taken from moog. 06/04-2001 BPz+ST (Sivarani)
+*
+* Modified 16/07-2015 by BPz. rinteg moved down, to compute the tau-scale 
+* directly at the reference wavelength without using the Rosseland scale.
+* 
           do k=1,ntau
             read (imod,*) rhox(k),t(k),pgl(k),pe(k),kaprefmass(k)
             pe(k)=pe(k)*T(k)*1.38054e-16
             print*,'reading: ', k, rhox(k),t(k),pgl(k),pe(k),
      &              kaprefmass(k)
           enddo
-
-          first = rhox(1)*kaprefmass(1)
-          tottau = rinteg(rhox,kaprefmass,tau,ntau,first)
-          tau(1) = first
-          print*,'computing tau(1)=',tau(1)
-          do k=2,ntau
-            tau(k) = tau(k-1) + tau(k)
-            print*,'computing tau(',k,')=',tau(k)
-          enddo
-          do k=1,ntau
-cc            kapref(k) = kaprefmass(k)*rho(k)
-            print 222, k,log10(tau(k)),tau(k),T(k), log10(pgl(k)),
-     &                pgl(k),log10(pe(k))
-222         format(i2,x,f5.2,x,1pe11.4,2x,0pf7.1,2x,f6.3,x,1pe11.4,
-     &             2x,0pf6.3)
-          enddo
-
         else
           DO 11 K=1,NTAU
             READ(IMOD,*) TAU(K),T(K),PE(K),PGL(K),XI(K)
@@ -760,6 +808,64 @@ ccc      IF(NLQ.GT.NDP) STOP
       IF(INTRYC.GT.0) CALL TRYCK(GRAV,NTAU,TAU,T,PE,PGL)
       NEWT=2
       if (tsuji) tsuswitch=.true.
+******
+* BPz 16/07-2015
+* modified for Kurucz models. In order to compute directly the 
+* tau-scale for the reference wavelength xls, we store the reference
+* opacity in the kaprefmass array, that originally contained the 
+* Kurucz model rosseland opacity.
+      if (mocode(1:6).eq.'KURUCZ') then
+        CALL ABSKO(NEWT,ntau,T,PE,1,1,ABSKK,SPRIDD)
+        do k=1,ntau
+          kaprefmass(k)=ABSKk(k)+SPRIDd(k)
+        enddo
+        newt=1
+        first = rhox(1)*kaprefmass(1)
+        tottau = rinteg(rhox,kaprefmass,tau,ntau,first)
+        tau(1) = first
+        print*,'Kurucz model. Computed tau-scale at lambda= ',xls,'A'
+        print*,'tau(1)=',tau(1)
+        do k=2,ntau
+          tau(k) = tau(k-1) + tau(k)
+          print*,'tau(',k,')=',tau(k)
+        enddo
+        do k=1,ntau
+cc          kapref(k) = kaprefmass(k)*rho(k)
+          print 222, k,log10(tau(k)),tau(k),T(k), log10(pgl(k)),
+     &                pgl(k),log10(pe(k))
+222       format(i2,x,f5.2,x,1pe11.4,2x,0pf7.1,2x,f6.3,x,1pe11.4,
+     &             2x,0pf6.3)
+        enddo
+      endif
+
+******   Model read, start calculations
+
+* attempt to ease convergence at low T / BPz 15/05-2018
+      if (mocode(1:4).eq.'alva') then
+        if (t(1).lt.1000.) then
+          do k=ntau,1,-1
+            pg=pgl(k)
+            if (k.ne.ntau) then
+* better guess of pe from previous depth point
+              pe(k)=pe(k+1)*pgl(k)/pgl(k+1)
+            endif
+            call jon(t(k),pe(k),1,pg,ro,dum,io,k)
+            print888,t(k),pe(k),pg,pgl(k)
+888         format('first jon call T, Pe, Pg Pgin ',f6.0,3(1x,1pe9.3))
+* must iterate on pe to get right pg in model.
+* try better guess input pe:
+            pein=pe(k)*pgl(k)/pg
+            call pemake(t(k),pein,pgl(k),pe(k))
+            call jon(t(k),pe(k),1,pg,ro,dum,io,k)
+* pg should be within eps of pgl (cf. pemake).
+            print889,t(k),pe(k),pg,pgl(k)
+889         format('after jon iter T, Pe, Pg Pgin ',f6.0,3(1x,1pe9.3))
+          enddo
+        endif
+      endif
+
+* end of attempt
+
       DO 25 K=1,NTAU
         if (mrxf) then
 * guess input pg to help eqmol_pe.
@@ -771,14 +877,18 @@ c      print*,'jon done'
           print*,'MARCS model. romod= ',rho(k),'rocalc= ',ro
           RO=RHO(K)
         else
-          IF (mocode(1:4).ne.'BOWE'.and.mocode(1:4).ne.'bowe'.and.
-     &        mocode(1:4).ne.'alva'.and.mocode(1:7).ne.'Hoefner') THEN
+          if (mocode(1:4).ne.'BOWE'.and.mocode(1:4).ne.'bowe'.and.
+     &        mocode(1:4).ne.'alva'.and.mocode(1:7).ne.'Hoefner'.and.
+     &        mocode(1:7).ne.'Stagger') then
 * guess input pg to help eqmol_pe.
             pg=pgl(k)
-            CALL JON(T(K),PE(K),1,PG,RO,DUM,IO,k)
-            print*,'nonmarcs model rocalc=',ro,' pgcalc=',pg,
+            call jon(T(K),PE(K),1,PG,RO,DUM,IO,k)
+            if (abs(pg/pgl(k)-1.).gt.0.03) then
+              print*,'WARNING ! calculated gas pressure difference > 3%'
+              print*,'model rocalc=',ro,' pgcalc=',pg,
      &               ' pgmod=',pgl(k)
-          ELSE
+            endif
+          else
 * for funny models, like miras
             if (k.ne.1) then
 * better guess of pe from previous depth point
@@ -795,46 +905,43 @@ C
 * guess input pg to help eqmol_pe.
             pg=pgl(k)
             print*,'babsma, alva, call jon'
-            CALL JON(T(K),pe(k),-1,PG,RO,DUM,IO,k)
+            call jon(T(K),pe(k),-1,PG,RO,DUM,IO,k)
             print*,'return from jon, pg=',pg
-
-CCC unecessary ?
+ccc unecessary ?
 C try to improve convergence
-      pefirst=pe(k)
-      do while (pg.lt.0..and.pe(k).gt.1.e-30)
+            pefirst=pe(k)
+            do while (pg.lt.0..and.pe(k).gt.1.e-30)
 c not converged in jon
-        pe(k)=pe(k)/10.
-        print*,'babsma, trying with lower Pe:',pe
-            CALL JON(T(K),pe(k),-1,PG,RO,DUM,IO,k)
-      enddo
-      if (pg.lt.0.) pe(k)=pefirst
-      do while (pg.lt.0..and.pe(k).lt.1000.)
+              pe(k)=pe(k)/10.
+              print*,'babsma, trying with lower Pe:',pe
+              call jon(T(K),pe(k),-1,PG,RO,DUM,IO,k)
+            enddo
+            if (pg.lt.0.) pe(k)=pefirst
+            do while (pg.lt.0..and.pe(k).lt.1000.)
 c not converged in jon
-        pe(k)=pe(k)*10.
-        print*,'babsma, trying with lower Pe:',pe
-            CALL JON(T(K),pe(k),-1,PG,RO,DUM,IO,k)
-      enddo
-      if (pg.lt.0.) then
-        print*,'giving up in babsma'
-        stop 'Too many unsuccessful tries.'
-      endif
-
-
-
-
-* must iterate on pe here to get right ro in Bowen's or Hoefner's models.
+              pe(k)=pe(k)*10.
+              print*,'babsma, trying with lower Pe:',pe
+              call jon(T(K),pe(k),-1,PG,RO,DUM,IO,k)
+            enddo
+            if (pg.lt.0.) then
+              print*,'giving up in babsma'
+              stop 'Too many unsuccessful tries.'
+            endif
+ccc
+* must iterate on pe here to get right ro in Bowen, Hoefner or Stagger models.
 * pgl/ro==kT/muamu 
-            if (mocode(1:7).eq.'Hoefner') then
+            if (mocode(1:7).eq.'Hoefner'.or.
+     &          mocode(1:7).eq.'Stagger') then
               ratiobow=rhobow(k)/ro
-              print*,'rho_Hoefner/rho ',k,ratiobow
+              print*,'rho_input/rho ',k,ratiobow
               pein=pe(k)
               call pemakero(t(k),pein,rhobow(k),pe(k))
-              CALL JON(T(K),pe(k),1,PG,RO,DUM,IO,k)
+              call jon(T(K),pe(k),1,PG,RO,DUM,IO,k)
               ratiobow=rhobow(k)/ro
-              print*,'rho_Hoefner/rho ',k,ratiobow
+              print*,'rho_input/rho ',k,ratiobow
               
-              print*,'k  rho_Hoefner    ro_calc     pe     ',
-     &              'pg_hoefner   pg'
+              print*,'k  rho_input    ro_calc     pe     ',
+     &              'pg_input   pg'
               print*,k,rhobow(k),ro,pe(k),pgl(k),pg
 
             else if (mocode(1:4).eq.'bowe'.or.
@@ -858,7 +965,7 @@ c              ratiobow=rhobow(k)/ro*molweight/1.26
 * must iterate on pe to get right pg in Rodrigo's models.
 * try better guess input pe:
               pein=pe(k)*pgl(k)/pg
-cc              print*,'babsma, improving on guess Pe = ',pein
+              print*,'babsma, improving on guess Pe = ',pein
               call pemake(t(k),pein,pgl(k),pe(k))
               print*,'Alva format. Converged'
               print*,'Pe=',pe(k)
@@ -936,40 +1043,48 @@ ccc            tau(k)=tau(k-1)+(rr(k-1)-rr(k))*stndop*ro
             stndopprev=stndop
             roprev=ro
           endif
+************   Stagger models
+        else if (mocode(1:7).eq.'Stagger') then
+* compute tau-scale
+          if (k.eq.1) then
+            print*,'Stagger model'
+            print*,' r           tau'
+            tau(1)=stndop*(rr(2)-rr(1))*rhobow(1)/2.
+            stndopprev=stndop
+            print*,rr(1),tau(1)
+          else
+            tau(k)=tau(k-1)+(rr(k)-rr(k-1))*
+     &         (stndop*rhobow(k)+stndopprev*rhobow(k-1))*0.5
+            stndopprev=stndop
+            print*,rr(k),tau(k)
+          endif
         endif
+************
    22   NEWT=0
 c        print*,'check ro'
         write(6,66) k,tau(k),t(k),pe(k),pg,ro
-66      format('tau,T,Pe,Pg,ro',i3,1x,1pe10.3,1x,0pf8.1,3(1x,1pe10.3))
+66      format('tau,T,Pe,Pg,ro ',i3,1x,1pe10.3,1x,0pf8.1,3(1x,1pe10.3))
+*******************************************************************
         if (mocode(1:7).eq.'Hoefner'.or.mocode(1:4).eq.'alva'.or.
-     &      mocode(1:4).eq.'bowe') then
+     &      mocode(1:4).eq.'bowe'.or.mocode(1:7).eq.'Stagger') then
+*
 * write out model at babsma input format.
 * It can be injected in MARCS35 for a global OS spectrum run (newmod=8)
 *  BPz 14/11-2002
+*
           write(imodut2,123) log10(tau(k)),T(k),log10(pe(k)),
      &                        log10(pg),xi(k),rr(k)
 123       format(f8.4,1x,f8.1,2(1x,f8.4),1x,f5.2,1x,1pe15.8)
         endif
+*******************************************************************
         if (hydrovelo) then
           WRITE(IMODUT,211) RR(K),TAU(K),T(K),PE(K),PG,RO,
      &                      XI(K),STNDOP,velocity(k)
           if (mocode(1:6).eq.'KURUCZ') then
             stop 'incompatible options: Kurucz and hydrovelo'
           endif
-        else if (mocode(1:6).ne.'KURUCZ') then
+        else
           WRITE(IMODUT,201) RR(K),TAU(K),T(K),PE(K),PG,RO,
-     &                      XI(K),STNDOP
-        else if (mocode(1:6).eq.'KURUCZ') then
-          print*, ' This is not tested yet! check the result carefully!'
-            print3333,k,kaprefmass(k)*ro,stndop*ro
-3333        format('opac comp: ',i3,2(2x,1pe11.4))
-            FORE=(ABSK+SPRID)/kaprefmass(K)
-            IF(K.GT.1)GO TO 811
-            TAUS(1)=FORE*TAU(1)
-            GO TO 912
-811         TAUS(K)=TAUS(K-1)+(TAU(K)-TAU(K-1))*(FORE+FOREM)*0.5
-912         FOREM=FORE
-            WRITE(IMODUT,201) RR(K),TAUS(K),T(K),PE(K),PG,RO,
      &                      XI(K),STNDOP
         endif
 *
@@ -1003,13 +1118,17 @@ c        print*,'check ro'
         WRITE(IMODUT,202)(X(J),S(J),J=1,NLQ)
         WRITE(IWRIT,302)(X(J),S(J),J=1,NLQ)
         NEWT=1
+
+* save gas pressure
+        pgk(k)=pg
+
    25 CONTINUE
       tsuswitch=.false.
       if (mocode(1:6).eq.'KURUCZ') then  
         WRITE(*,*) 'KURUCZ model converted to:' 
-        print*,'log(tau5000), T,  log(Pe),  log(Pg), Xi'
+        print*,'log(tau',int(xls),'), T,  log(Pe),  log(Pg), Xi'
         do k=1,ntau
-          WRITE(*,*) log10(TAUS(K)),T(K),log10(PE(K)),log10(PG),
+          WRITE(*,*) log10(TAU(K)),T(K),log10(PE(K)),log10(pgk(k)),
      &                      XI(K)
         enddo
       else      
@@ -1050,20 +1169,5 @@ cc      enddo
      &       DIM. FOR XS,SS,XLP')
 *
       END
-C***********************************************************************
-      REAL*8 FUNCTION VACAIR(W)
-      REAL*8 W, WAVEN
-C
-C  W is vacuum wavelength in Angstroms
-C
-
-      WAVEN = 1.D8 / W
-      VACAIR = W / (1.0000834213D0 + 2406030.D0 / (1.30D10 - WAVEN**2) +
-     +       15997.D0 / (3.89D9 - WAVEN**2))
-C
-      RETURN
-      END
-
-
 C***********************************************************************
 

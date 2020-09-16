@@ -59,6 +59,7 @@ C                                                       modif    22/11/88
         character*20   MOL(maxim)
 * really real, not supposed to become doubleprecision
         real tem,pg,pe,pgin,tt,pgas,g0(100),g1(100),g2(100),g3(100)
+        real temtemp
 * may become dbleprec
         doubleprecision IP(100),KP(100),uiidui(100),eps,fp(100),
      &       ppmol(maxim),apm(maxim),c(maxim,5),ccomp(100),p(100),
@@ -297,6 +298,17 @@ cc        print*,'eqmol after molecpartf, nmol',nmol
         nmotsuji=nmol
 	call die_pe(tem,pe,pg,found,converge,niter,skiprelim)
 c
+c try something different
+        if (.not.converge) then
+          pg=pgin
+          do i=5,1,-1
+            temtemp=tem*(1.+float(i)/10.)
+            print*,'did not converge at T=',tem,' trying ',temtemp
+            call die_pe(temtemp,pe,pg,found,converge,niter,skiprelim)
+          enddo
+        endif
+        call die_pe(tem,pe,pg,found,converge,niter,skiprelim)
+c it really did not work
         if (.not.converge) then
           pgas=-1.0
           return

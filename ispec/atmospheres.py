@@ -150,10 +150,6 @@ def interpolate_atmosphere_layers(modeled_layers_pack, target, code="spectrum"):
 
     existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulations, kdtree, ranges, base_dirname = modeled_layers_pack
 
-    if code == "turbospectrum" and "MARCS" not in base_dirname:
-        # Spherical models in turbospectrum require a parameters that is only provided in MARCS model atmosphere
-        raise Exception("Turbospectrum can only be used with MARCS model atmospheres.")
-
     if not valid_atmosphere_target(modeled_layers_pack, target):
         raise Exception("Target parameters '{}' are out of range.".format(target))
 
@@ -214,41 +210,47 @@ def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None
         #atm_file.write("NATOMS = 0  %.2f\n" % (MH))
         #atm_file.write("NMOL 0")
     elif code == "turbospectrum":
-        nvalues = len(atmosphere_layers[0])
-        if nvalues != 11:
-            raise Exception("Turbospectrum can only be used with MARCS model atmospheres.")
-        radius = atmosphere_layers[0][-1]
-        if radius > 1.0:
-            atm_file.write("spherical model\n")
-            atm_file.write("  1.0        Mass [Msun]\n")
-            atm_file.write("  %.4E Radius [cm] at Tau(Rosseland)=1.0\n" % (radius))
+        is_marcs_model = len(atmosphere_layers[0]) == 11
+        if not is_marcs_model:
+            atm_file.write("TEFF   %i.  GRAVITY %.5f LTE\n" % (teff, logg))
+            atm_file.write("READ DECK6 %i RHOX,T,P,XNE,ABROSS,ACCRAD,VTURB, FLXCNV,VCONV,VELSND\n" % (len(atmosphere_layers)))
+            for i, layer in enumerate(atmosphere_layers):
+                atm_file.write("%.8E %.1f %.4E %.4E %.4E\n" % (layer[0], layer[1], layer[2], layer[3], layer[4]))
         else:
-            atm_file.write("plane-parallel model\n")
-            atm_file.write("  0.0        No mass for plane-parallel models\n")
-            atm_file.write("  1.0000E+00 1 cm radius for plane-parallel models\n")
-        atm_file.write("  %i Number of depth points\n" % (len(atmosphere_layers)))
-        atm_file.write("Model structure\n")
-        atm_file.write(" k lgTauR  lgTau5    Depth     T        Pe          Pg         Prad       Pturb\n")
-        #  temperature structure measured at the continuum optical depth at 5000 A
-        #1 -5.00 -4.9174 -6.931E+07  4066.8  2.1166E-02  2.6699E+02  1.4884E+00  0.0000E+00
-        ## Gustafsson et al. 2008:
-        #  http://marcs.astro.uu.se/GEEJNP08.pdf
-        # We have tested the use of Eq. (7) to simulate
-        # the effects of turbulent pressure for a number of models at
-        # various points in the grid and find that it leads to very small errors
-        # in the temperature structure (less than 5 K in the temperature
-        # throughout the model for a depth independent vt in the interval 0
-        # to 10 km s-1). We, therefore, have chosen to set vt = 0 for all
-        # grid models, and advise those who would have liked a different
-        # choice to use models with a different mass or g, according to
-        # the recipe given in Eq. (7).
-        lgTauR = -5.00 # lgTauR is only needed by Turbospectrum to read the model atmosphere but it has no effect
-        for i, layer in enumerate(atmosphere_layers):
-            atm_file.write("%i %.2f %.4f %.3E %.1f %.4E %.4E %.4E %.4E\n" % (i+1, lgTauR, layer[7], layer[8], layer[1], layer[9], layer[2], layer[5], 0.))
-            if lgTauR <= -3.00 or lgTauR >= 1.00:
-                lgTauR += 0.20
+            for i, layer in enumerate(atmosphere_layers):
+                atm_file.write("%.8E %.1f %.4E %.4E %.4E\n" % (layer[0], layer[1], layer[2], layer[3], layer[4]))
+            radius = atmosphere_layers[0][-1]
+            if radius > 1.0:
+                atm_file.write("spherical model\n")
+                atm_file.write("  1.0        Mass [Msun]\n")
+                atm_file.write("  %.4E Radius [cm] at Tau(Rosseland)=1.0\n" % (radius))
             else:
-                lgTauR += 0.10
+                atm_file.write("plane-parallel model\n")
+                atm_file.write("  0.0        No mass for plane-parallel models\n")
+                atm_file.write("  1.0000E+00 1 cm radius for plane-parallel models\n")
+            atm_file.write("  %i Number of depth points\n" % (len(atmosphere_layers)))
+            atm_file.write("Model structure\n")
+            atm_file.write(" k lgTauR  lgTau5    Depth     T        Pe          Pg         Prad       Pturb\n")
+            #  temperature structure measured at the continuum optical depth at 5000 A
+            #1 -5.00 -4.9174 -6.931E+07  4066.8  2.1166E-02  2.6699E+02  1.4884E+00  0.0000E+00
+            ## Gustafsson et al. 2008:
+            #  http://marcs.astro.uu.se/GEEJNP08.pdf
+            # We have tested the use of Eq. (7) to simulate
+            # the effects of turbulent pressure for a number of models at
+            # various points in the grid and find that it leads to very small errors
+            # in the temperature structure (less than 5 K in the temperature
+            # throughout the model for a depth independent vt in the interval 0
+            # to 10 km s-1). We, therefore, have chosen to set vt = 0 for all
+            # grid models, and advise those who would have liked a different
+            # choice to use models with a different mass or g, according to
+            # the recipe given in Eq. (7).
+            lgTauR = -5.00 # lgTauR is only needed by Turbospectrum to read the model atmosphere but it has no effect
+            for i, layer in enumerate(atmosphere_layers):
+                atm_file.write("%i %.2f %.4f %.3E %.1f %.4E %.4E %.4E %.4E\n" % (i+1, lgTauR, layer[7], layer[8], layer[1], layer[9], layer[2], layer[5], 0.))
+                if lgTauR <= -3.00 or lgTauR >= 1.00:
+                    lgTauR += 0.20
+                else:
+                    lgTauR += 0.10
     elif code == "spectrum":
         # Spectrum
         # mass depth, temperature in kelvin, gas pressure, electron density, Rosseland mean absorption coefficient, radiation pressure, microturbulent velocity in meters/second.
@@ -372,7 +374,7 @@ def load_modeled_layers_pack(input_path):
     return existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulations, kdtree, ranges, base_dirname
 
 
-def calculate_opacities(atmosphere_layers_file, abundances, MH, microturbulence_vel, wave_base, wave_top, wave_step, verbose=0, opacities_filename=None, tmp_dir=None):
+def calculate_opacities(atmosphere_layers_file, abundances, MH, microturbulence_vel, wave_base, wave_top, wave_step, verbose=0, opacities_filename=None, tmp_dir=None, is_marcs_model=True):
     """
     abundances should have been already modified acording to MH
     """
@@ -395,7 +397,10 @@ def calculate_opacities(atmosphere_layers_file, abundances, MH, microturbulence_
     command_input += "'LAMBDA_MAX:'  '"+str(wave_top*10.)+"'\n"
     command_input += "'LAMBDA_STEP:' '"+str(wave_step*10.)+"'\n"
     command_input += "'MODELINPUT:' '"+atmosphere_layers_file+"'\n"
-    command_input += "'MARCS-FILE:' '.true.'\n"
+    if is_marcs_model:
+        command_input += "'MARCS-FILE    :' '.true.'\n"
+    else:
+        command_input += "'MARCS-FILE    :' '.false.'\n"
     command_input += "'MODELOPAC:' '"+opacities_filename+"'\n"
     #command_input += "'METALLICITY:'    '"+str(MH)+"'\n"
     command_input += "'METALLICITY:'    '0.00'\n" # We have done the abundance changes already

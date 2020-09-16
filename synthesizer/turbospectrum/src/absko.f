@@ -36,30 +36,71 @@ C        NL(I) IS THE NUMBER OF WAVELENGTHS IN WAVELENGTH SET I
 C        NT IS THE NUMBER OF T-PE POINTS SUPPLIED IN TSKAL AND PESKAL
 C        NTO IS THE NUMBER OF POINTS IN THOSE SCALES FOR WHICH A DETAILED
 C              PRINT-OUT IS WANTED.
+      implicit none
       include 'spectrum.inc'
 C
-C      PARAMETER (KFADIM=4000,IFADIM=1000)
+      integer newt,iseta,isetp,nt,ifak,kfak,jp,kp,ntp,ioutr,j,komp
+      integer ireadp,nabkof,nkompl,j1,j2,iu,index,nop,np,lunit
+      real pg,dum,delsum
+
       logical first
-      DIMENSION TSKAL(NDP),PESKAL(NDP),ABSK(NDP),SPRID(NDP)
-      DIMENSION FAKTP(ifadim)
-      DIMENSION SUMW(NDP)
-      dimension tioabs(ndp),h2oabs(ndp)
+      real TSKAL(NDP),PESKAL(NDP),ABSK(NDP),SPRID(NDP)
+      real FAKTP(ifadim)
+      real SUMW(NDP)
+      real tioabs(ndp),h2oabs(ndp)
+      integer iread, iwrit
       COMMON/UTPUT/IREAD,IWRIT
+      real abkof
+      integer kompla,kompr,komps,nkomp
       COMMON/CA2/ABKOF(nabdim),KOMPLA(mkomp*20),KOMPR,KOMPS,NKOMP
+      integer ilogta,null
       COMMON/CA3/ILOGTA(mkomp),NULL
+      real afak
+      integer nofak,nplats
       COMMON/CA4/AFAK(KFADIM),NOFAK(IFADIM),NPLATS(IFADIM)
+      real ab,fakt,pe,t,xla,xla3,ro,sumabs,sumsca,viktr
+      integer iset,nlb
       COMMON/CA5/AB(mkomp),FAKT(mkomp),PE(NDP),T(NDP),XLA(20),XLA3(20),
      &           RO,
      &           SUMABS,SUMSCA,VIKTR,ISET,NLB
+      integer ireset,islask,ireat
       COMMON/CFIL/IRESET(numbset),ISLASK,IREAT
+      integer nto,ntpo
       COMMON/COUTR/NTO,NTPO(10)
+      real rosw
       COMMON/CROS/ROSW(20)
+      real f1p,f3p,f4p,f5p,hnic,presmo
       COMMON /CARC3/ F1P,F3P,F4P,F5P,HNIC,PRESMO(30)
+      real prov
+      integer nprova,nprovs,nprov
       COMMON /CARC4/ PROV(mkomp),NPROVA,NPROVS,NPROV
+      real ptio,rosav,poxg1
       COMMON /TIO/PTIO(NDP),ROsav(NDP),POXG1(NDP)
+      integer ielem,ion
+      real tmolim,molh
       COMMON/CI4/ IELEM(16),ION(16,5),TMOLIM,MOLH
+      real eh,fe,fh,fhe,fc,fce,fn,fne,fo,foe,fk,fke,fs,fse
       COMMON/CMOL1/EH,FE,FH,FHE,FC,FCE,FN,FNE,FO,FOE,FK,FKE,FS,FSE
+      real rotest,prh2o
       COMMON /DENSTY/ ROTEST(NDP),PRH2O(NDP)
+
+      doubleprecision presneutral,presion,presion2,presion3
+      common/orderedpress/presneutral(ndp,100),presion(ndp,100),
+     &                    presion2(ndp,100),presion3(ndp,100)
+      character species*20, comment*100
+      integer i,nline,ioniz
+      doubleprecision xlambda
+      real nh1,ne,nhe1
+! 150 is the max allowed number of H lines
+      doubleprecision hlambda(150)
+      real xlo(150),xup(150),gf(150),npop(150)
+      real cont,total,dopple
+      integer nlo(150),nup(150)
+      character*9 lname(150)
+      logical contonly,firsth
+      data contonly /.true./, firsth /.true./
+!
+
       data first/.true./
 
       save first
@@ -95,6 +136,8 @@ C        IS PRINT-OUT WANTED FOR T-PE POINT NO. NTP
     3 CONTINUE
 C
       CALL JON(T(NTP),PE(NTP),1,PG,RO,DUM,IOUTR,ntp)
+! save ro for HI absorption calculation
+      rosav(ntp)=ro
 cc      print*,'absko back from jon, calling detabs'
       CALL DETABS(J,0,NTP,IOUTR)
 cc      print*,'absko back from detabs, nkomp, kompr,komps',
@@ -221,6 +264,46 @@ C        DONE IN DETABS.
 cc      print*,'absko, calling detabs 2nd time'
       CALL DETABS(J,JP,NTP,IOUTR)
 cc      print*,'absko, back from detabs'
+!
+! Must add HI bf absorption with improved treatment from Barklem&Piskunov
+! BPz 03/04-2019
+!
+      if (firsth) then
+!       read file
+        lunit=77
+        open(lunit,file='DATA/Hlinedata', status='old')
+        read(lunit,*) species,ioniz,nline
+        read(lunit,*) comment
+*        print*,species,ioniz,nline,comment
+        if (species(1:6) /= '01.000' .or. ioniz /= 1) then
+          print*, 'wrong H line data file!'
+          print*,species,ioniz
+          stop 'ERROR!'
+        endif
+c babsma uses air wavelengths, and so does hbop.f, except for Lyman series
+c
+        if (nline > 150 ) stop 'increase nline dimension in babsma!'
+        do i=1,nline
+!         oscillator strengths are computed in hbop.f
+          read(lunit,*) hlambda(i),nlo(i),nup(i),xlo(i),xup(i),gf(i),
+     &                lname(i)
+        enddo
+        close(lunit)
+        firsth=.false.
+      endif
+*
+      ne=pe(ntp)/(t(ntp)*1.38066e-16)
+      nh1=sngl(presneutral(ntp,1))/(t(ntp)*1.38066e-16)
+      nhe1=sngl(presneutral(ntp,2))/(t(ntp)*1.38066e-16)
+! dopple not used for continuum
+      dopple=0.0
+      xlambda=dble(xla(jp))
+      call hbop(xlambda,nline,nlo,nup,hlambda,
+     &         nh1,nhe1,ne,t(ntp),dopple,npop,0,total,cont,
+     &         contonly)
+      sumabs=sumabs+cont/rosav(ntp)
+!
+! now HI bf absorption is included !
 C
       if (J.gt.0) then
         ABSK(NTP)=SUMABS
@@ -234,6 +317,7 @@ C        if(j.le.0) sumabs=sumabs + tioabs(ntp) + h2oabs(ntp)
         IF(J.LT.0) ABSK(NTP)=ABSK(NTP)+ROSW(JP)*VIKTR/SUMABS
         SUMW(NTP)=SUMW(NTP)+ROSW(JP)*VIKTR
       endif
+! end of NTP loop
    26 CONTINUE
 C
 C        END OF 'THE SECOND NTP-LOOP'

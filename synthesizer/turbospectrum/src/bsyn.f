@@ -96,7 +96,7 @@
 
       doubleprecision xlambda,dist
       common/large/ xlambda(lpoint),maxlam,ABSO(NDP,lpoint),
-     & absos(ndp,lpoint),absocont(ndp,lpoint)
+     & absos(ndp,lpoint),absocont(ndp,lpoint),absoscont(ndp,lpoint)
       logical oldpart,Ames,scan2001,oldscan,Barber
       common/oldpart/oldpart
       common/h2ochoice/Ames,scan2001,oldscan,Barber
@@ -136,7 +136,8 @@
      &        datmultidump,datxifix,datmrxf,dathydrovelo,datpureLTE,
      &        pureLTE
       integer datnoffil,datncore,datmaxfil,datmihal,datiint
-      real    isoch(400),isochfact(400),datisoch(400),datisochfact(400)
+      real    isoch(1000),isochfact(1000),datisoch(1000),
+     &        datisochfact(1000)
       real    datxmyc,datscattfrac
       character*128 datfilmet,datfilmol,datfilwavel
       character*256 datlinefil(maxfil),datdetout,
@@ -176,7 +177,7 @@
       real absave(100),symmfactor
 ***********************************************
       integer version
-      data version /151/
+      data version /191/
 ***********************************************
       data debug/.false./
       data nat/92/
@@ -268,6 +269,8 @@ ccc      external commn_handler
       xmyc=datxmyc
       do i=1,92
         fixabund(i)=databch(i)
+      enddo
+      do i=1,1000
         isoch(i)=datisoch(i)
         isochfact(i)=datisochfact(i)
       enddo
@@ -338,17 +341,11 @@ CCCconvert='big_endian')
       call clock
 cc      OPEN(UNIT=12,FILE=INMOD,STATUS='OLD',recl=4*2*200)
       OPEN(UNIT=12,FILE=INMOD,STATUS='OLD')
-cc      OPEN(UNIT=14,STATUS='SCRATCH',FORM='UNFORMATTED',RECL=16384)
-c      OPEN(UNIT=14,STATUS='SCRATCH',FORM='UNFORMATTED')
-      OPEN(UNIT=14,STATUS='SCRATCH',FORM='UNFORMATTED',access='direct',
-     ,      recl=4*(4*ndp+2)+50 )
 cc      OPEN(UNIT=15,FILE=INSPEC,STATUS='OLD')
 cc      open(unit=16,file=inabun,status='old')
 cc      OPEN(UNIT=27,STATUS='SCRATCH',FORM='FORMATTED')
 ccc      OPEN(UNIT=20,FILE=OUTFIL,STATUS='UNKNOWN',FORM='UNFORMATTED')
 cc      OPEN(UNIT=20,FILE=OUTFIL,STATUS='UNKNOWN',FORM='UNFORMATTED',
-cc     &     RECL=412)
-cc      OPEN(UNIT=66,FILE='sphlimb',STATUS='UNKNOWN',FORM='UNFORMATTED',
 cc     &     RECL=412)
       OPEN(UNIT=23,STATUS='SCRATCH',FORM='FORMATTED')
 *
@@ -397,7 +394,7 @@ cc      OPEN(UNIT=11,FILE=INATOM,STATUS='OLD')
       enddo
       abund(1)=1.00
 * change isotopic mixture if appropriate
-      do i=1,400
+      do i=1,1000
         if (isoch(i).gt.0.) then
           write(blabla,'(f6.3,20x)') isoch(i)
           print*,blabla
@@ -464,9 +461,9 @@ cc        xl1=filtlam(1)
 cc        xl2=filtlam(ifilt)
         iint=1
       endif
-      if (iint.gt.0) then
-      OPEN(UNIT=66,FILE='sphlimb',STATUS='UNKNOWN',FORM='UNFORMATTED')
-      endif
+!      if (iint.gt.0) then
+!      OPEN(UNIT=66,FILE='sphlimb',STATUS='UNKNOWN',FORM='UNFORMATTED')
+!      endif
       if (hydrovelo) then
 * this allows line shifts from the first lambda to the last of the list 
 * (at least for v/c*lambda <5A.
@@ -500,6 +497,7 @@ ccc          stop
         abso(k,j)=0.0
         absos(k,j)=0.0
         absocont(k,j)=0.0
+        absoscont(k,j)=0.0
 401    continue
 400   continue
        
@@ -523,7 +521,8 @@ cc      if (xlboff.lt.1.e-6) xlboff=0.0
 *
 * Next read model atm. and continuous abs. coeffs. at XLM
 * readmo also interpolates the continuous opacities to all the
-* lambdas . They are put into absos and abso. the wavelengths that
+* xlambda(1:maxlam) . 
+* They are put into absocont and absoscont. the wavelengths that
 * were used in babsma for the calculation of the cont. opacities
 * are put into xlp.
 *
@@ -537,85 +536,23 @@ cc      if (xlboff.lt.1.e-6) xlboff=0.0
 **        spherical=.false.
       endif
 *
-* Calculate continuum opacities and planck function.
-* We try to catch the wavelengths closest to the continuum points of
-* babsma. At these caught lambdas the continuum flux or intensity
-* will be computed, and then interpolated to the other lambdas.
-
-      i=1
-      nlcont=0
-      do j=2,maxlam
-        dist=abs(xlambda(j-1)-xlp(i))
-ccc        print*,'dist and xlp-xlb',dist,j,xlambda(j),i,xlp(i)
-        if (abs(xlambda(j)-xlp(i)).gt.dist) then
-          nlcont=nlcont+1
-          jlcont(nlcont)=j-1
-ccc          print*,'found a point ',nlcont,i,xlp(i),j,xlambda(j-1),dist
-          i=i+1
-          if (i.gt.nlq) goto 112
-        endif
+* initiate total extinction
+      do j=1,maxlam
+        do K=1,ntau
+          absos(k,j)=absoscont(k,j)
+          abso(k,j)=absocont(k,j)
+        enddo
       enddo
-112   continue
-      if (nlcont.eq.1) then
-        print*,'ERROR in bsyn: nlcont=1'
-        stop 
-      endif
-
-ccc      print*,'check bsyn: nlq=',nlq,' nlcont=',nlcont
-      
-      if (xlp(1).gt.xlambda(1)) then
-        print*,
-     &  'WARNING bsyn; extrapolating continuous opacity downwards'
-      endif
-      if (xlp(nlq).lt.xlambda(jlcont(nlcont))) then
-        print*,
-     &  'WARNING bsyn; extrapolating continuous opacity upwards'
-      endif
-
-      do 1965 jc=1,nlcont
-        xlmb=xlambda(jlcont(jc))
-        if (debug) then
-          print*,'saving continuous opac'
-          print*,jc,xlmb
-        endif
-        DO 42 k=1,NTAU
-          BPLAN(k)=BPL(T(k),xlmb)
-          x(k)=abso(k,jlcont(jc))
-          s(k)=absos(k,jlcont(jc))
-          if (debug) then
-            print*,x(k),s(k),bplan(k)
-          endif
-   42   CONTINUE
-*
-        WRITE(14,rec=jc) MCODE,nlcont,xlmb,BPLAN,X,S,XI
-1965  continue
-* save continuous opacities for MULTI output.
-      if (multidump) then
-        do j=1,maxlam
-          do k=1,ntau
-            absocont(k,j)=abso(k,j)
-          enddo
-        enddo
-      else 
-* use for reference continuum opacity:
-        do j=1,maxlam
-          do k=1,ntau
-cc            absocont(k,j)=abso(k,j)+absos(k,j)
-            absocont(k,j)=abso(k,j)
-          enddo
-        enddo
-      endif
-
 *
 * X  is kappa/stndop,
 * S  is sigma/stndop
 *    at each depth for a series of nlcont lambdas (xlmb).
 * the complete description of the continuum absorption is in 
-* abso (pure absorption) and absos (scattering). They are also 
+* absocont (pure absorption) and absoscont (scattering). They are also 
 * divided by stndop. They are computed in readmo.
 * stndop is called ross in this routine and is not ross.
 *
-      WRITE(7,237) MCODE(1:lenstr(mcode))
+      WRITE(6,237) MCODE(1:lenstr(mcode))
       IF(IP.EQ.0) WRITE(7,303)
       NLEV=0
       DO 25 K=1,NTAU,5
@@ -634,7 +571,18 @@ cc            absocont(k,j)=abso(k,j)+absos(k,j)
       tp=1.e6
       pep=-1.
       print*,'Bsyn; k, pgmod, pg_calc, romod, ro_calc'
-      do 43 k=1,ntau
+
+c      skiprelim=.false.
+c      print*,'calling eqmol for intializing'
+c      print*,t(20),pg(20),pe(20)
+c      call eqmol_pe(t(20),pg(20),pgpg,pe(20),
+c     &      1.,1.,k,niter,skiprelim)
+
+* Test Plez 11-May-2018
+      do 43 k=ntau,1,-1
+*      do 43 k=1,ntau
+* end of test
+
         if ((abs((t(k)-tp)/t(k)).lt.3.e-2).and.
      &      (abs((pe(k)-pep)/pe(k)).lt.0.6)) then
           skiprelim=.true.
@@ -902,6 +850,8 @@ ccc        CALL ATOMDA(IEL,LELE,CHI,CHI2,MAM,ABUNP)
               print*,' SYMMFACTOR = 2 for 12C13C'
             else if ((isotope(1).eq.12.and.isotope(2).eq.12).or.
      &               (isotope(1).eq.13.and.isotope(2).eq.13)) then
+              symmfactor=1.
+            else if (isotope(1).eq.0.and.isotope(2).eq.0) then
               symmfactor=1.
             else
               stop 'Bsyn: Problem with C2 isotopic mix!!'
@@ -1250,22 +1200,15 @@ ccc        endif
 *
 255   continue
 *
-* Write line data
-*
-ccc      WRITE(14) LELE,ION,XLB,CHIE,GFELOG,ABUL
-ccc      WRITE(14) IP2,(XLAL(I),I=1,IP2)
-ccc      WRITE(14) ((ET(K,I),K=1,NTAU),I=1,IP2)
-CCC      WRITE(7,240) XLB,LELE,ION
-*
 * End of line calculation
 *
       ILINE=ILINE+1
 *
-        iannonce=mod(iline,10000)
-        if (iannonce.eq.0) then
-         call clock
-         print*,iline,' lines done'
-        endif
+      iannonce=mod(iline,30000)
+      if (iannonce.eq.0) then
+        call clock
+        print*,iline,' lines done'
+      endif
       GOTO 64
 *
 * End model loop
@@ -1280,7 +1223,7 @@ CCC      WRITE(7,240) XLB,LELE,ION
 9874  close(lunit)
 98    continue
 * 
-      WRITE(7,214) NREJCT,XL1L,XL2R,XLM
+      WRITE(6,214) NREJCT,XL1L,XL2R,XLM
  214  FORMAT(1X,I8,' LINES WERE REJECTED, ONLY LINES BETWEEN',F10.3,
      &       ' AND',F10.3,' A CONSIDERED',/,'  CENTRAL WAVELENGTH=',
      &       F10.3,' A')
@@ -1378,8 +1321,6 @@ c        enddo
   236 FORMAT(' ***STOP IN BSYN***.NTOT(',I2,').LT.0.0, IEL=',
      & I3,/,' ION=',I3,' ABUND=',E10.3,' ILINE=',I4,' XLB=',F9.2)
   237 FORMAT(' MODEL IDENTIFICATION=',A,'; MAIN PROGRAMME BSYN')
-  240 FORMAT(' **DATA FOR LAMBDA',F10.3,'  FROM ',A2,I1,
-     &       ' WRITTEN ON UNIT 14')
   265 FORMAT('0THE ABUNDANCE OF ',A3,' IS',F6.2,
      &       ' (NO OF FREE NUCLEI PER HYDROGEN: ',1PE9.2,
      &       ' AT DEPTHPOINT',I3,' )')

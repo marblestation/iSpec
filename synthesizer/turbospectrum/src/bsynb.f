@@ -12,6 +12,8 @@
 *
 *-----------------------------------------------------------------------
 *
+      use cubint_module
+
       include 'spectrum.inc'
 *
       parameter (imax=1000)
@@ -40,7 +42,7 @@
      &                XMU(NRAYS,NDP)
       COMMON /TRDBUG/IDEBUG
       common /limbdk/ pos,intens,totintens,tottrans
-      logical debug
+      logical debug,extrap
       real fluxme
       dimension y1c(nrays),xmuc(nrays)
       dimension fcfc(lpoint),xlm(lpoint),jlcont(lpoint)
@@ -53,7 +55,7 @@ CCC      COMMON/CANGLE/ NMY,XMY(6),XMY2(6),WMY(6)
 * extension for large number of wavelengths and lines (monster II)
       doubleprecision xlambda
       common/large/ xlambda(lpoint),maxlam,ABSO(NDP,lpoint),
-     & absos(ndp,lpoint),absocont(ndp,lpoint)
+     & absos(ndp,lpoint),absocont(ndp,lpoint),absoscont(ndp,lpoint)
 *
       character*256 filterfil
       character*80 filttitle
@@ -68,9 +70,15 @@ CCC      COMMON/CANGLE/ NMY,XMY(6),XMY2(6),WMY(6)
       real bigsource(2*ndp)
       logical computeIplus,optthin
 *
+      real muout(10),isurf(10,lpoint),icsurf(10,lpoint),yout(10)
+      real costheta(nrays),uin(nrays)
+      integer iout(10)
+* muout are mu-point for output intensities, icsurf is for continuum intensity 
+*  and isurf for absolute intensity
       character*4 iblnk
       DATA IBLNK/'    '/,profold/0./,first/.true./
       data debug/.false./
+      data muout /-1.0, -0.9,-0.8,-0.7,-0.6,-0.5,-0.4,-0.3,-0.2,-0.1/
 
 
       PI=3.141593
@@ -78,6 +86,8 @@ CCC      COMMON/CANGLE/ NMY,XMY(6),XMY2(6),WMY(6)
 * Initiate mode of calculation
 * IINT =1  : intensity at all mu-points / output spectrum is flux spectrum!
 *             intensities at all angles are stored in a separate file !
+*       Version 7/02-2019 BPz: for intensity, we save intensities at 10 mu angles
+*                              in the flux file. Mu=0.1 to 1.0 with step 0.1
 * IINT =0  : flux
 * XL1      : wavelength where synthetic spectrum starts
 * XL2      : wavelength where synthetic spectrum stops
@@ -96,38 +106,43 @@ CCC      COMMON/CANGLE/ NMY,XMY(6),XMY2(6),WMY(6)
         enddo
       endif
 *
-      if(iint.eq.0) write(7,201) xl1,xl2,del
+      if(iint.eq.0) write(6,201) xl1,xl2,del
 ccc      if(iweak.gt.0) write(7,202) eps
-*
-* Read model atmosphere
-*
-      read(14,rec=1) mcode,nlcont,xlm(1),bplan,xc,s,xi
-      write(7,203) mcode(1:lenstr(mcode))
-*
-      if (iint.gt.0) then
-* header for intensity file
-*
-        write(66) mcode
-        write(66) rr(1),radius
-        write(66) maxlam
-      endif
 *
 * Continuum calculations:
 *
-      do jc=1,nlcont
-        read(14,rec=jc) mcode,idum,xlm(jc),bplan,xc,s,xi
+* 07/02-2019 BPz. We now compute continuum at all wavelengths
+* a little more costly in time, but avoid interpolation in wavelength 
+* continuum flux, and allows to save continuum intensity at various angles.
+* 
+      do j=1,maxlam
         do k=1,ntau
-          x(k)=xc(k)
+          x(k)=absocont(k,j)
+          s(k)=absoscont(k,j)
+          xlsingle=xlambda(j)
+          bplan(k)=bpl(T(k),xlsingle)
         enddo
         if (debug) then
-          print*,'bsynb: calling traneq for continuum',jc,xlm(jc)
+          print*,'bsynb: calling traneq for continuum',j,xlsingle
           do k=1,ntau,5
             print*,(x(kk),s(kk),kk=k,k+4)
           enddo
         endif
         call traneq
 *
-* Spherical fluxes
+* calculate emergent continuum intensity at prescribed mu-points
+*
+        do k=1,mmu(1)
+          costheta(k)=xmu(k,1)
+        enddo
+        call cubintp14(y1,costheta,uin,muout,yout,iout,mmu(1),
+     &                 10,3,0,0,0,
+     &                     extrap)
+        do k=1,10
+          icsurf(k,j)=yout(k)
+        enddo
+*
+* Spherical continuum fluxes
 *
 C FLUX TO PRINT
         hflux1c=4.*pi*hsurf*(rr(1)/radius)**2
@@ -135,34 +150,24 @@ C FLUX TO PRINT
         hflux2c=4.*pi*hflux(ntau)*(rr(ntau)/radius)**2
 * starting with version 12.1, flux is not divided by pi anymore. 
 * F_lambda integrated over lambda is sigma.Teff^4
-*        fcfc(jc)=hflux1c/pi
-        fcfc(jc)=hflux1c
+        fcfc(j)=hflux1c
 
 C        GFLUX1C=HFLUX1/PI*XLambda(J)**2/CLIGHT
 C        GFLUX2C=HFLUX2/PI*XLambda(J)**2/CLIGHT
 C        FFLUX1C=-2.5*ALOG10(AMAX1(GFLUX1,1E-20))
 C        FFLUX2C=-2.5*ALOG10(AMAX1(GFLUX2,1E-20))
 C
-C OUTPUT IN CASE OF intensity calculation : STORE LIMB FUNCTION
-c We don't store continuous limb darkening. BPz 28/04-09
-cc       if (iint.gt.0) then
-cc         write(66) xlm(jc),mmu(1),(xmu(nlx,1),y1(nlx),nlx=1,mmu(1))
-cc       endif
 *
 * End of continuum spherical fluxes
 *
-        if (debug) print*,jc,xlm(jc),fcfc(jc)
-        if(iint.le.0) write(7,204) fcfc(jc),xlm(jc)
-CC      if(iint.gt.0) write(7,205) y1c
+        if (debug) print*,j,xlsingle,fcfc(j)
       enddo
 *
-* Start loop over wavelengths
+* Start loop over wavelengths with lines
 *
       numb=0
       do j=1,maxlam
         do k=1,ntau
-* the continuum opacity is already included in abso
-ccc          x(k)=xc(k)+abso(k,j)
           x(k)=abso(k,j)
           s(k)=absos(k,j)
           xlsingle=xlambda(j)
@@ -170,9 +175,17 @@ ccc          x(k)=xc(k)+abso(k,j)
         enddo
         call traneq
 *
+* calculate emergent intensity
+*
+        
+* save traneq's fluxes
+        hflux1tr=4.*pi*hsurf*(rr(1)/radius)**2
+        hflux1tr=amax1(1e-30,hflux1tr)
+
+        if (computeIplus) then
+*
 ************************************************************************
 * Compute Iplus, for all rays, at this wavelength. BPz 08/08-2001
-        if (computeIplus) then
 * calculate taulambda along the ray
           do i=1,nimpac
             ntaui=kimpac(i)
@@ -260,7 +273,8 @@ cc                print*,'bsynb, taul',dtaulambda(k),dtaulambda(index)
               endif
               zold=z
             enddo
-            taulambda(1)=dzdr*(x(1)+s(1))*tau(1)
+            taulambda(1)=(x(1)+s(1))*tau(1)/
+     &                    sqrt(1.-(pimpac(i)/rr(1))**2)
             do k=2,ntaui
               taulambda(k)=taulambda(k-1)+dtaulambda(k)
             enddo
@@ -315,6 +329,18 @@ cc              print*,'Pfeau(1,1) ',pfeau(1,1)
         endif
 ************************************************************************
 *
+* calculate emergent line intensity at prescribed mu-points
+*
+        do k=1,mmu(1)
+          costheta(k)=xmu(k,1)
+        enddo
+        call cubintp14(y1,costheta,uin,muout,yout,iout,mmu(1),
+     &                     10,3,0,0,0,
+     &                     extrap)
+        do k=1,10
+          isurf(k,j)=yout(k)
+        enddo
+*
 * Spherical fluxes
 *
 C FLUX TO PRINT
@@ -327,29 +353,9 @@ C renormalize to standard radius at tauross=1
 *        fluxme=hflux1/pi
         fluxme=hflux1
 
-C OUTPUT IN CASE OF intensity calculation : STORE LIMB FUNCTION
-        if (iint.gt.0) then
-* fluxme is normalised at radius, whereas y1 is at RR(1).
-          write(66) xlambda(j),mmu(1),fluxme,
-     &                (xmu(nlx,1),y1(nlx),nlx=1,mmu(1))
-        endif
+* divide by continuum flux
+        prf=fluxme/fcfc(j)
 
-* interpolate continuum flux
-        do jc=2,nlcont
-          if(xlm(jc)-xlsingle.gt.0.) then
-            jjc=jc-1
-            goto 3692
-          endif
-        enddo
-3692    continue
-        if (nlcont.gt.1) then
-          jjc=min(jjc,nlcont-1)
-          fc=(fcfc(jjc+1)-fcfc(jjc))/
-     &       (xlm(jjc+1)-xlm(jjc))*(xlsingle-xlm(jjc)) + fcfc(jjc)
-        else
-          fc=fcfc(1)
-        endif
-        prf=fluxme/fc
         if (debug) print*,j,xlsingle,fluxme,prf
 *
 * End of spherical fluxes
@@ -357,8 +363,6 @@ C OUTPUT IN CASE OF intensity calculation : STORE LIMB FUNCTION
         prof=1.-prf
 *
 * find depth where tau_lambda=1
-
-
 
         if (findtau1) then
           taulambda(1)=tau(1)*(x(1)+s(1))
@@ -385,38 +389,41 @@ cc            call weightlimb(xlsingle,sdel)
 cc          endif
 cc        endif
 *
-* Spherical intensities are stored in unit 66 for a set of angles.
-* The output file ('.lim' file ) can be read with the program readlimb.f 
-*
-cc        if (first.and.limbdark) then
-cc            first=.false.
-cc            write (46,'(a)') filttitle
-cc            write (46,'(a)') filterfil(1:lenstr(filterfil))
-cc            write (46,*) '''lambda min, max : ''',filtlam(1),
-cc     &                   filtlam(ifilt)
-cc            write (46,*) '''sampling : ''',sdel
-cc            write (46,*) '''radius tauross=1, max : ''',radius,rr(1)
-cc            write (46,*)     
-cc          endif
-
 * store spectrum in x,y format
 * integral_inf^+inf (fluxme) = sigma Teff^4
 
         if (iint.eq.0) then
           if (computeIplus) then
 c We should have surface flux here!
-            write(46,1965) xlambda(j),prf,fluxme,surfIsave
+* lambda, normalized and absolute flux from source function summation, absolute feautrier flux, 
+* central intensity from summmed source function
+            write(46,2018) xlambda(j),prf,fluxme,hflux1tr,surfIsave
           else
-            write(46,1964) xlambda(j),prf,fluxme
+* lambda, normalized feautrier flux, absolute feautrier flux
+            write(46,1965) xlambda(j),prf,fluxme
 1964        format(f11.3,1x,f10.5,1x,1pe12.5)
           endif
         else if (iint.gt.0) then
-* We store an additional column, which is the intensity at mu=0
           if (computeIplus) then
-            write(46,1965) xlambda(j),prf,fluxme,surfIsave
+* We store additional columns for the intensity at mu=1.0 to 0.1, step 0.1.
+* So we have: lambda, normalized and absolute flux for summed source function,
+* absolute Feautrier flux, and intensities for summed source function:
+* , normalized intensity at mu=1.0, intensity at mu=1.0,
+* and then Inorm, I for mu=0.9, 0.8, ..., 0.1.
+            write(46,1967) xlambda(j),prf,fluxme,hflux1tr,
+     &                    (isurf(k,j),isurf(k,j)/icsurf(k,j),k=1,10)
+1967        format(f11.3,1x,f10.5,1x,1pe12.5,1x,1pe12.5,2x,
+     &             10(1x,1pe12.5,1x,0pf10.5))
           else
-            write(46,1965) xlambda(j),prf,fluxme,y1(1)
-1965        format(f11.3,1x,f10.5,1x,1pe12.5,1x,e12.5)
+* We store additional columns for the intensity at mu=1.0 to 0.1, step 0.1.
+* So we have: lambda, normalized flux, flux, normalized intensity at mu=1.0, intensity at mu=1.0,
+* and then Inorm, I for mu=0.9, 0.8, ..., 0.1.
+            write(46,1965) xlambda(j),prf,fluxme,
+     &                    (isurf(k,j),isurf(k,j)/icsurf(k,j),k=1,10)
+1965        format(f11.3,1x,f10.5,1x,1pe12.5,2x,
+     &             10(1x,1pe12.5,1x,0pf10.5))
+cc            write(46,1965) xlambda(j),prf,fluxme,y1(1)
+2018        format(f11.3,1x,f10.5,1x,1pe12.5,1x,e12.5,1x,e12.5)
           endif
         endif
 
@@ -424,29 +431,6 @@ c We should have surface flux here!
 * End of wavelength loop
       enddo
 *
-* writes limbdark profile if wanted
-*
-cc      if (limbdark) then
-cc* filterfile name / lambda start and end / stellar radius tau=1 and max /
-cc* intens at center of disk (weighted with filter transmission) /
-cc* number of profile points /
-cc* profile: impact parameter, normalized to radius tau=1, 
-cc* profile normalized to 1 at center.
-cc
-cc        write (47,'(a)') filttitle
-cc        write (47,'(a)') filterfil(1:lenstr(filterfil))
-cc        write (47,*) '''lambda min, max : ''',filtlam(1),filtlam(ifilt)
-cc        write (47,*) '''sampling : ''',sdel
-cc        write (47,*)     '''radius tauross=1, max : ''',radius,rr(1)
-cc        write (47,*)     
-cc     &  '''integrated I at center of disk, int. filter trans.: ''',
-cc     &       totintens,tottrans
-cc        write (47,*)     imax
-cc        do i=1,imax
-cc          write (47,*)   pos(i),rr(1)/radius*pos(i),intens(i)/totintens
-cc        enddo
-cc      endif
-
       call clock
       RETURN
 *

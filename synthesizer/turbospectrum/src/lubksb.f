@@ -27,4 +27,3 @@
 14    continue 
       return 
       END 
-C  (C) Copr. 1986-92 Numerical Recipes Software 1"n26@1kN. 

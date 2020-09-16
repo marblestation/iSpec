@@ -27,7 +27,7 @@
       character*80 filttitle,comment
       character*50 MCODE
 
-      real scattfrac,absfrac
+      real scattfrac,absfrac,mindnud
       real obs(3),abufact(3),eqwidth(3)
       REAL N,MA,MH,M,L,MUM,NTOT,MAM,MABUND(16),ntt
       REAL XIH,XIHM,XKHM,HJONH,HJONC,HJONN,HJONO,XNECNO
@@ -36,7 +36,7 @@
       DIMENSION
      &          JLEV(NDP/5+1),EMOL(NMEMOL,NDP),BPLAN(NDP),
      &          X(NDP),S(NDP),plez(ndp),contop(ndp)
-      doubleprecision XL1,XL2,DEL,XLMARG,XL1L,XL2R,XLBOFF,XLB
+      doubleprecision XL1,XL2,DEL,XLMARG,XL1L,XL2R,XLBOFF,XLB,step
       doubleprecision DLAMB0,DOPPLC,DXLAMB,xlb_vshifted(ndp),lshift(ndp)
       CHARACTER*20 LELE
       real newvoigt
@@ -83,9 +83,8 @@
       character*26   species,blabla
 
       doubleprecision xlambda
-      common/large/ xlambda(lpoint),maxlam,ABSO(NDP,lpoint),
-     & absos(ndp,lpoint),absocont(ndp,lpoint)
-      real absoscont(ndp,lpoint)
+      common/large/ xlambda(lpoint),maxlam,abso(ndp,lpoint),
+     & absos(ndp,lpoint),absocont(ndp,lpoint),absoscont(ndp,lpoint)
       logical oldpart,Ames,scan2001,oldscan,Barber
       common/oldpart/oldpart
       common/h2ochoice/Ames,scan2001,oldscan,Barber
@@ -125,7 +124,8 @@
       logical dattsuji,datspherical,datlimbdark,databfind,abfind,
      &        datmultidump,datxifix,datmrxf,dathydrovelo,datpureLTE
       integer datnoffil,datncore,datmaxfil,datmihal,datiint
-      real    isoch(400),isochfact(400),datisoch(400),datisochfact(400)
+      real    isoch(1000),isochfact(1000),datisoch(1000),
+     &        datisochfact(1000)
       real    datxmyc,datscattfrac
       character*128 datfilmet,datfilmol,datfilwavel
       character*256 datlinefil(maxfil),datdetout,
@@ -162,7 +162,7 @@
 
 ******************************************
       integer version
-      data version /151/
+      data version /191/
 ******************************************
       data nat/92/
       logical newformat
@@ -245,18 +245,10 @@ ccc      external commn_handler
       print*,' EQWIDT CHECK: iint=', iint
       print*,' EQWIDT CHECK: xmyc=',xmyc
 
-      if (abfind) then
-* we determine abundance for obseqwidt and obs+-error
-        ieqmin=1
-        ieqmax=3
-      else
-* otherwise we only do one computation
-        ieqmin=2
-        ieqmax=2
-      endif
-
       do i=1,92
         fixabund(i)=databch(i)
+      enddo
+      do i=1,1000
         isoch(i)=datisoch(i)
         isochfact(i)=datisochfact(i)
       enddo
@@ -302,8 +294,6 @@ ccc      external commn_handler
       call clock
 cc      OPEN(UNIT=12,FILE=INMOD,STATUS='OLD',recl=4*2*200)
       OPEN(UNIT=12,FILE=INMOD,STATUS='OLD')
-cc      OPEN(UNIT=14,STATUS='SCRATCH',FORM='UNFORMATTED',RECL=16384)
-      OPEN(UNIT=14,STATUS='SCRATCH',FORM='UNFORMATTED')
 cc      open(unit=16,file=inabun,status='old')
 cc      OPEN(UNIT=27,STATUS='SCRATCH',FORM='FORMATTED')
 ccc      OPEN(UNIT=20,FILE=OUTFIL,STATUS='UNKNOWN',FORM='UNFORMATTED')
@@ -367,7 +357,7 @@ ccc      OPEN(UNIT=11,FILE=INATOM,STATUS='OLD')
       enddo
       abund(1)=1.00
 * change isotopic mixture if appropriate
-      do i=1,400
+      do i=1,1000
         if (isoch(i).gt.0.) then
           write(blabla,'(f6.3,20x)') isoch(i)
           print*,blabla
@@ -470,7 +460,8 @@ cc      READ(27,109) XLBOFF
 *
 * Next read model atm. and continuous abs. coeffs. at XLM
 * readmo also interpolates the continuous opacities to all the
-* lambdas . They are put into absos and abso. the wavelengths that
+* xlambda(1:maxlam) . They are put into absocont and absoscont. 
+* the wavelengths that
 * were used in babsma for the calculation of the cont. opacities
 * are put into xlp.
 *
@@ -478,33 +469,18 @@ cc      READ(27,109) XLBOFF
       maxlam=-200
       xlm=(xl1+xl2)*0.5e0
       CALL READMO(XLM,X,S)
-* call again to get continuum absorption and scattering coefficients
-* in abso and absos (common "large") at the xlp wavelengths of babsma.
-
-      do i=1,nlq
-        xlambda(i)=xlp(i)
-      enddo
-      maxlam=nlq
-      call readmo(xlm,x,s)
-      maxlam=-200
-      do i=1,nlq
-        do k=1,ntau
-          absocont(k,i)=abso(k,i)
-          absoscont(k,i)=absos(k,i)
-        enddo
-      enddo
 *
 * X  is kappa/stndop,
 * S  is sigma/stndop
 * at all depths of the model, at wavelength xlm.
 * the complete description of the continuum absorption is in 
 * absocont (pure absorption) and absoscont (scattering) at 
-* wavelengths xlp. They are also 
+* wavelengths xlambda(1:maxlam). They are also 
 * divided by stndop. They are computed in readmo.
 * stndop is called ross in this routine and is not ross.
 *
-      WRITE(7,237) MCODE(1:lenstr(mcode))
-      IF(IP.EQ.0) WRITE(7,303)
+      WRITE(6,237) MCODE(1:lenstr(mcode))
+!      IF(IP.EQ.0) WRITE(7,303)
       NLEV=0
       DO 25 K=1,NTAU,5
         NLEV=NLEV+1
@@ -714,8 +690,8 @@ ccc        CALL ATOMDA(IEL,LELE,CHI,CHI2,MAM,ABUNP)
 *
 * Big jump to 64 from far below, line loop.
 *
-   64 CONTINUE
-      DGFE=0.
+   64 continue
+      dgfe=0.
 *
 * Loop for reading the lines
 *
@@ -763,6 +739,17 @@ cc        print*,' line out of range for continuous opacity. Dropped.'
 cc      if (iel.le.nat) then
       velexp=0.0
       sigmacross=0.0
+      if (abfind) then
+* we determine abundance for obseqwidt and obs+-error
+        ieqmin=1
+        ieqmax=3
+      else
+* otherwise we only do one computation
+        abufact(1)=1.0
+        abufact(3)=1.0
+        ieqmin=2
+        ieqmax=2
+      endif
       if (obseqw.gt.0.) then
         obs(1)=max(obseqw-eqwerror,0.1)
         obs(2)=obseqw
@@ -777,7 +764,6 @@ cc      if (iel.le.nat) then
         obs(2)=0.0
         obs(3)=0.0
       endif
-cc      endif
 *
       f=10**(gfelog)
       xlb=xlb+xlboff
@@ -807,8 +793,10 @@ cc      endif
             else if ((isotope(1).eq.12.and.isotope(2).eq.12).or.
      &               (isotope(1).eq.13.and.isotope(2).eq.13)) then
               symmfactor=1.
+            else if (isotope(1).eq.0.and.isotope(2).eq.0) then
+              symmfactor=1.
             else
-              stop 'Bsyn: Problem with C2 isotopic mix!!'
+              stop 'Eqwidt: Problem with C2 isotopic mix!!'
             endif
           endif
           if (molindex.eq.0) then
@@ -1005,9 +993,11 @@ cc  6   CONTINUE
 *
 cc      IF(FDAMP.GT.0..AND.IP.GE.1) WRITE(7,267) GAMRAD,ALOGC6
 cc      IF(IP.GE.1) WRITE(7,265) LELE,ABUL,ABUND,NTAU
+      mindnud=1.e30
       do 111 j=1,ntau
        plez(j)=n(j)*stim(j)/dnud(j)/ross(j)
        xlb_vshifted(j)=xlb*lshift(j)
+       mindnud=min(mindnud,dnud(j))
 111   continue
 *
 * Start wavelength loop for this line
@@ -1022,242 +1012,190 @@ cc        contop(j)=x(j)+s(j)
 
       strongflag=.false.
 
+! adaptive step for profile calculation, given in fraction of Doppler width.
+! minimum value is del in [AA] given in input.
+
+      step=min(del,mindnud*xl*xlb/c*0.5)
+      print*,'lambda',xlb,' step for calculation ',step,'A'
+
       do ieq=ieqmin,ieqmax
+! ieq=2 is for nominal abundance, ieq=1 for lower error bar, ieq=3 for upper error bar
 
-      notconvflag(ieq)=.false.
-      firstiter=.true.
-      iterabu=1
-      if ((ieq.eq.1).or.(ieqmin.eq.ieqmax)) then
-        abufact(ieq)=1.0
-      else
-        abufact(ieq)=obs(ieq)/eqwidth(ieq-1)/1000.*abufact(ieq-1)
-      endif
-      abufactold=2.0
-
-9876  continue
-      lmin=1
-      lmax=1
-      do iloop=int(lpoint/2)+1,lpoint,1
-        xkmax=0.
-        i=iloop-int(lpoint/2)-1
-        xlambda(iloop)=xlb+float(i)*del
-        if (xlambda(iloop).gt.xl2) then 
-          lmax=iloop-1
-          goto 155
+        notconvflag(ieq)=.false.
+        firstiter=.true.
+        iterabu=1
+        if ((ieq.eq.1).or.(ieqmin.eq.ieqmax)) then
+          abufact(ieq)=1.0
+        else
+          abufact(ieq)=obs(ieq)/eqwidth(ieq-1)/1000.*abufact(ieq-1)
         endif
-        vt=(float(i)*del)*1.d-8
-        vt=c*vt/xl**2
-        do j=1,ntau
-          v=vt/dnud(j)
-c         CALL VOIGT(A(j),V,HVOIGT)
-          hvoigt=newvoigt(a(j),v)
-          l=calf*hvoigt*plez(j)
-          l=l*abufact(ieq)
-          ABSO(j,iloop)=l*absfrac
-          absos(j,iloop)=l*scattfrac
-          xkmax=max(xkmax,l/contop(j))
-        enddo
-        lmax=iloop
-        if (xkmax.lt.eps) goto 15
-      enddo
-155   continue
-      print*,' element: ', lele, ion
-      print*,' the line may still contribute at ',xl2
-      print*,' central lambda: ',xlmb
-      print*,' abufact: ',abufact(ieq)
-      print*,' obseqw: ',obs(ieq),' eqwidth: ',eqwidth(ieq)
-      strongflag=.true.
-cc      goto 2345
+        abufactold=2.0
 
-15    CONTINUE
+9876    continue
+        lmin=1
+        lmax=1
+        do iloop=int(lpoint/2)+1,lpoint,1
+          xkmax=0.
+          i=iloop-int(lpoint/2)-1
+          xlambda(iloop)=xlb+float(i)*step
+          if (xlambda(iloop).gt.xl2) then 
+            lmax=iloop-1
+            goto 155
+          endif
+          vt=(float(i)*step)*1.d-8
+          vt=c*vt/xl**2
+          do j=1,ntau
+            v=vt/dnud(j)
+c           CALL VOIGT(A(j),V,HVOIGT)
+            hvoigt=newvoigt(a(j),v)
+            l=calf*hvoigt*plez(j)
+            l=l*abufact(ieq)
+            abso(j,iloop)=l*absfrac
+            absos(j,iloop)=l*scattfrac
+            xkmax=max(xkmax,l/contop(j))
+          enddo
+          lmax=iloop
+          if (xkmax.lt.eps.and.iloop.gt.int(lpoint/2)+1) goto 15
+        enddo
+155     continue
+        print*,' element: ', lele, ion
+        print*,' the line may still contribute at ',xl2
+        print*,' central lambda: ',xlmb
+        print*,' abufact: ',abufact(ieq)
+        print*,' obseqw: ',obs(ieq),' eqwidth: ',eqwidth(ieq)*1000.
+        strongflag=.true.
+
+15      CONTINUE
 * and now the other side of the profile
-      do iloop=int(lpoint/2),1,-1
-        xkmax=0.0
-        i=int(lpoint/2)+1-iloop
-        xlambda(iloop)=xlb-float(i)*del
-        if (xlambda(iloop).lt.xl1) then 
-          lmin=iloop+1
-          goto 165
-        endif
-        vt=(float(i)*del)*1.d-8
-        vt=c*vt/xl**2
-        do j=1,ntau
-          v=vt/dnud(j)
-c         CALL VOIGT(A(j),V,HVOIGT)
-          hvoigt=newvoigt(a(j),v)
-          l=calf*hvoigt*plez(j)
-          l=l*abufact(ieq)
-          ABSO(j,iloop)=l*absfrac
-          absos(j,iloop)=l*scattfrac
-          xkmax=max(xkmax,l/contop(j))
-          lmin=iloop
+        do iloop=int(lpoint/2),1,-1
+          xkmax=0.0
+          i=int(lpoint/2)+1-iloop
+          xlambda(iloop)=xlb-float(i)*step
+          if (xlambda(iloop).lt.xl1) then 
+            lmin=iloop+1
+            goto 165
+          endif
+          vt=(float(i)*step)*1.d-8
+          vt=c*vt/xl**2
+          do j=1,ntau
+            v=vt/dnud(j)
+c           CALL VOIGT(A(j),V,HVOIGT)
+            hvoigt=newvoigt(a(j),v)
+            l=calf*hvoigt*plez(j)
+            l=l*abufact(ieq)
+            abso(j,iloop)=l*absfrac
+            absos(j,iloop)=l*scattfrac
+            xkmax=max(xkmax,l/contop(j))
+            lmin=iloop
+          enddo
+          if (xkmax.lt.eps) goto 16
         enddo
-        if (xkmax.lt.eps) goto 16
-      enddo
-165   continue
-      print*,' element: ', lele, ion
-      print*,' the line may still contribute at ',xl1
-      print*,' central lambda: ',xlmb
-      print*,' abufact: ',abufact(ieq)
-      print*,' obseqw: ',obs(ieq),' eqwidth: ',eqwidth(ieq)
-      strongflag=.true.
-cc      goto 2345
-
-16    CONTINUE
+165     continue
+        print*,' element: ', lele, ion
+        print*,' the line may still contribute at ',xl1
+        print*,' central lambda: ',xlmb
+        print*,' abufact: ',abufact(ieq)
+        print*,' obseqw: ',obs(ieq),' eqwidth: ',eqwidth(ieq)*1000.
+        strongflag=.true.
+  
+16      CONTINUE
 *
-cc      print*, 'EQWIDT: Line at ', sngl(xlb)
-cc      print*, 'EQWIDT: lambda min and max ', 
-cc     &       lmin,lmax,sngl(xlambda(lmin)),sngl(xlambda(lmax))
-*
-      rewind(14)
+cc        print*, 'EQWIDT: Line at ', sngl(xlb)
+cc        print*, 'EQWIDT: lambda min and max ', 
+cc       &       lmin,lmax,sngl(xlambda(lmin)),sngl(xlambda(lmax))
 *
 * Continuum points for continuum flux calculations
-* Calculate planck function.
-* We catch the wavelengths from the continuum points of
-* babsma. At these caught lambdas the continuum flux or intensity
-* will be computed, and then interpolated to the other lambdas.
-      nlq1=1
-      nlq2=1
-      i=1
-      do while (xlp(i).lt.xlambda(lmin)) 
-        nlq1=i
-        i=i+1
-      enddo
-      i=nlq1
-      nlq2=nlq1
-      do while (xlp(i).le.xlambda(lmax).and.i.le.nlq)
-        nlq2=i
-        i=i+1
-      enddo
-      nlq2=min(nlq2+1,nlq)
-
-      nlcont=nlq2-nlq1+1
-
-cc      print*,'eqwidth check: line at ', xlb
-cc      print*,'eqwidth check: ',nlcont,nlq1,nlq2,xlp(nlq1:nlq2)
-
-      if (nlcont.lt.2) then
-        print*,'ERROR in eqwidt: xlb=',sngl(xlb),' ; nlcont<2'
-        stop 
-      endif
-      
-      if (xlp(nlq1).gt.xlambda(lmin)) then
-        print*,
-     &  'WARNING eqwidth; extrapolating continuous opacity downwards'
-      endif
-      if (xlp(nlq2).lt.xlambda(lmax)) then
-        print*,
-     &  'WARNING eqwidth; extrapolating continuous opacity upwards'
-      endif
-
-      do jc=nlq1,nlq2
-        xx(jc)=sngl(xlp(jc))
-        do k=1,ntau
-          bplan(k)=bpl(T(k),xx(jc))
-          x(k)=absocont(k,jc)
-          s(k)=absoscont(k,jc)
-* TEST all in pure absorption (i.e. S=B)   BPz 28/09/2002 (cf also below)
-cc          x(k)=x(k)+s(k)
-cc          s(k)=0.0
+* call readmo again to get continuum absorption and scattering coefficients
+* in abso and absos (common "large") at the wavelengths of the line profile.
+* The line opacity is in abso(lmin:lmax),and absos(lmin:lmax)
+* The continuum opacity, after interpolation in readmo, is in absocont(1:maxlam)
+* and absoscont(1:maxlam) with maxlam=lmax-lmin+1
+* 
+        maxlam=lmax-lmin+1
+        do i=1,maxlam
+          xlambda(i)=xlambda(lmin+i-1)
         enddo
-*
-        WRITE(14) MCODE,nlcont,xx(jc),BPLAN,X,S,XI
-      enddo
+        call readmo(xlm,x,s)
 *
 * X  is kappa/stndop,
 * S  is sigma/stndop
-*    at each depth for a series of nlcont lambdas.
-* The continuous opacity at the selected nlcont wavelengths is in 
-* absocont (pure absorption) and absoscont (scattering). They are also 
-* divided by stndop. 
 * stndop is called ross in the routine readmo but is not ross.
 *
 *
-* add the continuous opacities at all wavelengths; 
-* they are first
-* interpolated from the ones calculated above in readmo.
-* and contained in absocont and absoscont.
-
-      do j=1,ntau
-        ii=1
-        do jc=nlq1,nlq2
-          yyy(ii)=absocont(j,jc)
-          zzz(ii)=absoscont(j,jc)
-          ii=ii+1
+* We shift everything between (1:maxlam), and set lmin=1, lmax=maxlam
+* we also add the continuum extinction to the line extinction
+*
+        do i=1,maxlam
+          do k=1,ntau
+            abso(k,i)=abso(k,lmin+i-1)+absocont(k,i)
+            absos(k,i)=absos(k,lmin+i-1)+absoscont(k,i)
+          enddo
         enddo
-        do iloop=lmin,lmax
-          call lint(nlcont,xlp(nlq1),yyy(1),xlambda(iloop),x(j))
-          call lint(nlcont,xlp(nlq1),zzz(1),xlambda(iloop),s(j))
-          abso(j,iloop)=abso(j,iloop)+x(j)
-          absos(j,iloop)=absos(j,iloop)+s(j)
-* TEST all in pure absorption (i.e. S=B)   BPz 28/09/2002
-cc          abso(j,iloop)=abso(j,iloop)+absos(j,iloop)
-cc          absos(j,iloop)=0.0
-        enddo
-      enddo
+        lmin=1
+        lmax=maxlam
 
-      eqwidth(ieq)=0.0
-      if (lmax.gt.lmin) then
-        if (spherical) then
-          CALL eqwidtb(lmin,lmax,eqwidth(ieq))
-        else
-          CALL eqwidtbplatt(lmin,lmax,eqwidth(ieq))
+        eqwidth(ieq)=0.0
+        if (lmax.gt.lmin) then
+          if (spherical) then
+            call eqwidtb(lmin,lmax,step,eqwidth(ieq))
+          else
+            call eqwidtbplatt(lmin,lmax,step,eqwidth(ieq))
+          endif
         endif
-      endif
 *
 * iterate on abundance; epsabu = precision of determination in dex
 *
-      epsabu=0.001
-      epsabu=log(10**epsabu)
+        epsabu=0.001
+        epsabu=log(10**epsabu)
 
-      if (abfind) then
-        if (obs(ieq).gt.0.e0) then
+        if (abfind) then
+          if (obs(ieq).gt.0.e0) then
 ccc          if (abs(log(obs(ieq)/eqwidth(ieq)/1000.)).gt.epsabu) then
-          if (abs(log(abufact(ieq)/abufactold)).gt.epsabu.and.
+            if (abs(log(abufact(ieq)/abufactold)).gt.epsabu.and.
      &        iterabu.le.14) then
-            if (firstiter) then
-              abufactold=abufact(ieq)
-              abufact(ieq)=obs(ieq)/eqwidth(ieq)/1000.*abufact(ieq)
-              eqwidthold=eqwidth(ieq)
-              firstiter=.false.
-            else 
-              dlnabufact=log(abufact(ieq)/abufactold)/
+              if (firstiter) then
+                abufactold=abufact(ieq)
+                abufact(ieq)=obs(ieq)/eqwidth(ieq)/1000.*abufact(ieq)
+                eqwidthold=eqwidth(ieq)
+                firstiter=.false.
+              else 
+                dlnabufact=log(abufact(ieq)/abufactold)/
      &                log(eqwidth(ieq)/eqwidthold)*
      &                  log(obs(ieq)/eqwidth(ieq)/1000.)
 
-              if (iterabu.eq.8) then
+                if (iterabu.eq.8) then
 c we are likely stuck in an infinite loop
 c we try to get out of it with a small kick
-                dlnabufact=dlnabufact+1.1
+                  dlnabufact=dlnabufact+1.1
+                endif
+  
+                abufactold=abufact(ieq)
+                abufact(ieq)=abufactold*exp(dlnabufact)
+                eqwidthold=eqwidth(ieq)
+                iterabu=iterabu+1
               endif
-
-              abufactold=abufact(ieq)
-              abufact(ieq)=abufactold*exp(dlnabufact)
-              eqwidthold=eqwidth(ieq)
-              iterabu=iterabu+1
-            endif
 cc            print*, iterabu,abufactold,
 cc     &              obs(ieq),eqwidth(ieq)*1000.,exp(dlnabufact)
 cc            print*
-            goto 9876
-          else if (iterabu.gt.14) then
+              goto 9876
+            else if (iterabu.gt.14) then
 c obviously the kick at iteration 8 was not enough...
-            print*,' WARNING!! abundance not converged for line:'
-            print*,LELE,ION,XLB,CHIE,GFELOG,eqwidth(2)*1000.,
+              print*,' WARNING!! abundance not converged for line:'
+              print*,LELE,ION,XLB,CHIE,GFELOG,eqwidth(2)*1000.,
      &                  obs(2),
      &                  log10(abunp)+12.+log10(abufact(2))
 * fake abufact
-            abufact(ieq)=1.0
-            notconvflag(ieq)=.true.
-cc          print*, iterabu,abufactold,
+              abufact(ieq)=1.0
+              notconvflag(ieq)=.true.
+cc            print*, iterabu,abufactold,
 cc     &          obs(ieq),eqwidth(ieq)*1000.,exp(dlnabufact)
-cc          print*
-          endif
-        else
+cc            print*
+            endif
+          else
 * observed equivalent width is zero mAA
-          abufact(ieq)=1.e-30
+            abufact(ieq)=1.e-30
+          endif
         endif
-      endif
 * end of the ieq loop
       enddo
 
@@ -1271,22 +1209,22 @@ cc          print*
       endif
       if (strongflag) then
         if (formatlong) then
-        WRITE(20,455) LELE,ION,XLB,CHIE,GFELOG,eqwidth(2)*1000.,
+          WRITE(20,455) LELE,ION,XLB,CHIE,GFELOG,eqwidth(2)*1000.,
      &                  obs(2),eqwerror,log10(abufact(2)),
      &                (log10(abunp)+12.+log10(abufact(ieq)),ieq=1,3)
         else
-        WRITE(20,457) LELE,ION,XLB,CHIE,GFELOG,eqwidth(2)*1000.,
+          WRITE(20,457) LELE,ION,XLB,CHIE,GFELOG,eqwidth(2)*1000.,
      &                  obs(2),eqwerror,log10(abufact(2)),
      &                (log10(abunp)+12.+log10(abufact(ieq)),ieq=1,3)
         endif
         strongflag=.false.
       else if (notconvflag(1).or.notconvflag(2).or.notconvflag(3)) then
         if (formatlong) then
-        WRITE(20,4572) LELE,ION,XLB,CHIE,GFELOG,eqwidth(2)*1000.,
+          WRITE(20,4572) LELE,ION,XLB,CHIE,GFELOG,eqwidth(2)*1000.,
      &                  obs(2),eqwerror,log10(abufact(2)),
      &                (log10(abunp)+12.+log10(abufact(ieq)),ieq=1,3)
         else
-        WRITE(20,4571) LELE,ION,XLB,CHIE,GFELOG,eqwidth(2)*1000.,
+          WRITE(20,4571) LELE,ION,XLB,CHIE,GFELOG,eqwidth(2)*1000.,
      &                  obs(2),eqwerror,log10(abufact(2)),
      &                (log10(abunp)+12.+log10(abufact(ieq)),ieq=1,3)
         endif
@@ -1305,11 +1243,11 @@ C one of the cases did not work.
           abufact(3)=abufact(2)
         endif
         if (formatlong) then
-        WRITE(20,4561) LELE,ION,XLB,CHIE,GFELOG,eqwidth(2)*1000.,
+          WRITE(20,4561) LELE,ION,XLB,CHIE,GFELOG,eqwidth(2)*1000.,
      &                obs(2),eqwerror,log10(abufact(2)),
      &                (log10(abunp)+12.+log10(abufact(ieq)),ieq=1,3)
         else
-        WRITE(20,456) LELE,ION,XLB,CHIE,GFELOG,eqwidth(2)*1000.,
+          WRITE(20,456) LELE,ION,XLB,CHIE,GFELOG,eqwidth(2)*1000.,
      &                obs(2),eqwerror,log10(abufact(2)),
      &                (log10(abunp)+12.+log10(abufact(ieq)),ieq=1,3)
         endif
@@ -1322,9 +1260,9 @@ C one of the cases did not work.
 * End of line calculation
 *
 2345  continue
-      ILINE=ILINE+1
+      iline=iline+1
 *
-      GOTO 64
+      goto 64
 *
 * End model loop
 *
@@ -1332,7 +1270,7 @@ C one of the cases did not work.
 9874  close(lunit)
 98    continue
 * 
-      WRITE(7,214) NREJCT,XL1L,XL2R,XLM
+      WRITE(6,214) NREJCT,XL1L,XL2R,XLM
  214  FORMAT(1X,I8,' LINES WERE REJECTED, ONLY LINES BETWEEN',F10.3,
      &       ' AND',F10.3,' A CONSIDERED',/,'  CENTRAL WAVELENGTH=',
      &       F10.3,' A')

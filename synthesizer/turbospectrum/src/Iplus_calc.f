@@ -24,13 +24,7 @@
       if (optthin) then
 * optically thin: assumes no incoming radiation above taumax
 
-cc        Iplus(ntau)=source(ntau)*(1.-exp(-tau(1)))
         Iplus(ntau)=0.
-cc        do i=ntau-1,1
-cc          Iplus(i)=Iplus(i+1)*ex(i)+
-cc     &             (source(i+1)+source(i))*0.5*
-cc     &              (1.-ex(i))
-cc        enddo
       else
 * optically thick: diffusion approximation
         Iplus(ntau)=source(ntau)+
@@ -41,6 +35,12 @@ cc        enddo
      &           (source(i+1)+source(i))*0.5*
      &                  (1.-ex(i+1))
       enddo
+
+! Iplus(1) corrected for emission/absorption from layer between 
+! tau=tau(1) and tau=0.
+
+      Iplus(1)=Iplus(1)*exp(-tau(1))+
+     &         source(1)*(1.-exp(-tau(1)))
 
       return
       end

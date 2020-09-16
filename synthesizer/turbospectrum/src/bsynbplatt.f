@@ -14,20 +14,12 @@
 *
       include 'spectrum.inc'
 *
-      INTEGER    MAXNL
-      PARAMETER (MAXNL=200)
-      INTEGER    NLBL
-      PARAMETER (NLBL=100)
-*
-      CHARACTER*20  LELE(100)
       character*50 mcode
-      DIMENSION ION(100),SRXLAL(2*MAXNL),
-     &          GFELOG(100),ABUND(100),ETAK(2*MAXNL),ETAR(ndp*2*MAXNL),
-     &          ETAD(ndp),PROF(100),XC(ndp),CHIE(100)
-      real fluxme(nlbl),icenter(nlbl)
-      real mum,prf,iprf
+      real ETAD(ndp),XC(ndp),maxetad
+      real fluxme(lpoint),icenter(lpoint),prof(lpoint)
+      real mum,prf,iprf(lpoint)
       doubleprecision XL1,XL2,eqwidth
-      doubleprecision XLBEG,XLEND,DEL,XLB(100),XL(100),XLAL(2*MAXNL)
+      doubleprecision XLBEG,XLEND,DEL
       COMMON/ATMOS/ T(NDP),PE(NDP),PG(NDP),XI(NDP),MUM(NDP),RO(NDP),
      &  nnNTAU
 *
@@ -37,14 +29,15 @@
       COMMON/CANGLE/ NMY,XMY(nrays),XMY2(nrays),WMY(nrays)
       COMMON/TAUC/ TAU(ndp),DTAULN(ndp),NTAU
       COMMON/PIECES/ XL1,XL2,DEL,EPS,NMX,NLBLDU,IINT,XMYC,IWEAK
+      COMMON/ROSSC/ ROSS(NDP),cross(ndp)
 *
 * extension for large number of wavelengths and lines (monster II)
       doubleprecision xlambda
       common/large/ xlambda(lpoint),maxlam,ABSO(NDP,lpoint),
-     & absos(ndp,lpoint),absocont(ndp,lpoint)
+     & absos(ndp,lpoint),absocont(ndp,lpoint),absoscont(ndp,lpoint)
 *
-      dimension fcfc(lpoint),y1cy1c(lpoint),
-     & xlm(lpoint),jlcont(lpoint)
+      real fcfc(lpoint),y1cy1c(lpoint),y1y1(nrays,lpoint),
+     & xlm(lpoint)
 
       logical findtau1,hydrovelo
       real velocity
@@ -52,14 +45,13 @@
       logical debug
       data debug /.false./ 
 *
-* NLBLDU is a dummy, real val. of NLBL is set as parameter
+* NLBLDU is a dummy
 *
       DATA eqwidth/0./,profold/0./
 
       PI=3.141593
 *
-* Initiate angle quadrature points and number of wavelengths
-* per block (NLBL)
+* Initiate angle quadrature points 
 *
       NMY=NMX
       CALL GAUSI(NMY,0.,1.,WMY,XMY)
@@ -70,250 +62,188 @@
 * Initiate mode of calculation
 * IINT =1  : intensity at MY=XMYC
 * IINT =0  : flux
-* XL1      : wavelength where syntetic spectrum starts
-* XL2      : wavelength where syntetic spectrum stops
+* XL1      : wavelength where synthetic spectrum starts
+* XL2      : wavelength where synthetic spectrum stops
 * DEL      : wavelength step
 * IWEAK =1 : weak line approximation for L/KAPPA le. EPS
 * note  XL2.gt.XL1
 *
       iweak=0
-      IF(IINT.GT.0) THEN
-        NMY=NMY+1
-        XMY(NMY)=XMYC
-        wmy(nmy)=0.
-        WRITE(7,200) XMYC,XL1,XL2,DEL
-      END IF
-      IF(IINT.EQ.0) WRITE(7,201) XL1,XL2,DEL
-      IF(IWEAK.GT.0) WRITE(7,202) EPS
-*
-* Read model atmosphere
-*
-      READ(14,rec=1) MCODE,nlcont,xlm(1),BPLAN,XC,S,XI
-cc       print*,'bsynbplatt read 14 ',mcode,nlcont,xlm(1),xi
-      WRITE(7,203) MCODE(1:lenstr(mcode))
-*
-*
       if (iint.gt.0) then
-* header for intensity file
-*
-        write(66) mcode
-        write(66) 1.,1.
-        write(66) maxlam
-      endif
-
+        nmy=nmy+1
+        xmy(nmy)=xmyc
+        wmy(nmy)=0.
+        WRITE(6,200) XMYC,XL1,XL2,DEL
+      end iF
+      if(iint.eq.0) write(6,201) xl1,xl2,del
+      if(iweak.gt.0) write(6,202) eps
 *
 * Continuum calculations:
 *
-      do 1963 jc=1,nlcont
-        READ(14,rec=jc) MCODE,idum,xlm(jc),BPLAN,XC,S,XI
-        if (debug) then
-          print*,'bsynbplatt read 14 ',mcode,jc,idum,xlm(jc)
-          print*,' XC     S     BPlan'
-          do k=1,ntau
-            print*,xc(k),s(k),bplan(k)
-          enddo
-        endif
-      DO 9 K=1,NTAU
-        X(K)=XC(K)
-    9 CONTINUE
+*
+* 13/03-2019 BPz. We now compute continuum at all wavelengths
+* a little more costly in time, but avoid interpolation in wavelength
+* continuum flux.
+*
+
+      do j=1,maxlam
+        xlsingle=xlambda(j)
+        do k=1,ntau
+          x(k)=absocont(k,j)
+          s(k)=absoscont(k,j)
+          bplan(k)=bpl(T(k),xlsingle)
+        enddo
+cc      do 1963 jc=1,nlcont
+cc        READ(14,rec=jc) MCODE,idum,xlm(jc),BPLAN,XC,S,XI
+cc        if (debug) then
+cc          print*,'bsynbplatt read 14 ',mcode,jc,idum,xlm(jc)
+cc          print*,' XC     S     BPlan'
+cc          do k=1,ntau
+cc            print*,xc(k),s(k),bplan(k)
+cc          enddo
+cc        endif
+cc      DO 9 K=1,NTAU
+cc        X(K)=XC(K)
+!        if (abs(xlsingle-5001.0).lt.1.e-4.and.k.eq.61) then
+!           print*,'k',k,'kappa cont',x(k)*ross(k),s(k)*ross(k)
+!        endif
+cc    9 CONTINUE
        
-      call traneqplatt(0)
-      Y1CY1C(jc)=Y1(NMY)
-      FCFC(jc)=4.*HSURF*pi
-      IF(IINT.LE.0) WRITE(7,204) fcFC(jc),xlm(jc)
-      IF(IINT.GT.0) WRITE(7,205) Y1Cy1c(jc),xlm(jc)
-      if (debug) then
-        print*,' continuum;  lambda = ',jc,xlm(jc),fcfc(jc)
-      endif
-1963  continue
+        call traneqplatt(0)
+        Y1CY1C(j)=Y1(NMY)
+        FCFC(j)=4.*HSURF*pi
+!        IF(IINT.LE.0) WRITE(7,204) fcFC(j),xlsingle
+!        IF(IINT.GT.0) WRITE(7,205) Y1Cy1c(j),xlsingle
+cc        if (debug) then
+cc          print*,' continuum;  lambda = ',jc,xlm(jc),fcfc(jc)
+cc        endif
+cc1963  continue
+      enddo
 *
-* Start loop over wavelength blocks, each containing NLBL
-* wavelength points
+* cont + line flux
 *
-        numb=0
-        DO 39 jjj=0,maxlam,nlbl
-         xlend=xlambda(jjj+nlbl)
-         do 390 j=1,nlbl
-          xl(j)=xlambda(j+jjj)
-          if (xl(j).le.xl2) then
-          IF(IWEAK.LE.0.OR.IINT.LE.0) THEN
-            DO 30 K=1,NTAU
+      numb=0
+      do j=1,maxlam
+        xlsingle=xlambda(j)
+!        if (abs(xlsingle-5001.0).lt.1.e-4) then
+!          print*,'k','61','kappa line',abso(61,j)*ross(61),
+!     &       absos(61,j)*ross(61)
+!        endif
+
+        if(iweak.le.0.or.iint.le.0) then
+          do k=1,ntau
 * the continuum opacity is already included in abso
-ccc              X(K)=XC(K)+ABSO(K,J+jjj)
-              X(K)=ABSO(K,J+jjj)
-              s(k)=absos(k,j+jjj)
-              xlsingle=xl(j)
-              BPLAN(k)=BPL(T(k),xlsingle)
-   30       CONTINUE
+ccc              x(k)=xc(k)+abso(k,j+jjj)
+            x(k)=abso(k,j)
+            s(k)=absos(k,j)
+            bplan(k)=bpl(T(k),xlsingle)
+          enddo
 c            if (debug) then
-c              print*,' line;  lambda = ',xl(j)
+c              print*,' line;  lambda = ',xlambda(j)
 c            endif
-cc            if (abs(xl(j)-5240.41d0).lt.1.d-4.or.
-cc     &          abs(xl(j)-5242.49d0).lt.1.d-4.or.
-cc     &          abs(xl(j)-5241.62d0).lt.1.d-4)  then
-cc              print*,'lambda = ',xl(j),' calling traneqplatt',idebug
+cc            if (abs(xlambda(j)-5240.41d0).lt.1.d-4.or.
+cc     &          abs(xlambda(j)-5242.49d0).lt.1.d-4.or.
+cc     &          abs(xlambda(j)-5241.62d0).lt.1.d-4)  then
+cc              print*,'lambda = ',xlambda(j),' calling traneqplatt',idebug
 cc              idebug=1
 cc            else
-              idebug=0
+          idebug=0
 cc            endif
-            call traneqplatt(idebug)
-* interpolate continuum flux
-            do 3691 jc=2,nlcont
-              if(xlm(jc)-xlsingle.gt.0.) then
-                jjc=jc-1
-                goto 3692
-              endif
-3691        continue
-3692        continue
-	    if (nlcont.gt.1) then
-              jjc=min(jjc,nlcont-1)
-              fc=(fcfc(jjc+1)-fcfc(jjc))/
-     &           (xlm(jjc+1)-xlm(jjc))*(xlsingle-xlm(jjc)) + fcfc(jjc)
-              y1c=(y1cy1c(jjc+1)-y1cy1c(jjc))/
-     &           (xlm(jjc+1)-xlm(jjc))*(xlsingle-xlm(jjc)) + y1cy1c(jjc)
-              if (debug) then
-                print*,'interpolating cont: ',jjc,xlm(jjc),xlsingle,
-     &                                        xlm(jjc+1)
-                print*,'fluxes ' ,fcfc(jjc),fc,fcfc(jjc+1)
-              endif
-	    else
-              fc=fcfc(1)
-              y1c=y1cy1c(1)
-            endif
-            PRF=4.*pi*HSURF/FC
+          call traneqplatt(idebug)
+
 * starting with version 12.1, flux is not divided by pi anymore.
 * F_lambda integrated over lambda is sigma.Teff^4
-*            fluxme(j)=hsurf*4.
-            fluxme(j)=hsurf*4.*pi
-            IF(IINT.GT.0) then
-              iPRF=Y1(NMY)/Y1C
-              icenter(j)=y1(nmy)
-            endif
-            PROF(J)=1.-PRF
-          ELSE
-            DO 31 K=1,NTAU
-              ETAD(K)=ABSO(K,J+jjj)
-              IF(ETAD(K).GT.EPS) GOTO 32
-   31       CONTINUE
-            CALL TRANW(NTAU,TAU,XMYC,BPLAN,XC,ETAD,DELI)
-            PROF(J)=DELI/Y1C
-            GOTO 39
-   32       DO 33 K=1,NTAU
-              X(K)=ABSO(K,J+jjj)
-              s(k)=absos(k,j+jjj)
-              xlsingle=xl(j)
-              BPLAN(k)=BPL(T(k),xlsingle)
-   33       CONTINUE
+          prf=4.*pi*hsurf/fcfc(j)
+          fluxme(j)=hsurf*4.*pi
+          if (iint.gt.0) then
+            iprf(j)=y1(nmy)/y1cy1c(j)
+            icenter(j)=y1(nmy)
+          endif
+          prof(j)=1.-prf
+        else
+          do k=1,ntau
+            etad(k)=abso(k,j)
+            maxetad=max(maxetad,etad(k))
+          enddo
+          if (maxetad.le.eps) then
+            call tranw(ntau,tau,xmyc,bplan,xc,etad,deli)
+            prof(j)=deli/y1cy1c(j)
+          else
+            do k=1,ntau
+              x(k)=abso(k,j)
+              s(k)=absos(k,j)
+              xlsingle=xlambda(j)
+              bplan(K)=bpl(t(k),xlsingle)
+            enddo
 c            if (debug) then
-c              print*,' line;  lambda = ',xl(j)
+c              print*,' line;  lambda = ',xlsingle
 c            endif
-             print*,'debug ',xlsingle
             call traneqplatt(0)
-* interpolate continuum flux
-            do 3693 jc=2,nlcont
-              if(xlm(jc)-xlsingle.gt.0.) then
-                jjc=jc-1
-                goto 3694
-              endif
-3693        continue
-3694        continue
-	    if (nlcont.gt.1) then
-              jjc=min(jjc,nlcont-1)
-              fc=(fcfc(jjc+1)-fcfc(jjc))/
-     &           (xlm(jjc+1)-xlm(jjc))*(xlsingle-xlm(jjc)) + fcfc(jjc)
-              y1c=(y1cy1c(jjc+1)-y1cy1c(jjc))/
-     &           (xlm(jjc+1)-xlm(jjc))*(xlsingle-xlm(jjc)) + y1cy1c(jjc)
-            else
-              fc=fcfc(1)
-              y1c=y1cy1c(1)
-	    endif
-            PRF=4.*pi*HSURF/FC
 * starting with version 12.1, flux is not divided by pi anymore.
 * F_lambda integrated over lambda is sigma.Teff^4
-*            fluxme(j)=hsurf*4.
+            prf=4.*pi*hsurf/fcfc(j)
             fluxme(j)=hsurf*4.*pi
-            IF(IINT.GT.0) then
-              iPRF=Y1(NMY)/Y1C
+            if (iint.gt.0) then
+              iprf(j)=y1(nmy)/y1cy1c(j)
               icenter(j)=y1(nmy)
             endif
-            PROF(J)=1.-PRF
-          END IF
+            prof(j)=1.-prf
+          endif
 ccc          eqwidth=eqwidth+(prof(j)+profold)*del/2.
 ccc          profold=prof(j)
+        endif
 *
 * find depth where tau_lambda=1
-          if (hydrovelo) then
-            findtau1=.true.
-          else
-            findtau1=.false.
-          endif
-          if (findtau1) then
+        if (hydrovelo) then
+          findtau1=.true.
+        else
+          findtau1=.false.
+        endif
+        if (findtau1) then
           taulambda=tau(1)*(x(1)+s(1))
           do k=2,ntau
             taulambda=taulambda+(tau(k)-tau(k-1))*(x(k)+s(k)+
-     &                   x(k-1)+s(k-1))*0.5
+     &               x(k-1)+s(k-1))*0.5
             if (taulambda.ge.1.) then
-               print333,xl(j),k,tau(k),taulambda,t(k),ro(k)
-333            format(f10.3,x,i3,x,1pe11.4,x,1pe11.4,x,0pf7.1,x,
-     &                1pe11.4,0p)
+              print333,xlambda(j),k,tau(k),taulambda,t(k),ro(k)
+333           format(f10.3,x,i3,x,1pe11.4,x,1pe11.4,x,0pf7.1,x,
+     &            1pe11.4,0p)
 
-               goto 1966
+              goto 1966
             endif
           enddo
 1966      continue
-          endif
-          endif
+        endif
 *
-390      continue
-cc         PRINT 2341,NUMB
-ccc        WRITE(7,206) PROF
-         IF(IINT .LE. 0) DUMMY=FC
-         IF(IINT .GT. 0) DUMMY=Y1C
-
+* save intensities
+        do nlx=1,nmy
+          y1y1(nlx,j)=y1(nlx)
+        enddo
+*
+* End loop over wavelengths
+*
+      enddo
 *
 * Write spectrum on file for convolution with instrument profile
 *
-         do iplez=1,nlbl
-           if (xl(iplez).le.xl2) then
-             plezflux=1.-prof(iplez)
-
-             if (iint.eq.0) then
+      do j=1,maxlam
+        plezflux=1.-prof(j)
+        if (iint.eq.0) then
 * fluxme is sigma teff^4
-               write(46,1964) xl(iplez),plezflux,fluxme(iplez)
-1964           format(f11.3,1x,f10.5,1x,1pe12.5)
+          write(46,1964) xlambda(j),plezflux,fluxme(j)
+1964      format(f11.3,1x,f10.5,1x,1pe12.5)
 
-C OUTPUT IN CASE OF intensity calculation : STORE LIMB FUNCTION
-             else
+C output in case of intensity calculation : store limb function
+        else
 * We add intensity at center of disk in spectrum output.
-               write(46,1965) xl(iplez),plezflux,fluxme(iplez),
-     &                        icenter(iplez)
-1965           format(f11.3,1x,f10.5,2(1x,1pe12.5))
-               write(66) xl(iplez),nmy,fluxme(iplez),
-     &                (xmy(nlx),y1(nlx),nlx=1,nmy)
-             endif
+          write(46,1965) xlambda(j),plezflux,fluxme(j),
+     &                   icenter(j),iprf(j)
+1965      format(f11.3,1x,f10.5,2(1x,1pe12.5),1x,0pf8.5)
+        endif
+      enddo
 
-           endif
-         enddo
-*
-* Check whether there are more wavelength blocks
-*
-         NUMB=NUMB+1
-
-39      CONTINUE
-*
-* End loop over wavelength blocks
-*
-ccc        WRITE(7,207) NALLIN
-*
-*
-ccc      DO 442 LIN=1,NALLIN
-ccc        WRITE(7,208) LELE(LIN),ION(LIN),XLB(LIN),CHIE(LIN),GFELOG(LIN),
-ccc     &               ABUND(LIN)
-ccc  442 CONTINUE
-ccc      print 1111,eqwidth*1000.
-1111    format(' eqwidth: ',f9.1,' mA')
-        call clock
-      RETURN
+      call clock
+      return
 *
   100 FORMAT(4X,I1,6X,I3)
   207 FORMAT(' SPECTRUM CALCULATED FOR THE FOLLOWING ',I3,' LINES'

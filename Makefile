@@ -32,15 +32,16 @@ synthesizer/ARES/bin/ARES:	synthesizer/ARES/src/ARES_v2.c synthesizer/ARES/src/*
 	gcc -o synthesizer/ARES/bin/ARES synthesizer/ARES/src/ARES_v2.c -lcfitsio -lgsl -lgslcblas -lm -lgomp -fopenmp ${CPPFLAGS} ${LDFLAGS}
 
 synthesizer/turbospectrum/bin/babsma_lu synthesizer/turbospectrum/bin/bsyn_lu synthesizer/turbospectrum/bin/eqwidt_lu: synthesizer/turbospectrum/src/*.f
-	rm -f synthesizer/turbospectrum/exec-gf-v15.1/*.o
-	rm -f synthesizer/turbospectrum/exec-gf-v15.1/babsma_lu
-	rm -f synthesizer/turbospectrum/exec-gf-v15.1/bsyn_lu
-	rm -f synthesizer/turbospectrum/exec-gf-v15.1/eqwidt_lu
-	$(MAKE) -C synthesizer/turbospectrum/exec-gf-v15.1/
+	rm -f synthesizer/turbospectrum/exec-gf/*.o
+	rm -f synthesizer/turbospectrum/exec-gf/*.mod
+	rm -f synthesizer/turbospectrum/exec-gf/babsma_lu
+	rm -f synthesizer/turbospectrum/exec-gf/bsyn_lu
+	rm -f synthesizer/turbospectrum/exec-gf/eqwidt_lu
+	$(MAKE) -C synthesizer/turbospectrum/exec-gf/
 	mkdir -p synthesizer/turbospectrum/bin/
-	mv synthesizer/turbospectrum/exec-gf-v15.1/babsma_lu synthesizer/turbospectrum/bin/
-	mv synthesizer/turbospectrum/exec-gf-v15.1/bsyn_lu synthesizer/turbospectrum/bin/
-	mv synthesizer/turbospectrum/exec-gf-v15.1/eqwidt_lu synthesizer/turbospectrum/bin/
+	mv synthesizer/turbospectrum/exec-gf/babsma_lu synthesizer/turbospectrum/bin/
+	mv synthesizer/turbospectrum/exec-gf/bsyn_lu synthesizer/turbospectrum/bin/
+	mv synthesizer/turbospectrum/exec-gf/eqwidt_lu synthesizer/turbospectrum/bin/
 
 synthesizer/moog/MOOGSILENT: synthesizer/moog/*.f
 ifeq ($(UNAME_S),Linux)
@@ -73,7 +74,8 @@ clean:
 	rm -f synthesizer/moog/*.o
 	rm -f synthesizer/moog/MOOG
 	rm -f synthesizer/moog/MOOGSILENT
-	rm -f synthesizer/turbospectrum/exec-gf-v15.1/*.o
+	rm -f synthesizer/turbospectrum/exec-gf/*.o
+	rm -f synthesizer/turbospectrum/exec-gf/*.mod
 	rm -f synthesizer/turbospectrum/bin/babsma_lu 
 	rm -f synthesizer/turbospectrum/bin/bsyn_lu 
 	rm -f synthesizer/turbospectrum/bin/eqwidt_lu

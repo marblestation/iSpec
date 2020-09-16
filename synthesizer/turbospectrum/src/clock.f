@@ -22,8 +22,8 @@ c      real dtime,etime
         tempspart=dtime(tt)
         tempsacc=etime(ett)
 *
-        WRITE(7,50) tt(1),ett(1),tt(2),ett(2),tempspart,tempsacc
-        write(7,'(a)') message
+!        WRITE(7,50) tt(1),ett(1),tt(2),ett(2),tempspart,tempsacc
+!        write(7,'(a)') message
 50      FORMAT('0','user_TIME ',F9.3,2x,'ACCMLTD ',F9.3,2x,
      &    'syst_TIME ',F9.3,2x,'ACCMLTD ',F9.3,2x,
      &    'totl_TIME ',f9.3,2x,'ACCMLTD',f9.3)

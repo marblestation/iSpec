@@ -111,7 +111,8 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
         remove_tmp_atm_file = True
         atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=atmosphere_layers_file, code="turbospectrum", tmp_dir=tmp_dir)
 
-    opacities_file = calculate_opacities(atmosphere_layers_file, atom_abundances, MH, microturbulence_vel, global_wave_base-10, global_wave_top+10, wave_step, verbose=verbose, opacities_filename=None, tmp_dir=tmp_dir)
+    is_marcs_model = len(atmosphere_layers[0]) == 11
+    opacities_file = calculate_opacities(atmosphere_layers_file, atom_abundances, MH, microturbulence_vel, global_wave_base-10, global_wave_top+10, wave_step, verbose=verbose, opacities_filename=None, tmp_dir=tmp_dir, is_marcs_model=is_marcs_model)
 
     if linelist_file is None:
         remove_tmp_linelist_file = True
@@ -148,6 +149,10 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
         command_input += "'INTENSITY/FLUX:' 'Flux'\n"
         command_input += "'COS(THETA)    :' '1.00'\n"
         command_input += "'ABFIND        :' '.false.'\n"
+        if is_marcs_model:
+            command_input += "'MARCS-FILE    :' '.true.'\n"
+        else:
+            command_input += "'MARCS-FILE    :' '.false.'\n"
         command_input += "'MODELOPAC:' '"+opacities_file+"'\n"
         command_input += "'RESULTFILE :' '"+synth_spectrum_filename+"'\n"
         #command_input += "'METALLICITY:'    '"+str(MH)+"'\n"

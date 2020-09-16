@@ -115,7 +115,7 @@ C  EVALUATION OF THE IONIZATION CONSTANTS
         call partf(nelemi,2,tem,1,g1(nelemi),ipp(nelemi))
         call partf(nelemi,3,tem,1,g2(nelemi),ippp(nelemi))
         call partf(nelemi,4,tem,1,g3(nelemi),ipppp(nelemi))
-        uiidui(nelemi)=g1(nelemi)/g0(nelemi)*0.6665
+        uiidui(nelemi)=g1(nelemi)/g0(nelemi)*0.6667654
 *
 *****
 * We include neutral, 1st, 2nd and 3rd ion.
@@ -129,15 +129,15 @@ C  EVALUATION OF THE IONIZATION CONSTANTS
         if (nelemi.eq.1) then
           KP1(NELEMI) =UIIDUI(NELEMI)*TEM25*
      &                 EXP((dxi-IP(NELEMI))*T/ECONST)
-          kp2(NELEMI) =g2(nelemi)/g1(nelemi)*0.6665*TEM25*
+          kp2(NELEMI) =g2(nelemi)/g1(nelemi)*0.6667654*TEM25*
      &                 EXP((2.*dxi-ipp(NELEMI))*T/ECONST)
           kp3(NELEMI) =0.0
         else
           KP1(NELEMI) =UIIDUI(NELEMI)*TEM25*
      &                 EXP((dxi-IP(NELEMI))*T/ECONST)
-          kp2(NELEMI) =g2(nelemi)/g1(nelemi)*0.6665*TEM25*
+          kp2(NELEMI) =g2(nelemi)/g1(nelemi)*0.6667654*TEM25*
      &                 EXP((2.*dxi-ipp(NELEMI))*T/ECONST)
-          kp3(NELEMI) =g3(nelemi)/g2(nelemi)*0.6665*TEM25*
+          kp3(NELEMI) =g3(nelemi)/g2(nelemi)*0.6667654*TEM25*
      &                 EXP((3.*dxi-ippp(NELEMI))*T/ECONST)
         endif
         kp(nelemi)=kp1(nelemi)/pe *

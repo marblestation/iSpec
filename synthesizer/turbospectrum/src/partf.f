@@ -16,7 +16,7 @@
 *
       implicit none
 *
-      logical uexist(4,92),dummy
+      logical uexist(4,92),dummy,first,firsth
       integer ntemp,i,j,k,jatom,ion,iread,iaa,idumb
       real temp(ntemp),u(ntemp),spec,ipot,ip(0:4,92),tt,tt1,tt2
       real partitu2,partitu3,partitth2,partitth3
@@ -27,6 +27,8 @@
       data iread /0/
       data ip/460*0./
       data uexist/368*.false./
+      data first/.true./
+      data firsth/.true./
 *
       save iread,a,ip,uexist
 *
@@ -73,8 +75,38 @@
           tt=temp(i)
           if (temp(i).le.16000.) then
             if(temp(i).lt.1000.) then
-              tt=1000.
-              print*,'WARNING: atomic partf; temp<1000 K, using Q(1000)'
+* BPz 15/05-2018
+* instead of using q(1000) we extrapolate in log(q) - log(T)
+*              tt=1000.
+*              print*,'WARNING: atomic partf; temp<1000 K, using Q(1000)'
+*
+              if (first) then
+                print*,'WARNING: atomic partf; temp<1000 K, ',
+     &               'extrapolating ',
+     &               'using Q(1000) and Q(1500)'
+                first=.false.
+              endif
+              tt1=1000.
+              t=dlog(dble(tt1))
+              ulog1=   a(0,ion,jatom)+
+     &             t*(a(1,ion,jatom)+
+     &             t*(a(2,ion,jatom)+
+     &             t*(a(3,ion,jatom)+
+     &             t*(a(4,ion,jatom)+
+     &             t*(a(5,ion,jatom))))))
+              tt2=1500.
+              t=dlog(dble(tt2))
+              ulog2=   a(0,ion,jatom)+
+     &             t*(a(1,ion,jatom)+
+     &             t*(a(2,ion,jatom)+
+     &             t*(a(3,ion,jatom)+
+     &             t*(a(4,ion,jatom)+
+     &             t*(a(5,ion,jatom))))))
+              ulog=(ulog2-ulog1)*(dlog(dble(tt))-dlog(dble(tt1)))/
+     &             (dlog(dble(tt2))-dlog(dble(tt1))) + ulog1
+              u(i)=real(dexp(ulog))
+* End of BPz change 15/05-2018
+*
             endif
             t=dlog(dble(tt))
             ulog=   a(0,ion,jatom)+
@@ -85,9 +117,12 @@
      &           t*(a(5,ion,jatom))))))
             u(i)=real(dexp(ulog))
           else if(temp(i).gt.16000.) then
-            print*,'WARNING: atomic partf; temp=',temp(i), 
+            if (firsth) then
+              print*,'WARNING: atomic partf; temp=',temp(i), 
      &             ' extrapolating ',
      &               'from Q(10000) and Q(16000)'
+              firsth=.false.
+            endif
             tt1=10000.
             t=dlog(dble(tt1))
             ulog1=   a(0,ion,jatom)+

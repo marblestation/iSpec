@@ -34,7 +34,7 @@
 * extension for large number of wavelengths and lines (monster II)
       doubleprecision xlambda
       common/large/ xlambda(lpoint),maxlam,ABSO(NDP,lpoint),
-     & absos(ndp,lpoint),absocont(ndp,lpoint)
+     & absos(ndp,lpoint),absocont(ndp,lpoint),absoscont(ndp,lpoint)
 *
 ccc      READ(12,100) MCODE,NTAU,XLS
       READ(12,*) MCODE,NTAU,XLS
@@ -66,8 +66,8 @@ ccc      READ(12,100) MCODE,NTAU,XLS
 * interpolate to all wavelengths
         do j=1,maxlam
          xxll=xlambda(j)
-         CALL LINT(NLQ,XLP,XS,xxll,abso(K,j))
-         CALL LINT(NLQ,XLP,SS,xxll,absos(K,j))
+         CALL LINT(NLQ,XLP,XS,xxll,absocont(K,j))
+         CALL LINT(NLQ,XLP,SS,xxll,absoscont(K,j))
         enddo
 *        
         XI(K)=XI(K)*1.E5

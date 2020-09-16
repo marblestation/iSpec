@@ -2,17 +2,7 @@
 * Include file for TurboSpectrum
 *                                         27_octobre_1996
       INTEGER NDP,NRAYS,lpoint
-
-**      PARAMETER (NDP=150,NRAYS=150,lpoint=1000000)
-      PARAMETER (NDP=120,NRAYS=150,lpoint=100000)
-
-*      PARAMETER (NDP=60,NRAYS=80,lpoint=1000000)
-***      PARAMETER (NDP=80,NRAYS=100,lpoint=1000000)
-*      PARAMETER (NDP=90,NRAYS=90,lpoint=300000)
-*      PARAMETER (NDP=100,NRAYS=120,lpoint=1000000)
-*      PARAMETER (NDP=750,NRAYS=10,lpoint=150000)
-*      PARAMETER (NDP=550,NRAYS=10,lpoint=150000)
-*      PARAMETER (NDP=275,NRAYS=275,lpoint=150000)
+      PARAMETER (NDP=1500,NRAYS=10,lpoint=150000)
       
 *
 *

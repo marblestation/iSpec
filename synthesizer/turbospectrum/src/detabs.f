@@ -182,6 +182,9 @@ C        H-
         stop 'PROBLEM in detabs!'
       endif
       fakt(19)=pe(ntp)*presneutral(ntp,1)*(1.d-26/rhokt)
+!
+!  Suppress HI bf, as it is now integrated in hydropac.f   BPz 03/04-2019
+!
 C        HI
       TETA31=31.30364*TETA
       xfakh=(2.0898d-26/rhokt)*presneutral(ntp,1)/part(1,1)
@@ -193,6 +196,13 @@ C        HI
         XM3=XM2*FLOAT(M)
     3 FAKT(M+1)=XFAKH*EXP(-TETA31*(1.-1./XM2))/XM3
       FAKT(NNIV+1)=FAKT(NNIV+1)*AMIN1(H(1)-NNIV,1.)
+!
+      do m=2,nniv+1
+        fakt(m)=0.0
+      end do
+!
+! HI bf is now set to zero !
+!
       IF(NNIV.GE.15) goto 6
     4 N1=NNIV+1
       DO5 M=N1,15

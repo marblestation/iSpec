@@ -139,7 +139,7 @@ C INITIATE
 ccc      print*,'p(','1',') ',p(1)
       DO 140 K=2,NTAU
       P(K)=(1.-AD(K,I)-BD(K,I))*SOURCE(K)+AD(K,I)*SOURCE(K-1)+
-     & BD(K,I)*SOURCE(K+1)
+     & BD(K,I)*SOURCE(min(K+1,ntau))
 ccc      print*,'p(',k,') ',p(k)
 140   continue
       IF(I.LE.NCORE) P(JTAU1)=SOURCE(JTAU1)+XMU(I,JTAU1)**2*XH(JTAU1)

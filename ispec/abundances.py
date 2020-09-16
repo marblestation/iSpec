@@ -557,7 +557,8 @@ def __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, alph
     efilter = np.logical_and(atom_abundances['code'] != 1, atom_abundances['code'] != 2)
     atom_abundances['Abund'][efilter] += MH
 
-    opacities_filename = calculate_opacities(atmosphere_layers_file, atom_abundances, MH, microturbulence_vel, wave_base, wave_top, wave_step, verbose=verbose, opacities_filename=None)
+    is_marcs_model = len(atmosphere_layers[0]) == 11
+    opacities_filename = calculate_opacities(atmosphere_layers_file, atom_abundances, MH, microturbulence_vel, wave_base, wave_top, wave_step, verbose=verbose, opacities_filename=None, is_marcs_model=is_marcs_model)
 
     # For the determination of abundances, turbospectrum uses the atomic abundances
     # only to calculate [X/H], thus we have to provide the original non-modified
@@ -591,6 +592,10 @@ def __turbospectrum_determine_abundances(atmosphere_layers, teff, logg, MH, alph
         command_input += "'INTENSITY/FLUX:' 'Flux'\n"
         command_input += "'COS(THETA)    :' '1.00'\n"
         command_input += "'ABFIND        :' '.true.'\n"
+        if is_marcs_model:
+            command_input += "'MARCS-FILE    :' '.true.'\n"
+        else:
+            command_input += "'MARCS-FILE    :' '.false.'\n"
         command_input += "'MODELOPAC:' '"+opacities_filename+"'\n"
         command_input += "'RESULTFILE :' '"+abundances_filename+"'\n"
         #command_input += "'METALLICITY:'    '"+str(MH)+"'\n"
