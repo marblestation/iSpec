@@ -956,6 +956,7 @@ def random_realizations(spectrum, number, distribution="poisson"):
         new_derived_spectrum = create_spectrum_structure(spectrum['waveobs'], spectrum['flux'], spectrum['err'])
         if distribution.lower() == "gaussian":
             sigma = spectrum['err']
+            sigma[np.isnan(sigma)] = 1.0e-10
             sigma[sigma <= 0.0] = 1.0e-10
             new_derived_spectrum['flux'] += np.random.normal(0, sigma, len(spectrum))
             #new_derived_spectrum['err'] += sigma
@@ -963,6 +964,7 @@ def random_realizations(spectrum, number, distribution="poisson"):
             # poison
             sigma = spectrum['err']
             lamb = spectrum['flux']/ np.power(sigma, 2)
+            lamb[np.isnan(lamb)] = 0.0
             lamb[lamb < 0.0] = 0.0
             new_derived_spectrum['flux'] = np.random.poisson(lamb)
             new_derived_spectrum['flux'] *= sigma*sigma
