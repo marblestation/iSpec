@@ -154,13 +154,13 @@ class iSpecBaseApp(tkinter.Tk):
         found = np.where(self.lists['abundances']['name'] == 'Grevesse.2007')[0]
         if len(found) == 1:
             self.default_lists['abundances'] = found[0]
-        found = np.where(self.lists['atomic_lines']['name'] == 'GESv5_atom_hfs_iso.420_920nm')[0]
+        found = np.where(self.lists['atomic_lines']['name'] == 'GESv6_atom_hfs_iso.420_920nm')[0]
         if len(found) == 1:
             self.default_lists['atomic_lines'] = found[0]
-        found = np.where(self.lists['grid']['name'] == 'SPECTRUM_MARCS.GES_GESv5_atom_hfs_iso.480_680nm_light')[0]
+        found = np.where(self.lists['grid']['name'] == 'SPECTRUM_MARCS.GES_GESv6_atom_hfs_iso.480_680nm_light')[0]
         if len(found) == 1:
             self.default_lists['grid'] = found[0]
-        found = np.where(self.lists['grid']['name'] == 'SPECTRUM_MARCS.GES_GESv5_atom_hfs_iso.480_680nm')[0]
+        found = np.where(self.lists['grid']['name'] == 'SPECTRUM_MARCS.GES_GESv6_atom_hfs_iso.480_680nm')[0]
         if len(found) == 1:
             self.default_lists['grid'] = found[0]
         ######
@@ -782,10 +782,10 @@ www.gnu.org/licenses/"""
 iSpec uses the following radiative transfer codes:
 
 1) SPECTRUM - Richard O. Gray - Version 2.76e
-2) Turbospectrum - Bertrand Plez - v15.1
-3) MOOG - Chris Sneden - July 2014
+2) Turbospectrum - Bertrand Plez - v19.1
+3) MOOG - Chris Sneden - November 2019
 4) SYNTHE/WIDTH9 - R. L. Kurucz / Atmos port - 2015
-5) SME - Valenti & Piskunov - 4.23
+5) SME - Valenti & Piskunov - 574
 """
         self.info("About iSpec", description)
 

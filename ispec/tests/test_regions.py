@@ -143,8 +143,8 @@ class TestRegions(unittest.TestCase):
         #--- Find linemasks ------------------------------------------------------------
         #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
         #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
-        atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
-        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
+        atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv"
+        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
         telluric_linelist_file = ispec_dir + "/input/linelists/CCF/Synth.Tellurics.500_1100nm/mask.lst"
 
@@ -184,7 +184,7 @@ class TestRegions(unittest.TestCase):
         iron = np.logical_or(iron, star_linemasks['element'] == "Fe 2")
         iron_star_linemasks = star_linemasks[iron]
 
-        self.assertEqual(len(star_linemasks), 1731)
+        self.assertEqual(len(star_linemasks), 1732)
         self.assertEqual(len(iron_star_linemasks), 883)
         self.assertAlmostEqual(iron_star_linemasks['ew'][0], 15.82970157775808)
         self.assertAlmostEqual(iron_star_linemasks['ew'][-1], 15.545342323635188)

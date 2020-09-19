@@ -67,8 +67,8 @@ class TestSynthesis(unittest.TestCase):
 
         #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
         #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
-        atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
-        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
+        atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv"
+        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
         isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
 
@@ -134,7 +134,7 @@ class TestSynthesis(unittest.TestCase):
         wave_top = 525.0
 
         code = "grid"
-        precomputed_grid_dir = ispec_dir + "/input/grid/SPECTRUM_MARCS.GES_GESv5_atom_hfs_iso.480_680nm_light/"
+        precomputed_grid_dir = ispec_dir + "/input/grid/SPECTRUM_MARCS.GES_GESv6_atom_hfs_iso.480_680nm_light/"
         grid = ispec.load_spectral_grid(precomputed_grid_dir)
 
         atomic_linelist = None
@@ -160,7 +160,7 @@ class TestSynthesis(unittest.TestCase):
                 macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, \
                 R=resolution, regions=regions, verbose=1,
                 code=code, grid=grid)
-        np.testing.assert_almost_equal(interpolated_spectrum['flux'][:10], np.array([1.0000000e-10, 9.3520813e-01, 9.2910456e-01, 9.2112858e-01, 9.1283452e-01, 9.0342249e-01, 8.9173492e-01, 8.7670338e-01, 8.5749592e-01, 8.3359273e-01]))
+        np.testing.assert_almost_equal(interpolated_spectrum['flux'][:10], np.array([1.0000000e-10, 9.2996927e-01, 9.2265883e-01, 9.1284553e-01, 9.0243105e-01, 8.9074588e-01, 8.7677477e-01, 8.5963100e-01, 8.3868456e-01, 8.1360822e-01]))
         np.testing.assert_almost_equal(interpolated_spectrum['waveobs'][:10], np.array([515.   , 515.001, 515.002, 515.003, 515.004, 515.005, 515.006, 515.007, 515.008, 515.009]))
 
 

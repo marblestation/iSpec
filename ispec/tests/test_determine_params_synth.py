@@ -77,7 +77,7 @@ class TestDetermineParamsSynth(unittest.TestCase):
         max_iterations = 20
 
         code = "grid"
-        precomputed_grid_dir = ispec_dir + "/input/grid/SPECTRUM_MARCS.GES_GESv5_atom_hfs_iso.480_680nm_light/"
+        precomputed_grid_dir = ispec_dir + "/input/grid/SPECTRUM_MARCS.GES_GESv6_atom_hfs_iso.480_680nm_light/"
 
         atomic_linelist = None
         isotopes = None
@@ -135,32 +135,32 @@ class TestDetermineParamsSynth(unittest.TestCase):
                 code=code, precomputed_grid_dir=precomputed_grid_dir)
 
         expected_params = {
-                            'teff': 5687.853585498881,
-                            'logg': 4.200690433567511,
-                            'MH': -0.0365710637310875,
+                            'teff': 5851.628742661467,
+                            'logg': 4.461276199140998,
+                            'MH': 0.024255109120437632,
                             'alpha': 0.0,
-                            'vmic': 0.5612848853141451,
-                            'vmac': 3.95,
+                            'vmic': 0.5246819025206294,
+                            'vmac': 4.51,
                             'vsini': 2.0,
                             'limb_darkening_coeff': 0.6,
-                            'R': 59940.062674656656
+                            'R': 77632.52714857543
         }
         for k, v in list(expected_params.items()):
             self.assertAlmostEqual(params[k], v)
         expected_errors = {
-                            'teff': 16.232321168204415,
-                            'logg': 0.023941667520824196,
-                            'MH': 0.008528187478657197,
+                            'teff': 14.225900341961772,
+                            'logg': 0.02712239389209893,
+                            'MH': 0.005795561724255147,
                             'alpha': 0.0,
-                            'vmic': 0.03753100996572769,
+                            'vmic': 0.042710575599214096,
                             'vmac': 0.0,
                             'vsini': 0.0,
                             'limb_darkening_coeff': 0.0,
-                            'R': 1579.2869032822312
+                            'R': 3520.9717057141356
         }
         for k, v in list(expected_errors.items()):
             self.assertAlmostEqual(errors[k], v)
-        self.assertEqual(len(stats_linemasks), 348)
+        self.assertEqual(len(stats_linemasks), 350)
 
     def test_determine_astrophysical_parameters_using_synth_spectra(self):
         code = "spectrum"
@@ -236,8 +236,8 @@ class TestDetermineParamsSynth(unittest.TestCase):
 
         #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
         #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
-        atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
-        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
+        atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv"
+        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
         solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
         #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
@@ -313,28 +313,28 @@ class TestDetermineParamsSynth(unittest.TestCase):
                 code=code)
 
         expected_params = {
-                            'teff': 5662.030274734316,
-                            'logg': 4.202751488289012,
-                            'MH': -0.17506302938782214,
-                            'alpha': 0.07002521175512887,
-                            'vmic': 1.1756501858542001,
-                            'vmac': 4.01,
+                            'teff': 5702.259442760393,
+                            'logg': 4.3696572501727795,
+                            'MH': -0.113799073955096,
+                            'alpha': 0.0455196295820384,
+                            'vmic': 1.1320458124216601,
+                            'vmac': 4.05,
                             'vsini': 2.0,
                             'limb_darkening_coeff': 0.6,
-                            'R': 48976.71190355286
+                            'R': 50051.84206213919
         }
         for k, v in list(expected_params.items()):
             self.assertAlmostEqual(params[k], v)
         expected_errors = {
-                            'teff': 76.33547792971667,
-                            'logg': 0.1697922974299602,
-                            'MH': 0.08621953417789983,
+                            'teff': 65.79677141433265,
+                            'logg': 0.09882642843734958,
+                            'MH': 0.07728192750563401,
                             'alpha': 0.0,
-                            'vmic': 0.10980199038358686,
+                            'vmic': 0.11434892171928127,
                             'vmac': 0.0,
                             'vsini': 0.0,
                             'limb_darkening_coeff': 0.0,
-                            'R': 3773.619236185364
+                            'R': 3683.1203645893384
         }
         for k, v in list(expected_errors.items()):
             self.assertAlmostEqual(errors[k], v)

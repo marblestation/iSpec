@@ -75,8 +75,8 @@ class TestLineFit(unittest.TestCase):
         #--- Fit lines -----------------------------------------------------------------
         #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
         #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
-        atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
-        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
+        atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv"
+        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
 
         # Read
@@ -132,13 +132,13 @@ class TestLineFit(unittest.TestCase):
             snr = 50
             linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="%s" % (snr), tmp_dir=None, verbose=0)
 
-        self.assertEqual(len(linemasks), 277)
-        self.assertAlmostEqual(linemasks['ew'][0], 68.48284586882163)
-        self.assertAlmostEqual(linemasks['ew'][-1], 14.277490920046171)
+        self.assertEqual(len(linemasks), 281)
+        self.assertAlmostEqual(linemasks['ew'][0], 68.48284589709996)
+        self.assertAlmostEqual(linemasks['ew'][-3], 46.17583047097995)
         self.assertEqual(linemasks['element'][0], 'Fe 1')
-        self.assertEqual(linemasks['element'][1], 'Ni 1')
+        self.assertEqual(linemasks['element'][-3], 'Si 1')
         self.assertAlmostEqual(linemasks['loggf'][0], -1.028)
-        self.assertAlmostEqual(linemasks['loggf'][-1], -2.326)
+        self.assertAlmostEqual(linemasks['loggf'][-3], -1.062)
 
     def test_fit_lines_already_crossmatched_with_atomic_data_and_determine_ew(self):
         use_ares = False
@@ -257,10 +257,10 @@ class TestLineFit(unittest.TestCase):
             snr = 50
             linemasks = ispec.update_ew_with_ares(normalized_star_spectrum, linemasks, rejt="%s" % (snr), tmp_dir=None, verbose=0)
 
-        self.assertEqual(len(linemasks), 277)
+        self.assertEqual(len(linemasks), 281)
         self.assertAlmostEqual(linemasks['ew'][0], 68.62459244466727)
-        self.assertAlmostEqual(linemasks['ew'][-1], 14.29079898585822)
+        self.assertAlmostEqual(linemasks['ew'][-3], 46.23135207295078)
         self.assertEqual(linemasks['element'][0], 'Fe 1')
-        self.assertEqual(linemasks['element'][1], 'Ni 1')
+        self.assertEqual(linemasks['element'][-3], 'Si 1')
         self.assertAlmostEqual(linemasks['loggf'][0], -1.028)
-        self.assertAlmostEqual(linemasks['loggf'][-1], -2.326)
+        self.assertAlmostEqual(linemasks['loggf'][-3], -1.062)

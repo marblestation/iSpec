@@ -31,8 +31,8 @@ class TestReader(unittest.TestCase):
 
         #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
         #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
-        atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
-        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
+        atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv"
+        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
         solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
         #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
@@ -72,7 +72,7 @@ class TestReader(unittest.TestCase):
         #ispec.write_atomic_linelist(new_atomic_linelist, linelist_filename="example_linelist.txt")
 
         np.testing.assert_almost_equal(new_atomic_linelist['theoretical_ew'][:10], np.array([2.500e-01, 1.200e+00, 3.000e-02, 2.000e-02, 6.591e+01, 1.413e+01, 1.060e+00, 1.000e-02, 0.000e+00, 1.850e+00]))
-        np.testing.assert_almost_equal(new_atomic_linelist['theoretical_depth'][:10], np.array([0.01, 0.04, 0.  , 0.  , 0.82, 0.31, 0.02, 0.  , 0.96, 0.04]))
+        np.testing.assert_almost_equal(new_atomic_linelist['theoretical_depth'][:10], np.array([0.01 , 0.04 , 0.   , 0.   , 0.82 , 0.31 , 0.02 , 0.   , 0.959, 0.04 ]))
 
 
 

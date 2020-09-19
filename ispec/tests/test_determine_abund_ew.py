@@ -15,28 +15,28 @@ class TestDetermineAbundEW(unittest.TestCase):
         bad = np.isnan(x_over_h)
         self.assertFalse(np.any(bad))
         self.assertEqual(len(x_over_h), len(linemasks))
-        np.testing.assert_almost_equal(x_over_h[:10], np.array([-0.016,  0.073,  0.094, -0.043,  0.194, -0.02 ,  0.082,  0.096, 0.137,  0.07 ]))
+        np.testing.assert_almost_equal(x_over_h[:10], np.array([-0.016,  0.073,  0.094, -0.09 ,  0.147,  0.155, -0.023,  0.08 , 0.093,  0.07 ]))
 
     def test_determine_abundances_from_ew_with_width(self):
         linemasks, x_over_h = self._determine_abundances_from_ew(code="width")
         bad = np.isnan(x_over_h)
         self.assertFalse(np.any(bad))
         self.assertEqual(len(x_over_h), len(linemasks))
-        np.testing.assert_almost_equal(x_over_h[:10], np.array([-0.01 ,  0.088,  0.113, -0.075, -0.04 ,  0.209,  0.097,  0.083, 0.132, -0.029]))
+        np.testing.assert_almost_equal(x_over_h[:10], np.array([-0.01 ,  0.088, -0.075,  0.156, -0.04 ,  0.158,  0.097,  0.083, -0.097, -0.029]))
 
     def test_determine_abundances_from_ew_with_spectrum(self):
         linemasks, x_over_h = self._determine_abundances_from_ew(code="spectrum")
         bad = np.isnan(x_over_h)
         self.assertFalse(np.any(bad))
         self.assertEqual(len(x_over_h), len(linemasks))
-        np.testing.assert_almost_equal(x_over_h[:10], np.array([0.21646358, 0.50153489, 0.38303478, 0.90906617, 0.46305459, 0.75443278, 0.42516838, 0.72694297, 0.84662829, 0.12828691]))
+        np.testing.assert_almost_equal(x_over_h[:10], np.array([0.21646358, 0.23577249, 0.38303478, 0.90906617, 0.87797043, 0.46305459, 0.6549248 , 0.75443278, 0.42516838, 0.72694297]))
 
     def test_determine_abundances_from_ew_with_turbospectrum(self):
         linemasks, x_over_h = self._determine_abundances_from_ew(code="turbospectrum")
         bad = np.isnan(x_over_h)
         self.assertEqual(len(np.where(bad)[0]), 2)
         self.assertEqual(len(x_over_h), len(linemasks))
-        np.testing.assert_almost_equal(x_over_h[:10], np.array([  np.nan, -0.09,  0.14, -0.37,  0.46,  0.22, -0.09, -0.46, -0.06, -0.18]))
+        np.testing.assert_almost_equal(x_over_h[:10], np.array([  np.nan,  0.15, -0.09,  0.14, -0.37,  0.46, -0.27,  0.22, -0.46, -0.06]))
 
 
     def _determine_abundances_from_ew(self, code):

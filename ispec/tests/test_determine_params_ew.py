@@ -155,8 +155,8 @@ class TestDetermineParamsEW(unittest.TestCase):
 
         #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv"
         #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/VALD.1100_2400nm/atomic_lines.tsv"
-        atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_hfs_iso.420_920nm/atomic_lines.tsv"
-        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv5_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
+        atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv"
+        #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
         solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
         #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
@@ -210,20 +210,20 @@ class TestDetermineParamsEW(unittest.TestCase):
         params, errors, status, x_over_h, selected_x_over_h, fitted_lines_params, used_linemasks = results
 
         expected_params = {
-                            'teff': 5822.3363580464265,
-                            'logg': 4.398406639831278,
-                            'MH': 0.03550000000000031,
+                            'teff': 5825.366401775263,
+                            'logg': 4.3929210834771535,
+                            'MH': 0.03500000000000014,
                             'alpha': 0.0,
-                            'vmic': 1.1697776390241097
+                            'vmic': 1.1670939448402673
         }
         for k, v in list(expected_params.items()):
             self.assertAlmostEqual(params[k], v)
         expected_errors = {
-                            'teff': 60.01952848016763,
-                            'logg': 0.08770016771446255,
-                            'MH': 0.0632120138744285,
+                            'teff': 59.030776466850426,
+                            'logg': 0.08775700534919817,
+                            'MH': 0.0606561589029185,
                             'alpha': 0.0,
-                            'vmic': 0.039306466858085205
+                            'vmic': 0.03900548810240552
         }
         for k, v in list(expected_errors.items()):
             self.assertAlmostEqual(errors[k], v)
