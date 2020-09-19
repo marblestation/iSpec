@@ -12,7 +12,8 @@ synthesizer/build/*
 synthesizer/synthesizer.c
 YYmix2
 synthesizer/turbospectrum/bin/*
-synthesizer/turbospectrum/exec-gf-v15.1/*.o
+synthesizer/turbospectrum/exec-gf/*.o
+synthesizer/turbospectrum/exec-gf/*.mod
 synthesizer/ARES/bin/*
 synthesizer/moog/*.o
 synthesizer/moog/MOOGSILENT
