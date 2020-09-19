@@ -168,7 +168,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
             out = open(stronglinelist_file, "w")
             for line in selected_hydrogen_lines:
                 out.write("%10.3f%10s%10.3f%10.3f%10s%10s%10s%10s\n" \
-                        % (line['wave_A'], line['spectrum_moog_species'].decode('utf-8'), line['lower_state_eV'], line['loggf'], "", "", "", ""))
+                        % (line['wave_A'], line['spectrum_moog_species'], line['lower_state_eV'], line['loggf'], "", "", "", ""))
             out.close()
 
             par_file = open(tmp_execution_dir + "/batch.par", "w")
