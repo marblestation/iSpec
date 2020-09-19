@@ -62,8 +62,8 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
 
     Fixed abundances can be set to 'None'.
     """
-    if len(linelist) > 500000:
-        raise Exception("Linelist too big for SPECTRUM: %i (limit 500000)" % (len(linelist)))
+    if len(linelist) > 1000000:
+        raise Exception("Linelist too big for SPECTRUM: %i (limit 1000000)" % (len(linelist)))
     if fixed_abundances is None:
         # No fixed abundances
         fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float), ('element', '|U30')])

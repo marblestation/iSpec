@@ -2,8 +2,8 @@
 #define NATOM 107
 #define NMOL 15
 #define TNATOM 308
-#define NLINE 500000
-#define NLIST 500000
+#define NLINE 1000000 // SBC
+#define NLIST 1000000 // SBC
 #define NHE 5
 #define NSTRG 19
 
