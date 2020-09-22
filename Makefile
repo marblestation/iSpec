@@ -15,7 +15,7 @@ ares: synthesizer/ARES/bin/ARES
 isochrones: isochrones/YYmix2
 
 
-ispec/synthesizer.so: synthesizer/synthesizer.pyx synthesizer/synthesizer_func.c synthesizer/spectrum276e/*.c
+ispec/synthesizer.so: synthesizer/synthesizer.pyx synthesizer/synthesizer_func.c synthesizer/spectrum/*.c
 	rm -f synthesizer/synthesizer.c
 	rm -rf synthesizer/build/
 	cd synthesizer/ ; python setup.py build_ext --inplace

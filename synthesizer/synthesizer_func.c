@@ -25,7 +25,7 @@
     It works always on the Integrated Disk mode (normalized Intensity) 
 */
 #include <stdio.h>
-#include "spectrum276e/spectrum.h"
+#include "spectrum/spectrum.h"
 #include "synthesizer_func.h"
 #include <stdlib.h>
 #include <math.h>

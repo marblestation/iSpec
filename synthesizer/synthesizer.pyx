@@ -23,7 +23,7 @@ cimport numpy as np
 cdef extern from "stdio.h":
     ctypedef struct FILE
 
-cdef extern from "spectrum276e/spectrum.h":
+cdef extern from "spectrum/spectrum.h":
     struct memo:
         int lyman
         int balmer
