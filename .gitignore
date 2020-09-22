@@ -10,6 +10,7 @@ tests/*
 synthesizer/discard/*
 synthesizer/build/*
 synthesizer/synthesizer.c
+synthesizer/spectrum/spectrum
 YYmix2
 synthesizer/turbospectrum/bin/*
 synthesizer/turbospectrum/exec-gf/*.o

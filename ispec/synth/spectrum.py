@@ -16,7 +16,9 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 import os
+import sys
 import numpy as np
+import subprocess
 from multiprocessing import Process
 #from multiprocessing import Queue
 from multiprocessing import JoinableQueue
@@ -27,6 +29,8 @@ from ispec.abundances import write_solar_abundances, write_fixed_abundances, enh
 from ispec.atmospheres import write_atmosphere
 from ispec.lines import write_atomic_linelist, write_isotope_data
 from ispec.common import is_spectrum_support_enabled
+from ispec.common import which
+from ispec.spectrum import create_spectrum_structure, resample_spectrum
 from .effects import _filter_linelist, apply_post_fundamental_effects
 
 
@@ -312,6 +316,147 @@ def _create_waveobs_mask(waveobs, segments):
     waveobs_mask[wfilter] = 1.0 # Compute fluxes only for selected segments
 
     return waveobs_mask
+
+
+def __execute_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, molecules_files=None, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, tmp_dir=None, timeout=1800):
+    """
+    Unused function. It demonstrates how to call spectrum as an external program
+    (similar to MOOG, synthe and turbospectrum) instead of as an integrated
+    python module.
+    """
+    if not is_spectrum_support_enabled():
+        raise Exception("spectrum support is not enabled")
+
+    if len(linelist) > 1000000:
+        raise Exception("Linelist too big for SPECTRUM: %i (limit 1000000)" % (len(linelist)))
+    if fixed_abundances is None:
+        # No fixed abundances
+        fixed_abundances = np.recarray((0, ), dtype=[('code', int),('Abund', float), ('element', '|U30')])
+
+    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../../"
+    spectrum_dir = ispec_dir + "synthesizer/spectrum/"
+    spectrum_executable = spectrum_dir + "spectrum"
+
+    if regions is None:
+        global_wave_base = np.min(waveobs)
+        global_wave_top = np.max(waveobs)
+        regions = np.recarray((1,),  dtype=[('wave_base', float), ('wave_top', float)])
+        regions['wave_base'][0] = global_wave_base
+        regions['wave_top'][0] = global_wave_top
+    else:
+        global_wave_base = np.min(regions['wave_base'])
+        global_wave_top = np.max(regions['wave_top'])
+
+    # TODO: decide how to stablish wave_step
+    waveobs = waveobs.copy()
+    waveobs.sort()
+    #wave_step = waveobs[1] - waveobs[0] # 0.001
+    wave_step = np.max((0.001, np.min(waveobs[1:] - waveobs[:-1])))
+
+    # Limit linelist
+    linelist = _filter_linelist(linelist, regions)
+
+    atmosphere_layers_file = write_atmosphere(atmosphere_layers, teff, logg, MH, code="spectrum", tmp_dir=tmp_dir)
+    abundances_filename = write_solar_abundances(abundances, tmp_dir=tmp_dir)
+    fixed_abundances_filename = write_fixed_abundances(fixed_abundances, tmp_dir=tmp_dir)
+    isotope_filename = write_isotope_data(isotopes, tmp_dir=tmp_dir)
+    nlayers = len(atmosphere_layers)
+
+    synth_fluxes = []
+    synth_waveobs = []
+    for i, region in enumerate(regions):
+        # It is better not to spectrum in a single run a big chunk of wavelength so
+        # we split the computation in several pieces
+        max_segment = 100. # nm
+        if (region['wave_top'] - region['wave_base']) / wave_step > max_segment / wave_step:
+            segment_wave_base = np.arange(region['wave_base'], region['wave_top'], max_segment)
+            segments = np.recarray((len(segment_wave_base),),  dtype=[('wave_base', float), ('wave_top', float)])
+            segments['wave_base'] = segment_wave_base
+            segments['wave_top'] = segment_wave_base + max_segment - wave_step
+            segments['wave_top'][-1] = region['wave_top'] # Last segment should not over pass the original global limits
+        else:
+            segments = np.recarray((1,),  dtype=[('wave_base', float), ('wave_top', float)])
+            segments['wave_base'][0] = region['wave_base']
+            segments['wave_top'][0] = region['wave_top']
+
+        for segment in segments:
+            wave_base = segment['wave_base']
+            wave_top = segment['wave_top']
+
+            # Provide some margin or near-by deep lines might be omitted
+            margin = 2. # 2 nm
+            wfilter = np.logical_and(linelist['wave_nm'] >= wave_base-margin, linelist['wave_nm'] <= wave_top+margin)
+            linelist_filename = write_atomic_linelist(linelist[wfilter], code="spectrum", tmp_dir=tmp_dir)
+
+            tmp_spec_filename = tempfile.mktemp() + str(int(random.random() * 100000000))
+
+            spectrum_switches = "aixn" # custom abundances + isotopes + fixed abudnances + silence
+            command = spectrum_executable + " " + spectrum_switches
+
+            command_input  = "{}\n".format(atmosphere_layers_file)
+            command_input += "{}\n".format(linelist_filename)
+            command_input += "{}\n".format(abundances_filename)
+            command_input += "{}\n".format(isotope_filename)
+            command_input += "{}\n".format(fixed_abundances_filename)
+            command_input += "{}\n".format(tmp_spec_filename)
+            command_input += "{}\n".format(microturbulence_vel)
+            command_input += "{},{}\n".format(wave_base*10., wave_top*10.)
+            command_input += "{}\n".format(wave_step*10.)
+
+            # If timeout command exists in PATH, then use it to control spectrum execution time
+            which_timeout = which("timeout")
+            if which_timeout is not None:
+                command = "timeout %i " % (timeout) + command
+
+            #if verbose == 1:
+                #proc = subprocess.Popen(command.split(), stdin=subprocess.PIPE)
+            #else:
+            proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+            # wait for the process to terminate
+            out, err = proc.communicate(input=command_input.encode('utf-8'))
+            errcode = proc.returncode
+            #print out
+
+            if errcode == 124: # TIMEOUT
+                logging.error("A timeout has occurred in the spectrum process.")
+                raise Exception("Timeout: synthesis failed!")
+
+            try:
+                data = np.loadtxt(tmp_spec_filename)
+            except:
+                #print out
+                sys.stdout.flush()
+                raise Exception("synthesis failed!")
+            synth_waveobs_tmp = data[:,0] / 10. # Armstrong to nm
+            # NOTE: We provided an artificially bigger wavelength range, so that spectrum will consider near-by deep lines
+            # Now we correct that and we reduce the wavelength range to the correct one:
+            wfilter = np.logical_and(synth_waveobs_tmp >= wave_base, synth_waveobs_tmp <= wave_top)
+            synth_waveobs = np.hstack((synth_waveobs, synth_waveobs_tmp[wfilter]))
+
+            synth_fluxes_tmp = data[:,1]
+            synth_fluxes = np.hstack((synth_fluxes, synth_fluxes_tmp[wfilter]))
+
+            os.remove(linelist_filename)
+            os.remove(tmp_spec_filename)
+    os.remove(atmosphere_layers_file)
+    os.remove(abundances_filename)
+    os.remove(fixed_abundances_filename)
+    os.remove(isotope_filename)
+
+    synth_spectrum = create_spectrum_structure(synth_waveobs, synth_fluxes)
+    synth_spectrum.sort(order=['waveobs'])
+
+    # Make sure we return the number of expected fluxes
+    if not np.array_equal(synth_spectrum['waveobs'], waveobs):
+        synth_spectrum = resample_spectrum(synth_spectrum, waveobs, method="linear", zero_edges=True)
+
+    segments = None
+    vrad = (0,)
+    synth_spectrum['flux'] = apply_post_fundamental_effects(synth_spectrum['waveobs'], synth_spectrum['flux'], segments, \
+                    macroturbulence=macroturbulence, vsini=vsini, \
+                    limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
+
+    return synth_spectrum['flux']
 
 
 

@@ -4,7 +4,7 @@ UNAME_S := $(shell uname -s)
 
 all: spectrum turbospectrum moog isochrones
 
-spectrum: ispec/synthesizer.so
+spectrum: ispec/synthesizer.so ispec/spectrum/spectrum
 
 turbospectrum: synthesizer/turbospectrum/bin/babsma_lu synthesizer/turbospectrum/bin/bsyn_lu synthesizer/turbospectrum/bin/eqwidt_lu
 
@@ -22,6 +22,10 @@ ispec/synthesizer.so: synthesizer/synthesizer.pyx synthesizer/synthesizer_func.c
 	mv -f synthesizer/synthesizer*.so ispec/synthesizer.so
 	rm -f synthesizer/synthesizer.c
 	rm -rf synthesizer/build/
+
+ispec/spectrum/spectrum: synthesizer/spectrum/*.c
+	rm -f synthesizer/spectrum/*.o
+	$(MAKE) -C synthesizer/spectrum/
 
 isochrones/YYmix2: isochrones/YYmix2.f
 	rm -f isochrones/YYmix2
@@ -82,6 +86,8 @@ clean:
 	rm -f synthesizer/synthesizer.c
 	rm -rf synthesizer/build/
 	rm -f synthesizer/synthesizer*.so
+	rm -f synthesizer/spectrum/*.o
+	rm -f synthesizer/spectrum/spectrum
 	rm -f ispec/synthesizer.so
 	rm -f isochrones/YYmix2
 	rm -f synthesizer/ARES/bin/ARES
