@@ -47,7 +47,7 @@ all: MOOGSILENT ;
 	@echo -----------------------------------------------------------------
 
 MOOGSILENT:  $(OBJECTS) $(SMLIB)/lib/libfakesm.a;
-	$(FC) $(OBJECTS) -o MOOGSILENT -L$(X11LIB) -lX11 \
+	$(FC) $(OBJECTS) -o MOOGSILENT  \
         -L$(SMLIB)/lib -lfakesm #-lplotsub -ldevices -lutils
 
 $(OBJECTS): $(COMMON)
