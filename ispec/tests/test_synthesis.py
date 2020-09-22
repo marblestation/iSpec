@@ -12,7 +12,7 @@ class TestSynthesis(unittest.TestCase):
 
     def test_synthesize_spectrum_with_spectrum(self):
         synth_spectrum = self._synthesize_spectrum(code="spectrum")
-        np.testing.assert_almost_equal(synth_spectrum['flux'][:10], np.array([0.        , 0.99776054, 0.99698647, 0.99558204, 0.99346707, 0.99032837, 0.98571305, 0.9790391 , 0.96960094, 0.95660359]))
+        np.testing.assert_almost_equal(synth_spectrum['flux'][:10], np.array([0.        , 0.99776664, 0.99699498, 0.99559501, 0.99348685, 0.99035828, 0.98575779, 0.97910508, 0.96969659, 0.95673944]))
         np.testing.assert_almost_equal(synth_spectrum['waveobs'][:10], np.array([515.   , 515.001, 515.002, 515.003, 515.004, 515.005, 515.006, 515.007, 515.008, 515.009]))
 
     def test_synthesize_spectrum_with_turbospectrum(self):

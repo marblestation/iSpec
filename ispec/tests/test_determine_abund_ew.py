@@ -29,7 +29,7 @@ class TestDetermineAbundEW(unittest.TestCase):
         bad = np.isnan(x_over_h)
         self.assertFalse(np.any(bad))
         self.assertEqual(len(x_over_h), len(linemasks))
-        np.testing.assert_almost_equal(x_over_h[:10], np.array([0.21646358, 0.23577249, 0.38303478, 0.90906617, 0.87797043, 0.46305459, 0.6549248 , 0.75443278, 0.42516838, 0.72694297]))
+        np.testing.assert_almost_equal(x_over_h[:10], np.array([0.220315 , 0.2386463, 0.3867166, 0.9112925, 0.8800965, 0.4654216, 0.6586883, 0.7576341, 0.4286079, 0.7309001]))
 
     def test_determine_abundances_from_ew_with_turbospectrum(self):
         linemasks, x_over_h = self._determine_abundances_from_ew(code="turbospectrum")

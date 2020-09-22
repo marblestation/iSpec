@@ -71,8 +71,8 @@ class TestReader(unittest.TestCase):
                 verbose=1, gui_queue=None, timeout=900)
         #ispec.write_atomic_linelist(new_atomic_linelist, linelist_filename="example_linelist.txt")
 
-        np.testing.assert_almost_equal(new_atomic_linelist['theoretical_ew'][:10], np.array([2.500e-01, 1.200e+00, 3.000e-02, 2.000e-02, 6.591e+01, 1.413e+01, 1.060e+00, 1.000e-02, 0.000e+00, 1.850e+00]))
-        np.testing.assert_almost_equal(new_atomic_linelist['theoretical_depth'][:10], np.array([0.01 , 0.04 , 0.   , 0.   , 0.82 , 0.31 , 0.02 , 0.   , 0.959, 0.04 ]))
+        np.testing.assert_almost_equal(new_atomic_linelist['theoretical_ew'][:10], np.array([2.500e-01, 1.180e+00, 3.000e-02, 2.000e-02, 6.492e+01, 1.381e+01, 1.040e+00, 1.000e-02, 0.000e+00, 1.810e+00]))
+        np.testing.assert_almost_equal(new_atomic_linelist['theoretical_depth'][:10], np.array([0.01 , 0.04 , 0.   , 0.   , 0.81 , 0.3  , 0.02 , 0.   , 0.959, 0.04 ]))
 
 
 

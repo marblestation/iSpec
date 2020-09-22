@@ -156,50 +156,50 @@ class TestDetermineAbundSynth(unittest.TestCase):
                 code=code)
 
         expected_params = {
-                            'MH': 0.0,
-                            'R': 47000.0,
-                            'alpha': 0.0,
-                            'limb_darkening_coeff': 0.6,
-                            'logg': 4.44,
                             'teff': 5771.0,
-                            'vmac': 4.19,
+                            'logg': 4.44,
+                            'MH': 0.0,
+                            'alpha': 0.0,
                             'vmic': 1.07,
-                            'vrad0000': -0.014236572551593383,
-                            'vrad0001': -0.060747762730039546,
-                            'vrad0002': -0.015112973054249907,
-                            'vrad0003': -0.05478978560293956,
-                            'vrad0004': -0.15687878317415702,
-                            'vrad0005': -0.22541956406770822,
-                            'vrad0006': -0.20350778494525035,
-                            'vrad0007': -0.16016986490598595,
-                            'vsini': 1.6
+                            'vmac': 4.19,
+                            'vsini': 1.6,
+                            'limb_darkening_coeff': 0.6,
+                            'R': 47000.0,
+                            'vrad0000': -0.009293697395991595,
+                            'vrad0001': -0.06018526081728252,
+                            'vrad0002': -0.015666491320596353,
+                            'vrad0003': -0.055193632795656256,
+                            'vrad0004': -0.1567689404172516,
+                            'vrad0005': -0.22508061064189286,
+                            'vrad0006': -0.20359311863771612,
+                            'vrad0007': -0.16078450322612126
                            }
         for k, v in list(expected_params.items()):
             self.assertAlmostEqual(params[k], v)
         expected_errors = {
-                            'MH': 0.0,
-                            'R': 0.0,
-                            'alpha': 0.0,
-                            'limb_darkening_coeff': 0.0,
-                            'logg': 0.0,
                             'teff': 0.0,
-                            'vmac': 0.0,
+                            'logg': 0.0,
+                            'MH': 0.0,
+                            'alpha': 0.0,
                             'vmic': 0.0,
-                            'vrad0000': 2.2869694859069014,
-                            'vrad0001': 0.6752670286020491,
-                            'vrad0002': 0.27650862905582735,
-                            'vrad0003': 1.078220425624207,
-                            'vrad0004': 0.47623752166713595,
-                            'vrad0005': 0.2582966608244762,
-                            'vrad0006': 0.46080252531829013,
-                            'vrad0007': 0.23844625288619709,
-                            'vsini': 0.0
+                            'vmac': 0.0,
+                            'vsini': 0.0,
+                            'limb_darkening_coeff': 0.0,
+                            'R': 0.0,
+                            'vrad0000': 2.2914331925224816,
+                            'vrad0001': 0.6770488621090028,
+                            'vrad0002': 0.2767472596825708,
+                            'vrad0003': 1.0820599330375968,
+                            'vrad0004': 0.47734411482243877,
+                            'vrad0005': 0.2585031799872256,
+                            'vrad0006': 0.46187116575854853,
+                            'vrad0007': 0.23921192411257394
                           }
         for k, v in list(expected_errors.items()):
             self.assertAlmostEqual(errors[k], v)
         self.assertEqual(len(stats_linemasks), 8)
         self.assertEqual(abundances_found['element'][0], 'Ca')
-        self.assertAlmostEqual(abundances_found['[X/H]'][0], -0.003417007071945477)
-        self.assertAlmostEqual(abundances_found['[X/Fe]'][0], -0.003417007071945477)
-        self.assertAlmostEqual(abundances_found['e[X/H]'][0], 0.02708655339373642)
-        self.assertAlmostEqual(abundances_found['e[X/Fe]'][0], 0.02708655339373642)
+        self.assertAlmostEqual(abundances_found['[X/H]'][0], -0.0020078068382556324)
+        self.assertAlmostEqual(abundances_found['[X/Fe]'][0], -0.0020078068382556324)
+        self.assertAlmostEqual(abundances_found['e[X/H]'][0], 0.027149612080779945)
+        self.assertAlmostEqual(abundances_found['e[X/Fe]'][0], 0.027149612080779945)

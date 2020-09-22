@@ -313,28 +313,28 @@ class TestDetermineParamsSynth(unittest.TestCase):
                 code=code)
 
         expected_params = {
-                            'teff': 5702.259442760393,
-                            'logg': 4.3696572501727795,
-                            'MH': -0.113799073955096,
-                            'alpha': 0.0455196295820384,
-                            'vmic': 1.1320458124216601,
-                            'vmac': 4.05,
+                            'teff': 5700.60895591792,
+                            'logg': 4.357052646691409,
+                            'MH': -0.10729296408531262,
+                            'alpha': 0.042917185634125055,
+                            'vmic': 1.1412534073088432,
+                            'vmac': 4.04,
                             'vsini': 2.0,
                             'limb_darkening_coeff': 0.6,
-                            'R': 50051.84206213919
+                            'R': 50101.842351606625
         }
         for k, v in list(expected_params.items()):
             self.assertAlmostEqual(params[k], v)
         expected_errors = {
-                            'teff': 65.79677141433265,
-                            'logg': 0.09882642843734958,
-                            'MH': 0.07728192750563401,
+                            'teff': 66.2711106842635,
+                            'logg': 0.10477704697086701,
+                            'MH': 0.07756514816665908,
                             'alpha': 0.0,
-                            'vmic': 0.11434892171928127,
+                            'vmic': 0.11389528849649228,
                             'vmac': 0.0,
                             'vsini': 0.0,
                             'limb_darkening_coeff': 0.0,
-                            'R': 3683.1203645893384
+                            'R': 3742.908365508009
         }
         for k, v in list(expected_errors.items()):
             self.assertAlmostEqual(errors[k], v)
