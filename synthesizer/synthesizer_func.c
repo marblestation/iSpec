@@ -106,11 +106,13 @@ double sqrt2 = 1.414214;
 // - For resolution:
 long intdiv();
 long mmin(),mmax();
+void free_dvector();
 
 // - For abundances:
-//double eqwidth(model,line,atom,wave,V,POP);
-//int bwline(wave,line,atom,ew,qf);
-
+//double eqwidth();
+int bwline();
+int approx();
+void eqtaukap();
 
 long num;
 int Ntau;

@@ -4,7 +4,7 @@ UNAME_S := $(shell uname -s)
 
 all: spectrum turbospectrum moog isochrones
 
-spectrum: ispec/synthesizer.so ispec/spectrum/spectrum
+spectrum: ispec/synthesizer.so synthesizer/spectrum/spectrum
 
 turbospectrum: synthesizer/turbospectrum/bin/babsma_lu synthesizer/turbospectrum/bin/bsyn_lu synthesizer/turbospectrum/bin/eqwidt_lu
 
@@ -23,13 +23,13 @@ ispec/synthesizer.so: synthesizer/synthesizer.pyx synthesizer/synthesizer_func.c
 	rm -f synthesizer/synthesizer.c
 	rm -rf synthesizer/build/
 
-ispec/spectrum/spectrum: synthesizer/spectrum/*.c
+synthesizer/spectrum/spectrum: synthesizer/spectrum/*.c
 	rm -f synthesizer/spectrum/*.o
 	$(MAKE) -C synthesizer/spectrum/
 
 isochrones/YYmix2: isochrones/YYmix2.f
 	rm -f isochrones/YYmix2
-	gfortran -o isochrones/YYmix2 isochrones/YYmix2.f
+	gfortran -L/usr/lib -o isochrones/YYmix2 isochrones/YYmix2.f
 
 synthesizer/ARES/bin/ARES:	synthesizer/ARES/src/ARES_v2.c synthesizer/ARES/src/*.h
 	mkdir -p synthesizer/ARES/bin/
@@ -66,6 +66,8 @@ endif
 	rm -f synthesizer/moog/MOOGSILENT
 	$(MAKE) -C synthesizer/moog/fake_sm-2.4.35/ -f Makefile
 	$(MAKE) -C synthesizer/moog/ -f Makefile.rhsilent
+	sed -i 's/machine = "mac"/machine = "pcl"/' synthesizer/moog/Moogsilent.f
+	sed -i 's/machine = "uni"/machine = "pcl"/' synthesizer/moog/Moogsilent.f
 
 
 .PHONY: clean

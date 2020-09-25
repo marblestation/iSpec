@@ -11,7 +11,7 @@ OBJECTS = Abfind.o Abpop.o Abunplot.o Batom.o Begin.o Binary.o \
         Fluxplot.o Gammabark.o Getasci.o Getcount.o Getnum.o Getsyns.o \
         Gridplo.o Gridsyn.o Infile.o Inlines.o Inmodel.o Invert.o \
         Jexpint.o Lineinfo.o Lineabund.o Linlimit.o \
-        Makeplot.o Molquery.o Moog.o Mydriver.o \
+        Makeplot.o Molquery.o Moogsilent.o Mydriver.o \
         Nansi.o Nearly.o Number.o Obshead.o \
         Oneline.o Opaccouls.o OpacHelium.o OpacHydrogen.o \
         Opacit.o Opacmetals.o Opacscat.o Params.o Partfn.o \
@@ -27,7 +27,7 @@ COMMON =  Atmos.com Dummy.com Equivs.com Factor.com Kappa.com Linex.com \
         Quants.com Multimod.com Dampdat.com
 
 FC = gfortran
-FFLAGS = -Wall -O1 -ff2c
+FFLAGS = -Wall -ff2c
 SMLIB = fake_sm-2.4.35
 #CC = cc
 #FC = f77 -Wall
@@ -48,7 +48,7 @@ all: MOOGSILENT ;
 
 MOOGSILENT:  $(OBJECTS) $(SMLIB)/lib/libfakesm.a;
 	$(FC) $(OBJECTS) -o MOOGSILENT  \
-        -L$(SMLIB)/lib -lfakesm #-lplotsub -ldevices -lutils
+        -L$(SMLIB)/lib -lfakesm -L/usr/lib #-lplotsub -ldevices -lutils
 
 $(OBJECTS): $(COMMON)
 
