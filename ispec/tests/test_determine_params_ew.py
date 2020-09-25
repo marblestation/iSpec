@@ -158,12 +158,14 @@ class TestDetermineParamsEW(unittest.TestCase):
         atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv"
         #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
-        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
+        if "ATLAS" in model:
+            solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
+        else:
+            # MARCS
+            solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
         #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
         #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2009/stdatom.dat"
-        #solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
         #solar_abundances_file = ispec_dir + "/input/abundances/Anders.1989/stdatom.dat"
-
 
         # Load model atmospheres
         modeled_layers_pack = ispec.load_modeled_layers_pack(model)

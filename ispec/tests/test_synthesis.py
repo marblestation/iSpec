@@ -78,10 +78,13 @@ class TestSynthesis(unittest.TestCase):
 
         isotopes = ispec.read_isotope_data(isotope_file)
 
-        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
+        if "ATLAS" in model:
+            solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
+        else:
+            # MARCS
+            solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
         #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
         #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2009/stdatom.dat"
-        #solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
         #solar_abundances_file = ispec_dir + "/input/abundances/Anders.1989/stdatom.dat"
 
         # Load model atmospheres

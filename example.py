@@ -1013,10 +1013,13 @@ def synthesize_spectrum(code="spectrum"):
 
     isotopes = ispec.read_isotope_data(isotope_file)
 
-    solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
+    if "ATLAS" in model:
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
+    else:
+        # MARCS
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2009/stdatom.dat"
-    #solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Anders.1989/stdatom.dat"
 
     # Load model atmospheres
@@ -1179,10 +1182,13 @@ def precompute_synthetic_grid(code="spectrum"):
 
     isotopes = ispec.read_isotope_data(isotope_file)
 
-    solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
+    if "ATLAS" in model:
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
+    else:
+        # MARCS
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2009/stdatom.dat"
-    #solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Anders.1989/stdatom.dat"
 
     # Load model atmospheres
@@ -1281,10 +1287,13 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
-    solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
+    if "ATLAS" in model:
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
+    else:
+        # MARCS
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2009/stdatom.dat"
-    #solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Anders.1989/stdatom.dat"
 
     isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
@@ -1585,10 +1594,13 @@ def estimate_initial_ap_with_precomputed_grid_and_determine_ap_using_synth_spect
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
-    solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
+    if "ATLAS" in model:
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
+    else:
+        # MARCS
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2009/stdatom.dat"
-    #solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Anders.1989/stdatom.dat"
 
     isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
@@ -1772,10 +1784,13 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
-    solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
+    if "ATLAS" in model:
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
+    else:
+        # MARCS
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2009/stdatom.dat"
-    #solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Anders.1989/stdatom.dat"
 
     isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
@@ -1930,10 +1945,13 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
-    solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
+    if "ATLAS" in model:
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
+    else:
+        # MARCS
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2009/stdatom.dat"
-    #solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Anders.1989/stdatom.dat"
 
     isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
@@ -2104,10 +2122,13 @@ def determine_loggf_line_by_line_using_synth_spectra(code="spectrum"):
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
-    solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
+    if "ATLAS" in model:
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
+    else:
+        # MARCS
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2009/stdatom.dat"
-    #solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Anders.1989/stdatom.dat"
 
     isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
@@ -2393,12 +2414,14 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
-    solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
+    if "ATLAS" in model:
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
+    else:
+        # MARCS
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2009/stdatom.dat"
-    #solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Anders.1989/stdatom.dat"
-
 
     # Load model atmospheres
     modeled_layers_pack = ispec.load_modeled_layers_pack(model)
@@ -2636,10 +2659,13 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kurucz/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Kirby/"
 
-    solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
+    if "ATLAS" in model:
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
+    else:
+        # MARCS
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2009/stdatom.dat"
-    #solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Anders.1989/stdatom.dat"
 
     # Load model atmospheres
@@ -2692,10 +2718,13 @@ def calculate_theoretical_ew_and_depth(code="spectrum"):
     atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv"
     #atomic_linelist_file = ispec_dir + "/input/linelists/transitions/GESv6_atom_nohfs_noiso.420_920nm/atomic_lines.tsv"
 
-    solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
+    if "ATLAS" in model:
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
+    else:
+        # MARCS
+        solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.2007/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2005/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Asplund.2009/stdatom.dat"
-    #solar_abundances_file = ispec_dir + "/input/abundances/Grevesse.1998/stdatom.dat"
     #solar_abundances_file = ispec_dir + "/input/abundances/Anders.1989/stdatom.dat"
 
     isotope_file = ispec_dir + "/input/isotopes/SPECTRUM.lst"
