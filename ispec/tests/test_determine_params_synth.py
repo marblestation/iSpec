@@ -135,32 +135,32 @@ class TestDetermineParamsSynth(unittest.TestCase):
                 code=code, precomputed_grid_dir=precomputed_grid_dir)
 
         expected_params = {
-                            'teff': 5851.628742661467,
-                            'logg': 4.461276199140998,
-                            'MH': 0.024255109120437632,
+                            'teff': 5848.516352941799,
+                            'logg': 4.47140586507073,
+                            'MH': 0.021745200217247945,
                             'alpha': 0.0,
-                            'vmic': 0.5246819025206294,
-                            'vmac': 4.51,
+                            'vmic': 0.5617098008018283,
+                            'vmac': 4.5,
                             'vsini': 2.0,
                             'limb_darkening_coeff': 0.6,
-                            'R': 77632.52714857543
+                            'R': 78395.52968455742
         }
         for k, v in list(expected_params.items()):
             self.assertAlmostEqual(params[k], v)
         expected_errors = {
-                            'teff': 14.225900341961772,
-                            'logg': 0.02712239389209893,
-                            'MH': 0.005795561724255147,
-                            'alpha': 0.0,
-                            'vmic': 0.042710575599214096,
+                            'teff': 16.061649602869444,
+                            'logg': 0.028408456932473077,
+                            'MH': 0.007324730574204324,
+                            'alpha': 0.007733907152934892,
+                            'vmic': 0.043996803165640905,
                             'vmac': 0.0,
                             'vsini': 0.0,
                             'limb_darkening_coeff': 0.0,
-                            'R': 3520.9717057141356
+                            'R': 3898.724894322937
         }
         for k, v in list(expected_errors.items()):
             self.assertAlmostEqual(errors[k], v)
-        self.assertEqual(len(stats_linemasks), 350)
+        self.assertEqual(len(stats_linemasks), 337)
 
     def test_determine_astrophysical_parameters_using_synth_spectra(self):
         code = "spectrum"
@@ -316,29 +316,29 @@ class TestDetermineParamsSynth(unittest.TestCase):
                 code=code)
 
         expected_params = {
-                            'teff': 5700.60895591792,
-                            'logg': 4.357052646691409,
-                            'MH': -0.10729296408531262,
-                            'alpha': 0.042917185634125055,
-                            'vmic': 1.1412534073088432,
+                            'teff': 5696.144535300913,
+                            'logg': 4.35386512625295,
+                            'MH': -0.117924251886487,
+                            'alpha': 0.047169700754594805,
+                            'vmic': 1.1383979614486783,
                             'vmac': 4.04,
                             'vsini': 2.0,
                             'limb_darkening_coeff': 0.6,
-                            'R': 50101.842351606625
+                            'R': 49936.32725781359
         }
         for k, v in list(expected_params.items()):
             self.assertAlmostEqual(params[k], v)
         expected_errors = {
-                            'teff': 66.2711106842635,
-                            'logg': 0.10477704697086701,
-                            'MH': 0.07756514816665908,
+                            'teff': 66.38643184730074,
+                            'logg': 0.10101410057739481,
+                            'MH': 0.07728877921624414,
                             'alpha': 0.0,
-                            'vmic': 0.11389528849649228,
+                            'vmic': 0.10922339131594937,
                             'vmac': 0.0,
                             'vsini': 0.0,
                             'limb_darkening_coeff': 0.0,
-                            'R': 3742.908365508009
+                            'R': 3496.439438356713
         }
         for k, v in list(expected_errors.items()):
             self.assertAlmostEqual(errors[k], v)
-        self.assertEqual(len(stats_linemasks), 29)
+        self.assertEqual(len(stats_linemasks), 30)
