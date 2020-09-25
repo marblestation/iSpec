@@ -781,7 +781,7 @@ www.gnu.org/licenses/"""
             description += """
 iSpec uses the following radiative transfer codes:
 
-1) SPECTRUM - Richard O. Gray - Version 2.76e
+1) SPECTRUM - Richard O. Gray - Version 2.77
 2) Turbospectrum - Bertrand Plez - v19.1
 3) MOOG - Chris Sneden - November 2019
 4) SYNTHE/WIDTH9 - R. L. Kurucz / Atmos port - 2015
