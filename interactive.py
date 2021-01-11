@@ -24,8 +24,7 @@ import matplotlib
 matplotlib.use('TkAgg')
 
 #--- iSpec directory --------------------------------------------------------
-#ispec_dir = '/home/marble/shared/ispec/'
-ispec_dir = './'
+ispec_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.abspath(ispec_dir))
 import ispec
 from ispec.gui import iSpecBaseApp

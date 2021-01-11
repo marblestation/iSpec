@@ -382,9 +382,10 @@ class iSpecBaseApp(tkinter.Tk):
     def __get_filelist(self, dirname, match):
         import os
         import glob
+        ispec_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
         filelist = []
-        for root in glob.glob(os.path.join(dirname, "*")):
+        for root in glob.glob(os.path.join(os.path.join(ispec_dir, dirname), "*")):
             if os.path.isdir(root) and os.path.exists(os.path.join(root, match)):
                 filelist.append((os.path.basename(root), resource_path(os.path.join(root, match))))
         filelist = np.array(filelist, dtype=[('name', '|U100'), ('path', '|U500')])
