@@ -2124,7 +2124,7 @@ iSpec uses the following radiative transfer codes:
             else:
                 template_spectrum = None
 
-            self.active_spectrum.continuum_model = ispec.fit_continuum(self.active_spectrum.data, from_resolution=None, independent_regions=independent_regions, continuum_regions=continuum_regions, ignore=ignore_lines, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection, strong_line_probability=strong_line_probability, use_errors_for_fitting=use_errors_for_fitting, template=template_spectrum)
+            self.active_spectrum.continuum_model = ispec.fit_continuum(self.active_spectrum.data, from_resolution=R, independent_regions=independent_regions, continuum_regions=continuum_regions, ignore=ignore_lines, nknots=nknots, degree=degree, median_wave_range=median_wave_range, max_wave_range=max_wave_range, fixed_value=fixed_value, model=model, order=order, automatic_strong_line_detection=automatic_strong_line_detection, strong_line_probability=strong_line_probability, use_errors_for_fitting=use_errors_for_fitting, template=template_spectrum)
             waveobs = self.active_spectrum.data['waveobs']
             self.active_spectrum.continuum_data = ispec.create_spectrum_structure(waveobs, self.active_spectrum.continuum_model(waveobs))
 
