@@ -66,8 +66,13 @@ endif
 	rm -f synthesizer/moog/MOOGSILENT
 	$(MAKE) -C synthesizer/moog/fake_sm-2.4.35/ -f Makefile
 	$(MAKE) -C synthesizer/moog/ -f Makefile.rhsilent
-	sed -i 's/machine = "mac"/machine = "pcl"/' synthesizer/moog/Moogsilent.f
+ifeq ($(UNAME_S),Darwin)
+	sed -i.bak 's/machine = "mac"/machine = "pcl"/' synthesizer/moog/Moogsilent.f
+	rm -f synthesizer/moog/Moogsilent.f.bak
+endif
+ifeq ($(UNAME_S),Solaris)
 	sed -i 's/machine = "uni"/machine = "pcl"/' synthesizer/moog/Moogsilent.f
+endif
 
 
 .PHONY: clean
