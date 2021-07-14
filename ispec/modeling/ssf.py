@@ -895,6 +895,8 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
         logging.warning("'vmac_from_empirical_relation' changed to False because vmac is a free parameter")
 
     if segments is None:
+        wave_base = np.min(waveobs)
+        wave_top = np.max(waveobs)
         segments = np.recarray((1,),  dtype=[('wave_base', float), ('wave_top', float)])
         segments['wave_base'][0] = wave_base
         segments['wave_top'][0] = wave_top
