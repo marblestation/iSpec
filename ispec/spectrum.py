@@ -1043,7 +1043,7 @@ def create_filter_cosmic_rays(spectrum, continuum_model, resampling_wave_step=0.
     resampled_spectrum = resample_spectrum(spectrum, wavelengths)
 
     resampled_smooth = create_spectrum_structure(resampled_spectrum['waveobs'])
-    resampled_smooth['flux'] = scipy.signal.medfilt(resampled_spectrum['flux'], 15)
+    resampled_smooth['flux'] = scipy.signal.medfilt(resampled_spectrum['flux'], window_size)
     smooth = resample_spectrum(resampled_smooth, spectrum['waveobs'])
 
     cosmics = (spectrum['flux'] - smooth['flux'])/ continuum_model(spectrum['waveobs']) > variation_limit
