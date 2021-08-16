@@ -752,8 +752,22 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
             parinfo[base+i]['limits'] = [-5., 5]
             if parinfo[base+i]['value'] > parinfo[base+i]['limits'][1] or parinfo[base+i]['value'] < parinfo[base+i]['limits'][0]:
                 raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[base+i]['parname'], parinfo[base+i]['value'], parinfo[base+i]['limits'][0], parinfo[base+i]['limits'][1]))
+    # log(gf)
     if "vrad" in free_params or np.any(initial_vrad != 0):
         base = 9 + len(initial_vrad)
+    else:
+        base = 9 + len(free_abundances)
+    for i in range(len(linelist_free_loggf)):
+        parinfo[base+i]['parname'] = str(linelist_free_loggf['wave_nm'][i])
+        parinfo[base+i]['value'] = linelist_free_loggf['loggf'][i]
+        parinfo[base+i]['fixed'] = not "loggf" in free_params
+        parinfo[base+i]['step'] = Constants.SYNTH_STEP_LOGGF # For auto-derivatives
+        parinfo[base+i]['limited'] = [True, True]
+        parinfo[base+i]['limits'] = [-10., 10.]
+        if parinfo[base+i]['value'] > parinfo[base+i]['limits'][1] or parinfo[base+i]['value'] < parinfo[base+i]['limits'][0]:
+            raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[base+i]['parname'], parinfo[base+i]['value'], parinfo[base+i]['limits'][0], parinfo[base+i]['limits'][1]))
+    if "vrad" in free_params or np.any(initial_vrad != 0):
+        base = 9 + len(initial_vrad) + len(linelist_free_loggf)
     else:
         base = 9
     # ABUNDANCES
@@ -764,20 +778,6 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
         parinfo[base+i]['step'] = Constants.SYNTH_STEP_ABUNDANCES # For auto-derivatives
         parinfo[base+i]['limited'] = [True, True]
         parinfo[base+i]['limits'] = [-30., 0.]
-        if parinfo[base+i]['value'] > parinfo[base+i]['limits'][1] or parinfo[base+i]['value'] < parinfo[base+i]['limits'][0]:
-            raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[base+i]['parname'], parinfo[base+i]['value'], parinfo[base+i]['limits'][0], parinfo[base+i]['limits'][1]))
-    # log(gf)
-    if "vrad" in free_params or np.any(initial_vrad != 0):
-        base = 9 + len(initial_vrad) + len(free_abundances)
-    else:
-        base = 9 + len(free_abundances)
-    for i in range(len(linelist_free_loggf)):
-        parinfo[base+i]['parname'] = str(linelist_free_loggf['wave_nm'][i])
-        parinfo[base+i]['value'] = linelist_free_loggf['loggf'][i]
-        parinfo[base+i]['fixed'] = not "loggf" in free_params
-        parinfo[base+i]['step'] = Constants.SYNTH_STEP_LOGGF # For auto-derivatives
-        parinfo[base+i]['limited'] = [True, True]
-        parinfo[base+i]['limits'] = [-10., 10.]
         if parinfo[base+i]['value'] > parinfo[base+i]['limits'][1] or parinfo[base+i]['value'] < parinfo[base+i]['limits'][0]:
             raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[base+i]['parname'], parinfo[base+i]['value'], parinfo[base+i]['limits'][0], parinfo[base+i]['limits'][1]))
 
