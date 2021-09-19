@@ -756,7 +756,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
     if "vrad" in free_params or np.any(initial_vrad != 0):
         base = 9 + len(initial_vrad)
     else:
-        base = 9 + len(free_abundances)
+        base = 9
     for i in range(len(linelist_free_loggf)):
         parinfo[base+i]['parname'] = str(linelist_free_loggf['wave_nm'][i])
         parinfo[base+i]['value'] = linelist_free_loggf['loggf'][i]
@@ -769,7 +769,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
     if "vrad" in free_params or np.any(initial_vrad != 0):
         base = 9 + len(initial_vrad) + len(linelist_free_loggf)
     else:
-        base = 9
+        base = 9 + len(linelist_free_loggf)
     # ABUNDANCES
     for i in range(len(free_abundances)):
         parinfo[base+i]['parname'] = str(free_abundances['code'][i])
