@@ -27,7 +27,7 @@ COMMON =  Atmos.com Dummy.com Equivs.com Factor.com Kappa.com Linex.com \
         Quants.com Multimod.com Dampdat.com
 
 FC = gfortran
-FFLAGS = -Wall -ff2c -fallow-argument-mismatch
+FFLAGS = -Wall -ff2c -std=legacy
 SMLIB = fake_sm-2.4.35
 #CC = cc
 #FC = f77 -Wall
