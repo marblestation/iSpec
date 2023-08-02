@@ -901,13 +901,14 @@ def correct_velocity(spectrum, velocity, segments=None):
     c = 299792458.0
 
     # Correct wavelength scale for radial velocity
+    corrected_spectrum = create_spectrum_structure(spectrum['waveobs'], spectrum['flux'], spectrum['err'])
     # - Newtonian version:
     ##Radial/barycentric velocity from km/s to m/s
     ##velocity = velocity * 1000
-    #spectrum['waveobs'] = spectrum['waveobs'] / ((velocity / c) + 1)
+    #corrected_spectrum['waveobs'] = spectrum['waveobs'] / ((velocity / c) + 1)
     # - Relativistic version:
-    spectrum['waveobs'] = spectrum['waveobs'] * np.sqrt((1.-(velocity*1000.)/c)/(1.+(velocity*1000.)/c))
-    return spectrum
+    corrected_spectrum['waveobs'] = spectrum['waveobs'] * np.sqrt((1.-(velocity*1000.)/c)/(1.+(velocity*1000.)/c))
+    return corrected_spectrum
 
 def correct_velocity_regions(regions, velocity, with_peak=False):
     """
@@ -918,6 +919,7 @@ def correct_velocity_regions(regions, velocity, with_peak=False):
     # Radial/barycentric velocity from km/s to m/s
     velocity = velocity * 1000
 
+    regions = regions.copy()
     regions['wave_base'] = regions['wave_base'] / ((velocity / c) + 1)
     regions['wave_top'] = regions['wave_top'] / ((velocity / c) + 1)
     if with_peak:
