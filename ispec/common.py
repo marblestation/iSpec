@@ -15,6 +15,7 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
+import platform
 from scipy.interpolate import UnivariateSpline
 import numpy.lib.recfunctions as rfn # Extra functions
 import numpy as np
@@ -67,8 +68,8 @@ def is_moog_support_enabled():
         return True
 
 def is_width_support_enabled():
-    from sys import platform as _platform
-    if "linux" not in _platform:
+    is_linux = platform.system() == "Linux"
+    if not is_linux:
         return False
     ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
     atmos_dir = ispec_dir + "/synthesizer/atmos/"
@@ -96,8 +97,8 @@ def is_ares_support_enabled():
         return True
 
 def is_synthe_support_enabled():
-    from sys import platform as _platform
-    if "linux" not in _platform:
+    is_linux = platform.system() == "Linux"
+    if not is_linux:
         return False
     ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
     atmos_dir = ispec_dir + "/synthesizer/atmos/"
@@ -137,31 +138,36 @@ def is_synthe_support_enabled():
         return True
 
 def is_sme_support_enabled():
-    from sys import platform as _platform
-    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
-    sme_dir = ispec_dir + "/synthesizer/sme/"
+    system = platform.system()
+    arch = platform.machine()
     system_64bits = sys.maxsize > 2**32
 
-    if _platform == "linux" or _platform == "linux2":
-        # linux
-        if system_64bits:
-            sme_lib = sme_dir + "/sme_synth.so.linux.x86_64.64g"
-        else:
-            sme_lib = sme_dir + "/sme_synth.so.linux.x86.32"
-    elif _platform == "darwin":
-        # OS X
-        if system_64bits:
-            sme_lib = sme_dir + "/sme_synth.so.darwin.x86_64.64g"
-        else:
-            sme_lib = sme_dir + "/sme_synth.so.darwin.i386.32"
-    else:
-        # Windows
-        if system_64bits:
-            sme_lib = sme_dir + "/sme_synth.so.Win32.x86_64.64g"
-        else:
-            sme_lib = sme_dir + "/sme_synth.so.Win32.x86.32"
+    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
+    sme_dir = ispec_dir + "/synthesizer/sme/"
 
-    if not os.path.exists(sme_lib):
+    sme_lib = None
+    if 'x86' in arch:
+        # Only x86 (no ARM, Apple Silicon M1/2)
+        if system == 'Linux':
+            # linux
+            if system_64bits:
+                sme_lib = sme_dir + "/sme_synth.so.linux.x86_64.64g"
+            else:
+                sme_lib = sme_dir + "/sme_synth.so.linux.x86.32"
+        elif system == 'Darwin':
+            # OS X
+            if system_64bits:
+                sme_lib = sme_dir + "/sme_synth.so.darwin.x86_64.64g"
+            else:
+                sme_lib = sme_dir + "/sme_synth.so.darwin.i386.32"
+        elif system == 'Windows':
+            # Windows
+            if system_64bits:
+                sme_lib = sme_dir + "/sme_synth.so.Win32.x86_64.64g"
+            else:
+                sme_lib = sme_dir + "/sme_synth.so.Win32.x86.32"
+
+    if sme_lib is None or not os.path.exists(sme_lib):
         return False
     else:
         return True
