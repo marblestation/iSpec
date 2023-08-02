@@ -891,17 +891,17 @@ iSpec uses the following radiative transfer codes:
         for spec in self.spectra:
             if except_active and self.active_spectrum == spec:
                 continue
-            self.axes.lines.remove(spec.plot_id)
+            spec.plot_id.remove()
             # Remove errors if they exists
             if spec is not None and spec.errors_plot_id1 is not None:
-                self.axes.lines.remove(spec.errors_plot_id1)
+                spec.errors_plot_id1.remove()
                 spec.errors_plot_id1 = None
             if spec is not None and spec.errors_plot_id2 is not None:
-                self.axes.lines.remove(spec.errors_plot_id2)
+                spec.errors_plot_id2.remove()
                 spec.errors_plot_id2 = None
             # Remove fitted continuum if it exists
             if spec is not None and spec.continuum_plot_id is not None:
-                self.axes.lines.remove(spec.continuum_plot_id)
+                spec.continuum_plot_id.remove()
                 spec.continuum_plot_id = None
                 spec.continuum_model = None
                 spec.continuum_data = None
@@ -909,7 +909,7 @@ iSpec uses the following radiative transfer codes:
             for region in self.region_widgets["lines"]:
                 if spec in region.line_model:
                     if region.line_plot_id[spec] is not None:
-                        self.axes.lines.remove(region.line_plot_id[spec])
+                        region.line_plot_id[spec].remove()
                     del region.line_plot_id[spec]
                     del region.line_model[spec]
                     del region.line_extra[spec]
@@ -1299,8 +1299,7 @@ iSpec uses the following radiative transfer codes:
                 return
 
         self.spectra.remove(self.active_spectrum)
-        self.axes.lines.remove(self.active_spectrum.plot_id)
-
+        self.active_spectrum.plot_id.remove()
 
         # Remove errors if they exists
         self.remove_drawn_errors_spectrum()
@@ -1333,10 +1332,10 @@ iSpec uses the following radiative transfer codes:
 
     def remove_drawn_errors_spectrum(self):
         if self.active_spectrum is not None and self.active_spectrum.errors_plot_id1 is not None:
-            self.axes.lines.remove(self.active_spectrum.errors_plot_id1)
+            self.active_spectrum.errors_plot_id1.remove()
             self.active_spectrum.errors_plot_id1 = None
         if self.active_spectrum is not None and self.active_spectrum.errors_plot_id2 is not None:
-            self.axes.lines.remove(self.active_spectrum.errors_plot_id2)
+            self.active_spectrum.errors_plot_id2.remove()
             self.active_spectrum.errors_plot_id2 = None
 
 
@@ -1430,7 +1429,7 @@ iSpec uses the following radiative transfer codes:
         if self.active_spectrum is not None:
             # Remove spectrum plot if exists
             if self.active_spectrum.plot_id is not None:
-                self.axes.lines.remove(self.active_spectrum.plot_id)
+                self.active_spectrum.plot_id.remove()
 
             # zorder = 1, always in the background
             self.active_spectrum.plot_id = self.axes.plot(self.active_spectrum.data['waveobs'], self.active_spectrum.data['flux'], lw=1, color=self.active_spectrum.color, linestyle='-', marker='', markersize=1, markeredgewidth=0, markerfacecolor=self.active_spectrum.color, zorder=1, label="[A] "+self.active_spectrum.name)[0]
@@ -1438,9 +1437,9 @@ iSpec uses the following radiative transfer codes:
             # Draw errors
             if self.show_errors.get():
                 if self.active_spectrum.errors_plot_id1 is not None:
-                    self.axes.lines.remove(self.active_spectrum.errors_plot_id1)
+                    self.active_spectrum.errors_plot_id1.remove()
                 if self.active_spectrum.errors_plot_id2 is not None:
-                    self.axes.lines.remove(self.active_spectrum.errors_plot_id2)
+                    self.active_spectrum.errors_plot_id2.remove()
 
                 # zorder = 1, always in the background
                 self.active_spectrum.errors_plot_id1 = self.axes.plot(self.active_spectrum.data['waveobs'], self.active_spectrum.data['flux'] + self.active_spectrum.data['err'], lw=1, color=self.active_spectrum.color, linestyle='-.', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=1)[0]
@@ -1629,10 +1628,10 @@ iSpec uses the following radiative transfer codes:
     def remove_drawn_errors_spectra(self):
         for spec in self.spectra:
             if spec.errors_plot_id1 is not None:
-                self.axes.lines.remove(spec.errors_plot_id1)
+                spec.errors_plot_id1.remove()
                 spec.errors_plot_id1 = None
             if spec.errors_plot_id2 is not None:
-                self.axes.lines.remove(spec.errors_plot_id2)
+                spec.errors_plot_id2.remove()
                 spec.errors_plot_id2 = None
         self.canvas.draw()
 
@@ -1640,9 +1639,9 @@ iSpec uses the following radiative transfer codes:
         for spec in self.spectra:
             # Remove continuum plot if exists
             if spec.errors_plot_id1 is not None:
-                self.axes.lines.remove(spec.errors_plot_id1)
+                spec.errors_plot_id1.remove()
             if spec.errors_plot_id2 is not None:
-                self.axes.lines.remove(spec.errors_plot_id2)
+                spec.errors_plot_id2.remove()
 
             # zorder = 1, always in the background
             spec.errors_plot_id1 = self.axes.plot(spec.data['waveobs'], spec.data['flux'] + spec.data['err'], lw=1, color=spec.color, linestyle='-.', marker='', markersize=1, markeredgewidth=0, markerfacecolor='b', zorder=1)[0]
@@ -1891,7 +1890,7 @@ iSpec uses the following radiative transfer codes:
 
     def remove_drawn_continuum_spectrum(self):
         if self.active_spectrum is not None and self.active_spectrum.continuum_plot_id is not None:
-            self.axes.lines.remove(self.active_spectrum.continuum_plot_id)
+            self.active_spectrum.continuum_plot_id.remove()
             self.active_spectrum.continuum_plot_id = None
             #self.active_spectrum.continuum_model = None
             #self.active_spectrum.continuum_data = None
@@ -1900,7 +1899,7 @@ iSpec uses the following radiative transfer codes:
     def remove_drawn_fitted_lines(self):
         for region in self.region_widgets["lines"]:
             if self.active_spectrum in region.line_plot_id and region.line_plot_id[self.active_spectrum] is not None:
-                self.axes.lines.remove(region.line_plot_id[self.active_spectrum])
+                region.line_plot_id[self.active_spectrum].remove()
                 region.line_plot_id[self.active_spectrum] = None
         self.canvas.draw()
 
@@ -1922,7 +1921,7 @@ iSpec uses the following radiative transfer codes:
 
         # Remove continuum plot if exists
         if self.active_spectrum.continuum_plot_id is not None:
-            self.axes.lines.remove(self.active_spectrum.continuum_plot_id)
+            self.active_spectrum.continuum_plot_id.remove()
 
         # zorder = 1, always in the background
         if self.active_spectrum.continuum_data is not None:
