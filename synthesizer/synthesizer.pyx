@@ -79,7 +79,7 @@ cdef extern from "synthesizer_func.h":
 def dummy_func(double num):
     pass
 
-cdef void callback(double num, void *f):
+cdef void callback(double num, void *f) noexcept with gil:
     (<object>f)(num)
 ##############
 
