@@ -143,7 +143,7 @@ def __read_fits_spectrum(spectrum_filename):
                     data = data[0]
                 # iSpec binary table for irregular spectra
                 waveobs = None
-                for key in ('AWAV', 'WAVE'):
+                for key in ('WAVE_AIR', 'AWAV', 'WAVE'):
                     try:
                         waveobs = data[key]
                     except:
