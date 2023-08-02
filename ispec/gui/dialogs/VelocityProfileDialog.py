@@ -80,7 +80,7 @@ class VelocityProfileDialog(CustomDialog):
                 self.__stats.append("%-50s: %10.2f" % ("Corrected FWHM (km/s)", np.round(fwhm - telluric_fwhm, 2)))
             c = 299792458.0 # m/s
             if (fwhm - telluric_fwhm > 0.0):
-                R = np.int(c/(1000.0*(fwhm - telluric_fwhm)))
+                R = int(c/(1000.0*(fwhm - telluric_fwhm)))
                 self.__stats.append("%-50s: %10.i" % ("Estimated resolution (R)", np.round(R)))
 
             self.__stats.append("%-50s: %10.5f" % ("RMS", np.round(model.rms, 5)))

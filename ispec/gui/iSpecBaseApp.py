@@ -2333,7 +2333,7 @@ iSpec uses the following radiative transfer codes:
             fwhm = models[0].fwhm()[0] # km/s (because xcoord is already velocity)
             if relative_to_atomic_data or relative_to_template:
                 telluric_fwhm = 0.0
-                R = np.int(c/(1000.0*fwhm))
+                R = int(c/(1000.0*fwhm))
             else:
                 # If telluric lines have been used, we can substract its natural FWHM
                 # so that we get the real resolution of the instrument (based on the difference in FWHM)
@@ -2341,7 +2341,7 @@ iSpec uses the following radiative transfer codes:
                 telluric_fwhm = np.mean((c/ (mask_linelist['wave_peak']/ mask_linelist['fwhm'])) / 1000.0) # km/s
                 diff = np.round(fwhm - telluric_fwhm, 2)
                 if diff > 0:
-                    R = np.int(c/(1000.0*diff))
+                    R = int(c/(1000.0*diff))
                 else:
                     R = 0
             # Velocity
