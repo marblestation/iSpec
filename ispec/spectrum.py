@@ -151,7 +151,7 @@ def __read_fits_spectrum(spectrum_filename):
                     else:
                         break
                 flux = None
-                for key in ('FLUX',):
+                for key in ('FLUX', 'FLUX_REDUCED'):
                     try:
                         flux = data[key]
                     except:
