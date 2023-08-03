@@ -977,7 +977,31 @@ def estimate_vmic(teff, logg, feh):
 
 
 
-def estimate_vmac(teff, logg, feh):
+def _estimate_vmac_doyle2014(teff, logg, feh):
+    """
+    Estimate Macroturbulence velocity (Vmac) by using an empirical relation
+    considering the effective temperature, surface gravity and metallicity.
+
+    The relation was constructed by Doyle et al. (2014), which is only valid
+    for the Teff range 5200 to 6400 K, and the log g range 4.0 to 4.6 dex.
+    """
+    t0 = 5777
+    g0 = 4.44
+
+    if logg >= 3.5:
+        if teff >= 5000:
+            # main sequence and subgiants (RGB)
+            vmac = 3.21 + 2.33e-3*(teff-t0) + 2e-6*(teff-t0)**2 - 2*(logg-g0)
+        else:
+            # main sequence
+            vmac = 3.21 + 2.33e-3*(teff-t0) + 2e-6*(teff-t0)**2 - 2*(logg-g0)
+    else:
+        # Out of the calibrated limits
+        vmac = 0.
+
+    return vmac
+
+def _estimate_vmac_ges(teff, logg, feh):
     """
     Estimate Microturbulence velocity (Vmic) by using an empirical relation
     considering the effective temperature, surface gravity and metallicity.
@@ -998,6 +1022,21 @@ def estimate_vmac(teff, logg, feh):
         # giants (RGB/AGB)
         vmac = 3*(1.15 + 2.2e-5*(teff-t0) - 0.5e-7*(teff-t0)**2 - 0.1*(logg-g0) + 0.04*(logg-g0)**2 - 0.37*feh - 0.07*feh**2)
 
+    return vmac
+
+def estimate_vmac(teff, logg, feh, relation='GES'):
+    """
+    Estimate Microturbulence velocity (Vmic) by using an empirical relation
+    considering the effective temperature, surface gravity and metallicity.
+
+    By default, the selected relation was constructed by Maria Bergemann
+    for the Gaia ESO Survey. Alternatively, "relation='Doyle2014'" implements
+    a relation for dwrafs (Doyle et al, 2014).
+    """
+    if relation == 'Doyle2014':
+        vmac = _estimate_vmac_doyle2014(teff, logg, feh)
+    else:
+        vmac = _estimate_vmac_ges(teff, logg, feh)
     vmac = float("%.2f" % vmac)
     return vmac
 

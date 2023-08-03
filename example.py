@@ -2794,7 +2794,8 @@ def estimate_vmac_from_empirical_relation():
     teff = 5500
     logg = 4.5
     MH = 0.0
-    vmac = ispec.estimate_vmac(teff, logg, MH)
+    vmac = ispec.estimate_vmac(teff, logg, MH, relation='GES')
+    #vmac = ispec.estimate_vmac(teff, logg, MH, relation='Doyle2014')
     print("VMAC:", vmac)
 
 def generate_and_plot_YY_isochrone():
