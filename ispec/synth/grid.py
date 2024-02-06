@@ -402,7 +402,7 @@ def estimate_initial_ap(spectrum, precomputed_dir, resolution, linemasks, defaul
 
         except Exception as e:
             print("Initial parameters could not be estimated")
-            print(type(e), e.message)
+            print(type(e), e)
             pass
         finally:
             grid.close()

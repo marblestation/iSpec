@@ -476,8 +476,6 @@ def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None
                 discard_gaussian = False
             except Exception as e:
                 pass
-                #if len(e.message) > 0:
-                    #print e.message
 
     if not discard_voigt:
         # Default values for failed fit:
@@ -495,8 +493,6 @@ def __fit_line(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=None
                 discard_voigt = False
             except Exception as e:
                 pass
-                #if len(e.message) > 0:
-                    #print e.message
 
     if (not discard_gaussian and not discard_voigt and rms_gaussian <= rms_voigt) or (not discard_gaussian and discard_voigt):
         return gaussian_model, rms_gaussian
@@ -1417,7 +1413,7 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                 # RMS
                 regions['rms'][i] = rms
             except Exception as e:
-                #print "WARNING: Bad line fit (", i, ") - ", e.message
+                #print("WARNING: Bad line fit (", i, ") - ", e)
                 fitting_not_possible = True
 
 
@@ -2455,7 +2451,7 @@ def __model_velocity_profile(ccf, nbins, only_one_peak=False, peak_probability=0
             logging.info("Peak found at %.2f km/s (fitted at %.2f +/- %.2f km/s)" % (xcoord[peaks[i]], final_model.mu(), final_model.emu()))
             models.append(final_model)
         except Exception as e:
-            print(type(e), e.message)
+            print(type(e), e)
 
 
     return np.asarray(models)
