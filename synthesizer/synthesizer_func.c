@@ -181,7 +181,7 @@ int ew_and_depth(char *atmosphere_model_file, char *linelist_file, char *isotope
     isodata *isotope;
     pfunc *V;
     population *POP;
-    char *file, *ofile, name[60], lines[60], *flines, c, atmdat[60];
+    char *file, *ofile, name[60], lines[60], *flines, c, atmdat[4096];
     /*char tmp[10], isofile[80]; */
     FILE *qf, *fp, *sel;
     int nq = 0;

@@ -205,6 +205,7 @@ def __calculate_ew_and_depth(process_communication_queue, atmosphere_model_file,
     #update_progress_func = lambda v: process_communication_queue.put(("self.update_progress(%i)" % v))
     update_progress_func = lambda v: __enqueue_progress(process_communication_queue, v)
     output_wave, output_code, output_ew, output_depth = ispec.synthesizer.calculate_ew_and_depth(atmosphere_model_file.encode('utf-8'), linelist_file.encode('utf-8'), isotope_file.encode('utf-8'), abundances_file.encode('utf-8'), num_lines, microturbulence_vel, nlayers, start, end, verbose, update_progress_func)
+    print(output_wave)
     process_communication_queue.put((output_wave, output_code, output_ew, output_depth))
 
 def __enqueue_progress(process_communication_queue, v):
@@ -253,13 +254,12 @@ def calculate_theoretical_ew_and_depth(atmosphere_layers, teff, logg, MH, alpha,
     #process_communication_queue = Queue()
     process_communication_queue = JoinableQueue()
 
-
     p = Process(target=__calculate_ew_and_depth, args=(process_communication_queue, atmosphere_layers_file, linelist_file, isotope_file, abundances_file, num_lines), kwargs={'microturbulence_vel': microturbulence_vel, 'nlayers': nlayers, 'start': start, 'end':end, 'verbose': verbose})
     p.start()
-    output_wave = np.zeros(len(linelist))
-    output_code = np.zeros(len(linelist))
-    output_ew = np.zeros(len(linelist))
-    output_depth = np.zeros(len(linelist))
+    output_wave = np.zeros(num_lines)
+    output_code = np.zeros(num_lines)
+    output_ew = np.zeros(num_lines)
+    output_depth = np.zeros(num_lines)
     num_seconds = 0
     # Constantly check that the process has not died without returning any result and blocking the queue call
     while p.is_alive() and num_seconds < timeout:
