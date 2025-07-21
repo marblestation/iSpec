@@ -876,13 +876,14 @@ def calendar_to_jd(caltime,tz=None,gregorian=True,mjd=False):
 
 
 
-    yr = np.array(yr,dtype='int64',copy=False).ravel()
-    month = np.array(month,dtype='int64',copy=False).ravel()
-    day = np.array(day,dtype='int64',copy=False).ravel()
-    hr = np.array(hr,dtype=float,copy=False).ravel()
-    min = np.array(min,dtype=float,copy=False).ravel()
-    sec = np.array(sec,dtype=float,copy=False).ravel()
-    msec = np.array(msec,dtype=float,copy=False).ravel()
+    yr = np.asarray(yr, dtype='int64').ravel()
+    month = np.asarray(month, dtype='int64').ravel()
+    day = np.asarray(day, dtype='int64').ravel()
+    hr = np.asarray(hr, dtype=float).ravel()
+    min = np.asarray(min, dtype=float).ravel()
+    sec = np.asarray(sec, dtype=float).ravel()
+    msec = np.asarray(msec, dtype=float).ravel()
+
 
     #do tz conversion if tz is provided
     if isinstance(tz,str) or isinstance(tz,tzinfo):
