@@ -1934,6 +1934,8 @@ iSpec uses the following radiative transfer codes:
                 wave_top = region.get_wave_top()
                 wave_filter = (self.active_spectrum.data['waveobs'] >= wave_base) & (self.active_spectrum.data['waveobs'] <= wave_top)
                 spectrum_window = self.active_spectrum.data[wave_filter]
+                if len(spectrum_window) == 0:
+                    continue
 
                 # Get fluxes from model
                 line_fluxes = region.line_model[self.active_spectrum](spectrum_window['waveobs'])

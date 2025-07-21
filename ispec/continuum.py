@@ -76,6 +76,14 @@ class KnotSplineModel(object):
         else:
             self.iknots = np.linspace(x[0],x[-1],self.nknots+2)[1:-1]
 
+        required_points = len(self.iknots) + self.degree + 1
+        if len(x) < required_points:
+            raise ValueError(
+                f"Not enough data points to fit the spline. "
+                f"Need at least {required_points} points for {len(self.iknots)} knots and degree {self.degree}, "
+                f"but only have {len(x)}."
+            )
+
         self.spline = LSQUnivariateSpline(x,y,t=self.iknots,k=int(self.degree),w=weights)
 
     def __call__(self, x):
