@@ -1,9 +1,9 @@
-numpy>=1.18.5
-scipy>=1.5.0
-matplotlib>=3.2.2
-astropy>=4.0.1.post1
+numpy>=2.2.5
+scipy>=1.15.3
+matplotlib>=3.10.0
+astropy>=7.1.0
 lockfile>=0.12.2
-Cython>=0.29.21
-pandas>=1.0.5
-statsmodels>=0.11.1
-dill>=0.3.2
+Cython>=3.0.12
+pandas>=2.2.3
+statsmodels>=0.14.4
+dill>=0.3.8
