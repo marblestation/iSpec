@@ -71,44 +71,44 @@ class CustomizableRegion(object):
 
 
     def update_size(self, event):
-        # Update the position of the edge left or right
-        xy = self.axvspan.get_xy()
+        left_edge = self.axvspan.get_x()
+        width = self.axvspan.get_width()
+        right_edge = left_edge + width
 
         # If left button clicked, modify left edge
         if event.button == 1:
             # Check condition to allow modification
+            compatible_with_mark = True
             if self.mark is not None:
                 # Mark should be inside the region
                 compatible_with_mark = event.xdata < self.mark.get_xdata()[0]
-            else:
-                # There is no mark, so any position is good
-                compatible_with_mark = True
 
             # Do not modify if the region will become slimmer than...
-            big_enough = xy[2,0] - event.xdata > self.min_width
+            big_enough = right_edge - event.xdata > self.min_width
 
             if big_enough and compatible_with_mark:
-                xy[0,0] = event.xdata
-                xy[1,0] = event.xdata
-                xy[4,0] = event.xdata
-                self.frame.status_message("Moving left edge to %.4f" % xy[0,0])
+                new_left_edge = event.xdata
+                new_width = right_edge - new_left_edge
+                self.axvspan.set_x(new_left_edge)
+                self.axvspan.set_width(new_width)
+                self.frame.status_message("Moving left edge to %.4f" % new_left_edge)
                 self.frame.canvas.draw()
+
+        # If right button clicked, modify right edge
         elif event.button == 3:
             # Check condition to allow modification
+            compatible_with_mark = True
             if self.mark is not None:
                 # Mark should be inside the region
                 compatible_with_mark = event.xdata > self.mark.get_xdata()[0]
-            else:
-                # There is no mark, so any position is good
-                compatible_with_mark = True
 
             # Do not modify if the region will become slimmer than...
-            big_enough = event.xdata - xy[0,0] > self.min_width
+            big_enough = event.xdata - left_edge > self.min_width
 
             if big_enough and compatible_with_mark:
-                xy[2,0] = event.xdata
-                xy[3,0] = event.xdata
-                self.frame.status_message("Moving right edge to %.4f" % xy[2,0])
+                new_width = event.xdata - left_edge
+                self.axvspan.set_width(new_width)
+                self.frame.status_message("Moving right edge to %.4f" % (left_edge + new_width))
                 self.frame.canvas.draw()
 
     def update_mark(self, event):
@@ -121,6 +121,24 @@ class CustomizableRegion(object):
 
             inside_region = (event.xdata > xy[0,0]) and (event.xdata < xy[2,0])
             if inside_region:
+                x[0] = event.xdata
+                x[1] = event.xdata
+                self.mark.set_xdata(x)
+                self.mark_position = self.mark.get_xdata()[0]
+                if self.note is not None:
+                    self.note.xy = (event.xdata, 1)
+                self.frame.status_message("Moving mark to %.4f" % x[0])
+                self.frame.canvas.draw()
+
+    def update_mark(self, event):
+        left_edge = self.axvspan.get_x()
+        right_edge = left_edge + self.axvspan.get_width()
+        inside_region = (event.xdata > left_edge) and (event.xdata < right_edge)
+
+        # If left button clicked, modify mark
+        if event.button == 1 and self.mark is not None:
+            if inside_region:
+                x = self.mark.get_xdata()
                 x[0] = event.xdata
                 x[1] = event.xdata
                 self.mark.set_xdata(x)
@@ -285,7 +303,9 @@ class CustomizableRegion(object):
                     #  (if we do it on_press, this event would not be trigered and the lock not released)
                     self.frame.region_widgets[self.element_type].remove(self)
                     self.frame.regions_changed(self.element_type)
-                    self.frame.flash_status_message("Removed region from " + "%.4f" % self.axvspan.get_xy()[0,0] + " to " + "%.4f" % self.axvspan.get_xy()[2,0])
+                    left_edge = self.axvspan.get_x()
+                    right_edge = left_edge + self.axvspan.get_width()
+                    self.frame.flash_status_message("Removed region from " + "%.4f" % left_edge + " to " + "%.4f" % right_edge)
                     self.disconnect_and_remove()
                     self.hide()
                     self.frame.canvas.draw()
@@ -343,9 +363,9 @@ class CustomizableRegion(object):
             return None
 
     def get_wave_base(self):
-        return self.axvspan.get_xy()[0,0]
+        return self.axvspan.get_x()
 
     def get_wave_top(self):
-        return self.axvspan.get_xy()[2,0]
+        return self.axvspan.get_x() + self.axvspan.get_width()
 
 
