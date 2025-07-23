@@ -9,7 +9,7 @@ include2 = ../$(SOURCE)/tsuji.par
 OPT1 = -L/usr/lib -fconvert=big-endian -O3 -fno-automatic -mcmodel=small -std=legacy
 LINKOPT = -L/usr/lib -fconvert=big-endian -O3 -fno-automatic -mcmodel=small -std=legacy
 
-SOURCE = src
+SOURCE = source
 
 babsma_luobj =  \
       ../$(SOURCE)/absko.f \
