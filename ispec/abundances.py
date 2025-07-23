@@ -18,7 +18,7 @@
 import numpy as np
 from .atmospheres import *
 from .lines import write_atomic_linelist
-from .common import is_spectrum_support_enabled, is_moog_support_enabled, is_width_support_enabled
+from .common import is_spectrum_support_enabled, is_moog_support_enabled, is_moog_scat_support_enabled, is_width_support_enabled
 from multiprocessing import Process
 from multiprocessing import Queue
 from multiprocessing import JoinableQueue
@@ -274,12 +274,12 @@ def write_solar_abundances(abundances, abundances_filename=None, tmp_dir=None):
 
 def determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, gui_queue=None, timeout=1800, isotopes=None, code="spectrum", tmp_dir=None):
     code = code.lower()
-    if code not in ['spectrum', 'moog', 'width']:
+    if code not in ['spectrum', 'moog', 'moog-scat', 'width']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
     abundances = enhance_solar_abundances(abundances, alpha)
 
-    if code == "moog":
+    if code in ("moog", "moog-scat"):
         #return __moog_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir)
         success = False
         bad = linemasks['wave_A'] < 0 # All to false
@@ -291,7 +291,10 @@ def determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, ab
                     filtered_ignore = ignore[~bad]
                 else:
                     filtered_ignore = None
-                spec_abund, absolute_abund, x_over_h, x_over_fe = __moog_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks[~bad], isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=filtered_ignore, verbose=verbose, tmp_dir=tmp_dir)
+                if code == "moog":
+                    spec_abund, absolute_abund, x_over_h, x_over_fe = __moog_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks[~bad], isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=filtered_ignore, verbose=verbose, tmp_dir=tmp_dir)
+                else:
+                    spec_abund, absolute_abund, x_over_h, x_over_fe = __moog_scat_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks[~bad], isotopes, abundances, microturbulence_vel = microturbulence_vel, ignore=filtered_ignore, verbose=verbose, tmp_dir=tmp_dir)
             except Exception as e:
                 # MOOG ERROR: CANNOT DECIDE ON LINE WAVELENGTH STEP SIZE FOR   5158.62   I QUIT!
                 if "CANNOT DECIDE ON LINE WAVELENGTH STEP SIZE FOR" in str(e):
@@ -464,17 +467,27 @@ def __spectrum_determine_abundances_internal(process_communication_queue, atmosp
     process_communication_queue.put(abundances)
 
 
-
 def __moog_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, isotopes, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, tmp_dir=None):
     if not is_moog_support_enabled():
         raise Exception("MOOG support is not enabled")
-
     ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
     moog_dir = ispec_dir + "/synthesizer/moog/"
     moog_executable = moog_dir + "MOOGSILENT"
+    return __moog_generic_determine_abundances(moog_executable, atmosphere_layers, teff, logg, MH, alpha, linemasks, isotopes, abundances, microturbulence_vel=microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir)
+
+def __moog_scat_determine_abundances(atmosphere_layers, teff, logg, MH, alpha, linemasks, isotopes, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, tmp_dir=None):
+    if not is_moog_scat_support_enabled():
+        raise Exception("MOOG support is not enabled")
+    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
+    moog_dir = ispec_dir + "/synthesizer/moog-scat/"
+    moog_executable = moog_dir + "MOOG_SCATSILENT"
+    return __moog_generic_determine_abundances(moog_executable, atmosphere_layers, teff, logg, MH, alpha, linemasks, isotopes, abundances, microturbulence_vel=microturbulence_vel, ignore=ignore, verbose=verbose, tmp_dir=tmp_dir)
+
+def __moog_generic_determine_abundances(moog_executable, atmosphere_layers, teff, logg, MH, alpha, linemasks, isotopes, abundances, microturbulence_vel = 2.0, ignore=None, verbose=0, tmp_dir=None):
+    if not is_moog_support_enabled():
+        raise Exception("MOOG support is not enabled")
 
     tmp_execution_dir = tempfile.mkdtemp(dir=tmp_dir)
-    #os.symlink(moog_dir, tmp_execution_dir+"/DATA")
     os.makedirs(tmp_execution_dir+"/DATA/")
     atmosphere_filename = tmp_execution_dir + "/model.in"
     linelist_file = tmp_execution_dir + "/lines.in"

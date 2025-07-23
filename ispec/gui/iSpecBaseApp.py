@@ -137,6 +137,10 @@ class iSpecBaseApp(tkinter.Tk):
             self.lists['synth_code'].append("MOOG")
             self.lists['ew_code'].append("MOOG")
             self.default_lists['ew_code'] = len(self.lists['ew_code'])-1 # Prefer moog before spectrum
+        if ispec.is_moog_scat_support_enabled():
+            self.lists['synth_code'].append("MOOG-SCAT")
+            self.lists['ew_code'].append("MOOG-SCAT")
+            self.default_lists['ew_code'] = len(self.lists['ew_code'])-1 # Prefer moog-scat before moog
         if ispec.is_width_support_enabled():
             self.lists['ew_code'].append("Width")
             self.default_lists['ew_code'] = len(self.lists['ew_code'])-1 # Prefer width before moog
@@ -782,8 +786,9 @@ www.gnu.org/licenses/"""
 iSpec uses the following radiative transfer codes:
 
 1) SPECTRUM - Richard O. Gray - Version 2.77
-2) Turbospectrum - Bertrand Plez - v19.1
+2) Turbospectrum - Bertrand Plez - v20.0
 3) MOOG - Chris Sneden - November 2019
+3) MOOG-SCAT - Jennifer Sobeck - January 2023
 4) SYNTHE/WIDTH9 - R. L. Kurucz / Atmos port - 2015
 5) SME - Valenti & Piskunov - 574
 """

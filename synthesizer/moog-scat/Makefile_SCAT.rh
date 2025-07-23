@@ -1,0 +1,72 @@
+#     Makefile for MOOG with all of the common block assignments;
+#     Modified by J. Sobeck 
+#     Linux RH OS 
+#     Updated 2022
+
+
+#     here are the object files
+OBJECTS = Abfind_SCAT.o Abpop_SCAT.o Abunplot.o Ang_Weight_SCAT.o \
+	Batom.o Begin.o Binary_SCAT.o \
+	Binplot.o Binplotprep.o Blankstring.o Blends_SCAT.o \
+	Bmolec.o Boxit.o \
+	Calmod.o Cdcalc_SCAT.o Chabund.o Cog_SCAT.o Cogplot.o Cogsyn_SCAT.o \
+	Correl.o Crosscorr.o Curve_SCAT.o Damping.o Defcolor.o Discov.o \
+	Doflux_SCAT.o Drawcurs.o Eqlib.o Ewfind_SCAT.o \
+	Ewweighted.o Fakeline_SCAT.o Findtic.o Finish.o \
+	Fluxplot.o Gammabark.o Getasci.o Getcount.o \
+	Gauss_Quad_Sum.o Getnum.o Getsyns_SCAT.o \
+	Gridplo.o Gridsyn_SCAT.o Infile.o Inlines.o Inmodel.o Invert.o \
+	Jexpint.o Lineinfo.o Lineabund_SCAT.o Linlimit.o \
+	Makeplot.o Molquery.o Moog_SCAT.o Mydriver.o \
+	Nansi.o Nearly.o Number.o Obshead.o \
+	Oneline_SCAT.o Opaccouls.o OpacHelium.o OpacHydrogen.o \
+	Opacit.o Opacmetals.o Opacscat.o Params.o Partfn.o \
+	Partnew.o Plotit.o Plotremember.o Pltabun.o Pltcog.o \
+	Pltflux.o Pltspec.o Pointcurs.o Prinfo.o Putasci.o Readobs.o \
+	Rinteg.o Setmols.o Smooth.o Specplot.o Stats.o Sunder.o \
+	Synpop_SCAT.o Synspec_SCAT.o \
+	Sourcefunc_cont_SCAT.o Sourcefunc_line_SCAT.o \
+	Synth_SCAT.o Tablepop.o Taukap.o Total.o Trudamp.o Ucalc.o Vargauss.o \
+	Vmacro.o Voigt.o Wavecalc.o Weedout.o Writenumber.o
+
+
+#     here are the common files
+COMMON =  Atmos.com Dummy.com Equivs.com Factor.com Kappa.com Linex.com \
+	Mol.com Multistar.com Obspars.com Pstuff.com \
+	Quants.com Multimod.com Dampdat.com Scat.com
+
+CC = cc
+FC = gfortran -ff2c -Wall
+
+# the following lines point to some needed libraries
+#X11LIB = /usr/X11R6/lib #!SBC
+#SMLIB = /usr/local/lib #!SBC
+SMLIB = fake_sm-2.4.35
+
+#        here are the compilation and linking commands
+all: MOOG ;
+	@echo -----------------------------------------------------------------
+	@echo 
+	@echo make sure that you have entered the proper parameters
+	@echo for MOOG_SCAT into the FORTRAN source driver
+	@echo routine Moog_SCAT.f !!!!!!!!!!!!
+	@echo
+	@echo NOTE: The inital way to call MOOG_SCAT in the local install 
+	@echo directory is to type ./MOOG_SCAT at the command line prompt.
+	@echo 
+	@echo
+	@echo -----------------------------------------------------------------
+
+#!SBC
+#MOOG:  $(OBJECTS);
+#	$(FC) $(OBJECTS) -o MOOG_SCAT -L$(X11LIB) -lX11 \
+#	-L$(SMLIB) -lplotsub -ldevices -lutils
+#
+MOOG:  $(OBJECTS) $(SMLIB)/lib/libfakesm.a;
+	$(FC) $(OBJECTS) -o MOOG_SCAT  \
+        -L$(SMLIB)/lib -lfakesm -L/usr/lib
+
+$(OBJECTS): $(COMMON)
+
+clean:
+	-rm -f *.o MOOG_SCAT libMOOG.a

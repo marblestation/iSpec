@@ -2,13 +2,15 @@
 UNAME_S := $(shell uname -s)
 
 
-all: spectrum turbospectrum moog isochrones
+all: spectrum turbospectrum moog moog-scat isochrones
 
 spectrum: ispec/synthesizer.so synthesizer/spectrum/spectrum
 
 turbospectrum: synthesizer/turbospectrum/bin/babsma_lu synthesizer/turbospectrum/bin/bsyn_lu
 
 moog: synthesizer/moog/MOOGSILENT
+
+moog-scat: synthesizer/moog-scat/MOOG_SCATSILENT
 
 ares: synthesizer/ARES/bin/ARES
 
@@ -72,6 +74,34 @@ ifeq ($(UNAME_S),Solaris)
 	sed -i 's/machine = "uni"/machine = "pcl"/' synthesizer/moog/Moogsilent.f
 endif
 
+synthesizer/moog-scat/MOOG_SCATSILENT: synthesizer/moog-scat/*.f
+ifeq ($(UNAME_S),Linux)
+	sed -i 's/machine = "mac"/machine = "pcl"/' synthesizer/moog-scat/Moogsilent_SCAT.f
+	sed -i 's/machine = "uni"/machine = "pcl"/' synthesizer/moog-scat/Moogsilent_SCAT.f
+endif
+ifeq ($(UNAME_S),Darwin)
+	sed -i.bak 's/machine = "pcl"/machine = "mac"/' synthesizer/moog-scat/Moogsilent_SCAT.f
+	sed -i.bak 's/machine = "uni"/machine = "mac"/' synthesizer/moog-scat/Moogsilent_SCAT.f
+	rm -f synthesizer/moog-scat/Moogsilent_SCAT.f.bak
+endif
+ifeq ($(UNAME_S),Solaris)
+	sed -i 's/machine = "mac"/machine = "uni"/' synthesizer/moog-scat/Moogsilent_SCAT.f
+	sed -i 's/machine = "pcl"/machine = "uni"/' synthesizer/moog-scat/Moogsilent_SCAT.f
+endif
+	rm -f synthesizer/moog-scat/*.o
+	rm -f synthesizer/moog-scat/MOOG_SCAT
+	rm -f synthesizer/moog-scat/MOOG_SCATSILENT
+	$(MAKE) -C synthesizer/moog-scat/fake_sm-2.4.35/ -f Makefile
+	$(MAKE) -C synthesizer/moog-scat/ -f Makefile_SCAT.rhsilent
+ifeq ($(UNAME_S),Darwin)
+	sed -i.bak 's/machine = "mac"/machine = "pcl"/' synthesizer/moog-scat/Moogsilent_SCAT.f
+	rm -f synthesizer/moog-scat/Moogsilent_SCAT.f.bak
+endif
+ifeq ($(UNAME_S),Solaris)
+	sed -i 's/machine = "uni"/machine = "pcl"/' synthesizer/moog-scat/Moogsilent_SCAT.f
+endif
+
+
 
 .PHONY: clean
 
@@ -83,6 +113,9 @@ clean:
 	rm -f synthesizer/moog/*.o
 	rm -f synthesizer/moog/MOOG
 	rm -f synthesizer/moog/MOOGSILENT
+	rm -f synthesizer/moog-scat/*.o
+	rm -f synthesizer/moog-scat/MOOG_SCAT
+	rm -f synthesizer/moog-scat/MOOG_SCATSILENT
 	rm -f synthesizer/turbospectrum/exec-gf/*.o
 	rm -f synthesizer/turbospectrum/exec-gf/*.mod
 	rm -f synthesizer/turbospectrum/bin/babsma_lu 

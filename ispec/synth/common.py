@@ -28,12 +28,17 @@ def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, al
     """
     """
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog', 'synthe', 'sme', 'grid']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'moog-scat', 'synthe', 'sme', 'grid']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
     if code != "grid":
         # Filter out lines not supported by a given synthesizer
-        lcode = linelist[code+'_support'] == "T"
+        if code == 'moog-scat':
+            # MOOG-SCAT is backward compatible with MOOG
+            linelist_code = 'moog'
+        else:
+            linelist_code = code
+        lcode = linelist[linelist_code+'_support'] == "T"
         linelist = linelist[lcode]
         # Limit linelist to the region asked to be synthesized
         # Provide some margin or near-by deep lines might be omitted
@@ -45,8 +50,8 @@ def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, al
 
         if code == "turbospectrum":
             return turbospectrum.generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
-        elif code == "moog":
-            return moog.generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
+        elif code in ("moog", "moog-scat"):
+            return moog.generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout, code=code)
         elif code == "synthe":
             return synthe.generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
         elif code == "sme":
@@ -63,12 +68,17 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
     """
     """
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog', 'synthe', 'sme', 'grid']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'moog-scat', 'synthe', 'sme', 'grid']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
     if code != "grid":
         # Filter out lines not supported by a given synthesizer
-        lcode = linelist[code+'_support'] == "T"
+        if code == 'moog-scat':
+            # MOOG-SCAT is backward compatible with MOOG
+            linelist_code = 'moog'
+        else:
+            linelist_code = code
+        lcode = linelist[linelist_code+'_support'] == "T"
         linelist = linelist[lcode]
         # Limit linelist to the region asked to be synthesized
         # Provide some margin or near-by deep lines might be omitted
@@ -80,8 +90,8 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
 
         if code == "turbospectrum":
             return turbospectrum.generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
-        elif code == "moog":
-            return moog.generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
+        elif code in ("moog", "moog-scat"):
+            return moog.generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout, code=code)
         elif code == "synthe":
             return synthe.generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, molecules_files=molecules_files, regions=regions, tmp_dir=tmp_dir, timeout=timeout)
         elif code == "sme":

@@ -65,6 +65,18 @@ def is_moog_support_enabled():
     else:
         return True
 
+def is_moog_scat_support_enabled():
+    ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../"
+    moog_dir = ispec_dir + "/synthesizer/moog-scat/"
+    moog_executable = moog_dir + "MOOG_SCATSILENT"
+
+    if not os.path.exists(moog_executable) or \
+            not os.path.exists(moog_dir):
+        return False
+    else:
+        return True
+
+
 def is_width_support_enabled():
     is_linux = platform.system() == "Linux"
     if not is_linux:

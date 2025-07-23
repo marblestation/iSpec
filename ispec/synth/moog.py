@@ -28,20 +28,26 @@ from astropy.table import Table, Column
 from ispec.atmospheres import write_atmosphere
 from ispec.lines import write_atomic_linelist
 from ispec.common import which
-from ispec.common import is_moog_support_enabled
+from ispec.common import is_moog_support_enabled, is_moog_scat_support_enabled
 from ispec.spectrum import create_spectrum_structure, resample_spectrum
 from .effects import _filter_linelist, apply_post_fundamental_effects
 
-def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, regions=None, tmp_dir=None, timeout=1800):
-    return generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0, tmp_dir=tmp_dir, timeout=timeout)
+def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, regions=None, tmp_dir=None, timeout=1800, code="moog"):
+    return generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0, tmp_dir=tmp_dir, timeout=timeout, code=code)
 
-def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, tmp_dir=None, timeout=1800):
-    if not is_moog_support_enabled():
+def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, tmp_dir=None, timeout=1800, code="moog"):
+    if code == "moog" and not is_moog_support_enabled():
         raise Exception("MOOG support is not enabled")
+    elif code == "moog-scat" and not is_moog_scat_support_enabled():
+        raise Exception("MOOG-SCAT support is not enabled")
 
     ispec_dir = os.path.dirname(os.path.realpath(__file__)) + "/../../"
-    moog_dir = ispec_dir + "/synthesizer/moog/"
-    moog_executable = moog_dir + "MOOGSILENT"
+    if code == "moog":
+        moog_dir = ispec_dir + "/synthesizer/moog/"
+        moog_executable = moog_dir + "MOOGSILENT"
+    else:
+        moog_dir = ispec_dir + "/synthesizer/moog-scat/"
+        moog_executable = moog_dir + "MOOG_SCATSILENT"
 
     #molecules = linelist['molecule'] == "T"
     #if len(np.where(molecules)[0]) > 0:

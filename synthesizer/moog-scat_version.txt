@@ -1,0 +1,5 @@
+January 6, 2023
+Commit: 768d9beddadb51d2156eaf2651146a6739f90236
+https://github.com/jsobeck/MOOG_SCAT
+https://moog-scat.readthedocs.io/en/latest/
+https://ui.adsabs.harvard.edu/abs/2023AAS...24221703S/abstract

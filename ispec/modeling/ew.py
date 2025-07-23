@@ -539,7 +539,7 @@ class EquivalentWidthModel(MPFitModel):
             raise Exception("Wrong number of parameters!")
 
         code = code.lower()
-        if code not in ['spectrum', 'turbospectrum', 'moog', 'width']:
+        if code not in ['spectrum', 'turbospectrum', 'moog', 'moog-scat', 'width']:
             raise Exception("Unknown radiative transfer code: %s" % (code))
 
 
@@ -562,7 +562,7 @@ class EquivalentWidthModel(MPFitModel):
         gtol = 1.e-4
         damp = 0.0   # Not active: Residuals are limited between -1.0 and 1.0 (np.tanh(residuals/1.0))
         #chisq_limit = 4.0e-4 # 0.0004 = np.sum(np.asarray([0.01, 0.01, 0.01, 0.01])**2))
-        if code == "moog":
+        if code in ("moog", "moog-scat"):
             chisq_limit = None
         else:
             chisq_limit = 3 # = np.sum((np.asarray([0.01, 0.01, 0.01])*100)**2) # weight 100)
@@ -662,7 +662,7 @@ def model_spectrum_from_ew(linemasks, modeled_layers_pack, abundances, initial_t
       depending on the metallicity.
     """
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog', 'width']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'moog-scat', 'width']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
     ranges = modeled_layers_pack[7]

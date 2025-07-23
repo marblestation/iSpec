@@ -1320,10 +1320,15 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     linelist_free_loggf = None
 
     # Line regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(code))
+    if code == "moog-scat":
+        # MOOG-SCAT is backward compatible with MOOG
+        line_region_code = "moog"
+    else:
+        line_region_code = code
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     ## Select only some lines to speed up the execution (in a real analysis it is better not to do this)
     line_regions = line_regions[np.logical_or(line_regions['note'] == 'Ti 1', line_regions['note'] == 'Ti 2')]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -1457,10 +1462,15 @@ def determine_astrophysical_parameters_using_grid():
     free_params = ["teff", "logg", "MH", "alpha", "vmic", "R"]
 
     # Line regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(code))
+    if code == "moog-scat":
+        # MOOG-SCAT is backward compatible with MOOG
+        line_region_code = "moog"
+    else:
+        line_region_code = code
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     ## Select only some lines to speed up the execution (in a real analysis it is better not to do this)
     #line_regions = line_regions[np.logical_or(line_regions['note'] == 'Ti 1', line_regions['note'] == 'Ti 2')]
     #line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -1627,10 +1637,15 @@ def estimate_initial_ap_with_precomputed_grid_and_determine_ap_using_synth_spect
     linelist_free_loggf = None
 
     # Line regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(code))
+    if code == "moog-scat":
+        # MOOG-SCAT is backward compatible with MOOG
+        line_region_code = "moog"
+    else:
+        line_region_code = code
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     # Select only some lines to speed up the execution (in a real analysis it is better not to do this)
     line_regions = line_regions[np.logical_or(line_regions['note'] == 'Ti 1', line_regions['note'] == 'Ti 2')]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -1826,10 +1841,15 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     linelist_free_loggf = None
 
     # Line regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(code))
+    if code == "moog-scat":
+        # MOOG-SCAT is backward compatible with MOOG
+        line_region_code = "moog"
+    else:
+        line_region_code = code
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     # Select only the lines to get abundances from
     line_regions = line_regions[np.logical_or(line_regions['note'] == element_name+' 1', line_regions['note'] == element_name+' 2')]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -1981,10 +2001,15 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
     chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
 
     # Line regions
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(code))
+    if code == "moog-scat":
+        # MOOG-SCAT is backward compatible with MOOG
+        line_region_code = "moog"
+    else:
+        line_region_code = code
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     # Select only the lines to get abundances from
     line_regions = line_regions[:5]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -2158,8 +2183,13 @@ def determine_loggf_line_by_line_using_synth_spectra(code="spectrum"):
     chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
 
     # Line regions
-    line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(code))
-    #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(code))
+    if code == "moog-scat":
+        # MOOG-SCAT is backward compatible with MOOG
+        line_region_code = "moog"
+    else:
+        line_region_code = code
+    line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     # Select only the lines to get abundances from
     line_regions_with_atomic_data = line_regions_with_atomic_data[:5]
     line_regions_with_atomic_data = ispec.adjust_linemasks(normalized_star_spectrum, line_regions_with_atomic_data, max_margin=0.5)
@@ -2300,12 +2330,17 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
 
     if use_lines_already_crossmatched_with_atomic_data:
         #--- Read lines and adjust them ------------------------------------------------
-        if code in ['width', 'moog']:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_ew_ispec_good_for_params_all_extended.txt".format(code))
-            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_ew_ispec_good_for_params_all_extended.txt".format(code))
+        if code == "moog-scat":
+            # MOOG-SCAT is backward compatible with MOOG
+            line_region_code = "moog"
         else:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(code))
-            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(code))
+            line_region_code = code
+        if code in ['width', 'moog', 'moog-scat']:
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_ew_ispec_good_for_params_all_extended.txt".format(line_region_code))
+            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_ew_ispec_good_for_params_all_extended.txt".format(line_region_code))
+        else:
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
 
         # Select only iron lines
         line_regions_with_atomic_data = line_regions_with_atomic_data[np.logical_or(line_regions_with_atomic_data['note'] == "Fe 1", line_regions_with_atomic_data['note'] == "Fe 2")]
@@ -2334,12 +2369,17 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
         # Read
         atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(star_spectrum['waveobs']), wave_top=np.max(star_spectrum['waveobs']))
 
-        if code in ['width', 'moog']:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_ew_ispec_good_for_params_all.txt".format(code))
-            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_ew_ispec_good_for_params_all.txt".format(code))
+        if code == "moog-scat":
+            # MOOG-SCAT is backward compatible with MOOG
+            line_region_code = "moog"
         else:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(code))
-            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(code))
+            line_region_code = code
+        if code in ['width', 'moog', 'moog-scat']:
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_ew_ispec_good_for_params_all.txt".format(line_region_code))
+            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_ew_ispec_good_for_params_all.txt".format(line_region_code))
+        else:
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
 
         line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
 
@@ -2551,12 +2591,17 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
 
     if use_lines_already_crossmatched_with_atomic_data:
         #--- Read lines and adjust them ------------------------------------------------
-        if code in ['width', 'moog']:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_ew_ispec_good_for_params_all_extended.txt".format(code))
-            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_ew_ispec_good_for_params_all_extended.txt".format(code))
+        if code == "moog-scat":
+            # MOOG-SCAT is backward compatible with MOOG
+            line_region_code = "moog"
         else:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(code))
-            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(code))
+            line_region_code = code
+        if code in ['width', 'moog', 'moog-scat']:
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_ew_ispec_good_for_params_all_extended.txt".format(line_region_code))
+            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_ew_ispec_good_for_params_all_extended.txt".format(line_region_code))
+        else:
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
 
         # Select only iron lines
         line_regions_with_atomic_data = line_regions_with_atomic_data[np.logical_or(line_regions_with_atomic_data['note'] == "Fe 1", line_regions_with_atomic_data['note'] == "Fe 2")]
@@ -2585,12 +2630,17 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
         # Read
         atomic_linelist = ispec.read_atomic_linelist(atomic_linelist_file, wave_base=np.min(star_spectrum['waveobs']), wave_top=np.max(star_spectrum['waveobs']))
 
-        if code in ['width', 'moog']:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_ew_ispec_good_for_params_all.txt".format(code))
-            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_ew_ispec_good_for_params_all.txt".format(code))
+        if code == "moog-scat":
+            # MOOG-SCAT is backward compatible with MOOG
+            line_region_code = "moog"
         else:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(code))
-            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(code))
+            line_region_code = code
+        if code in ['width', 'moog', 'moog-scat']:
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_ew_ispec_good_for_params_all.txt".format(line_region_code))
+            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_ew_ispec_good_for_params_all.txt".format(line_region_code))
+        else:
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
 
         line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
 
@@ -2893,6 +2943,7 @@ if __name__ == '__main__':
     synthesize_spectrum(code="turbospectrum")
     synthesize_spectrum(code="sme")
     synthesize_spectrum(code="moog")
+    synthesize_spectrum(code="moog-scat")
     synthesize_spectrum(code="synthe")
     interpolate_spectrum()
     add_noise_to_spectrum()
@@ -2901,49 +2952,56 @@ if __name__ == '__main__':
     ##precompute_synthetic_grid(code="turbospectrum")
     ##precompute_synthetic_grid(code="sme")
     ##precompute_synthetic_grid(code="moog")
+    ##precompute_synthetic_grid(code="moog-scat")
     ##precompute_synthetic_grid(code="synthe")
     determine_astrophysical_parameters_using_grid()
     determine_astrophysical_parameters_using_synth_spectra(code="spectrum")
     determine_astrophysical_parameters_using_synth_spectra(code="turbospectrum")
     determine_astrophysical_parameters_using_synth_spectra(code="sme")
     determine_astrophysical_parameters_using_synth_spectra(code="moog")
+    determine_astrophysical_parameters_using_synth_spectra(code="moog-scat")
     determine_astrophysical_parameters_using_synth_spectra(code="synthe")
     estimate_initial_ap_with_precomputed_grid_and_determine_ap_using_synth_spectra(code="spectrum")
     ##estimate_initial_ap_with_precomputed_grid_and_determine_ap_using_synth_spectra(code="turbospectrum")
     ##estimate_initial_ap_with_precomputed_grid_and_determine_ap_using_synth_spectra(code="sme")
     ##estimate_initial_ap_with_precomputed_grid_and_determine_ap_using_synth_spectra(code="moog")
+    ##estimate_initial_ap_with_precomputed_grid_and_determine_ap_using_synth_spectra(code="moog-scat")
     ##estimate_initial_ap_with_precomputed_grid_and_determine_ap_using_synth_spectra(code="synthe")
     determine_abundances_using_synth_spectra(code="spectrum")
     determine_abundances_using_synth_spectra(code="turbospectrum")
     determine_abundances_using_synth_spectra(code="sme")
     determine_abundances_using_synth_spectra(code="moog")
+    determine_abundances_using_synth_spectra(code="moog-scat")
     determine_abundances_using_synth_spectra(code="synthe")
     determine_abundances_line_by_line_using_synth_spectra(code="spectrum")
     determine_abundances_line_by_line_using_synth_spectra(code="turbospectrum")
     determine_abundances_line_by_line_using_synth_spectra(code="sme")
     determine_abundances_line_by_line_using_synth_spectra(code="moog")
+    determine_abundances_line_by_line_using_synth_spectra(code="moog-scat")
     determine_abundances_line_by_line_using_synth_spectra(code="synthe")
     determine_loggf_line_by_line_using_synth_spectra(code="spectrum")
     determine_loggf_line_by_line_using_synth_spectra(code="turbospectrum")
     determine_loggf_line_by_line_using_synth_spectra(code="sme")
     determine_loggf_line_by_line_using_synth_spectra(code="moog")
+    determine_loggf_line_by_line_using_synth_spectra(code="moog-scat")
     determine_loggf_line_by_line_using_synth_spectra(code="synthe")
     determine_astrophysical_parameters_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=True)
     determine_astrophysical_parameters_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=False)
+    determine_astrophysical_parameters_from_ew(code="moog-scat", use_lines_already_crossmatched_with_atomic_data=True)
+    determine_astrophysical_parameters_from_ew(code="moog-scat", use_lines_already_crossmatched_with_atomic_data=False)
     determine_astrophysical_parameters_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=True)
     determine_astrophysical_parameters_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=False)
-    #determine_astrophysical_parameters_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=True)
-    #determine_astrophysical_parameters_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=False)
-    #determine_astrophysical_parameters_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=True)
-    #determine_astrophysical_parameters_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=False)
     #determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=True)
     #determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=True)
     #determine_abundances_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=True)
     determine_abundances_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=True)
     determine_abundances_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=False)
+    determine_abundances_from_ew(code="moog-scat", use_lines_already_crossmatched_with_atomic_data=True)
+    determine_abundances_from_ew(code="moog-scat", use_lines_already_crossmatched_with_atomic_data=False)
     determine_abundances_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=True)
     determine_abundances_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=False)
     #determine_abundances_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=True)
+    #determine_abundances_from_ew(code="moog-scat", use_lines_already_crossmatched_with_atomic_data=True)
     #determine_abundances_from_ew(code="width", use_lines_already_crossmatched_with_atomic_data=True)
     calculate_theoretical_ew_and_depth()
     paralelize_code()
@@ -2953,4 +3011,5 @@ if __name__ == '__main__':
     interpolate_atmosphere(code="spectrum")
     interpolate_atmosphere(code="turbospectrum")
     interpolate_atmosphere(code="moog")
+    interpolate_atmosphere(code="moog-scat")
     pass

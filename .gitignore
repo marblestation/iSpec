@@ -1,3 +1,4 @@
+.DS_Store
 *.pyc
 input/*
 build/*
@@ -20,6 +21,11 @@ synthesizer/moog/*.o
 synthesizer/moog/MOOGSILENT
 synthesizer/moog/fake_sm-2.4.35/lib/*
 synthesizer/moog/fake_sm-2.4.35/src/*.o
+synthesizer/moog-scat/*.o
+synthesizer/moog-scat/MOOG_SCATSILENT
+synthesizer/moog-scat/fake_sm-2.4.35/lib/*
+synthesizer/moog-scat/fake_sm-2.4.35/src/*.o
 python/*
 venv/*
+.venv/*
 virtualenv/*

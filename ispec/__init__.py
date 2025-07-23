@@ -43,6 +43,7 @@ from .atmospheres import write_atmosphere
 from .common import is_turbospectrum_support_enabled
 from .common import is_spectrum_support_enabled
 from .common import is_moog_support_enabled
+from .common import is_moog_scat_support_enabled
 from .common import is_width_support_enabled
 from .common import is_ares_support_enabled
 from .common import is_synthe_support_enabled

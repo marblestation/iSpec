@@ -145,8 +145,12 @@ def interpolate_atmosphere_layers(modeled_layers_pack, target, code="spectrum"):
         Interpolated model atmosphere
     """
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog', 'width', 'synthe', 'sme']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'moog-scat', 'width', 'synthe', 'sme']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
+
+    if code == 'moog-scat':
+        # MOOG-SCAT is backward compatible with MOOG
+        code = 'moog'
 
     existing_points, free_parameters, filenames, read_point_value, value_fields, delaunay_triangulations, kdtree, ranges, base_dirname = modeled_layers_pack
 
@@ -189,8 +193,12 @@ def write_atmosphere(atmosphere_layers, teff, logg, MH, atmosphere_filename=None
         Name of the temporary file
     """
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog', 'width', 'synthe']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'moog-scat', 'width', 'synthe']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
+
+    if code == 'moog-scat':
+        # MOOG-SCAT is backward compatible with MOOG
+        code = 'moog'
 
     if atmosphere_filename is not None:
         atm_file = open(atmosphere_filename, "w")

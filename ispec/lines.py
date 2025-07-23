@@ -837,8 +837,12 @@ def write_atomic_linelist(linelist, linelist_filename=None, code=None, tmp_dir=N
     """
     if code is not None:
         code = code.lower()
-        if code not in ['spectrum', 'turbospectrum', 'moog', 'moog_barklem', 'synthe']:
+        if code not in ['spectrum', 'turbospectrum', 'moog', 'moog_barklem', 'moog-scat', 'synthe']:
             raise Exception("Unknown radiative transfer code: %s" % (code))
+
+        if code == 'moog-scat':
+            # MOOG-SCAT is backward compatible with MOOG
+            code = 'moog'
 
         if code == "moog":
             #logging.info("MOOG file format")

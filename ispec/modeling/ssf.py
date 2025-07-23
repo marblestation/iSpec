@@ -253,7 +253,7 @@ class SynthModel(MPFitModel):
                     # Fundamental synthetic fluxes
                     if self.code == "turbospectrum":
                         self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, use_molecules=self.use_molecules, tmp_dir=self.tmp_dir, timeout=self.timeout)
-                    elif self.code == "moog":
+                    elif self.code in ("moog", "moog-scat"):
                         self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
                     elif self.code == "synthe":
                         self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, molecules_files=self.molecules_files, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
@@ -297,7 +297,7 @@ class SynthModel(MPFitModel):
 
     def fitData(self, waveobs, segments, comparing_mask, fluxes, weights=None, parinfo=None, use_errors=False, max_iterations=20, quiet=True, code="spectrum", use_molecules=False, vmic_from_empirical_relation=True, vmac_from_empirical_relation=True, tmp_dir=None, timeout=1800):
         code = code.lower()
-        if code not in ['spectrum', 'turbospectrum', 'moog', 'synthe', 'sme', 'grid']:
+        if code not in ['spectrum', 'turbospectrum', 'moog', 'moog-scat', 'synthe', 'sme', 'grid']:
             raise Exception("Unknown radiative transfer code: %s" % (code))
 
         self.timeout = timeout
@@ -346,7 +346,7 @@ class SynthModel(MPFitModel):
             # Only write linelist (for optimization purposes) if there is no free loggf
             if self.code == 'synthe':
                 self.linelist_file, self.molecules_files = write_atomic_linelist(self.linelist, code="synthe", tmp_dir=tmp_dir)
-            elif self.code == 'sme' or self.code == 'moog':
+            elif self.code == 'sme' or self.code in ('moog', 'moog-scat'):
                 # moog requires two files for the linelist
                 # sme does not require files
                 self.linelist_file = None
@@ -383,7 +383,7 @@ class SynthModel(MPFitModel):
 
         if self.abundances_file is not None:
             os.remove(self.abundances_file)
-        if len(self.linelist_free_loggf) == 0 and self.code not in ('sme', 'moog', 'grid'):
+        if len(self.linelist_free_loggf) == 0 and self.code not in ('sme', 'moog', 'moog-scat', 'grid'):
             os.remove(self.linelist_file)
         if self.code == 'spectrum':
             os.remove(self.isotope_file)
@@ -810,7 +810,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
         quiet = True
 
     code = code.lower()
-    if code not in ['spectrum', 'turbospectrum', 'moog', 'synthe', 'sme', 'grid']:
+    if code not in ['spectrum', 'turbospectrum', 'moog', 'moog-scat', 'synthe', 'sme', 'grid']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
 
