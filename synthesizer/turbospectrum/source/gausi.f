@@ -2,6 +2,9 @@
 *
 *-----------------------------------------------------------------------
 *
+* Gauss-Legendre quadrature points (XMYI) and weights (AI) for 
+* K = 2 to 10 points between A and B
+*
 * RUTINEN GER VIKTER OCH INTEGRATIONSPUNKTER FOER GAUSSINTEGRATIO
 * MELLAN A OCH B - B AER OEVRE GRAENS , A NEDRE. KAELLA FOER DATA
 * LOWAN, DAVIDS, LEVENSON,  BULL AMER MATH SOC  48 SID 739  (1942
@@ -12,7 +15,7 @@
 *
 *-----------------------------------------------------------------------
 *
-      DIMENSION AI(6),XMYI(6),AP(29),XMYP(29),INDOV(9)
+      DIMENSION AI(*),XMYI(*),AP(29),XMYP(29),INDOV(9)
 *
 * 10 DATAKORT FOER AP, 9 FOER XMYP OCH 1 FOER INDOV
 *
@@ -38,6 +41,10 @@
      &     0.14887433898163/
       DATA INDOV/1,3,5,8,11,15,19,24,29/
 *
+      if (k.gt.10) then 
+        print*,'Gauss quadrature set to 10 points'
+        K=10
+      endif
       IF(K.EQ.1) GOTO 7
       KUD=0
       FLK=FLOAT(K)/2.

@@ -45,11 +45,9 @@ def is_turbospectrum_support_enabled():
     turbospectrum_dir = ispec_dir + "/synthesizer/turbospectrum/"
     turbospectrum_data = turbospectrum_dir + "/DATA/"
     turbospectrum_bsyn_lu = turbospectrum_dir + "bin/bsyn_lu"
-    turbospectrum_eqwidt_lu = turbospectrum_dir + "bin/eqwidt_lu"
     turbospectrum_babsma_lu = turbospectrum_dir + "bin/babsma_lu"
 
-    if not os.path.exists(turbospectrum_eqwidt_lu) or \
-            not os.path.exists(turbospectrum_bsyn_lu) or \
+    if not os.path.exists(turbospectrum_bsyn_lu) or \
             not os.path.exists(turbospectrum_babsma_lu) or \
             not os.path.exists(turbospectrum_data):
         return False

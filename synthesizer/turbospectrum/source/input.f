@@ -8,16 +8,20 @@
       character*2 atominclude(100)
       character*30 keyword,answer
       character*256 charvalue
+      character*286 oneline
       character*128 filmet,filmol,filwavel
       character*256 linefil,detout,inatom,inmod,inabun,inspec,
-     &              outfil,mongofil,filterfil,continopac,inpmod
+     &              outfil,mongofil,filterfil,continopac,inpmod,
+     &              modelatomfile,departurefile,nlteinfofile,
+     &              contmaskfile,linemaskfile,segmentsfile,
+     &              listoflistfile,mupointsfile
+      character*12 abund_source,haha
       logical tsuji,spherical,limbdark,abfind,multidump,xifix,mrxf,
-     &        hydrovelo,pureLTE
-      integer iint,k
+     &        hydrovelo,pureLTE,departbin,nlte
+      integer iint,k,nangles
+      real    muoutp(30)
       real    isoch(1000),isochfact(1000),xic,xmyc,scattfrac
-      doubleprecision xl1,xl2,del,xlmarg,xlboff
-      integer nsegments_lambda_min, nsegments_lambda_max !SBC
-      doubleprecision segments_lambda_min(400), segments_lambda_max(400)
+      doubleprecision xl1,xl2,del,xlmarg,xlboff,resolution
       common/inputdata/mmaxfil,tsuji,filmet,filmol,noffil,
      &                 linefil(maxfil),spherical,mihal,taum,ncore,
      &                 diflog,detout,inatom,
@@ -26,8 +30,14 @@
      &                 overall,abfind,multidump,isoch,isochfact,
      &                 helium,alpha,rabund,sabund,xifix,xic,mrxf,
      &                 inpmod,continopac,filwavel,hydrovelo,
-     &                 xl1,xl2,del,xlmarg,xlboff,iint,xmyc,scattfrac,
-     &                 pureLTE
+     &                 xl1,xl2,del,xlmarg,xlboff,
+     &                 resolution,
+     &                 iint,xmyc,scattfrac,
+     &                 pureLTE,nlte,modelatomfile,departurefile,
+     &                 departbin,contmaskfile,linemaskfile,
+     &                 segmentsfile,nlteinfofile,abund_source,
+     &                 nangles,muoutp
+
       common/species/atominclude
       data atominclude 
      &   /'H ','He','Li','Be','B ','C ','N ','O ','F ','Ne',
@@ -40,9 +50,27 @@
      &    'Lu','Hf','Ta','W ','Re','Os','Ir','Pt','Au','Hg',
      &    'Tl','Pb','Bi','Po','At','Rn','Fr','Ra','Ac','Th',
      &    'Pa','U ','  ','  ','  ','  ','  ','  ','  ','  ' /
+!
+! Default mu-points for intensity profiles (12 Gauss-Radau points)
+      data muoutp /0.010018, 0.052035, 0.124619, 0.222841, 0.340008,
+     &            0.468138, 0.598497, 0.722203, 0.830825, 0.916958,
+     &            0.974726, 1.000000, 18*0.0/
+!
+! default value of nangles for the 12 Gauss-Radau mu-points (PLATO)
+      nangles = 12
+
 *
+      abund_source='asp2007'
+      linemaskfile=' '
+      contmaskfile=' '
+      segmentsfile=' '
+      modelatomfile=' '
+      departurefile=' '
+      nlteinfofile=' '
+      resolution = 500000.
       scattfrac=0.0
       pureLTE=.false.
+      departbin=.true.
       do k=1,100
         abch(k)=-99.9
       enddo
@@ -55,9 +83,9 @@
       iwrite=6
 * default data files and setup:
 
-      continopac='DATA/jonabs_vac_v07.3.dat'
+      continopac='DATA/jonabs_vac_v19.2.dat'
       filmol=
-     &  'DATA/LISTE_molecules_all_v12.1.dat'
+     &  'DATA/LISTE_molecules_all_v19.1.dat'
 ccc     & '/b1/plez/BIGGRID/DATA/LISTE_molecules_all.dat'
       filmet=' '
 cc     &'/b1/plez/BIGGRID/DATA/tsuji.atoms_AndersGrev'
@@ -69,6 +97,7 @@ ccc      inatom='DATA/atomdata-v12.1'
       outfil='syntspec/synout'
       hydrovelo=.false.
       limbdark=.false.
+      nlte=.false.
       tsuji=.true.
       spherical=.false.
       multidump=.false.
@@ -88,10 +117,15 @@ ccc      inatom='DATA/atomdata-v12.1'
       xl1=-10.d0
       xl2=-10.d0
       del=-10.d0
-      nsegments_lambda_min = 0 ! SBC
-      nsegments_lambda_max = 0 ! SBC
 *
-1     read(iread,*,end=99) keyword,charvalue
+1     read(iread,'(a)',end=99) oneline
+      if (oneline(1:1).eq.'#') then
+        goto 1       ! this is a comment. Skip
+      else if (trim(oneline).eq.'') then
+        goto 1       ! this is an empty line. Skip
+      endif
+      
+      read(oneline,*,end=99) keyword,charvalue
 
       print*, keyword(1:lenstr(keyword)),charvalue(1:lenstr(charvalue))
 
@@ -110,6 +144,9 @@ ccc      inatom='DATA/atomdata-v12.1'
           print*,'nlines = ',nlines,' too large. Limit = 100'
           stop 
         endif
+      else if (keyword(1:12).eq.'ABUND_SOURCE') then
+        read(charvalue,*) haha
+        abund_source=adjustl(haha)
       else if (keyword(1:11).eq.'METALLICITY') then
         read(charvalue,*) overall
       else if (keyword(1:8).eq.'ALPHA/Fe') then
@@ -127,6 +164,29 @@ ccc      inatom='DATA/atomdata-v12.1'
           abch(iii)=fifi
           print*,iii,fifi
         enddo
+      else if (keyword(1:5).eq.'NLTE '.or.
+     &         keyword(1:5).eq.'nlte ') then
+        read(charvalue,*) nlte
+      else if (keyword(1:12).eq.'NLTEINFOFILE') then
+        read(charvalue,10) nlteinfofile
+      else if (keyword(1:13).eq.'MODELATOMFILE') then
+        read(charvalue,10) modelatomfile
+      else if (keyword(1:13).eq.'DEPARTUREFILE') then
+        read(charvalue,10) departurefile
+      else if (keyword(1:12).eq.'DEPARTBINARY') then
+        read(charvalue,*) departbin
+      else if (keyword(1:12).eq.'SEGMENTSFILE') then
+        read(charvalue,10) segmentsfile
+        print*,'input : segmentsfile',segmentsfile
+      else if (keyword(1:10).eq.'RESOLUTION') then
+        read(charvalue,10) resolution
+        print*,'input : spectral resolution',resolution
+!
+! obsolete      else if (keyword(1:12).eq.'LINEMASKFILE') then
+! obsolete        read(charvalue,10) linemaskfile
+! obsolete      else if (keyword(1:12).eq.'CONTMASKFILE') then
+! obsolete        read(charvalue,10) contmaskfile
+!
       else if (keyword(1:5).eq.'TSUJI') then
         read(charvalue,*) tsuji
       else if (keyword(1:9).eq.'SPHERICAL') then
@@ -135,10 +195,36 @@ ccc      inatom='DATA/atomdata-v12.1'
         read(iread,*) taum
         read(iread,*) ncore
         read(iread,*) diflog
+      else if (keyword(1:17).eq.'LIST_OF_LINELISTS') then
+!
+! This keyword signals a file (listoflistfile) that contains
+! a list of line lists to be used. BPlez 29-0ct-2024
+!
+        read(charvalue,10) listoflistfile
+        open(100, file = listoflistfile, status = 'old')
+        i=0
+        do while (.true.)
+          read(100,10,end=102) oneline
+          if (oneline(1:1).ne.'#') then
+            i=i+1        
+            read(oneline,'(a)') linefil(i)
+          endif
+        enddo
+ 102    noffil = i
       else if (keyword(1:6).eq.'NFILES') then
+!
+! This is the historical way of inputing line lists:
+! The list of file is given in the script
+!
         read(charvalue,*) noffil
-        do i=1,noffil
-          read(iread,'(a)') linefil(i)
+        i=0
+        do while (i.lt.noffil)
+  2       read(iread,'(a)',end=99) oneline
+          if (oneline(1:1).eq.'#') then
+            goto 2       ! this is a comment. Skip
+          endif
+          i=i+1
+          read(oneline,'(a)') linefil(i)
         enddo
       else if (keyword(1:7).eq.'LOGFILE') then
         read(charvalue,10) detout
@@ -184,19 +270,9 @@ ccc        read(iread,*) filterfil
       else if (keyword(1:14).eq.'HYDRODYN_DEPTH') then
         read(charvalue,*) hydrovelo
       else if (keyword(1:10).eq.'LAMBDA_MIN') then
-        if (xl1.lt.0) then
-            read(charvalue,*) xl1
-        else
-            nsegments_lambda_min = nsegments_lambda_min + 1 !SBC
-            read(charvalue,*) segments_lambda_min(nsegments_lambda_min)
-        endif
+        read(charvalue,*) xl1
       else if (keyword(1:10).eq.'LAMBDA_MAX') then
-        if (xl2.lt.0) then
-            read(charvalue,*) xl2
-        else
-            nsegments_lambda_max = nsegments_lambda_max + 1 !SBC
-            read(charvalue,*) segments_lambda_max(nsegments_lambda_max)
-        endif
+        read(charvalue,*) xl2
       else if (keyword(1:11).eq.'LAMBDA_STEP') then
         read(charvalue,*) del
       else if (keyword(1:14).eq.'INTENSITY/FLUX') then
@@ -212,6 +288,12 @@ ccc        read(iread,*) filterfil
         endif
       else if (keyword(1:10).eq.'COS(THETA)') then
         read(charvalue,*) xmyc
+      else if (keyword(1:9).eq.'MU-POINTS') then
+        read(charvalue,10) mupointsfile
+        open(77,file=mupointsfile,status='old')
+        read(77,*) nangles
+        read(77,*) (muoutp(i),i=1,nangles)
+        close(77)
       else if (keyword(1:9).eq.'SCATTFRAC') then
 ! fraction of line opacity to include in scattering
         read(charvalue,*) scattfrac
@@ -235,13 +317,6 @@ ccc        read(iread,*) filterfil
         print*,'xl1 xl2 del =',xl1,xl2,del
         stop
       endif
-
-      ! SBC:
-        if (nsegments_lambda_min.ne.nsegments_lambda_max) then
-          print*,'ERROR! Provide provide the same number of'
-          print*,' lambda min max for segments'
-          stop
-        endif
 
 cc* store atomic species to use in molecular equilibrium into file 26.
 cc      open(26,status='scratch')

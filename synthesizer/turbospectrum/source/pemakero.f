@@ -11,7 +11,7 @@ C START
       PEX=PE
       CALL JON(T,PE,1,pg,fa,E,0,1)
 C******WRITE(7,40) T,ro,PE,FA
-40    FORMAT(' T,ro,PE,rop=',4E10.4)
+C40    FORMAT(' T,ro,PE,rop=',4E11.4)
       IT=IT+1
       FA=ALOG(FA/ro)
       IF(ABS(FA).LT.EPS) GOTO 101

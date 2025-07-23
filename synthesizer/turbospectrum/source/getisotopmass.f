@@ -16,7 +16,7 @@ cc      end
       character firstchar*1,oneline*72,cleaned*72
       parameter (natom=92)
       real amass(natom,0:250),frac(natom,0:250),massmix(natom)
-      real masscheck
+!      real masscheck
 
       do j=1,250
         do i=1,natom

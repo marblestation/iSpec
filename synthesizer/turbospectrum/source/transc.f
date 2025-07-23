@@ -9,29 +9,54 @@ C ELEMENTS FOR SCATTR.
 C 79.06.21 *NORD*
 C
 C
+      implicit none
+      integer, parameter :: sp = selected_real_kind(6, 37)
+      integer, parameter :: dp = selected_real_kind(15, 307)
+C
       INCLUDE 'spectrum.inc'
 C
-      COMMON /CTRAN/X(NDP),S(NDP),BPLAN(NDP),XJ(NDP),XH(NDP),XK(NDP)
-     & ,FJ(NDP),SOURCE(NDP),TAUS(NDP),DTAUS(NDP),JTAU0,JTAU1,ISCAT
-      COMMON /TAUC/TAU(NDP),DTAULN(NDP),JTAU
-      COMMON /SPACE2/ERROR(NDP),FACT(NDP),DSO(NDP),
-     &  P(NDP),SP1(NDP),SP2(NDP),SP3(NDP),
-     &  DUM(NDP,NRAYS,3),AD(NDP,NRAYS),BD(NDP,NRAYS),EX(NRAYS),
-     &  NIMPAC,KIMPAC(NRAYS),PIMPAC(NRAYS),MMU(NDP),
-     &  TAUT(NDP),DTAUT(NDP),
-     &  PFEAU(NRAYS,NDP),XMU(NRAYS,NDP)
-      COMMON /CSPHER/NCORE,DIFLOG,RADIUS,RR(NDP)
+      real(sp)  :: x(ndp),s(ndp),bplan(ndp),xj(ndp),xh(ndp),xk(ndp)
+      real(sp)  :: fj(ndp),source(ndp),taus(ndp),dtaus(ndp)
+      integer   :: jtau0,jtau1,iscat 
+      COMMON /CTRAN/ X,S,BPLAN,XJ,XH,XK,FJ,SOURCE,TAUS,DTAUS,
+     &              JTAU0,JTAU1,ISCAT
+
+      real(sp)  :: tau(ndp),dtauln(ndp)
+      integer   :: jtau
+      COMMON /TAUC/ TAU,DTAULN,JTAU
+
+! this SPACE2 common block is not the same as in traneq.f or trrays.f
+! SP1, SP2 and SP3 variables are not located at the same place.
+
+!      real(sp)  :: error(ndp),fact(ndp),dso(ndp),p(ndp),dum(ndp,3)
+!      real(sp)  :: sp1(ndp,nrays),sp2(ndp,nrays),sp3(ndp,nrays)
+      real(sp)  :: error(ndp),fact(ndp),dso(ndp),p(ndp),dum(ndp,nrays,3)
+      real(sp)  :: sp1(ndp),sp2(ndp),sp3(ndp)
+      real(sp)  :: ad(ndp,nrays),bd(ndp,nrays),ex(nrays),pimpac(nrays)
+      integer   :: nimpac,kimpac(nrays),mmu(ndp)
+      real(sp)  :: taut(ndp),dtaut(ndp),pfeau(nrays,ndp),xmu(nrays,ndp)
+!      COMMON /SPACE2/ ERROR,FACT,DSO,P,DUM,SP1,SP2,SP3,AD,BD,EX,
+      COMMON /SPACE2/ ERROR,FACT,DSO,P,SP1,SP2,SP3,DUM,AD,BD,EX,
+     &  NIMPAC,KIMPAC,PIMPAC,MMU,TAUT,DTAUT,PFEAU,XMU
+
+      integer   :: ncore
+      real(sp)  :: diflog,radius,rr(ndp)
+      COMMON /CSPHER/ NCORE,DIFLOG,RADIUS,RR
+
+      integer   :: k,ntau,ntau1
+      real(sp)  :: a,b,dtauc,dz,dzdr,t,z,zold
 C
 C MU LOOP
       NTAU=KIMPAC(ISCAT)
       NTAU1=NTAU-1
 C
 C CALCULATE TAUS ALONG THE RAY, SPIRAL AT EDDINGTON ANGLE AT DEPTH.
-      Z=SQRT(RR(JTAU0)**2-PIMPAC(ISCAT)**2)
+! BPz 2024-12-05: gfortran with -O2 may result in <0 values of the argument of sqrt, when rr=pimpac
+      Z=SQRT(max(0.0,RR(JTAU0)**2-PIMPAC(ISCAT)**2))
       ZOLD=Z
       DO 101 K=2,JTAU
       IF (JTAU-K+2.GT.JTAU0) GO TO 103
-      Z=SQRT(RR(JTAU-K+1)**2-PIMPAC(ISCAT)**2)
+      Z=SQRT(max(0.0,RR(JTAU-K+1)**2-PIMPAC(ISCAT)**2))
       DZ=Z-ZOLD
       DZDR=DZ/(RR(JTAU-K+1)-RR(JTAU-K+2))
       GO TO 104
@@ -48,8 +73,8 @@ C K=1
       SP2(1)=1.-FJ(1)*S(1)/(X(1)+S(1))+2.*A
       SP3(1)=-2.*B
       T=TAUS(1)
-      EX(ISCAT)=TAUS(1)*(1.-0.5*TAUS(1)*(1.-0.333333*TAUS(1)))
-      IF (TAUS(1).GT.0.1) EX(ISCAT)=1.-EXP(-TAUS(1))
+      EX(ISCAT)=TAUS(1)*(1.-TAUS(1)/2.*(1.-TAUS(1)/3.*(1.-taus(1)/4.)))
+      IF (TAUS(1).GT.0.01) EX(ISCAT)=1.-EXP(-TAUS(1))
       SP2(1)=SP2(1)-2.*A*EX(ISCAT)*FJ(1)*S(1)/(X(1)+S(1))
       SP2(1)=SP2(1)/(1.+2.*A*EX(ISCAT))
       SP3(1)=SP3(1)/(1.+2.*A*EX(ISCAT))
@@ -67,11 +92,12 @@ C K=NTAU
       SP3(NTAU)=0.0
 C
 C ELIMINATE SUBDIAGONAL
-      DO 120 K=1,NTAU1
-      SP1(K)=-SP1(K+1)/(SP2(K)-SP3(K))
-      SP2(K+1)=SP2(K+1)+SP1(K)*SP2(K)
-120   SP2(K)=SP2(K)-SP3(K)
-121   CONTINUE
+      DO K=1,NTAU1
+        SP1(K)=-SP1(K+1)/(SP2(K)-SP3(K))
+        SP2(K+1)=SP2(K+1)+SP1(K)*SP2(K)
+        SP2(K)=SP2(K)-SP3(K)
+      ENDDO
+      CONTINUE
       RETURN
 C--------------------------------------------------------------------
 C

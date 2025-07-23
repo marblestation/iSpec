@@ -52,100 +52,140 @@ C
       DATA debug/.false./
 C
 C INITIATE, XJ IS SET TO THE DIFFUSION LIMIT VALUE
-109   IDEBUG=0
-      DO 100 K=1,JTAU
-      IF (K.GT.1) GO TO 101
-      DTAUB=(TAU(2)-TAU(1))*0.5*(X(2)+S(2)+X(1)+S(1))
-      DBPLB=(BPLAN(2)-BPLAN(1))/DTAUB
-      D2BPL=0.
-      GO TO 102
-101   IF (K.EQ.JTAU) GO TO 102
-      DTAUA=DTAUB
-      DTAUB=(TAU(K+1)-TAU(K))*0.5*(X(K)+S(K)+X(K+1)+S(K+1))
-      DBPLA=DBPLB
-      DBPLB=(BPLAN(K+1)-BPLAN(K))/DTAUB
-      DTAUC=0.5*(DTAUA+DTAUB)
-      D2BPL=(DBPLB-DBPLA)/DTAUC
-102   XH(K)=D2BPL
-      XJ(K)=BPLAN(K)+0.333333*(X(K)+S(K))/X(K)*D2BPL
-      XK(K)=0.333333*BPLAN(K)+(0.2+0.111111*S(K)/X(K))*D2BPL
-      FJ(K)=1.
-100   SOURCE(K)=BPLAN(K)
+!!109   continue
+
+      IDEBUG=0
+
+      DO K=1,JTAU
+
+        if (k.eq.1) then
+          DTAUB=(TAU(2)-TAU(1))*0.5*(X(2)+S(2)+X(1)+S(1))
+          DBPLB=(BPLAN(2)-BPLAN(1))/DTAUB
+          D2BPL=0.
+        else if (k.lt.jtau) then
+          DTAUA=DTAUB
+          DTAUB=(TAU(K+1)-TAU(K))*0.5*(X(K)+S(K)+X(K+1)+S(K+1))
+          DBPLA=DBPLB
+          DBPLB=(BPLAN(K+1)-BPLAN(K))/DTAUB
+          DTAUC=0.5*(DTAUA+DTAUB)
+          D2BPL=(DBPLB-DBPLA)/DTAUC
+        endif
+
+        XH(K)=D2BPL
+        XJ(K)=BPLAN(K)+0.333333*(X(K)+S(K))/X(K)*D2BPL
+        XK(K)=0.333333*BPLAN(K)+(0.2+0.111111*S(K)/X(K))*D2BPL
+        FJ(K)=1.
+        SOURCE(K)=BPLAN(K)
+      enddo
       IF (DEBUG) PRINT 103,X,S,BPLAN,XJ,XH,XK
 103   FORMAT('0X,S,B,XJ,D2B,XK='/(/10(1X,1P,10E12.4/)))
 C
 C CALCULATE THE MATRIX ELEMENTS
+!!      print*,'call to trrays'
       CALL TRRAYS
+!!      print*,'call to tranfr'
       CALL TRANFR
+!!      print*,'call to formal'
       CALL FORMAL
+!!      print*,'back from formal '
       NIMP1=NIMPAC+1
       IF (DEBUG) PRINT 132,XJ,SOURCE,ERROR,FJ
      & ,((PFEAU(I,K),K=1,NDP),I=1,NIMP1)
       IF (IDEBUG.GT.1) GO TO 150
-      if (computeIplus) then
-* skip iteration on S, BPz 06/06-2018
-        itm=1
-        goto 141
-      endif
+!
+! REMOVED on 1/04-2020  BPz
+!
+CCCC      if (computeIplus) then
+CCCC* skip iteration on S, BPz 06/06-2018
+CCCC        itm=1
+CCCC        goto 141
+CCCC      endif
+!
+!
 C
 C ITERATION LOOP
-      DO 110 IT=1,ITMAX
-110   A(IT)=0.
-      DO 140 IT=1,ITMAX
-      ITM=IT
+      do IT=1,ITMAX
+        A(IT)=0.
+      enddo
+
+      do IT=1,ITMAX
+        ITM=IT
 C
 C SOLVE THE CONTINUUM SCATTERING PROBLEM IN THE EDDINGTON APPROXIMATION
-      CALL TRANSC
-      CALL SCATTR
-      IF (DEBUG) PRINT 122,EX(ISCAT),DUM,P,DTAUS
-122   FORMAT('0EX,SP1,SP2,SP3,P,DTAUS=',E10.4/(/10(1X,1P,10E12.4/)))
+!!        print*,'call to transc'
+        CALL TRANSC
+!!        print*,'back from  transc'
+!!        print*,'call to scattr'
+        CALL SCATTR
+!!        print*,'back from scattr'
+        IF (DEBUG) PRINT 122,EX(ISCAT),DUM,P,DTAUS
+122     FORMAT('0EX,SP1,SP2,SP3,P,DTAUS=',E11.4/(/10(1X,1P,10E12.4/)))
 C
 C CORRECTION TO THE SOURCE FUNCTION
-      DO 120 K=1,JTAU1
-      P(K)=ERROR(K)+P(K)*FJ(K)*S(K)/(X(K)+S(K))
-      A(IT)=AMAX1(A(IT),ABS(P(K)/SOURCE(K)))
-120   CONTINUE
+        do K=1,JTAU1
+          P(K)=ERROR(K)+P(K)*FJ(K)*S(K)/(X(K)+S(K))
+          A(IT)=AMAX1(A(IT),ABS(P(K)/SOURCE(K)))
+!!          print*,k,it,p(k),a(it)
+        enddo
 C
 C CHECK ERROR IN SOURCE FUNCTION
-      IF (A(IT).LT.0.001) GO TO 141
-      DO 130 K=1,JTAU1
-130   SOURCE(K)=amax1(SOURCE(K)+P(K),source(k)/2.)
+        IF (A(IT).LT.0.001) exit
+cGO TO 141
+        do K=1,JTAU1
+          SOURCE(K)=amax1(SOURCE(K)+P(K),source(k)/2.)
+        enddo
 C
 C SOLVE THE TRANSFER EQUATION WITH GIVEN SOURCE FUNCTION
-      CALL FORMAL
-      NTAU=KIMPAC(ISCAT)
+!!        print*,'2nd call to formal'
+        CALL FORMAL
+!!        print*,'back from formal'
+        NTAU=KIMPAC(ISCAT)
 C
 C NOTE THAT FJ() SHOULD ONLY BE PICKED UP ABOVE JTAU0.  THE ISCAT
 C BECOMES TO INCLINED BELOW JTAU0.
-      DO 131 K=1,JTAU0
-131   FJ(K)=XJ(K)/PFEAU(ISCAT,K)
-      IF (DEBUG) PRINT 132,XJ,SOURCE,ERROR,FJ
-     & ,((PFEAU(I,K),K=1,NDP),I=1,NIMP1)
-132   FORMAT('0XJ,SO,ERR,FJ,PF='/(/10(1X,1P,10E12.4/)))
-      IF (IDEBUG.GT.1) GO TO 150
+        do K=1,JTAU0
+          FJ(K)=XJ(K)/PFEAU(ISCAT,K)
+        enddo
+        IF (DEBUG) PRINT 132,XJ,SOURCE,ERROR,FJ
+     &   ,((PFEAU(I,K),K=1,NDP),I=1,NIMP1)
+132     FORMAT('0XJ,SO,ERR,FJ,PF='/(/10(1X,1P,10E12.4/)))
+        IF (IDEBUG.GT.1) GO TO 150
 C
 C END OF ITERATION LOOP
-140   CONTINUE
+      enddo
+
+      if (a(it).ge.0.001) then
 C
 C NOT CONVERGED
-      IDEBUG=1
-CCC      WRITE (13) JTAU,TAU,X,S,BPLAN,RADIUS,RR,RHO,ROSS
-      WRITE(6,142) (A(IT),IT=1,ITM)
-142   FORMAT(' MAXFEL =',12F9.5)
+        IDEBUG=1
+CCC        WRITE (13) JTAU,TAU,X,S,BPLAN,RADIUS,RR,RHO,ROSS
+        WRITE(6,142) (A(IT),IT=1,ITM)
+142     FORMAT(' MAXFEL =',12F9.5)
+      endif
 C
 C CONVERGED, IF IN FIRST ITERATION, HAVE TO CALCULATE FJ().
-141   IF (ITM.GT.1) GO TO 143
-      NTAU=KIMPAC(ISCAT)
-      DO 144 K=1,NTAU
-144   FJ(K)=XJ(K)/PFEAU(ISCAT,K)
-143   CONTINUE
+      if (ITM.eq.1) then
+        NTAU=KIMPAC(ISCAT)
+        do K=1,NTAU
+          FJ(K)=XJ(K)/PFEAU(ISCAT,K)
+        enddo
+      endif
 C
 C CALCULATE MOMENTS, AND CHECK DEBUG CONTROL
       CALL TRMOM
-150   IF (DEBUG.AND.IDEBUG.GT.1) STOP
+!
+!!!!!!!!!!
+!150   IF (DEBUG.AND.IDEBUG.GT.1) STOP
+! try to just skip this wavelength, which will be flagged in the output. BPz 6-Apr-2021
+!
+150   IF (DEBUG.AND.IDEBUG.GT.1) then
+        print*,' NON-POSITIVE RESULT / SKIPPING this wavelength'
+        return
+      endif
+!!!!!!!!!!
       IF (DEBUG.AND.IDEBUG.EQ.1) IDEBUG=0
       DEBUG=IDEBUG.GT.1
-      IF (DEBUG) GO TO 109
+!!      IF (DEBUG) GO TO 109  !  as we don't want detailed printout, we don't need  to  do   it all over again.
 C
       RETURN
       END

@@ -20,8 +20,8 @@ C  VOIGT FUNCTION CALCULATION: HUMLICEK'S APPROXIMATION
 * The results are normalized to an area of 1/sqrt(pi).
 C 
       IMPLICIT NONE
-      COMPLEX*8 TAV,UAV,W4,V4 
-      REAL*8    SAV,AA,VV
+      double COMPLEX TAV,UAV,W4,V4 
+      REAL*8    SAV,AA,VV,voigt
       REAL      A,V
 C 
 cc      if (A.lt.1.e-8) then
@@ -29,7 +29,7 @@ cc        newvoigt=exp(-v*v)
 cc      else
       AA=A
       VV=abs(V)
-      TAV=CMPLX(AA,-VV) 
+      TAV=DCMPLX(AA,-VV) 
       SAV=VV+AA 
       UAV=TAV*TAV 
       IF(SAV.GE.15.D0) THEN
@@ -50,7 +50,8 @@ cc      else
      &     UAV*(61.57037D0-UAV*(1.841439D0-UAV)))))))
         W4=EXP(UAV)-W4/V4
       END IF
-      newVOIGT=REAL(W4) 
+      voigt = real(w4)
+      newvoigt = sngl(voigt)
 cc      endif
 C 
       RETURN 

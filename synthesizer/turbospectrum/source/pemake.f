@@ -37,7 +37,7 @@ c not converged in jon
       PEX=PE
 c
 C******WRITE(7,40) T,PG,PE,FA
-40    FORMAT(' T,PG,PE,PGP=',4E10.4)
+C40    FORMAT(' T,PG,PE,PGP=',4E11.4)
       IT=IT+1
       FA=ALOG(FA/PG)
       IF(ABS(FA).LT.EPS) GOTO 101

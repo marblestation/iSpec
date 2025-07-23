@@ -11,27 +11,26 @@ C
         integer maxim
         parameter (maxim=1000)
         integer i,j,m,mmax(maxim),mmaxj,natom(5,maxim),nelem(5,maxim),
-     &          natomj,nelemj,nelemx(100),nmetal,nmol,nimax,ntry,niter,
-     &          k,km5,nelemi,n,nelmolec(maxim),natomi,nhemolec(maxim)
-        integer indx(100),ii,jj
+     &          natomj,nelemj,nelemx(100),nmetal,nmol,nimax,
+     &          nelemi
         character*20   MOL(maxim)
         doubleprecision fvec(100),fmin
         character*20 molcode(maxim)
 * really real, not supposed to become doubleprecision
-        real spe,tem,spg,g0(100),g1(100),g2(100),g3(100)
+        real g0(100),g1(100),g2(100),g3(100)
         real exponent(maxim)
 * may become dbleprec
-	doubleprecision IP(100),KP(100),uiidui(100),eps,tem25,
-     &       delta,deltae,pg,pgold,fpold(100),fifi,epsp,
+	doubleprecision IP(100),KP(100),uiidui(100),eps,
+     &       pg,
      &       ppmol(maxim),apm(maxim),p(100),fp(100),c(maxim,5),
-     &       ccomp(100),maxerror,pstart(100),fp99back,
-     &       smallest,epsdie,econst,pgin,dhh,t,pmoljl,dfp99dp1,
-     &       heh,aplogj,pph,phh,pgin5,reducedmass15(maxim),
-     &       factor,pmolj,atomj,prev(100),pold(100),dfdp(100),
-     &       kp1(100),kp2(100),kp3(100),kpe(100),ipp(100),ippp(100),
-     &       d00(maxim),qmol(maxim),ipppp(100)
-        logical switer,readjust,first,elmolec(maxim),converge,
-     &          hemolec(maxim),molions
+     &       ccomp(100),fp99back,
+     &       pgin,
+     &       pgin5,reducedmass15(maxim),
+     &       pmolj,dfdp(100),
+     &       kpe(100),ipp(100),ippp(100),
+     &       d00(maxim),qmol(maxim)
+        logical switer,readjust,elmolec(maxim),
+     &          molions
 	COMMON/COMFH1/C,NELEM,NATOM,MMAX,PPMOL,d00,qmol,APM,MOL,IP,
      &              ipp,ippp,g0,g1,g2,g3,CCOMP,exponent,reducedmass15,
      &              UIIDUI,P,FP,KP,EPS,nelemx,nimax,NMETAL,NMOL,switer,

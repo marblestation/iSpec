@@ -17,13 +17,18 @@ C  Some contributions and significant input from Kjell Eriksson.
 C  
 C  Modified by B. Plez to include detailed treatment of lower Balmer lines
 C  April 2, 2019
+C    modifications of 25/09-2007 from previous version implemented here 
+C on 25/08-2020 (connection to DOYLE H+H and RAYLEIGH) BPz
 C
 C  We would very much appreciate bug reports to: barklem@astro.uu.se 
 C
 C  Table of Contents:
 C  ------------------
 C 
-C  REAL HBOP(WAVE,N,NLO,NUP,WAVEH,NH,NHE,NE,T,DOP,NPOP,NL,TOTAL,CONTIN)
+C  REAL HBOP(WAVE,N,NLO,NUP,WAVEH,NH,NHE,NE,T,DOP,NPOP,NL,TOTAL,CONTIN) !!!! modified by B. Plez for NLTE
+C  REAL HBOP(WAVE,N,NLO,NUP,WAVEH,NH,NHE,NE,T,DOP,NPOP,
+C            b_departure,NL,expcorr,fact,source_f,planckfct,TOTAL,CONTIN,
+C            contonly,lineonly,nlte_flag,nlte_species)
 C  REAL FUNCTION HLINOP(WAVE,NBLO,NBUP,WAVEH,T,XNE,H1FRC,HE1FRC,DOPPLE)
 C  REAL FUNCTION HPROFL(N,M,WAVE,WAVEH,T,XNE,H1FRC,HE1FRC,DOPPH)
 C  REAL FUNCTION STARK1(N,M,WAVE,WAVEH,T,XNE)
@@ -47,7 +52,9 @@ C
 C***********************************************************************
 
       SUBROUTINE HBOP(WAVE, N, NLO, NUP, WAVEH, NH, NHE, NE, T, DOP,
-     *                  NPOP, NL, TOTAL, CONTIN, contonly)
+     *                  NPOP, b_departure, NL, expcorr, fact, source_f,
+     *                  planckfct, TOTAL, CONTIN, contonly,
+     *                  lineonly, nlte_flag, nlte_species)
 C
 C  Returns the total absorption coefficient due to H bound levels at WAVE, 
 C  for a given line list employing the occupation probability formalism 
@@ -92,11 +99,13 @@ C  nhe    = number density of He I in cm-3
 C  dop    = reduced Doppler width delta_lambda / lambda_0
 C         = reduced Doppler width delta_nu / nu_0
 C  npop   = number density of each level in cm-3
+C  b_departure = departure coefficients (added by BPz 17/11-2020)
 C  nl     = number of levels for which populations are pre-specified 
 C           -- higher levels are assumed in LTE
 C  total  = returns the total (line + continuous) absorption coefficient
 C  contin = returns the continuous absorption coefficient
 C  contonly = computes only contin if true (BPz 03/04-2019)    logical
+C  lineonly = computes only lines if true (BPz 17/08-2020)    logical
 C
 C  Important parameters
 C  
@@ -109,19 +118,18 @@ C
 C  Paul Barklem, Uppsala, August 2003
 C
       IMPLICIT NONE
-      INTEGER N, NLO(*), NUP(*), NLEVELS, I, J, NBF, NL, FF,FN
+      INTEGER N, NLO(*), NUP(*), NLEVELS, I, J, NBF, NL
       PARAMETER (NLEVELS = 100)  
       PARAMETER (NBF = 6)  
-      REAL NH, NHE, NE, T, CONTIN, DOP, TOTAL
-      REAL NHL, NHEL, NEL, TL
+      REAL NH, NHE, NE, T, CONTIN, DOP, TOTAL, fact
+      REAL NHL, NHEL, NEL, TL, expcorr, planckfct, corr
       REAL*8 W(NLEVELS), G(NLEVELS), WGE(NLEVELS)
-      REAL NLTE(NLEVELS), NPOP(*), NP(NLEVELS)
+      REAL NLTE(NLEVELS), NPOP(*), NP(NLEVELS), b_departure(*)
       REAL Z, H, C, HC, K, KT, LINE, SIGMA, CHI, SF, PROF
       REAL IONH, X, HFNM, FNM(NLEVELS,NLEVELS), HLINOP, HBF
-      REAL TS, TF
-      REAL*8 WAVE, WAVEH(*), REDCUT
+      REAL*8 WAVE, WAVEH(*), REDCUT, source_f
       REAL*8 EHYD(NLEVELS), CONTH(NLEVELS), WCALC, D, WSTAR, TAPER
-      LOGICAL FIRST,contonly
+      LOGICAL FIRST,contonly,lineonly,nlte_flag,nlte_species
       SAVE 
       DATA FIRST/.TRUE./
       PARAMETER (H=6.62607E-27, C=2.9979E10, K=1.38065E-16)
@@ -141,15 +149,18 @@ C
         EHYD(6) = 106632.160D0
         EHYD(7) = 107440.444D0
         EHYD(8) = 107965.051D0
-        DO 1 I = 9, NLEVELS
- 1      EHYD(I) = 109678.764D0 - 109677.576D0/(I*I)
-        DO 2 I = 1, NLEVELS
- 2      CONTH(I) = 109678.764D0 - EHYD(I)
+        DO I = 9, NLEVELS
+          EHYD(I) = 109678.764D0 - 109677.576D0/dfloat(I*I)
+        enddo
+        DO I = 1, NLEVELS
+          CONTH(I) = 109678.764D0 - EHYD(I)
+        enddo
         FIRST = .FALSE.
-        DO 4 I = 1, NLEVELS-1
-        DO 3 J = I+1, NLEVELS
- 3      FNM(I,J) = HFNM(I,J)
- 4      CONTINUE
+        DO  I = 1, NLEVELS-1
+          DO J = I+1, NLEVELS
+            FNM(I,J) = HFNM(I,J)
+          enddo
+        enddo
       ENDIF 
 C
 C  Compute partition function and populations in LTE.
@@ -163,30 +174,44 @@ C
      *   GOTO 16
       Z = 0.
       KT = K*T
-      DO 10 I = 1, NLEVELS
-      W(I) = WCALC(NH, NE, NHE, FLOAT(I), T)
-      G(I) = 2.*I*I
-      WGE(I) = W(I)*G(I)*DEXP(-HC*EHYD(I)/KT)
- 10   Z = Z + WGE(I)
-      DO 15 I = 1, NLEVELS
- 15   NLTE(I) = NH*WGE(I)/Z  ! LTE populations
+      DO I = 1, NLEVELS
+        W(I) = WCALC(NH, NE, NHE, FLOAT(I), T)
+        G(I) = 2.*I*I
+        WGE(I) = W(I)*G(I)*DEXP(-HC*EHYD(I)/KT)
+        Z = Z + WGE(I)
+      enddo
+      DO I = 1, NLEVELS
+        NLTE(I) = NH*WGE(I)/Z  ! LTE populations
+      enddo
       NHL = NH
       NHEL = NHE
       NEL = NE
       TL = T
  16   CONTINUE
 C
-      DO 20 I = 1, NLEVELS
-      IF (I .LE. NL) THEN 
-        NP(I) = NPOP(I)        ! non-LTE populations for states below NL
-      ELSE 
-        NP(I) = NLTE(I)        ! LTE populations otherwise
-      ENDIF
- 20   CONTINUE
+      DO I = 1, NLEVELS
+        IF (I .LE. NL) THEN 
+          if (npop(I).gt.0.) then
+! NLTE number densities are given
+            NP(I) = NPOP(I)        ! non-LTE populations for states below NL
+          else 
+! departure coeffients are given
+            np(i)=b_departure(i)*nlte(i)
+          endif
+        ELSE 
+          NP(I) = NLTE(I)        ! LTE populations otherwise
+        ENDIF
+      enddo
 
 C
 C  Compute line opacity components
 C
+      if (lineonly.and.contonly) then
+! solve incompatible options
+        lineonly=.false.
+        contonly=.false.
+      endif
+
       LINE = 0.
 !
       if (.not. contonly) then
@@ -207,21 +232,41 @@ C
         else
 ! all other lines
           SIGMA = SF * FNM(NLO(I),NUP(I)) *
-     *     HLINOP(WAVE,NLO(I),NUP(I),WAVEH(I),T,NE,NP(1),NHE,DOP)
+     *     HLINOP(WAVE,NLO(I),NUP(I),WAVEH(I),T,NE,NH,NHE,DOP)
           CHI = 0.
           IF (W(NLO(I)).GT.0.)  ! populations would be zero also
      +       CHI = SIGMA * ( W(NUP(I))/W(NLO(I))*NP(NLO(I)) -
      -                 NP(NUP(I))*G(NLO(I))/G(NUP(I)) )  !stim em term
         endif
 
- 30    LINE = LINE + CHI
+        LINE = LINE + CHI
+
+! correct source function for NLTE case
+        if (nlte_flag) then
+          if (nlte_species) then
+            corr = (expcorr - 1.)/
+     &         ( b_departure(nlo(i)) / b_departure(nup(i)) * 
+     &              expcorr - 1. )
+!                print*,'check H NLTE correction',i,
+!     &             expcorr,bd(nlo(i)),bd(nup(i)),corr
+          else
+            corr=1.0
+          endif
+          source_f = source_f +
+     &                chi * fact * planckfct * corr
+        endif
+!
+ 30   continue
 !
       endif
+
+      CONTIN = 0.
+
+      if (.not. lineonly) then
 !
 C
 C  Compute the continuous components - sum over NBF lowest states
 C     
-      CONTIN = 0.
       DO 40 I = 1, NBF
 C
 C  Compute dissolved fraction for the wavelength for this lower level
@@ -252,6 +297,8 @@ CC      ENDIF
 C
 C  Sum up and we're done
 C
+      endif
+
       TOTAL = CONTIN + LINE
 C
       RETURN
@@ -322,10 +369,12 @@ C
         EHYD(6) = 106632.160D0
         EHYD(7) = 107440.444D0
         EHYD(8) = 107965.051D0
-        DO 1 I = 9, 100
- 1      EHYD(I) = 109678.764D0 - 109677.576D0/I**2
-        DO 2 I = 1, 100
- 2      CONTH(I) = 109678.764D0 - EHYD(I)
+        DO I = 9, 100
+          EHYD(I) = 109678.764D0 - 109677.576D0/I**2
+        enddo
+        DO I = 1, 100
+          CONTH(I) = 109678.764D0 - EHYD(I)
+        enddo
 C
 C  Red cutoff wavelengths in Angstroms.
 C  Arbitrarily chosen to be the same energy below the upper state of the
@@ -433,7 +482,7 @@ C  Based on code by Deane Peterson and Bob Kurucz
 C
       REAL*8 DELW,WAVE,WAVEH,DOP,D,FREQ,FREQNM,RAYLCUT,WAVE4000
       REAL*8 FINEST(14),FINSWT(14)
-      REAL*8 XN2,F,FO,HTOTAL,FREQSQ
+      REAL*8 XN2,FO,HTOTAL,FREQSQ
       DIMENSION STCOMP(5,4),STALPH(34),
      1          ISTAL(4),LNGHAL(4),STWTAL(34),
      2          STCPWT(5,4),LNCOMP(4)
@@ -565,14 +614,16 @@ C
      2 -12.59, -12.56, -12.53/
 C
       PARAMETER (PI = 3.14159265359, SQRTPI = 1.77245385)
-      PARAMETER (CLIGHT = 2.9979258E18)
+      PARAMETER (CLIGHT = 2.99792458E18)
       PARAMETER (CLIGHTCM = 2.99792458E10)
 C
 C  Most model atmosphere codes include Rayleigh scattering by H atoms 
 C  elsewhere, eg. quantum mechanical calculations. This parameter cuts
 C  the Lyman alpha natural absorption at this chosen point.  
 C
-      PARAMETER (RAYLCUT = 1240.D0) ! in Angstroms
+C Changed from 1240 to 1400 by BPz 04/10-2007 (implemented 25/08-2020 in this version)
+      PARAMETER (RAYLCUT = 1400.D0) ! in Angstroms
+cccc      PARAMETER (RAYLCUT = 1240.D0) ! in Angstroms
 c      PARAMETER (RAYLCUT = 3000.D0) ! in Angstroms
 C
 C  Data for self-broadening from calculations of Barklem, Piskunov and 
@@ -657,21 +708,21 @@ C
             FINSWT(1) = 1.
          ELSE IF (MMN.GT.1) THEN
             IFINS = LNCOMP(N)
-            DO 1 I = 1,IFINS
-            FINEST(I) = STCOMP(I, N)*1.D7
-            FINSWT(I) = STCPWT(I, N)/XN2
-   1        CONTINUE
+            DO I = 1,IFINS
+              FINEST(I) = STCOMP(I, N)*1.D7
+              FINSWT(I) = STCPWT(I, N)/XN2
+            enddo
          ELSE
 C
 C  eg: Ly alpha IFINS=2, IPOS=1, FINEST=-7.3E9,3.7E9, FINSWT=1/3, 2/3
 C
             IFINS = LNGHAL(N)
             IPOS = ISTAL(N)
-            DO 2 I = 1,IFINS
-            K = IPOS-1+I
-            FINEST(I) = STALPH(K)*1.D7
-            FINSWT(I) = STWTAL(K)/XN2/3.D0
-   2        CONTINUE
+            DO I = 1,IFINS
+              K = IPOS-1+I
+              FINEST(I) = STALPH(K)*1.D7
+              FINSWT(I) = STWTAL(K)/XN2/3.D0
+            enddo
          END IF
       END IF
 C
@@ -803,15 +854,26 @@ C  profiles store log10(I(d omega)) for N(H) = 1e14 cm^-3. Assumed
 C  insensitive to T, and linear scaling with N(H).  Note I(d freq) = 
 C  I(d omega)/c 
 C
-            ELSE IF (FREQ.GT.20000.*CLIGHTCM) THEN 
+c Changed by BPz on 25/09-2007 to stop extrapolation where Doyle's H+H
+c CIA takes over in jonabs_vac.dat (detabs.f) : 1750A
+c changed 25/08-2020 in this version
+c
+cccc            ELSE IF (FREQ.GT.20000.*CLIGHTCM) THEN
+            ELSE IF (FREQ.GT.57142.8571*CLIGHTCM) THEN
                SPACING = 200.*CLIGHTCM
                FREQ22000 = (82259.105-22000.)*CLIGHTCM
 C
 C  If redward of last point (1660 -> 5000 Angstrom) extrapolate,
+c [BPz : now it is 1750A, not 5000A]
 C  otherwise (1278 -> 1660 Angstrom) linear (in log10 profiles) 
 C  interpolation 
 C  
                IF (FREQ.LT.FREQ22000) THEN
+c
+c Changed by BPz on 25/09-2007. We replace that extrapolation of the far wing
+c by the H+H CIA of Doyle included in the continuous opacity package of MARCS/BABSMA
+c  implemented here on 25/08-2020
+
                   XLYMANH2 = (LYMANH2(2)-LYMANH2(1))/SPACING*
      *                         (FREQ-FREQ22000)+LYMANH2(1)
                ELSE
@@ -872,11 +934,16 @@ C  The profiles store log10(I(d omega)) for N(H+) = 1e14 cm^-3. Assumed
 C  insensitive to T, and linear scaling with N(H+). Note I(d freq) = 
 C  I(d omega)/c and we assume N(H+) = N(e-).
 C
-         ELSE IF (FREQ.GT.20000.*CLIGHTCM) THEN 
+c Changed by BPz on 25/09-2007 to stop extrapolation where Doyle's H+H
+c CIA takes over in jonabs_vac.dat (detabs.f) : 1750A
+c
+CCCC         ELSE IF (FREQ.GT.20000.*CLIGHTCM) THEN
+         ELSE IF (FREQ.GT.57142.8571*CLIGHTCM) THEN
             SPACING=100.*CLIGHTCM
             FREQ15000=(82259.105-15000.)*CLIGHTCM
 C
 C  If redward of last point (1487 -> 5000 Angstroem) extrapolate,
+c BPz : now it is 1750A, not 5000A. Implemented in this version on 25/08-2020
 C  otherwise (1278 -> 1487 Angstroem) interpolation. 
 C  
             IF (FREQ.LT.FREQ15000) THEN
@@ -926,7 +993,6 @@ C
       REAL*8 WAVE,WAVEH,DELW,DEL,F,FO,CLIGHT,FREQ,FREQNM
       REAL*4 K
       DIMENSION Y1WTM(2,2),XKNMTB(4,3)
-      LOGICAL LYMANALF
       SAVE
 C
 C  Knm constants as defined by Griem (1960, ApJ 132, 883) for the long 
@@ -940,7 +1006,7 @@ C
       DATA Y1WTM/1.E18, 1.E17, 1.E16, 1.E14/
       DATA N1/0/, M1/0/
 C
-      PARAMETER (CLIGHT = 2.9979258E18)
+      PARAMETER (CLIGHT = 2.99792458E18)
       PARAMETER (PI = 3.14159265359, SQRTPI = 1.77245385)
       PARAMETER (H = 6.62618E-27)  !Planck in cgs
       PARAMETER (K = 1.38066E-16)  !Boltzmann in cgs
@@ -1390,7 +1456,7 @@ C  Coded by Paul Barklem and Kjell Eriksson, Aug 2003
 C 	
       IMPLICIT NONE
       REAL NH, NE, NHE, NS, TEMP
-      REAL*8 IONH, A0, E, PI, K, CHI, RIH, NEUTR, ION, NS2, NS4 
+      REAL*8 IONH, A0, E, PI, K, CHI, RIH, NEUTR, NS2, NS4 
       REAL*8 F, A, BETAC, X, WNEUTR, WION, X1, X2      
       PARAMETER (IONH=2.17991E-11) 
       PARAMETER (A0=5.29177E-9)
@@ -1543,43 +1609,42 @@ C
       RETURN
       END
 
-
 C***********************************************************************
       SUBROUTINE LOGINT(X, Y, N, XI, YI)
 C
-C  Does log interpolation and extrapolation of arrays X and Y
+C  Does log interpolation and extrapolation of array Y
 C  of length N.  Returns value YI at XI.
+C  Assumes monotonically increasing X.
+C  Bug fix 20230711 thanks to Richard Hoppe
+C  Changed to log-linear 20230712
 C
       IMPLICIT NONE
       INTEGER N, I, J
       REAL X(*), Y(*), XI, YI
-      REAL XL(N), YL(N), XIL, YIL, XLS(3), YLS(3), DY        
+      REAL YL(N), YIL, XS(3), YLS(3), DY        
 C
       J = 0
-      XIL =  LOG10(XI)
-      DO 10 I = 1, N
-      XL(I) = LOG10(X(I))
-      YL(I) = LOG10(Y(I))
-      IF ((XL(I).LT.XIL) .AND. J.EQ.0) J = I
- 10   CONTINUE
+      DO I = 1, N
+        YL(I) = LOG10(Y(I))
+        IF (X(I).LT.XI) J = I
+      enddo
       IF (J.EQ.0) J = 1
-      IF (J.GT.N-3) J = N-3
+      IF (J.GT.N-3) J = N-2
 C
 C  polynomial 3 point interpolation or extrapolation
 C     
-      XLS(1) = XL(J)
-      XLS(2) = XL(J+1)
-      XLS(3) = XL(J+2)
+      XS(1) = X(J)
+      XS(2) = X(J+1)
+      XS(3) = X(J+2)
       YLS(1) = YL(J)
       YLS(2) = YL(J+1)
       YLS(3) = YL(J+2)
-      CALL POLINT(XLS, YLS, 3, XIL, YIL, DY)
+      CALL POLINT(XS, YLS, 3, XI, YIL, DY)
       YI = 10.**YIL
 C
       RETURN
       END
    
-
 C***********************************************************************
 C  polynomial interpolation routine
 
@@ -1590,7 +1655,7 @@ C  polynomial interpolation routine
       DIMENSION C(NMAX),D(NMAX)
       NS=1
       DIF=ABS(X-XA(1))
-      DO 11 I=1,N 
+      DO I=1,N 
         DIFT=ABS(X-XA(I))
         IF (DIFT.LT.DIF) THEN
           NS=I
@@ -1598,11 +1663,11 @@ C  polynomial interpolation routine
         ENDIF
         C(I)=YA(I)
         D(I)=YA(I)
-11    CONTINUE
+      enddo
       Y=YA(NS)
       NS=NS-1
-      DO 13 M=1,N-1
-        DO 12 I=1,N-M
+      DO M=1,N-1
+        DO I=1,N-M
           HO=XA(I)-X
           HP=XA(I+M)-X
           W=C(I+1)-D(I)
@@ -1612,7 +1677,7 @@ c          IF(DEN.EQ.0.d0)PAUSE
           DEN=W/DEN
           D(I)=HP*DEN
           C(I)=HO*DEN
-12      CONTINUE
+        enddo
         IF (2*NS.LT.N-M)THEN
           DY=C(NS+1)
         ELSE
@@ -1620,7 +1685,7 @@ c          IF(DEN.EQ.0.d0)PAUSE
           NS=NS-1
         ENDIF
         Y=Y+DY
-13    CONTINUE
+      enddo
       RETURN
       END
 

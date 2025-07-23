@@ -1,4 +1,4 @@
-      SUBROUTINE LINT(N,X,Y,XINT,YINT)
+      SUBROUTINE LINT(N,X,YY,XINT,YYINT)
 *
 *-----------------------------------------------------------------------
 *
@@ -13,13 +13,14 @@
 *-----------------------------------------------------------------------
 *
       integer countextrap
-      doubleprecision x,xint,arg
-      DIMENSION X(N),Y(N),ARG(2),FUNK(2)
+      doubleprecision x(n),xint,arg(2),funk(2),y(n),YINT
+      real YY(N),YYINT
 *
       COMMON/UTPUT/IREAD,IWRIT
       data countextrap/0/
       save countextrap
 *
+      y=dble(yy)
       IF(N.EQ.2) then
         arg(1)=x(1)
         arg(2)=x(2)
@@ -51,7 +52,10 @@
   200 FORMAT(' WARNING, EXTRAPOL. IN LINT. XINT=',E17.8,3X,/,
      &       ' ARG=',2E17.8)
 *
-   21 YINT=(funk(2)-funk(1))/(arg(2)-arg(1))*(XINT-arg(1))+funk(1)
+   21 YINT = (funk(2)-funk(1)) * ( (XINT-arg(1))/(arg(2)-arg(1)) ) +
+     &        funk(1)
+
+      YYINT = sngl(YINT)
 
       if (countextrap.gt.10) then
         print*,

@@ -1,4 +1,4 @@
-      SUBROUTINE BSYNBplatt(NALLIN)
+      SUBROUTINE BSYNBplatt(nangles,muoutp)
 *
 *-----------------------------------------------------------------------
 *
@@ -12,6 +12,8 @@
 *
 *-----------------------------------------------------------------------
 *
+      use cubint_module
+
       include 'spectrum.inc'
 *
       character*50 mcode
@@ -30,14 +32,36 @@
       COMMON/TAUC/ TAU(ndp),DTAULN(ndp),NTAU
       COMMON/PIECES/ XL1,XL2,DEL,EPS,NMX,NLBLDU,IINT,XMYC,IWEAK
       COMMON/ROSSC/ ROSS(NDP),cross(ndp)
+!
+      COMMON/SPACE3/ SOURCEplatt(ndp),ERROR(ndp),
+     &               tomatch(7*nrays*ndp+8*ndp+1+3*nrays)
+!
 *
 * extension for large number of wavelengths and lines (monster II)
       doubleprecision xlambda
-      common/large/ xlambda(lpoint),maxlam,ABSO(NDP,lpoint),
+      doubleprecision source_function
+      common/large/ xlambda(lpoint),source_function(ndp,lpoint),
+     & maxlam,ABSO(NDP,lpoint),
      & absos(ndp,lpoint),absocont(ndp,lpoint),absoscont(ndp,lpoint)
+*
 *
       real fcfc(lpoint),y1cy1c(lpoint),y1y1(nrays,lpoint),
      & xlm(lpoint)
+
+* icsurf is for continuum intensity and isurf for absolute intensity
+* muoutp are mu-points for output intensities
+* Use 12 Gauss-Radau points by default, if nangles < 0,
+* Otherwise use nangles mu-points from input
+*     
+      logical extrap
+      integer nangles
+      integer iout(nangles)
+      real muout(nangles),yout(nangles),uin(nrays),muoutp(nangles)
+      real, allocatable :: isurf(:,:), icsurf(:,:)
+
+* special version NLTE
+      logical nlte
+      common /nlte_common/ nlte
 
       logical findtau1,hydrovelo
       real velocity
@@ -53,6 +77,14 @@
 *
 * Initiate angle quadrature points 
 *
+      do i=1,nangles
+!        muout(i)=muoutp(nangles+1-i)
+        muout(i)=muoutp(i)
+      enddo
+
+      allocate(isurf(nangles,lpoint))
+      allocate(icsurf(nangles,lpoint))
+
       NMY=NMX
       CALL GAUSI(NMY,0.,1.,WMY,XMY)
       DO 1 I=1,NMY
@@ -65,11 +97,21 @@
 * XL1      : wavelength where synthetic spectrum starts
 * XL2      : wavelength where synthetic spectrum stops
 * DEL      : wavelength step
-* IWEAK =1 : weak line approximation for L/KAPPA le. EPS
+* IWEAK =1 : weak line approximation for L/KAPPA le. EPS ! not implemented anymore.
 * note  XL2.gt.XL1
 *
       iweak=0
       if (iint.gt.0) then
+
+! if intensity flag, add a mu-point. It should preferably be mu=1.0 so that
+! interpolation at the Gauss-Radau points is properly made at mu=1.0
+! xmyc is read in input.f, just after the intensity flag
+! so for safety we impose here xmyc=1.0
+
+        if (abs(xmyc-1.0).gt.0.0001) then
+          xmyc=1.0
+          print*,'WARNING! the additional mu-point was set to 1.0!'
+        endif
         nmy=nmy+1
         xmy(nmy)=xmyc
         wmy(nmy)=0.
@@ -91,33 +133,48 @@
         do k=1,ntau
           x(k)=absocont(k,j)
           s(k)=absoscont(k,j)
-          bplan(k)=bpl(T(k),xlsingle)
+!          s(k)=0.     !test
+*
+* NLTE case not implemented for continuum
+*
+          if (nlte) then
+! test            bplan(k)=source_function(k,j)
+            bplan(k)=bpl(T(k),xlsingle)
+          else
+            bplan(k)=bpl(T(k),xlsingle)
+          endif
+*
         enddo
-cc      do 1963 jc=1,nlcont
-cc        READ(14,rec=jc) MCODE,idum,xlm(jc),BPLAN,XC,S,XI
-cc        if (debug) then
-cc          print*,'bsynbplatt read 14 ',mcode,jc,idum,xlm(jc)
-cc          print*,' XC     S     BPlan'
-cc          do k=1,ntau
-cc            print*,xc(k),s(k),bplan(k)
-cc          enddo
-cc        endif
-cc      DO 9 K=1,NTAU
-cc        X(K)=XC(K)
-!        if (abs(xlsingle-5001.0).lt.1.e-4.and.k.eq.61) then
-!           print*,'k',k,'kappa cont',x(k)*ross(k),s(k)*ross(k)
-!        endif
-cc    9 CONTINUE
        
+!        do k=1,ntau
+!         write(59,*) xlsingle,k,bplan(k)
+!        enddo
+
         call traneqplatt(0)
+
+!        do k=1,ntau
+!          if (abs(source_function(k,j)/sourceplatt(k)-1.0).gt.
+!     &         0.01) then
+!            print*,'source differ',xlsingle,k,source_function(k,j),
+!     &          sourceplatt(k)
+!          endif
+!        enddo
+*
+* calculate emergent continuum intensity at prescribed mu-points
+*
+        if (iint.gt.0) then 
+          call cubintp14(y1,xmy,uin,muout,yout,iout,nmy,
+     &                     nangles,3,0,0,0,
+     &                     extrap)
+          do k=1,nangles
+            icsurf(k,j)=yout(k)
+          enddo
+        endif
+
+! intensity at special angle is now disk center intensity (mu forced to 1.0)
         Y1CY1C(j)=Y1(NMY)
+
         FCFC(j)=4.*HSURF*pi
-!        IF(IINT.LE.0) WRITE(7,204) fcFC(j),xlsingle
-!        IF(IINT.GT.0) WRITE(7,205) Y1Cy1c(j),xlsingle
-cc        if (debug) then
-cc          print*,' continuum;  lambda = ',jc,xlm(jc),fcfc(jc)
-cc        endif
-cc1963  continue
       enddo
 *
 * cont + line flux
@@ -130,68 +187,82 @@ cc1963  continue
 !     &       absos(61,j)*ross(61)
 !        endif
 
-        if(iweak.le.0.or.iint.le.0) then
-          do k=1,ntau
-* the continuum opacity is already included in abso
-ccc              x(k)=xc(k)+abso(k,j+jjj)
-            x(k)=abso(k,j)
-            s(k)=absos(k,j)
+        do k=1,ntau
+! the continuum opacity is not included in abso
+
+          x(k)=abso(k,j)+absocont(k,j)
+! test            x(k)=abso(k,j)
+! test 
+          s(k)=absos(k,j)+absoscont(k,j)
+!          s(k)=0. !test
+*
+* NLTE case implemented for lines
+*
+          if (nlte) then
+! compute total source function, for lines and continuum
+            bplan(k)=(source_function(k,j)*abso(k,j)+
+     &                bpl(T(k),xlsingle)*absocont(k,j))/x(k)
+          else
             bplan(k)=bpl(T(k),xlsingle)
+          endif
+*
+        enddo
+
+        idebug=0
+       
+!        do k=1,ntau
+!         write(60,*) xlsingle,k,bplan(k)
+!        enddo
+cc        if (abs(xlsingle-5349.40).lt.0.005) then
+cc          print*,'bsynbplatt final check', xlsingle,
+cc     &       source_function(10,j),abso(10,j),bpl(T(10),xlsingle),
+cc     &       absocont(10,j),x(10),s(10)
+cc        endif
+!          do k=1,ntau
+!            if (xlsingle.gt.5889.7.and.xlsingle.lt.5889.93) then
+!              print555,xlsingle,k,
+!     &          source_function(k,j),abso(k,j),
+!     &          x(k),
+!     &          bpl(T(k),xlsingle)
+!555           format(f9.3,1x,i3,4(1x,1pe9.3))
+!            endif
+!          enddo
+
+        call traneqplatt(idebug)
+
+!        if (xlsingle.gt.5889.7.and.xlsingle.lt.5889.93) then
+!        do k=1,ntau
+!          if (abs(source_function(k,j)/sourceplatt(k)-1.0).gt.
+!     &         0.01) then
+!            print556,xlsingle,k,source_function(k,j),
+!     &          sourceplatt(k)
+!556         format('source differ',f9.3,1x,i3,1x,2(1x,1pe9.3))
+!          endif
+!        enddo
+!        endif
+
+        if (iint.gt.0) then
+*
+* calculate emergent line intensity at prescribed mu-points
+*
+          call cubintp14(y1,xmy,uin,muout,yout,iout,nmy,
+     &                     nangles,3,0,0,0,
+     &                     extrap)
+          do k=1,nangles
+            isurf(k,j)=yout(k)
           enddo
-c            if (debug) then
-c              print*,' line;  lambda = ',xlambda(j)
-c            endif
-cc            if (abs(xlambda(j)-5240.41d0).lt.1.d-4.or.
-cc     &          abs(xlambda(j)-5242.49d0).lt.1.d-4.or.
-cc     &          abs(xlambda(j)-5241.62d0).lt.1.d-4)  then
-cc              print*,'lambda = ',xlambda(j),' calling traneqplatt',idebug
-cc              idebug=1
-cc            else
-          idebug=0
-cc            endif
-          call traneqplatt(idebug)
+        endif
 
 * starting with version 12.1, flux is not divided by pi anymore.
 * F_lambda integrated over lambda is sigma.Teff^4
-          prf=4.*pi*hsurf/fcfc(j)
-          fluxme(j)=hsurf*4.*pi
-          if (iint.gt.0) then
-            iprf(j)=y1(nmy)/y1cy1c(j)
-            icenter(j)=y1(nmy)
-          endif
-          prof(j)=1.-prf
-        else
-          do k=1,ntau
-            etad(k)=abso(k,j)
-            maxetad=max(maxetad,etad(k))
-          enddo
-          if (maxetad.le.eps) then
-            call tranw(ntau,tau,xmyc,bplan,xc,etad,deli)
-            prof(j)=deli/y1cy1c(j)
-          else
-            do k=1,ntau
-              x(k)=abso(k,j)
-              s(k)=absos(k,j)
-              xlsingle=xlambda(j)
-              bplan(K)=bpl(t(k),xlsingle)
-            enddo
-c            if (debug) then
-c              print*,' line;  lambda = ',xlsingle
-c            endif
-            call traneqplatt(0)
-* starting with version 12.1, flux is not divided by pi anymore.
-* F_lambda integrated over lambda is sigma.Teff^4
-            prf=4.*pi*hsurf/fcfc(j)
-            fluxme(j)=hsurf*4.*pi
-            if (iint.gt.0) then
-              iprf(j)=y1(nmy)/y1cy1c(j)
-              icenter(j)=y1(nmy)
-            endif
-            prof(j)=1.-prf
-          endif
-ccc          eqwidth=eqwidth+(prof(j)+profold)*del/2.
-ccc          profold=prof(j)
+        prf=4.*pi*hsurf/fcfc(j)
+        fluxme(j)=hsurf*4.*pi
+        if (iint.gt.0) then
+* save intensity at the prescribed angle (now mu=1.0)
+          iprf(j)=y1(nmy)/y1cy1c(j)
+          icenter(j)=y1(nmy)
         endif
+        prof(j)=1.-prf
 *
 * find depth where tau_lambda=1
         if (hydrovelo) then
@@ -216,9 +287,9 @@ ccc          profold=prof(j)
         endif
 *
 * save intensities
-        do nlx=1,nmy
-          y1y1(nlx,j)=y1(nlx)
-        enddo
+cc        do nlx=1,nmy
+cc          y1y1(nlx,j)=y1(nlx)
+cc        enddo
 *
 * End loop over wavelengths
 *
@@ -226,19 +297,23 @@ ccc          profold=prof(j)
 *
 * Write spectrum on file for convolution with instrument profile
 *
+      if (iint.gt.0) then
+        write(46,1111) muout(1:nangles)
+1111    format ('# mu-points ',30(1x,1pe13.6))
+      endif
       do j=1,maxlam
         plezflux=1.-prof(j)
         if (iint.eq.0) then
 * fluxme is sigma teff^4
           write(46,1964) xlambda(j),plezflux,fluxme(j)
 1964      format(f11.3,1x,f10.5,1x,1pe12.5)
-
-C output in case of intensity calculation : store limb function
         else
-* We add intensity at center of disk in spectrum output.
+* We add intensities at prescribed angles after spectrum output,
+* absolute and normalised
           write(46,1965) xlambda(j),plezflux,fluxme(j),
-     &                   icenter(j),iprf(j)
-1965      format(f11.3,1x,f10.5,2(1x,1pe12.5),1x,0pf8.5)
+     &                   (isurf(k,j),isurf(k,j)/icsurf(k,j),k=1,nangles)
+cc     &                   icenter(j),iprf(j)
+1965      format(f11.3,1x,f10.5,1x,1pe12.5,30(1x,1pe12.5,1x,0pf8.5))
         endif
       enddo
 

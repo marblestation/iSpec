@@ -28,25 +28,36 @@
 *            gamrad/(2.pi.c)=deltanu (cm-1); gamrad/(2.pi)=deltanu (Hz)
 *   ALOGC6 IS UNSOELDS (DIFFERENCE BETWEEN THE 2 LEVELS)
 *   IJON IS THE IONIZATIN STATE OF THE LINE SPECIES (1=NEUTRAL)
+*   GAMST is the Stark broadening parameter
 *
 * ROUTINE MODIFIED FOR CANARY CODE
 *
 *-----------------------------------------------------------------------
 *
+      implicit none
+
       INCLUDE 'spectrum.inc'
 *
+      integer iel,i,idamp,idum,ijon,ipress,nat,ndepth,nmol
+      real x,a,algh,alogc6,anjon,aq1,aq2,aq3,boltz,c,chi,chi2,chi3,chie,
+     &     consta,constb,dbvcon,dnud,duma,dumb,dumc,dumd,dume,e,fdamp,
+     &     fpartition,fyrapi,g,gam6,gam6anstee,gamh,gamma,gampre,gamrad,
+     &     h,heh,pe,pg,ph,ph2,phe,q1,q1lim,q2,q2lim,q3,q3lim,redmas,
+     &     relvel,ro,saha,saha1,saha2,sigma,stim,t,temp,tlim1,
+     &     tlim2,tlim3,tqa,xi,xite,xl,gammln,ex10
       character*1 recipe
-      REAL N,MU,MA,MH,M
+      REAL N,MA,MH,M
       REAL NTOT,NTT
-      REAL MUM,gamvdw10000
+      REAL MUM,gamvdw10000,gamst,gamstark,xne,eudiff
+      real tempstark,chiu,eion
       doubleprecision ionpot
-      DIMENSION Q(NDP),theta(ndp),xi0(ndp)
+      real q(ndp),theta(ndp),xi0(ndp)
 *
       COMMON/POP/ N(NDP),A(NDP),DNUD(NDP),STIM(NDP),ANJON(NDP),DBVCON
       COMMON/ATMOS/ T(NDP),PE(NDP),PG(NDP),XI(NDP),MUM(NDP),RO(NDP),
      &              NDEPTH
       COMMON/ATOM/ XL,MA,CHI,CHI2,chi3,CHIE,G,IDAMP,FDAMP,
-     &             GAMRAD,ALOGC6,IJON
+     &             GAMRAD,ALOGC6,IJON,gamst
       COMMON/CONST/ BOLTZ,MH,H,C,E,M
       COMMON/CQ/ Q1(NDP),Q2(NDP),Q3(NDP),AQ1(3),AQ2(3),TLIM1,
      &           TLIM2,Q1LIM,Q2LIM,AQ3(3),TLIM3,Q3LIM,TQA(3)
@@ -106,18 +117,18 @@
 *  fooled by 00 in atoms.
 *
         call partf(IEL,1,T(I),1,Q1(I),ionpot)
-        chi=ionpot
+        chi=sngl(ionpot)
         IF(IEL.GT.NAT) GOTO 20
         CALL INP3(TQA,AQ2,T(I),Q2(I))
         Q2(I)=EXP(Q2(I))
         IF(TEMP.LE.TLIM2) Q2(I)=Q2LIM
         call partf(IEL,2,T(I),1,Q2(I),ionpot)
-        chi2=ionpot
+        chi2=sngl(ionpot)
         CALL INP3(TQA,AQ3,T(I),Q3(I))
         Q3(I)=EXP(Q3(I))
         IF(TEMP.LE.TLIM3) Q3(I)=Q3LIM
         call partf(IEL,3,T(I),1,Q3(I),ionpot)
-        chi3=ionpot
+        chi3=sngl(ionpot)
         SAHA = 2.5*ALOG10(TEMP) - ALOG10(PE(I)) - 0.1761
         SAHA1 = SAHA + ALOG10(Q2(I)/Q1(I)) - THETA(i)*CHI
         SAHA2 = SAHA + ALOG10(Q3(I)/Q2(I)) - THETA(i)*CHI2
@@ -210,6 +221,47 @@ cc          endif
           print*,'depth: recipe= ',recipe,' not implemented!'
           stop
         endif
+
+        if (idamp.ne.1) then
+! Include Stark broadening
+!
+* prepare for stark broadening for the case when gamst=0.0
+          if (ijon.eq.1) then
+            eion=chi
+          else if (ijon.eq.2) then
+            eion=chi2
+          else if (ijon.eq.3) then
+            eion=chi3
+          else
+            print*,ijon,'th stage of ionisation not foreseen !'
+            stop 'in subroutine depth.f of bsyn/eqwidt.f'
+          endif
+! XL is wavelength in cm
+          chiu=chie+3.40*3647./(xl*1.e8)
+          Eudiff=13.598*(ijon/(eion-chiu))**2
+
+* preparation of T dependent factors for the Pe loop below:
+          tempstark=(temp/10000.)**(1./6.)
+          xne=pe(i)/boltz/temp
+          if (gamst.lt.0.0) then
+            gamst=10.**gamst
+          endif
+          if(gamst.ne.0.0) then
+* temperature scaling if the Stark width was given
+            gamstark=gamst*tempstark*xne
+          else
+* C.Cowley's modification of Unsold approximation
+* Cowley C.R. 1971, The Observatroy 91, 139
+            if(ijon.eq.1) then
+              gamstark=2.26e-7*Eudiff*xne
+            else    ! ijon = 2 or 3
+              gamstark=5.42e-7*Eudiff*xne/(ijon+1.)**2
+            endif
+          endif
+          gamma=gamma+gamstark
+        endif
+! end of Stark broadening calculation
+
         a(i) = gamma/(fyrapi*dnud(i))
       enddo
 *
@@ -226,6 +278,8 @@ cc          endif
 **********************************************************************************
       FUNCTION gammln(xx) 
 * returns ln gamma(xx) The Gamma function,
+      implicit none
+
       REAL gammln,xx 
       INTEGER j 
       DOUBLE PRECISION ser,stp,tmp,x,y,cof(6) 
@@ -242,7 +296,7 @@ cc          endif
         y=y+1.d0 
         ser=ser+cof(j)/y 
 11    continue 
-      gammln=tmp+log(stp*ser/x) 
+      gammln=sngl(tmp+log(stp*ser/x)) 
       return 
       END 
 *

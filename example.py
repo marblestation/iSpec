@@ -2937,7 +2937,6 @@ if __name__ == '__main__':
     #determine_astrophysical_parameters_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=True)
     #determine_astrophysical_parameters_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=False)
     #determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=True)
-    #determine_abundances_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=True)
     #determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched_with_atomic_data=True)
     #determine_abundances_from_ew(code="turbospectrum", use_lines_already_crossmatched_with_atomic_data=True)
     determine_abundances_from_ew(code="moog", use_lines_already_crossmatched_with_atomic_data=True)

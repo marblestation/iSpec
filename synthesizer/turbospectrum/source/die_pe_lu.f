@@ -13,8 +13,8 @@ C
         parameter (maxim=1000)
         integer i,j,m,mmax(maxim),mmaxj,natom(5,maxim),nelem(5,maxim),
      &          natomj,nelemj,nelemx(100),nmetal,nmol,nimax,ntry,niter,
-     &          k,km5,nelemi,n,nelmolec(maxim),natomi,nhemolec(maxim)
-        integer indx(100),ii,jj
+     &          k,nelemi,nelmolec(maxim),nhemolec(maxim)
+        integer indx(100),jj
         character*20   MOL(maxim)
         real xmass(maxim+400), atmass(100),exponent(maxim)
         doubleprecision ndensity, molweight,tsuapm,fmin,fminold,
@@ -27,16 +27,16 @@ C
         real spe,tem,spg,g0(100),g1(100),g2(100),g3(100)
 * may become dbleprec
         doubleprecision IP(100),KP(100),uiidui(100),eps,tem25,
-     &       delta,deltae,pg,pgold,fpold(100),fifi,epsp,pgindumm,
+     &       delta,deltae,pg,pgold,epsp,pgindumm,
      &       ppmol(maxim),apm(maxim),p(100),fp(100),c(maxim,5),
-     &       ccomp(100),maxerror,pstart(100),epsf,fp99back,
-     &       smallest,epsdie,econst,pgin,dhh,t,pmoljl,dfp99dp1,
-     &       heh,aplogj,pph,phh,pgin5,reducedmass15(maxim),
-     &       factor,pmolj,atomj,prev(100),pold(100),dfdp(100),
+     &       ccomp(100),pstart(100),epsf,
+     &       smallest,epsdie,econst,pgin,dhh,t,dfp99dp1,
+     &       heh,pph,phh,reducedmass15(maxim),
+     &       pold(100),dfdp(100),
      &       kp1(100),kp2(100),kp3(100),kpe(100),ipp(100),ippp(100),
      &       d00(maxim),qmol(maxim),ipppp(100)
         character*20 molcode(maxim)
-        logical switer,readjust,first,elmolec(maxim),converge,
+        logical switer,first,elmolec(maxim),converge,
      &          hemolec(maxim),molions,singular,skiprelim
         common /density/ndensity,molweight,xmass,atmass
         COMMON/COMFH1/C,NELEM,NATOM,MMAX,PPMOL,d00,qmol,APM,MOL,IP,
@@ -44,7 +44,7 @@ C
      &              UIIDUI,P,FP,KP,EPS,nelemx,nimax,NMETAL,NMOL,switer,
      &              molcode,elem
         character*2 elem(100)
-        double precision  error(100),pe,xx,bpzlog10,pep
+        double precision  error(100),pe,pep
         double precision konst,qprod,konsttem25
         real abund,anjon,h,part,dxi,f1,f2,f3,f4,f5,xkhm,xmh,xmy
         common /ci5/abund(16),anjon(16,5),h(5),part(16,5),dxi,
@@ -198,7 +198,7 @@ C as fictP(H) = PH+2*PHH+PPH, we get:
 C PG = PH+PHH+PPH + pe + HEH*(PH+2.0*PHH+PPH)
 * approximate fph for starting:
       ntry=0
-1     if (tem.lt.2000.) then
+      if (tem.lt.2000.) then
 * at low T, pg approx = ph2 + phe = fph/2. + fph*heh
         fp(1)=pgin/(0.5+heh)
       else
@@ -239,8 +239,8 @@ ccc        print*,'error',error(99), dfp99dp1
         if (abs(error(99)/pe).lt.epsdie) goto 100
         p(1)=p(1)+error(99)/dfp99dp1
 ccc	WRITE(6,6109) TEM,PG,fp(1),P(1)
-6109    FORMAT('TEM=',F10.2,1X,'PG=',E13.5,1X,
-     &  'FPH=',E12.3,1X,'PH=',E12.3)
+ccc6109    FORMAT('TEM=',F10.2,1X,'PG=',E13.5,1X,
+ccc     &  'FPH=',E12.3,1X,'PH=',E12.3)
       enddo
 100   continue
       if (niter.ge.100) then
@@ -293,10 +293,11 @@ c          if (nelemi.ne.2) then
       else
 *******************
 * we end up here if we skipped the preliminary equilibrium
-        pgin=pg
-        do i=1,nmetal
-          p(nelemx(i))=p(nelemx(i))*(pe/pep)
-        enddo
+*******************
+        pgin=spg
+!        do i=1,nmetal
+!          p(nelemx(i))=p(nelemx(i))*(pe/pep)
+!        enddo
       endif
 C
 C    RUSSELL EQUATIONS
@@ -627,7 +628,6 @@ ccc        enddo
 cc        stop
       endif
 * everything converged
-1051  continue
       if (.not.molions) then
 * Spurious convergence without molecular ions.
         print*,'die_pe WARNING. Converged without molecular ions'
@@ -639,7 +639,7 @@ cc        stop
 
 * recompute partial pressures to be on the safe side.
       call funcv(fvec,fmin,pgindumm,pg)
-      spg=pg
+      spg=sngl(pg)
 * store partial pressures in parptsuji array
       do i=1,nmetal
         nelemi=nelemx(i)

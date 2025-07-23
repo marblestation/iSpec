@@ -2,17 +2,22 @@
 F = gfortran
 Loader  = gfortran
 
+SOURCE = source
 
 include1 = ../$(SOURCE)/spectrum.inc
 include2 = ../$(SOURCE)/tsuji.par
 
-OPT1 = -L/usr/lib -fconvert=big-endian -O3 -fno-automatic -mcmodel=small -std=legacy
-LINKOPT = -L/usr/lib -fconvert=big-endian -O3 -fno-automatic -mcmodel=small -std=legacy
+#LINKOPT = -L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib -fconvert=big-endian -O3 -fno-automatic -mcmodel=small -std=legacy -Wall -Wsurprising
 
-SOURCE = source
+#LINKOPT =  -fconvert=big-endian -O3 -fno-automatic -Wall -Wsurprising -ffpe-trap=zero,invalid -fbacktrace -std=legacy
+
+LINKOPT =  -fconvert=big-endian -O3 -fno-automatic -fbacktrace -std=legacy -mcmodel=small
+# -fno-sign-zero
+#-ffpe-trap=zero,invalid 
 
 babsma_luobj =  \
       ../$(SOURCE)/absko.f \
+      ../$(SOURCE)/nhop.f \
       ../$(SOURCE)/babsma.f \
       ../$(SOURCE)/detabs.f \
       ../$(SOURCE)/getinfospecies.f \
@@ -52,6 +57,7 @@ babsma_luobj =  \
       ../$(SOURCE)/molecpartf.f \
       ../$(SOURCE)/ludcmp.f \
       ../$(SOURCE)/lubksb.f \
+      ../$(SOURCE)/lowercase_conversion.f90 \
       ../$(SOURCE)/molfys.f 
 
 eqwidt_luobj = \
@@ -135,6 +141,11 @@ bsyn_luobj = \
       ../$(SOURCE)/takemolec.f \
       ../$(SOURCE)/readmo.f \
       ../$(SOURCE)/readfilt.f \
+      ../$(SOURCE)/read_segments.f \
+      ../$(SOURCE)/read_modelatom.f \
+      ../$(SOURCE)/read_departure.f \
+      ../$(SOURCE)/read_nlteinfofile.f \
+      ../$(SOURCE)/strings_module.f90 \
       ../$(SOURCE)/tint.f \
       ../$(SOURCE)/lint.f \
       ../$(SOURCE)/traneq.f \
@@ -159,22 +170,29 @@ bsyn_luobj = \
 
 
 #clean : 
-#	rm *.f bsyn_lu babsma_lu eqwidt_lu 
+#	rm *.o bsyn_lu babsma_lu eqwidt_lu 
 
-all : cubint_module.mod  babsma_lu bsyn_lu eqwidt_lu
-
-cubint_module.mod : ../$(SOURCE)/cubint_module.f90 cubint_module.o
-	$(F)  -c ../$(SOURCE)/cubint_module.f90
+all : cubint_module.mod strings_module.mod babsma_lu bsyn_lu
+#  eqwidt_lu 
 
 cubint_module.o : ../${SOURCE}/cubint_module.f90
 	$(F)  -c ../${SOURCE}/cubint_module.f90
 
-babsma_lu : $(babsma_luobj)
+cubint_module.mod : ../$(SOURCE)/cubint_module.f90 cubint_module.o
+	$(F)  -c ../$(SOURCE)/cubint_module.f90
+
+strings_module.o : ../${SOURCE}/strings_module.f90
+	 $(F)  -c ../${SOURCE}/strings_module.f90
+
+strings_module.mod : ../$(SOURCE)/strings_module.f90 strings_module.o
+	 $(F)  -c ../$(SOURCE)/strings_module.f90
+
+babsma_lu : $(babsma_luobj) $(include1) $(include2)
 	$(F) $(LINKOPT) -o babsma_lu $(babsma_luobj)
 
-bsyn_lu: $(bsyn_luobj)
+bsyn_lu: $(bsyn_luobj) $(include1) $(include2)
 	$(F) $(LINKOPT) -o bsyn_lu  $(bsyn_luobj)
  
-eqwidt_lu: $(eqwidt_luobj)
+eqwidt_lu: $(eqwidt_luobj) $(include1) $(include2)
 	$(F) $(LINKOPT) -o eqwidt_lu  $(eqwidt_luobj)
  

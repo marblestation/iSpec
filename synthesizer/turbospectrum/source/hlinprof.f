@@ -68,10 +68,10 @@ C
       REAL*4 HEWID,RAD,DOP
       REAL*4 HLINOP
       REAL*8 TD,XNED,H1FRCD
-      REAL*8 WAVE,WAVE0,DEL,HHLIN
+      REAL*8 WAVE,WAVE0,DEL(1),HHLIN
       REAL*8 KRNSTEP,WLKRN(NKMAX),KERN(NKMAX),KMAX,WV2
-      REAL*8 DEL1,DDEL,XNEXP,F1,HLIND
-      REAL*8 STARKD
+      REAL*8 DEL1(1),DDEL,XNEXP,F1,HLIND(1)
+      REAL*8 STARKD(1)
       REAL*8 LOR,HWID,RES
       REAL*8 C,PI
       CHARACTER*80 HFILE,HVCSFILE,HSELFFILE
@@ -95,6 +95,9 @@ C
       ISTARK = 1
       ISELF = 2
       ICONV = 1
+! Test BPz
+!      ISELF = 1
+!
       IHE = 1
 C
 C We check we have a line which we can handle
@@ -119,7 +122,7 @@ C
 C      
 C Precomputed things here
 C
-      DEL = DABS(WAVE0 - WAVE)
+      DEL(1) = DABS(WAVE0 - WAVE)
       LINE = NUP - NLOW
 C
 C Adding for convolution of Stark and self
@@ -134,14 +137,14 @@ C If outside table range use VCS
 C
           IF (HLIN.LT.0.) THEN
             CALL VCS(HLIND,XNED,TD,DEL,1,NLOW,NUP,HVCSFILE)
-            HLIN = HLIND
+            HLIN = HLIND(1)
           ENDIF
         END IF
         IF (ISTARK .EQ. 2) THEN
           CALL VCS(HLIND,XNED,TD,DEL,1,NLOW,NUP,HVCSFILE)
-          HLIN = HLIND
+          HLIN = HLIND(1)
         END IF
-        IF ((DEL .GT. .2d0) .AND. (H1FRC .GT. 0.)) THEN
+        IF ((DEL(1) .GT. .2d0) .AND. (H1FRC .GT. 0.)) THEN
           IF (ISELF .EQ. 1) THEN
              CALL HGRID(HSELFFILE,
      ;            WAVE,WAVE0,TD,H1FRCD,NLOW,NUP,HHLIN)
@@ -151,17 +154,17 @@ C
             IF (HHLIN.LT.0.) THEN
               CALL HSELF_PDWIDTH(LINE,TEMP,H1FRC,HWID)
               HWID = HWID * WAVE0 * WAVE0 / C / 2. / PI
-              HHLIN = HWID / (HWID * HWID + DEL * DEL) / PI
+              HHLIN = HWID / (HWID * HWID + DEL(1) * DEL(1)) / PI
             ENDIF
           ENDIF
           IF (ISELF .EQ. 2) THEN
             CALL HSELF_PDWIDTH(LINE,TEMP,H1FRC,HWID)
             HWID = HWID * WAVE0 * WAVE0 / C / 2. / PI
-            HHLIN = HWID / (HWID * HWID + DEL * DEL) / PI
+            HHLIN = HWID / (HWID * HWID + DEL(1) * DEL(1)) / PI
           END IF
           IF (ISELF .EQ. 3) THEN
             CALL ALI_GRIEM(LINE,WAVE0,H1FRC,RES)
-            HHLIN = RES / (RES * RES + DEL * DEL) / PI
+            HHLIN = RES / (RES * RES + DEL(1) * DEL(1)) / PI
           END IF 
           HLIN = HLIN + HHLIN
         END IF
@@ -221,24 +224,25 @@ C
 C
 C  Do Convolution -- Integration is simple Trapezoidal here
 C
-        HLIND = 0.d0
+        HLIND(1) = 0.d0
         DO IKRN = 1, NKRN
-          DEL1 = DEL + WLKRN(IKRN)
+          DEL1(1) = DEL(1) + WLKRN(IKRN)
           I1 = MAX0(   1, IKRN - 1)
           I2 = MIN0(NKRN, IKRN + 1)
 		  DDEL = WLKRN(I2) - WLKRN(I1)
           IF (ISTARK .EQ. 1) THEN
-            CALL STEHLE(HFILE,WAVE0+DEL1,WAVE0,TEMP,XXNE,NLOW,NUP,STARK)
+            CALL STEHLE(HFILE,WAVE0+DEL1(1),WAVE0,TEMP,XXNE,NLOW,
+     &          NUP,STARK)
           END IF
           IF (ISTARK .EQ. 2) THEN
-            CALL VCS(STARKD,XNED,TD,DEL1,1,NLOW,NUP,HVCSFILE)
-            STARK = STARKD
+            CALL VCS(STARKD,XNED,TD,DEL1(1),1,NLOW,NUP,HVCSFILE)
+            STARK = STARKD(1)
           END IF
           F1 = KERN(IKRN) * STARK
-          HLIND = HLIND + DDEL * F1
+          HLIND(1) = HLIND(1) + DDEL * F1
         END DO
-        HLIND= HLIND * .5d0
-        HLIN = HLIND
+        HLIND(1)= HLIND(1) * .5d0
+        HLIN = HLIND(1)
       END IF
 C
 C The He and radiative broadening are always assumed small enough to 
@@ -253,8 +257,8 @@ C
       LOR = RAD + HEWID
       LOR = LOR * WAVE0 * WAVE0 / C / 2. / PI
 C
-      IF (DEL .GT. .2)
-     ;  HLIN = HLIN + LOR / (LOR * LOR + DEL * DEL) / PI
+      IF (DEL(1) .GT. .2)
+     ;  HLIN = HLIN + LOR / (LOR * LOR + DEL(1) * DEL(1)) / PI
 C
       PROF = HLIN
       RETURN
@@ -1073,26 +1077,30 @@ C     CALCULATES VIDAL COOPER AND SMITH PROFILES FOR FIRST FOUR BALMER
 C     LINES.  THEY ARE RETURNED IN ANGSTROM UNITS.                     
 C     ASSUMES RAW PROFILES ARE IN ALPHA UNITS.                      
       IMPLICIT REAL*8 (A-H,O-Z)
-      DIMENSION PR(40),DEL(40)                                       
+      DIMENSION PR(II),DEL(II)                                       
 C     DIMENSION ALPHA(40),PRALPH(40)                                  
       DIMENSION PRALPH(40)                                   
       DIMENSION SVCS(6,17,40,4),ALPHA0(4)  
       CHARACTER*80 HVCSFILE                                
-      DATA SVCS(1,1,1,1)/0./,ALPHA0/-3.,-3.,-3.,-3./   
-      SAVE SVCS
+      logical first
+      DATA SVCS(1,1,1,1)/0./,ALPHA0/-3.,-3.,-3.,-3./,first/.true./
+      SAVE SVCS,first
 C
       EXP10(X)=EXP(2.30258509299405E0*X)                       
       IF(SVCS(1,1,1,1).NE.0.)GO TO 3
 C
 C     READ IN VCS ARRAYS                                          
-      OPEN(1,FILE=HVCSFILE,FORM='FORMATTED',STATUS='OLD')
-      READ(1,10)
-      DO 20 LINE=1,4
+      if (first) then
+        OPEN(1,FILE=HVCSFILE,FORM='FORMATTED',STATUS='OLD')
         READ(1,10)
-        READ(1,10)(((SVCS(I,J,K,LINE),J=1,17),I=1,6),K=1,40)
-   10   FORMAT (10F8.4)
-   20 CONTINUE
-      CLOSE(1)
+        DO 20 LINE=1,4
+          READ(1,10)
+          READ(1,10)(((SVCS(I,J,K,LINE),J=1,17),I=1,6),K=1,40)
+   10     FORMAT (10F8.4)
+   20   CONTINUE
+        CLOSE(1)
+        first=.false.
+      endif
 C
     3 LINE=M-N                                  
 C     TEMPERATURE AND ELECTRON DENSITY INTERPOLATION        

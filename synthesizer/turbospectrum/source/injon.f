@@ -392,7 +392,7 @@ C        print*, (abund(i),i=1,nel)
 *
       EEV=1.602095E-12
       XMH=1.67339E-24
-      XKBOL=1.38066E-16
+      XKBOL=1.38065E-16
       ENAMN=EEV/(XMH*XMY)
       TP=0.
 *

@@ -174,9 +174,9 @@ C
 * ON POURRAIT CHANGER PART EN G0 G1 etc...
 ***************************************************************************
 C        H-
-* data in jonabs.dat are 10 times larger than in the past,
-* in case you would wonder about this 1.e-18 factor for H-
-      fakt(1)=(1.d-18/rhokt)*partryck(ntp,1)
+! H- data in jonabs-v19.2 are in cm^2.  BPz 26/04-2019
+!      fakt(1)=(1.d-18/rhokt)*partryck(ntp,1)
+      fakt(1)=(1.d0/rhokt)*partryck(ntp,1)
       if (nametryck(1).ne.'H -') then 
         print*,nametryck(1), 'should be H-'
         stop 'PROBLEM in detabs!'
@@ -325,6 +325,15 @@ C                using Peach G. 1970, Mem RAS 73,1 hydrogenic approx.
 **
 C        ELECTRON SCATTERING
       ELS(NTP)=4.8206E-9*PE(NTP)/(T(NTP)*RO)
+
+!      if (ntp.eq.36) then
+!        print*,'el scattering : ',ntp,T(ntp),els(ntp)
+!       write(100,*) t(ntp),xmettryck(ntp,1)+
+!     &              xmettryck(ntp,2)*0.42+partryck(ntp,2)*0.85,els(ntp)
+!      endif
+
+
+
 **
 * added for cool stars -> collision induced absorption (CIA)
 cc      ph2=f5*hn*ro
@@ -535,7 +544,7 @@ C        **** PRINT-OUT ****
       DO24 KP=1,NPROVS
    24 PROV(NPROVA+KP)=PROV(NPROVA+KP)/SUMSCA
       WRITE(IWRIT,201) T(NTP),sumabs,sumsca,(PROV(KP),KP=1,nprov)
-  201 FORMAT(3H T=,F7.1,5X,2E10.4,36F6.4)
+  201 FORMAT(3H T=,F7.1,5X,2E11.4,36F6.4)
    23 CONTINUE
 
 

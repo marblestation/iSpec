@@ -73,41 +73,48 @@
       else
         do 30 i=1,ntemp
           tt=temp(i)
-          if (temp(i).le.16000.) then
-            if(temp(i).lt.1000.) then
-* BPz 15/05-2018
-* instead of using q(1000) we extrapolate in log(q) - log(T)
-*              tt=1000.
-*              print*,'WARNING: atomic partf; temp<1000 K, using Q(1000)'
-*
+          if (tt.le.16000.) then
+            if(tt.lt.1000.) then
+              tt=1000.
               if (first) then
-                print*,'WARNING: atomic partf; temp<1000 K, ',
-     &               'extrapolating ',
-     &               'using Q(1000) and Q(1500)'
+                print*,
+     &          'WARNING: atomic partf; temp<1000 K, using Q(1000)'
                 first=.false.
               endif
-              tt1=1000.
-              t=dlog(dble(tt1))
-              ulog1=   a(0,ion,jatom)+
-     &             t*(a(1,ion,jatom)+
-     &             t*(a(2,ion,jatom)+
-     &             t*(a(3,ion,jatom)+
-     &             t*(a(4,ion,jatom)+
-     &             t*(a(5,ion,jatom))))))
-              tt2=1500.
-              t=dlog(dble(tt2))
-              ulog2=   a(0,ion,jatom)+
-     &             t*(a(1,ion,jatom)+
-     &             t*(a(2,ion,jatom)+
-     &             t*(a(3,ion,jatom)+
-     &             t*(a(4,ion,jatom)+
-     &             t*(a(5,ion,jatom))))))
-              ulog=(ulog2-ulog1)*(dlog(dble(tt))-dlog(dble(tt1)))/
-     &             (dlog(dble(tt2))-dlog(dble(tt1))) + ulog1
-              u(i)=real(dexp(ulog))
+*
+*********************** THIS CASE NOT USED. CALCULATION MADE WITH T=1000. 
+*
+* BPz 15/05-2018
+* instead of using q(1000) we extrapolate in log(q) - log(T)
+*              if (first) then
+*                print*,'WARNING: atomic partf; temp<1000 K, ',
+*     &               'extrapolating ',
+*     &               'using Q(1000) and Q(1500)'
+*                first=.false.
+*              endif
+*              tt1=1000.
+*              t=dlog(dble(tt1))
+*              ulog1=   a(0,ion,jatom)+
+*     &             t*(a(1,ion,jatom)+
+*     &             t*(a(2,ion,jatom)+
+*     &             t*(a(3,ion,jatom)+
+*     &             t*(a(4,ion,jatom)+
+*     &             t*(a(5,ion,jatom))))))
+*              tt2=1500.
+*              t=dlog(dble(tt2))
+*              ulog2=   a(0,ion,jatom)+
+*     &             t*(a(1,ion,jatom)+
+*     &             t*(a(2,ion,jatom)+
+*     &             t*(a(3,ion,jatom)+
+*     &             t*(a(4,ion,jatom)+
+*     &             t*(a(5,ion,jatom))))))
+*              ulog=(ulog2-ulog1)*(dlog(dble(tt))-dlog(dble(tt1)))/
+*     &             (dlog(dble(tt2))-dlog(dble(tt1))) + ulog1
+*              u(i)=real(dexp(ulog))
 * End of BPz change 15/05-2018
 *
             endif
+***********************
             t=dlog(dble(tt))
             ulog=   a(0,ion,jatom)+
      &           t*(a(1,ion,jatom)+
@@ -188,7 +195,7 @@ CC'/b1/plez/BIGGRID/DATA/tableU2.dat',
      &            status='old')
            READ(70, '(A)')
            nlevel=0
-           DO k=1,100 	
+           DO k=1,100 
              READ(70,*,end=99) E(k), g(k)
              nlevel=k
            ENDDO

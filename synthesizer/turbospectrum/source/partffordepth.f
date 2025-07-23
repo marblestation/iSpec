@@ -5,18 +5,17 @@
       parameter (maxim=1000)
       real temp(ntau),exponent(maxim),g0(100),g1(100),g2(100),g3(100),
      &          fpartition(ntau)
-      doubleprecision qcoeff(10,maxim),qc(10),qq,logt
       doubleprecision dpartf,dtemp
       character mol(maxim)*20,molname*20
       logical switer,found(maxim),Ames,first,scan2001,oldscan,Barber
       integer nelem(5,maxim),natom(5,maxim),mmax(maxim),nimax,
      &        nelemx(100),
-     &        nmetal,nmol,idumb,nqcoeff(maxim),nq
+     &        nmetal,nmol
 * may become dbleprec
       doubleprecision ip(100),kp(100),uiidui(100),eps,fp(100),
      &     ppmol(maxim),apm(maxim),c(maxim,5),ccomp(100),p(100),
      &     ipp(100),ippp(100),d00(maxim),qmol(maxim),
-     &     dissoc,reducedmass15(maxim),ndensity,molweight,d00hm
+     &     reducedmass15(maxim)
       character*20     molcode(maxim)
        character*2 elem(100)
        common/comfh1/c,nelem,natom,mmax,ppmol,d00,qmol,apm,mol,ip,
@@ -33,7 +32,7 @@
           do k=1,ntau
             dtemp=temp(k)
             call partfAmesH2O(dtemp,dpartf)
-            fpartition(k)=dpartf
+            fpartition(k)=sngl(dpartf)
           enddo
         else if (scan2001) then
           print*,'Using SCAN 2001 partition function for H2O'
@@ -45,7 +44,7 @@
           do k=1,ntau
             dtemp=temp(k)
             call partfBarberH2O(dtemp,dpartf)
-            fpartition(k)=dpartf
+            fpartition(k)=sngl(dpartf)
           enddo
         else
           print*,'No partition function for the H2O line list!'
@@ -74,7 +73,7 @@
         call molecpartf(temp(k),found)
         if (.not.found(molindex)) stop 
      &            'partffordepth: molecule not found'
-        fpartition(k)=qmol(molindex)
+        fpartition(k)=sngl(qmol(molindex))
       enddo
 
       return

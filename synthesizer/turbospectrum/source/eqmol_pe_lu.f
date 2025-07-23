@@ -43,11 +43,12 @@ C                                                       modif    22/11/88
         parameter (maxim=1000)
 	character*128 MET,MOLEC
         common/files/molec,met
-	REAL KPLOG,IPI,fictpres_c,fictpres_h,xlog,pmoll,pionl,
-     &       plog,fplog,pglog,theta,xmytsuji,ipii,ipiii,exponent(maxim)
-        real fictpres_c_noco,fract_c_in_atom_noco,fract_c_in_ion,
-     &  fract_c_in_atom,fract_c_in_ion_noco,fract_c_in_mol,
-     &  fract_c_in_mol_noco,seuil,cclogi,pdfpl,pelog,avo
+	REAL fictpres_h,
+     &       pglog,theta,xmytsuji,exponent(maxim)
+!        real fictpres_c_noco,fract_c_in_atom_noco,fract_c_in_ion,
+!     &  fract_c_in_atom,fract_c_in_ion_noco,fract_c_in_mol,
+!     &  fract_c_in_mol_noco
+        real seuil,cclogi,pelog,avo
         character*20   names(maxim),molinquire
         integer tselem(100),kk,iii,niter,indexanswer
         logical switer,found(maxim),molkeep(5),molekeep,converge,
@@ -71,7 +72,7 @@ C                                                       modif    22/11/88
      &                CCOMP,exponent,reducedmass15,
      &                UIIDUI,P,FP,KP,eps,NELEMX,
      &                NIMAX,NMETAL,NMOL,switer,molcode,elem
-        integer natomm(5),nelemm(5),ig1,ig0,nel,iel(16),nj(16)
+        integer natomm(5),nelemm(5),nel,iel(16),nj(16)
         real fl2(5),parco(45),parq(180),shxij(5),tparf(4),xiong(16,5),
      &       eev,enamn,sumh,xkbol,summ
         common/ci1/ fl2,parco,parq,shxij,tparf,xiong,eev,enamn,sumh,
@@ -83,7 +84,8 @@ C                                                       modif    22/11/88
         common/species/atominclude
 
         character*2 elem(100), elemnt(100), elemxi
-        real CCLOG(100),molenergy
+        real CCLOG(100)
+        doubleprecision molenergy
         real xmass(maxim+400),atmass(100)
         doubleprecision ndensity,molweight
         common /density/ndensity,molweight,xmass,atmass
@@ -99,7 +101,6 @@ C                                                       modif    22/11/88
       real pk
       integer jonnmol
       COMMON /CMOL2/jonnmol,PK(30)
-      real eh2,eh2p,ehm,ehj,eh2o,eoh,ech,eco,ecn,ec2,en2,eo2,eno,enh
       real DIS(10)
       real absc,abti,abv,abmn,abco
       common /auxabund/ absc,abti,abv,abmn,abco
@@ -146,17 +147,8 @@ C
       if (first) then
 	WRITE(6,6102)
 *
-cc        open(UNIT=26,FILE=filmet,STATUS='OLD')  ! suppressed by BPz 29/02-2012
-cc* file 26 opened in input.f, as scratch, contains a list of atomic
-cc* species to include in chemical equilibrium. One column, character*2.
-cc        rewind(26)
         nmetal=0
 	do i=1,100
-cccc* name, number of e-, ionisation pot, partition fct for neutral and
-cccc* first ion, log of abundance.
-cccc          READ (26,*,end=99) ELEMXI,NELEMI,IPI,IG0,IG1,CCLOGI,xmass(i),
-cccc     &                ipii,ipiii
-cc          read(26,*,end=99) elemxi  ! suppressed by BPz 29/02-2012
          elemxi=atominclude(i)
          if (elemxi.ne.'  ') then
           nelemi=0
@@ -198,7 +190,7 @@ c
 112       continue
          endif
         enddo
-99      continue
+
         do i=1,nmetal
           xmass(i+nmetal)=xmass(i)
           xmass(i+2*nmetal)=xmass(i)
@@ -225,9 +217,9 @@ cc        print*,'Chemical composition from atomic list'
         do i=1,nmetal
           nelemi=nelemx(i)
 cc          print*,nelemi,elemnt(nelemi),log10(sngl(ccomp(nelemi)))+12.
-          xmytsuji=xmytsuji+atmass(nelemi)*ccomp(nelemi)
+          xmytsuji=xmytsuji+atmass(nelemi)*sngl(ccomp(nelemi))
         enddo
-        xmytsuji=xmytsuji/(ccomp(1)*atmass(1))
+        xmytsuji=xmytsuji/(sngl(ccomp(1))*atmass(1))
 * not initialized if not called injon before. Skippping.
 ccc        enamn=eev/(xmytsuji*xmh)
 c
@@ -269,7 +261,7 @@ cccc      print*,'eqmol reading molec',j,mol(j)
           NELEM(M,J)=NELEMM(M)
           NATOM(M,J)=NATOMM(M)
         enddo
-1110    GOTO 1010
+        GOTO 1010
 C
 1014    NMOL=J-1
         close(26)
@@ -301,8 +293,8 @@ c
 c try something different
         if (.not.converge) then
           pg=pgin
-          do i=5,1,-1
-            temtemp=tem*(1.+float(i)/10.)
+          do i=10,1,-1
+            temtemp=tem*(1.+float(i)/20.)
             print*,'did not converge at T=',tem,' trying ',temtemp
             call die_pe(temtemp,pe,pg,found,converge,niter,skiprelim)
           enddo
@@ -368,8 +360,8 @@ ccc      fictpres_c=0.0
       fictpres_h=0.0
       do j=1,nmetal
         if (nelemx(j).eq.1) then
-          fictpres_h=parptsuji(j)+parptsuji(j+nmetal)+
-     &          parptsuji(j+2*nmetal)+parptsuji(j+3*nmetal)
+          fictpres_h=sngl(parptsuji(j)+parptsuji(j+nmetal)+
+     &          parptsuji(j+2*nmetal)+parptsuji(j+3*nmetal))
 ccc        else if (nelemx(j).eq.22) then
 ccc          fictpres_c=parptsuji(j)+parptsuji(j+nmetal)+
 ccc     &          parptsuji(j+2*nmetal)+parptsuji(j+3*nmetal)
@@ -383,7 +375,7 @@ ccc     &                   parptsuji(j+4*nmetal)*natom(jjj,j)
 ccc          endif
           if (nelem(jjj,j).eq.1) then
             fictpres_h = fictpres_h + 
-     &                   parptsuji(j+4*nmetal)*natom(jjj,j)
+     &                   sngl(parptsuji(j+4*nmetal)*natom(jjj,j))
           endif
         enddo
       enddo
@@ -451,7 +443,7 @@ ccc      enddo
       call takemolec(kk,infoonly,molinquire,indexanswer)
       rho=0.
       do 9874 i=1,4*nmetal+nmol
-        rho=rho+parptsuji(i)*xmass(i)
+        rho=rho+sngl(parptsuji(i)*xmass(i))
 9874  continue
       rho=rho+pe*atmass(99)
       rho=rho*1.2123e-8/tt
@@ -544,24 +536,24 @@ cc          ppk(3)=apm(j)
       PPK(24)=PE*PPK(24)
       do j=1,jonnmol
 * pick up single precision values
-        pk(j)=ppk(j)
+        pk(j)=sngl(ppk(j))
       enddo
 * fe, fh, etc
       do i=1,nmetal
         j=nelemx(i)
         if (j.eq.1) then
-          fh=parptsuji(i)/fictpres_h
-          gg2=parptsuji(i+nmetal)/parptsuji(i)
+          fh=sngl(parptsuji(i)/fictpres_h)
+          gg2=sngl(parptsuji(i+nmetal)/parptsuji(i))
         else if (j.eq.6) then
-          fc=parptsuji(i)/fictpres_h
+          fc=sngl(parptsuji(i)/fictpres_h)
         else if (j.eq.7) then
-          fn=parptsuji(i)/fictpres_h
+          fn=sngl(parptsuji(i)/fictpres_h)
         else if (j.eq.8) then
-          fo=parptsuji(i)/fictpres_h
+          fo=sngl(parptsuji(i)/fictpres_h)
         else if (j.eq.14) then
-          fk=parptsuji(i)/fictpres_h
+          fk=sngl(parptsuji(i)/fictpres_h)
         else if (j.eq.16) then
-          fs=parptsuji(i)/fictpres_h
+          fs=sngl(parptsuji(i)/fictpres_h)
         endif
       enddo
       fe=pe/fictpres_h
@@ -574,9 +566,9 @@ cc          ppk(3)=apm(j)
       fse=fs/fe
       f1=fh
       f2=gg2*fh
-      f3=fh*ppk(1)
-      f4=fh*fhe*gg2*ppk(3)
-      f5=fh*fhe*ppk(2)
+      f3=sngl(fh*ppk(1))
+      f4=sngl(fh*fhe*gg2*ppk(3))
+      f5=sngl(fh*fhe*ppk(2))
 C
 C COMPUTATION OF THE INNER ENERGY. DEH2 AND DEH2P ARE THE SUM OF
 C ROTATION AND VIBRATION ENERGIES (IN EV PER MOLECULE) FOR
@@ -607,7 +599,7 @@ C                            NOTE THAT ENERGIES INCLUDE ONLY MOLECULES 1-13
 * In that case we are calling eqmol without prior call to injon/jon.
 * The common block CI1 is not initialized. For bsyn 31/10-96 BPz
 
-      eh=-xih*presneutral(kk,1)
+      eh=-xih*sngl(presneutral(kk,1))
       do j=1,nmol
         if (mol(j).eq.'H H                ') then
           molenergy=(deh2nodis-(2.*xih+d00(j)))*
@@ -625,7 +617,7 @@ C                            NOTE THAT ENERGIES INCLUDE ONLY MOLECULES 1-13
           enddo
           molenergy=molenergy*parptsuji(j+4*nmetal)
         endif
-        eh = eh + molenergy
+        eh = eh + sngl(molenergy)
       enddo
 cc      print*,'enamn rho k t',enamn, rho,xkbol,tt,eh,enamn*xkbol*rho*tt
       eh=eh*eev/(enamn*rho*xkbol*tt)
@@ -636,9 +628,9 @@ cc      print*,'new EH = ',eh
       do i=1,nmetal
         nelemi=nelemx(i)
         if (nelemi.ne.1) then
-          ejontsuji=(ip(nelemi)-dxi)*presion(kk,nelemi)+
+          ejontsuji=sngl((ip(nelemi)-dxi)*presion(kk,nelemi)+
      &       (ipp(nelemi)-2.*dxi)*presion2(kk,nelemi)+
-     &       (ippp(nelemi)-3.*dxi)*presion3(kk,nelemi)+ejontsuji
+     &       (ippp(nelemi)-3.*dxi)*presion3(kk,nelemi)+ejontsuji)
         endif
       enddo
       ejontsuji=ejontsuji*eev/(enamn*rho*xkbol*tt)
@@ -647,43 +639,43 @@ cc      print*,'new EH = ',eh
 C
 C------------formats--------------------------------------------------------
 c
-  51	FORMAT(7E11.4)
- 501    FORMAT (I4)
- 500	FORMAT (3(1X,I5))
- 600	FORMAT (7(1X,I4,1X,A4,1X))
- 620	FORMAT (7(1X,I4,1X,A4,'+',1X))
- 650	FORMAT (7(1X,I4,1X,A8,1X))
-5000    FORMAT (2I5,2F10.5,I10)
-5001    FORMAT (A4,I6,F10.3,2I5,F10.3,F10.0)
+!  51	FORMAT(7E11.4)
+! 501    FORMAT (I4)
+! 500	FORMAT (3(1X,I5))
+! 600	FORMAT (7(1X,I4,1X,A4,1X))
+! 620	FORMAT (7(1X,I4,1X,A4,'+',1X))
+! 650	FORMAT (7(1X,I4,1X,A8,1X))
+!5000    FORMAT (2I5,2F10.5,I10)
+!5001    FORMAT (A4,I6,F10.3,2I5,F10.3,F10.0)
 
 CC format to write tsuji's data in file readable in free format
 
-5012    FORMAT ('''',A8,'''',x,1pE11.5,x,4(1pE12.5,x),I1,4(I3,I4))
+!5012    FORMAT ('''',A8,'''',x,1pE12.5,x,4(1pE12.5,x),I1,4(I3,I4))
 
-5021    FORMAT (F10.3,E12.5,E12.6)
-5030    FORMAT (A)
-5031    FORMAT (1X,A)
-6031    FORMAT(1H1,20A4/)
-6091    FORMAT (/,10X,'LOG PG=',F8.4,20X,'LOG PE=',F8.4,20X,'PE=',E13.6
-     2  /,10X,'THETA =',F8.4,20X,'TEMP. =',F8.0,20X,'PROF. =',E14.6/)
+!5021    FORMAT (F10.3,E12.5,E13.6)
+!5030    FORMAT (A)
+!5031    FORMAT (1X,A)
+!6031    FORMAT(1H1,20A4/)
+!6091    FORMAT (/,10X,'LOG PG=',F8.4,20X,'LOG PE=',F8.4,20X,'PE=',E13.6
+!     2  /,10X,'THETA =',F8.4,20X,'TEMP. =',F8.0,20X,'PROF. =',E14.6/)
 cc6102    FORMAT (1H0, ' ELEMENT  ATOMIC NUMBER       I.P.        G(0)   G
 cc     1(1)    LOGN/NH')
 cc6103    FORMAT(1H,5X,A4,8X,I5,3X,F10.3,5X,2I5,3X,F10.5)
 6102    FORMAT (' ELEMENT  ATOMIC NUMBER   LOG(ABUNDANCE)')
 6103    FORMAT(5X,A2,8X,I5,3X,F10.3)
-6300    FORMAT(1H0,' EQUILIBRIUM PARTIAL PRESSURES OF THE GASEOUS',
-     &    ' ATOMS'  ///)
-6301    FORMAT(1H0,'ELEMENT',3X,'LOG N(E)/N(H)',4X,'P(E)',6X,'LOG P(E)'
-     1,2X,'LOG P(A)',2X,'LOG P(A)/P(E)'/)
-6302    FORMAT(1H,1X,A4,1X,I2,4X,F10.3,1X,E11.4,2F10.3,4X,F10.3)
-6307    FORMAT(1H0,/      ' P(E) **** FICTITIOUS PRESSURE OF THE NUCLE
-     1US OF THE ELEMENT',/    ' P(A) ****PARTIAL PRESSURE OF THE MONA
-     2TOMIC GAS OF THE ELEMENT')
-6092    FORMAT (1H1,3(5X,'MOLECULE   LOG P   LOG P/PG  LOG KP')//)
-6495    FORMAT ( 3(8X,A4,'+',3F9.3))
-6496    FORMAT ( 3(9X,A4,3F9.3))
-6992    FORMAT (///,3(9X,'ION     LOG P   LOGP/PG  LOG KP ')//)
-7000    FORMAT (21(A9,I3))
+!6300    FORMAT(1H0,' EQUILIBRIUM PARTIAL PRESSURES OF THE GASEOUS',
+!     &    ' ATOMS'  ///)
+!6301    FORMAT(1H0,'ELEMENT',3X,'LOG N(E)/N(H)',4X,'P(E)',6X,'LOG P(E)'
+!     1,2X,'LOG P(A)',2X,'LOG P(A)/P(E)'/)
+!6302    FORMAT(1H,1X,A4,1X,I2,4X,F10.3,1X,E11.4,2F10.3,4X,F10.3)
+!6307    FORMAT(1H0,/      ' P(E) **** FICTITIOUS PRESSURE OF THE NUCLE
+!     1US OF THE ELEMENT',/    ' P(A) ****PARTIAL PRESSURE OF THE MONA
+!     2TOMIC GAS OF THE ELEMENT')
+!6092    FORMAT (1H1,3(5X,'MOLECULE   LOG P   LOG P/PG  LOG KP')//)
+!6495    FORMAT ( 3(8X,A4,'+',3F9.3))
+!6496    FORMAT ( 3(9X,A4,3F9.3))
+!6992    FORMAT (///,3(9X,'ION     LOG P   LOGP/PG  LOG KP ')//)
+!7000    FORMAT (21(A9,I3))
 C
-1100    return
+        return
         END

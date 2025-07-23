@@ -18,7 +18,7 @@
       COMMON /CTRAN/X(NDP),S(NDP),BPLAN(NDP),XJ(NDP),hflux(NDP),XK(NDP),
      &        fillup(4*ndp+3)
       COMMON/TAUC/ TAU(ndp),DTAULN(ndp),JTAU
-      COMMON/SPACE2/ SOURCE(ndp),ERROR(ndp),sp1(ndp),sp2(ndp),sp3(ndp),
+      COMMON/SPACE3/ SOURCE(ndp),ERROR(ndp),sp1(ndp),sp2(ndp),sp3(ndp),
      &               P(ndp),
      &               tomatch(7*nrays*ndp+4*ndp+3*nrays+1)
 *

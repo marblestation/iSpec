@@ -33,11 +33,17 @@
       COMMON/RHOC/RHO(NDP)
 * extension for large number of wavelengths and lines (monster II)
       doubleprecision xlambda
-      common/large/ xlambda(lpoint),maxlam,ABSO(NDP,lpoint),
+      doubleprecision  source_function
+      common/large/ xlambda(lpoint),source_function(ndp,lpoint),
+     & maxlam,ABSO(NDP,lpoint),
      & absos(ndp,lpoint),absocont(ndp,lpoint),absoscont(ndp,lpoint)
 *
 ccc      READ(12,100) MCODE,NTAU,XLS
       READ(12,*) MCODE,NTAU,XLS
+      if (ntau.gt.ndp) then
+        print*,'model has more layers than allowed by array dimensions'
+        stop 'Increase NDP in spectrum.inc parameter file and recompile'
+      endif
       READ(12,103) NLQ
       if (nlq.gt.20*numbset) then
          print*,'readmo: nlq= ',nlq,' larger than numbset*20= ',
@@ -45,6 +51,7 @@ ccc      READ(12,100) MCODE,NTAU,XLS
          stop
       endif
       READ(12,104) (XLP(I), I=1,NLQ)
+      mmm=-1
       DO 11 K=1,NTAU
         if (hydrovelo) then
           READ(12,*,err=99) RR(K),TAU(K),T(K),PE(K),PG(K),
@@ -64,6 +71,11 @@ ccc      READ(12,100) MCODE,NTAU,XLS
          CALL LINT(NLQ,XLP,XS,xxll,X(K))
          CALL LINT(NLQ,XLP,SS,xxll,S(K))
 * interpolate to all wavelengths
+        if (xlambda(1).lt.xlp(1).or.xlambda(maxlam).gt.xlp(nlq)) then
+          print*,' ERROR !! continuous opacity file wavelength range ',
+     &          'does not encompass spectral window'
+          stop 'STOP in readmo.f'
+        endif
         do j=1,maxlam
          xxll=xlambda(j)
          CALL LINT(NLQ,XLP,XS,xxll,absocont(K,j))
@@ -78,13 +90,15 @@ ccc      READ(12,100) MCODE,NTAU,XLS
         IF(K.EQ.1) GOTO 11
         DTAULN(K)=TAULN(K)-TAULN(K-1)
   11  CONTINUE
-      RADIUS=RR(mmm)
+      if (mmm.lt.0) then
+        stop 'readmo : not found layer where tau is close to one '
+      else
+        RADIUS=RR(mmm)
+      endif
       REWIND 12
       JTAU=NTAU
 *
- 100  FORMAT(1X,A50,I5,F10.2)
- 101  FORMAT(1X,8E11.4)
- 111  FORMAT(1X,9E11.4)
+! 100  FORMAT(1X,A50,I5,F10.2)
  102  FORMAT(1X,6E11.4)
  103  FORMAT(1X,I5)
  104  FORMAT(1X,10F11.3)

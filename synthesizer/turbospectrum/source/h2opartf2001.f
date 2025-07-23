@@ -19,7 +19,7 @@ cc      end
 * 
       implicit none
       integer i,ntau,index
-      real Qvib(40),Tvib(40),temp(ntau),fpartition(ntau),Qv,Qrot,a,
+      real Qvib(40),Tvib(40),temp(ntau),fpartition(ntau),Qv,a,
      &     Qrb,Qra,B
       data Qvib / 1.0000, 1.0032, 1.0227, 1.0633, 1.1239, 1.2036,
      &            1.3018, 1.4186, 1.5541, 1.7085, 1.8825, 2.0767, 

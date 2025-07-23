@@ -87,7 +87,8 @@ C
       include 'spectrum.inc'
 
       CHARACTER*8 ABNAME,SOURCE
-      DIMENSION IDISKV(40),XLATB(40),XTET(30),NTAET(mkomp),XKAP(40,30),
+      DIMENSION IDISKV(maxnlatb),XLATB(maxnlatb),XTET(30),NTAET(mkomp),
+     &          XKAP(maxnlatb,30),
      *XLA3(20),XLA(20),XTETP(30)
       COMMON/CARC4/PROV(mkomp),NDUM(3)
       COMMON /CHAR/ ABNAME(mkomp),SOURCE(mkomp)

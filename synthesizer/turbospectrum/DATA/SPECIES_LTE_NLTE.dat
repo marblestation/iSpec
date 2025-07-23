@@ -1,0 +1,18 @@
+# This file controls which species are treated in LTE/NLTE
+# It also gives the path to the model atom and the departure files
+# First created 2021-02-22
+# if a species is absent it is assumed to be LTE
+#
+# each line contains :
+# atomic number / name / (n)lte / model atom / departure file / binary or ascii departure file
+#
+# path for model atom files     ! don't change this line !
+~/Documents/GitHub/Turbospectrum/Turbospectrum2020/DATA/MODELATOMS/
+#
+# path for departure files      ! don't change this line !
+~/Documents/GitHub/Turbospectrum/Turbospectrum2020/COM/TEST-data/test_sun/
+#
+# atomic (N)LTE setup
+1	'H'	'lte'	'atom.h20'	'nlte_dep_h_12000_t5777g44m00_staggerAv3d_job0.dat' 'ascii'
+20      'Ca'	'lte'	'atom.ca105b'   'NLTEgrid_Ca_Sun.ascii' 'ascii'
+26	'Fe'	'lte'	'atom.fe607a'	'NLTEgrid_Fe_Sun.ascii'	'ascii'

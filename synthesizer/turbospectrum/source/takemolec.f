@@ -39,7 +39,8 @@
      &          nmol,
      &        nmetal,nimax,marcsnelemx(20),marcsnelemj,j,atindex(20),
      &        molindex(maxmol),index,indexanswer
-      real exponent(maxim),g0(100),g1(100),g2(100),g3(100),sumpress
+      real exponent(maxim),g0(100),g1(100),g2(100),g3(100)
+      doubleprecision sumpress
       doubleprecision IP(100),KP(100),uiidui(100),eps,fp(100),
      &       ppmol(maxim),apm(maxim),c(maxim,5),p(100),ccomp(100),
      &       ipp(100),ippp(100),d00(maxim),qmol(maxim),
@@ -206,10 +207,10 @@ cc     &         g3(marcsnelemj)
      &           parptsuji(index+nmetal)+
      &           parptsuji(index+2*nmetal)+
      &           parptsuji(index+3*nmetal)
-        anjon(j,1)=parptsuji(index)/sumpress
-        anjon(j,2)=parptsuji(index+nmetal)/sumpress
-        anjon(j,3)=parptsuji(index+2*nmetal)/sumpress
-        anjon(j,4)=parptsuji(index+3*nmetal)/sumpress
+        anjon(j,1)=sngl(parptsuji(index)/sumpress)
+        anjon(j,2)=sngl(parptsuji(index+nmetal)/sumpress)
+        anjon(j,3)=sngl(parptsuji(index+2*nmetal)/sumpress)
+        anjon(j,4)=sngl(parptsuji(index+3*nmetal)/sumpress)
       enddo
 *
 * now, the pressures indexed with the atomic number

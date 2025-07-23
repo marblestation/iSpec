@@ -140,12 +140,19 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
         os.chdir(tmp_execution_dir)
 
         command = turbospectrum_bsyn_lu
-        command_input = "'LAMBDA_MIN:'  '"+str(wave_base*10.)+"'\n"
+        command_input = ""
+        command_input += "'NLTE :'          '.false.'\n"
+        #command_input += 'NLTEINFOFILE:'  'DATA/SPECIES_LTE_NLTE.dat' # TODO: To be implemented following https://github.com/bertrandplez/Turbospectrum_NLTE/tree/master/DOC
+        command_input += "'LAMBDA_MIN:'  '"+str(wave_base*10.)+"'\n"
         command_input += "'LAMBDA_MAX:'  '"+str(wave_top*10.)+"'\n"
         command_input += "'LAMBDA_STEP:' '"+str(wave_step*10.)+"'\n"
-        for region in regions:
-            command_input += "'LAMBDA_MIN:'  '"+str(region['wave_base']*10.)+"'\n"
-            command_input += "'LAMBDA_MAX:'  '"+str(region['wave_top']*10.)+"'\n"
+        if len(regions) > 1:
+            segments_filename = "segments.txt"
+            command_input += f"'SEGMENTSFILE:' '{segments_filename}'\n"
+            with open(segments_filename, "w") as f:
+                f.write("; synthesis segments\n")
+                for region in regions:
+                    f.write(f"{region['wave_base']*10.:13.2f}{region['wave_top']*10.:13.2f}\n")
         command_input += "'INTENSITY/FLUX:' 'Flux'\n"
         command_input += "'COS(THETA)    :' '1.00'\n"
         command_input += "'ABFIND        :' '.false.'\n"
@@ -178,7 +185,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
         molecules = ""
         if use_molecules:
             for filename in glob.glob("molecules/*.bsyn"):
-                name, file_wave_base, file_wave_top = re.match("(.*)_(\d+)-(\d+)\.bsyn", os.path.basename(filename)).groups()
+                name, file_wave_base, file_wave_top = re.match(r"(.*)_(\d+)-(\d+)\.bsyn", os.path.basename(filename)).groups()
                 file_wave_base = float(file_wave_base)
                 file_wave_top = float(file_wave_top)
                 if (file_wave_base >= wave_base and file_wave_top <= wave_top) or \
@@ -187,7 +194,10 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
                     molecules += filename + "\n"
                     num_molecules_files += 1
             command_input += "'NFILES   :' '%i'\n" % (2 + num_molecules_files)
-            command_input += molecules
+            if num_molecules_files > 0:
+                command_input += molecules
+            else:
+                print(f"No molecules found between '{wave_base}' and '{wave_top}'. Are there turbospectrum molecule files ('input/linelists/turbospectrum/molecules/*.bsyn')?")
         else:
             command_input += "'NFILES   :' '2'\n"
         command_input += "DATA/Hlinedata\n"

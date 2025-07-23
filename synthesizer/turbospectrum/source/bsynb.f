@@ -1,4 +1,4 @@
-      SUBROUTINE BSYNB(NALLIN)
+      SUBROUTINE BSYNB(nangles,muoutp)
 *
 *-----------------------------------------------------------------------
 *
@@ -36,25 +36,27 @@
       COMMON /RHOC/RHO(NDP)
       COMMON /CSPHER/NCORE,DIFLOG,RADIUS,RR(NDP)
       COMMON /CSTYR/MIHAL  /CTAUM/TAUM
+! taut is the monochromatic optical depth, computed in traneq/trrays
       COMMON /SPACE2/ SPACEDUM1(NDP*7+NDP*NRAYS*5+NRAYS),
      &                nimpac,kimpac(nrays),pimpac(nrays),
-     &                MMU(NDP),SPACEDUM2(NDP*2),PFEAU(NRAYS,NDP),
+     &                MMU(NDP),taut(ndp),dtaut(ndp),PFEAU(NRAYS,NDP),
      &                XMU(NRAYS,NDP)
       COMMON /TRDBUG/IDEBUG
       common /limbdk/ pos,intens,totintens,tottrans
-      logical debug,extrap
+      logical debug,write_radius
       real fluxme
       dimension y1c(nrays),xmuc(nrays)
       dimension fcfc(lpoint),xlm(lpoint),jlcont(lpoint)
       real sx(5000),slambda(5000),xshifted(2*ndp)
 *
       COMMON/CSURF/ HSURF,Y1(NRAYS)
-CCC      COMMON/CANGLE/ NMY,XMY(6),XMY2(6),WMY(6)
       COMMON/PIECES/ XL1,XL2,DEL,EPS,NMX,NLBLDU,IINT,XMYC,IWEAK
 *
 * extension for large number of wavelengths and lines (monster II)
       doubleprecision xlambda
-      common/large/ xlambda(lpoint),maxlam,ABSO(NDP,lpoint),
+      doubleprecision source_function
+      common/large/ xlambda(lpoint),source_function(ndp,lpoint),
+     & maxlam,ABSO(NDP,lpoint),
      & absos(ndp,lpoint),absocont(ndp,lpoint),absoscont(ndp,lpoint)
 *
       character*256 filterfil
@@ -66,28 +68,48 @@ CCC      COMMON/CANGLE/ NMY,XMY(6),XMY2(6),WMY(6)
       real velocity
       common/velo/velocity(ndp),hydrovelo,computeIplus
 
+* special version NLTE
+      real dzdr2,mex
+      integer kmax
+      logical nlte
+      common /nlte_common/ nlte
+
       real taulambda(2*ndp),Iplus(2*ndp),dtaulambda(2*ndp)
       real bigsource(2*ndp)
       logical computeIplus,optthin
 *
-      real muout(10),isurf(10,lpoint),icsurf(10,lpoint),yout(10)
-      real costheta(nrays),uin(nrays)
-      integer iout(10)
-* muout are mu-point for output intensities, icsurf is for continuum intensity 
-*  and isurf for absolute intensity
+      real costheta(nrays)
+*
       character*4 iblnk
       DATA IBLNK/'    '/,profold/0./,first/.true./
       data debug/.false./
-      data muout /-1.0, -0.9,-0.8,-0.7,-0.6,-0.5,-0.4,-0.3,-0.2,-0.1/
+      data write_radius/.true./
 
+* icsurf is for continuum intensity and isurf for absolute intensity
+* muoutp are mu-points for output intensities
+* Use 12 Gauss-Radau points by default, if nangles < 0,
+* Otherwise use nangles mu-points from input
+*
+      logical extrap
+      integer nangles
+      integer iout(nangles)
+      real muout(nangles),yout(nangles),uin(nrays),muoutp(nangles)
+      real, allocatable :: isurf(:,:),icsurf(:,:)
+!
+! in spherical case, cos(theta) must be <0. muoutp are the cos(theta) for the PP case.
+      do i=1,nangles
+        muout(i)=-muoutp(nangles+1-i)
+      enddo
 
-      PI=3.141593
+      allocate(isurf(nangles,lpoint))
+      allocate(icsurf(nangles,lpoint))
+
+      PI=4.*atan(1.)
+! 3.141593
 *
 * Initiate mode of calculation
 * IINT =1  : intensity at all mu-points / output spectrum is flux spectrum!
 *             intensities at all angles are stored in a separate file !
-*       Version 7/02-2019 BPz: for intensity, we save intensities at 10 mu angles
-*                              in the flux file. Mu=0.1 to 1.0 with step 0.1
 * IINT =0  : flux
 * XL1      : wavelength where synthetic spectrum starts
 * XL2      : wavelength where synthetic spectrum stops
@@ -116,11 +138,22 @@ ccc      if(iweak.gt.0) write(7,202) eps
 * continuum flux, and allows to save continuum intensity at various angles.
 * 
       do j=1,maxlam
+        xlsingle=xlambda(j)
         do k=1,ntau
           x(k)=absocont(k,j)
           s(k)=absoscont(k,j)
-          xlsingle=xlambda(j)
-          bplan(k)=bpl(T(k),xlsingle)
+*
+* NLTE case implemented for continuum
+*
+          if (nlte) then
+! test            bplan(k)=source_function(k,j)
+* Using the Planck function is OK if we don't have NLTE for the species contributing to the continuum.
+*
+            bplan(k)=bpl(T(k),xlsingle)
+          else
+            bplan(k)=bpl(T(k),xlsingle)
+          endif
+*
         enddo
         if (debug) then
           print*,'bsynb: calling traneq for continuum',j,xlsingle
@@ -128,21 +161,165 @@ ccc      if(iweak.gt.0) write(7,202) eps
             print*,(x(kk),s(kk),kk=k,k+4)
           enddo
         endif
+!
+! in traneq, the source function is iterated to get the scattering part as well: S=(kB+sJ)/(k+s)
+!
         call traneq
+!
+        if (idebug.gt.1) then
+! this wavelngth gave non-positive result. We flag it with a negative flux ! BPz 6-Apr-2021
+          print*,'lambda = ',xlsingle,' skipped'
+          hsurf=-1.0
+        endif
+!
+* save traneq continuum flux
+        hflux1ctr=4.*pi*hsurf*(rr(1)/radius)**2
+        if (hflux1ctr.ge.0.) hflux1ctr=amax1(1e-30,hflux1ctr)
+*
+*
+* PRINT OUT lambda number 10
+*
+!        if (j.eq.10) then
+!          do k=1,mmu(1)
+!            write(97,*) xmu(k,1),y1(k),'traneq'
+!          enddo
+!        endif
+!
+        if (computeIplus) then
+*
+************************************************************************
+* Compute Iplus, for all rays, at this wavelength.
+* calculate taulambda along the ray
+          do i=1,nimpac
+            ntaui=kimpac(i)
+            zold=0.0
+* here we could implement a shift of the opacities if wanted
+            do k=1,ntaui
+              xshifted(k)=x(k)
+              xshifted(2*ntaui-k)=x(k)
+            enddo
+
+            if (i.gt.ncore) then
+C rays that cross the atmosphere
+              optthin=.true.
+            else
+C rays that stop at some deepest depth (the core)
+              optthin=.false.
+            endif
+
+            do k=1,ntaui
+              z=sqrt(rr(k)**2-pimpac(i)**2)
+              bigsource(k)=source(k)
+              if (k.gt.1) then
+                dz=z-zold
+                dzdr=dz/(rr(k)-rr(k-1))
+                if (k.eq.2) dzdr2=dzdr
+                dtaulambda(k)=dzdr*0.5*
+     &                       (xshifted(k)+s(k)+
+     &                       xshifted(k-1)+s(k-1))*
+     &                     (tau(k)-tau(k-1))
+                if (optthin) then
+c compute optical thickness for the symmetric part of the ray on the backside
+                  index=2*ntaui+1-k
+                  dtaulambda(index)=dzdr*0.5*
+     &                     (xshifted(index)+s(k)+
+     &                     xshifted(index-1)+s(k-1))*
+     &                     (tau(k)-tau(k-1))
+                  bigsource(index)=source(k-1)
+cc                print*,'bsynb, taul',dtaulambda(k),dtaulambda(index)
+                endif
+              endif
+              zold=z
+            enddo
+            taulambda(1)=(xshifted(1)+s(1))*tau(1)*dzdr2
+            do k=2,ntaui
+              taulambda(k)=taulambda(k-1)+dtaulambda(k)
+            enddo
+            ntauicall=ntaui
+            if (optthin) then
+              do k=ntaui+1,2*ntaui-1
+                taulambda(k)=taulambda(k-1)+dtaulambda(k)
+!                if (taulambda(k).ge.
+!     &              taum*sqrt((xshifted(k)+s(k))/xshifted(k))) then
+!                  optthin=.false.
+!                  kmax=k
+!                  print*,'not thin',kmax,2*ntaui-1,taulambda(k)
+!                  exit
+!                endif
+! TAU < TAUM*SQRT((X+S)/X)
+              enddo
+              if (.not.optthin) then
+                ntauicall=kmax
+              else
+                ntauicall=2*ntaui-1
+              endif
+            endif
+            call Iplus_calc(ntauicall,taulambda,bigsource,Iplus,optthin)
+            mex=taulambda(1)*(1.-taulambda(1)/2.*(1.-taulambda(1)/3.*
+     &            (1.-taulambda(1)/4.)))
+            if (taulambda(1).gt.0.01) mex=1.-exp(-taulambda(1))
+            surfIplus=Iplus(1)+
+     &           (bigsource(1)-Iplus(1))*mex
+*
+* Replace Y1 by surfIplus, to prepare integration of flux
+            write(96,*) y1(i),surfiplus/y1(i),taulambda(ntauicall)
+            Y1(i)=surfIplus
+
+            if (j.eq.10) then
+              do k=1,ntauicall
+                write(95,*) xmu(i,1),taulambda(k),bigsource(k)
+              enddo
+            endif
+
+*
+* End of the ray loop
+          enddo
+* we compute the emergent flux at this lambda for the Ipluscalc case
+          NMU=MMU(1)
+          PX=-XMU(NMU-2,1)/(XMU(NMU-1,1)-XMU(NMU-2,1))
+          QX=1.-PX
+          Y1(NMU)=EXP(ALOG(Y1(NMU-2))*QX+ALOG(Y1(NMU-1))*PX)
+          DO I=1,NMU
+            FUN(I)=-XMU(I,1)*Y1(I)
+          ENDDO
+          HSURF=0.5*TRQUA2(NMU,XMU,FUN,DMU,DER)
+*
+* PRINT OUT lambda number 10
+*
+!          if (j.eq.10) then
+!            do k=1,mmu(1)
+!             write(97,*) xmu(k,1),y1(k),'Ipluscalc'
+!            enddo
+!          endif
+
+        endif
+************************************************************************
 *
 * calculate emergent continuum intensity at prescribed mu-points
 *
+! This sampling is not so good at the limb. One should have more points
+! at the limb. Maybe some even spacing in log(mu), e.g. 0 -0.2 -0.4 -0.6 -0.8 -1.0 -1.25 -1.50 -1.75 -2.0 ?
+!
         do k=1,mmu(1)
           costheta(k)=xmu(k,1)
         enddo
         call cubintp14(y1,costheta,uin,muout,yout,iout,mmu(1),
-     &                 10,3,0,0,0,
+     &                 nangles,3,0,0,0,
      &                     extrap)
-        do k=1,10
+        do k=1,nangles
           icsurf(k,j)=yout(k)
         enddo
+!*
+!* PRINT OUT lambda number 10
+!*
+!        if (j.eq.10) then
+!          do k=1,10
+!            write(97,*) muout(k),icsurf(k,j)
+!          enddo
+!        endif
+
 *
-* Spherical continuum fluxes
+* Spherical continuum fluxes (from Ipluscalc if computeIplus = .true., else from traneq)
 *
 C FLUX TO PRINT
         hflux1c=4.*pi*hsurf*(rr(1)/radius)**2
@@ -166,21 +343,82 @@ C
 * Start loop over wavelengths with lines
 *
       numb=0
+      if (write_radius) then
+! used for optical depth check
+        open(99, file='radius_tau1.txt')
+        write(99,998)
+998     format('lambda, k, taulambda, tauross, T, r/radius')
+      endif
+!
+! write header in spectrum file, for the intensity case.
+!
+      if (iint.gt.0) then
+        write(46,1111) (-muout(j),j=nangles,1,-1)
+1111    format ('# mu-points ',30(1x,1pe13.6))
+      endif
+ 
       do j=1,maxlam
+        xlsingle=xlambda(j)
         do k=1,ntau
-          x(k)=abso(k,j)
-          s(k)=absos(k,j)
-          xlsingle=xlambda(j)
-          bplan(k)=bpl(T(k),xlsingle)
+! the continuum opacity is not included in abso
+
+          x(k)=abso(k,j)+absocont(k,j)
+          s(k)=absos(k,j)+absoscont(k,j)
+*
+* NLTE case implemented for lines
+*
+          if (nlte) then
+!            bplan(k)=source_function(k,j)
+            bplan(k)=(source_function(k,j)*abso(k,j)+
+     &                 bpl(T(k),xlsingle)*absocont(k,j))/x(k)
+          else
+            bplan(k)=bpl(T(k),xlsingle)
+          endif
+* 
         enddo
+!
+! source function is iterated in traneq to get S=(kB+sJ)/(k+s). 
+!
         call traneq
+!
+        if (idebug.gt.1) then
+! this wavelngth gave non-positive result. We flag it with a negative flux ! BPz 6-Apr-2021
+          print*,'lambda = ',xlsingle,' skipped'
+          hsurf=-1.0
+        endif
+!
+!
+! check optical depth unity and print out
+        if (write_radius) then
+          do k=1,ntau
+            if (taut(k).ge.1.0) then
+!
+!
+!
+            write(99,999) xlsingle,k,taut(k),tau(k),T(k),rr(k)/radius
+999         format(f11.3,1x,i3,1x,1pe12.5,1x,1pe12.5,1x,0pf8.1,1x,f8.4)
+!
+!
+!
+            exit
+            endif
+          enddo
+        endif
 *
 * calculate emergent intensity
 *
         
 * save traneq's fluxes
         hflux1tr=4.*pi*hsurf*(rr(1)/radius)**2
-        hflux1tr=amax1(1e-30,hflux1tr)
+        if (hflux1tr.ge.0.) hflux1tr=amax1(1e-30,hflux1tr)
+!*
+!* PRINT OUT lambda number 10
+!*
+!        if (j.eq.10) then
+!          do k=1,mmu(1)
+!            write(111,*) xmu(k,1),y1(k),'traneq'
+!          enddo
+!        endif
 
         if (computeIplus) then
 *
@@ -237,10 +475,6 @@ cc                print*,' c tint', shift,n,slambda(1),slambda(n)
                 xshifted(2*ntaui-k)=x(k)
               enddo
             endif
-CCC CONTINUE FROM HERE FOR BACKSDIDE !!!!!!
-** n -> gives call tint(2*n, x,y,xint,yint) !! attention a la single precision !!
-** puis caluler les kappas pour chaque v/c*cos(theta), avec a chaque fois l'array
-** lambda (2*n), kappa(2*n) centre sur le lambda.
 
             if (i.gt.ncore) then
 C rays that cross the atmosphere
@@ -256,6 +490,7 @@ C rays that stop at some deepest depth (the core)
               if (k.gt.1) then
                 dz=z-zold
                 dzdr=dz/(rr(k)-rr(k-1))
+                if (k.eq.2) dzdr2=dzdr
                 dtaulambda(k)=dzdr*0.5*
      &                       (xshifted(k)+s(k)+
      &                       xshifted(k-1)+s(k-1))*
@@ -265,7 +500,7 @@ c compute optical thickness for the symmetric part of the ray on the backside
                   index=2*ntaui+1-k
                   dtaulambda(index)=dzdr*0.5*
      &                     (xshifted(index)+s(k)+
-     &                     xshifted(index+1)+s(k-1))*
+     &                     xshifted(index-1)+s(k-1))*            ! corrected on 31/03-2020. Was : xshifted(index+1)+s(k-1))*
      &                     (tau(k)-tau(k-1))
                   bigsource(index)=source(k-1)
 cc                print*,'bsynb, taul',dtaulambda(k),dtaulambda(index)
@@ -273,8 +508,9 @@ cc                print*,'bsynb, taul',dtaulambda(k),dtaulambda(index)
               endif
               zold=z
             enddo
-            taulambda(1)=(x(1)+s(1))*tau(1)/
-     &                    sqrt(1.-(pimpac(i)/rr(1))**2)
+cc            taulambda(1)=(xshifted(1)+s(1))*tau(1)/              ! corrected on 1/04-202. Was : x(1)
+cc     &                    sqrt(1.-(pimpac(i)/rr(1))**2)
+            taulambda(1)=(xshifted(1)+s(1))*tau(1)*dzdr2         ! corrected on 1/04/2020 to agree with tranfr.f
             do k=2,ntaui
               taulambda(k)=taulambda(k-1)+dtaulambda(k)
             enddo
@@ -282,40 +518,47 @@ cc                print*,'bsynb, taul',dtaulambda(k),dtaulambda(index)
             if (optthin) then
               do k=ntaui+1,2*ntaui-1
                 taulambda(k)=taulambda(k-1)+dtaulambda(k)
+!                if (taulambda(k).ge.
+!     &              taum*sqrt((xshifted(k)+s(k))/xshifted(k))) then
+!                  optthin=.false.
+!                  kmax=k
+!                  print*,'not thin',kmax,2*ntaui-1,taulambda(k)
+!                  exit
+!                endif
+! TAU < TAUM*SQRT((X+S)/X)
               enddo
-              ntauicall=2*ntaui-1
+              if (.not.optthin) then
+                ntauicall=kmax
+              else
+                ntauicall=2*ntaui-1
+              endif
             endif
             call Iplus_calc(ntauicall,taulambda,bigsource,Iplus,optthin)
-            surfIplus=Iplus(1)*exp(-taulambda(1))+
-     &           bigsource(1)*(1.-exp(-taulambda(1)))**2
+            mex=taulambda(1)*(1.-taulambda(1)/2.*(1.-taulambda(1)/3.*
+     &            (1.-taulambda(1)/4.)))
+            if (taulambda(1).gt.0.01) mex=1.-exp(-taulambda(1))
+            surfIplus=Iplus(1)+
+     &           (bigsource(1)-Iplus(1))*mex
+*
 cc              print*,'Pfeau(1,1) ',pfeau(1,1)
-************************************************************************
-            if (xlsingle.gt.7800..and.xlsingle.lt.7800.3) then
-              if (i.eq.1) then
-                print*,'bsynb; lambda=',xlsingle,' Iplus(Source):'
-              endif
-              do k=ntauicall,1,-1
-                print*,k,taulambda(k),bigsource(k),Iplus(k)
-              enddo
-              if (optthin) then
-                print*,'mu ',xmu(i,1),'Y1 ',y1(i),' Isurf ',
-     &              surfIplus,'Thin'
-              else
-                print*,'mu ',xmu(i,1),'Y1 ',y1(i),' Isurf ',
-     &              surfIplus,'Thick'
-              endif
-            endif
-************************************************************************
 * TEST !!!! SAVE ONLY I(mu=1) !!!!!!!!!
             if (xmu(i,1).eq.-1.0) surfIsave=surfIplus
 * TEST !!!! SAVE ONLY I(mu=1) !!!!!!!!!
 *
 * Replace Y1 by surfIplus, to prepare integration of flux
+            write(98,*) y1(i),surfiplus/y1(i),taulambda(ntauicall)
+
+            if (abs(xlambda(j)-23707.55).lt.0.001) then
+              do k=1,ntauicall
+                write(94,*) xmu(i,1),taulambda(k),bigsource(k)
+              enddo
+            endif
+
             Y1(i)=surfIplus
 *
 * End of the ray loop
           enddo
-          if (hydrovelo) then
+cccc          if (hydrovelo) then
 * we compute the emergent flux at this lambda
             NMU=MMU(1)
             PX=-XMU(NMU-2,1)/(XMU(NMU-1,1)-XMU(NMU-2,1))
@@ -325,28 +568,54 @@ cc              print*,'Pfeau(1,1) ',pfeau(1,1)
               FUN(I)=-XMU(I,1)*Y1(I)
             ENDDO
             HSURF=0.5*TRQUA2(NMU,XMU,FUN,DMU,DER)
-          endif
+cccc          endif
         endif
 ************************************************************************
 *
 * calculate emergent line intensity at prescribed mu-points
 *
+!*
+!* PRINT OUT one lambda
+!*
+        if (abs(xlambda(j)-23707.55).lt.0.001) then
+
+!        if (j.eq.10) then
+          write(111,'(a)') 'original'
+          do k=1,mmu(1)
+           write(111,*) xmu(k,1),y1(k)
+          enddo
+        endif
+
         do k=1,mmu(1)
           costheta(k)=xmu(k,1)
         enddo
         call cubintp14(y1,costheta,uin,muout,yout,iout,mmu(1),
-     &                     10,3,0,0,0,
+     &                     nangles,3,0,0,0,
      &                     extrap)
-        do k=1,10
+        do k=1,nangles
           isurf(k,j)=yout(k)
         enddo
+!*
+!* PRINT OUT one lambda
+!*
+        if (abs(xlambda(j)-23707.55).lt.0.001) then
+
+          write(111,'(a)') 'interpolated'
+          do k=1,nangles
+            write(111,*) muout(k),isurf(k,j)
+          enddo
+          write(111,'(a)') 'FLUX at outermost layer'
+          write(111,*) hsurf*4.*pi
+        endif
+!
 *
 * Spherical fluxes
 *
-C FLUX TO PRINT
-C renormalize to standard radius at tauross=1
+* FLUX TO PRINT (from Ipluscalc if computeIplus = .true., else from traneq)
+*
+* renormalize to standard radius at tauross=1
         hflux1=4.*pi*hsurf*(rr(1)/radius)**2
-        hflux1=amax1(1e-30,hflux1)
+        if (hflux1.ge.0.) then hflux1=amax1(1e-30,hflux1)
         hflux2=4.*pi*hflux(ntau)*(rr(ntau)/radius)**2
 * starting with version 12.1, flux is not divided by pi anymore. 
 * F_lambda integrated over lambda is sigma.Teff^4
@@ -354,13 +623,19 @@ C renormalize to standard radius at tauross=1
         fluxme=hflux1
 
 * divide by continuum flux
-        prf=fluxme/fcfc(j)
+        if (fcfc(j).gt.0.) then
+          prf=fluxme/fcfc(j)
+        else
+! flag wavelength that did not converge in traneq ! BPz 6-Apr-2021
+          prf=-1.
+        endif
 
         if (debug) print*,j,xlsingle,fluxme,prf
 *
 * End of spherical fluxes
 *
         prof=1.-prf
+*
 *
 * find depth where tau_lambda=1
 
@@ -391,7 +666,20 @@ cc        endif
 *
 * store spectrum in x,y format
 * integral_inf^+inf (fluxme) = sigma Teff^4
-
+*
+* We now have (depending on computeIplus case activated or not)
+* continuum flux :
+* from traneq:     hflux1ctr, fluxme
+* from Ipluscalc:  hflux1c, fluxme
+* continuum intensities at prescribed mu's
+* from Ipluscalc:  icsurf(mu,lambda)
+*
+* line flux :
+* from traneq:     hflux1tr, fluxme
+* from Ipluscalc:  hflux1, fluxme
+* line intensities at prescribed mu's
+* from Ipluscalc:  isurf(mu,lambda)
+*
         if (iint.eq.0) then
           if (computeIplus) then
 c We should have surface flux here!
@@ -405,23 +693,29 @@ c We should have surface flux here!
           endif
         else if (iint.gt.0) then
           if (computeIplus) then
-* We store additional columns for the intensity at mu=1.0 to 0.1, step 0.1.
+* We store additional columns for the intensity.
 * So we have: lambda, normalized and absolute flux for summed source function,
 * absolute Feautrier flux, and intensities for summed source function:
-* , normalized intensity at mu=1.0, intensity at mu=1.0,
-* and then Inorm, I for mu=0.9, 0.8, ..., 0.1.
+* , intensity at mu=1.0,  normalized intensity at mu=1.0,
+* and then I, Inorm for the 12 Gauss-Radau distributed angles
             write(46,1967) xlambda(j),prf,fluxme,hflux1tr,
-     &                    (isurf(k,j),isurf(k,j)/icsurf(k,j),k=1,10)
+     &                    (isurf(k,j),isurf(k,j)/icsurf(k,j),
+     &                     k=nangles,1,-1)
 1967        format(f11.3,1x,f10.5,1x,1pe12.5,1x,1pe12.5,2x,
-     &             10(1x,1pe12.5,1x,0pf10.5))
+     &             30(1x,1pe12.5,1x,0pf10.5))
           else
-* We store additional columns for the intensity at mu=1.0 to 0.1, step 0.1.
-* So we have: lambda, normalized flux, flux, normalized intensity at mu=1.0, intensity at mu=1.0,
-* and then Inorm, I for mu=0.9, 0.8, ..., 0.1.
+* We store additional columns for the intensity at nangles values of mu
+* So we have: lambda, normalized flux, flux, and then intensity and normalised intensity
+* for all mu's
+* BPz 30-Jan-2025: format changed for normalized intensities to allow large numbers
+*                  as this may happen with extended envelopes when lines go in emission
+
             write(46,1965) xlambda(j),prf,fluxme,
-     &                    (isurf(k,j),isurf(k,j)/icsurf(k,j),k=1,10)
+     &                    (isurf(k,j),isurf(k,j)/icsurf(k,j),
+     &                     k=nangles,1,-1)
 1965        format(f11.3,1x,f10.5,1x,1pe12.5,2x,
-     &             10(1x,1pe12.5,1x,0pf10.5))
+     &             30(2(1x,1pe12.5)))
+!     &             20(1x,1pe12.5,1x,0pf10.5))
 cc            write(46,1965) xlambda(j),prf,fluxme,y1(1)
 2018        format(f11.3,1x,f10.5,1x,1pe12.5,1x,e12.5,1x,e12.5)
           endif
@@ -430,6 +724,7 @@ cc            write(46,1965) xlambda(j),prf,fluxme,y1(1)
 *
 * End of wavelength loop
       enddo
+      if (write_radius) close(99)
 *
       call clock
       RETURN

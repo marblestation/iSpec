@@ -9,7 +9,7 @@
         character filterfil*256,filttitle*80
         logical first,limbdark
         real intens(imax),x(nrays),y(nrays),yinterp(imax),pos(imax),
-     &            postheta(imax),xtheta(nrays)
+     &            postheta(imax)
         common /limbdk/ pos,intens,totintens,tottrans
         common /csurf/ hsurf,y1(nrays)
         common /space2/ spacedum1(ndp*7+ndp*nrays*5+nrays*3+1),

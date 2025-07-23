@@ -131,7 +131,6 @@ class iSpecBaseApp(tkinter.Tk):
             self.lists['ew_code'].append("SPECTRUM")
         if ispec.is_turbospectrum_support_enabled():
             self.lists['synth_code'].append("Turbospectrum")
-            self.lists['ew_code'].append("Turbospectrum")
         if ispec.is_sme_support_enabled():
             self.lists['synth_code'].append("SME")
         if ispec.is_moog_support_enabled():

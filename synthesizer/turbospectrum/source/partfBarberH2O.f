@@ -20,7 +20,7 @@
 
         khc=1.380658e-16/6.6260755e-27/2.997925e10
 
-        open(3,file='DATA/energy-levels-BarberH2O.txt')
+        open(3,file='DATA/energy-levels-BarberH2O.txt',status='old')
         i=1
         do while (.true.) 
           read(3,*,end=99) n,j,ns,nr,energy(i)

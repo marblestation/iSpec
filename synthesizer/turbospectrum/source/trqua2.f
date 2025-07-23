@@ -1,7 +1,14 @@
 ************************************************************************
-      function trqua2 (n,x,f,dx,d)
+      real function trqua2 (n,x,f,dx,d)
+
 cc      dimension x(*),f(*),dx(*),d(*)
-      dimension x(n),f(n),dx(n),d(n)
+
+      implicit none
+      integer, parameter :: sp = selected_real_kind(6, 37)
+      integer, parameter :: dp = selected_real_kind(15, 307)
+
+      real(sp) :: x(n),f(n),dx(n),d(n),res,p,d1,d2
+      integer  :: i,n
 *
 *  Calculate the integral over f(x), using dx and d as intermediaries
 *  holding the x-differences and the derivatives of f.

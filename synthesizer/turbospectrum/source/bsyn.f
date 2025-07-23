@@ -24,6 +24,7 @@
 * matrix inversion.  BPz 09/07-1999
 *-----------------------------------------------------------------------
 *
+      use strings_module
       INCLUDE 'spectrum.inc'
       include 'tsuji.par'
 *
@@ -38,10 +39,12 @@
 *
       CHARACTER*256 DETOUT,INATOM,INMOD,INLINE,INSPEC,OUTFIL,inabun,
      &              filterfil
-      character*80 filttitle,comment
+      character*80 filttitle
+      character*256 comment,comment_line
       character*50 MCODE
 
       real scattfrac,absfrac
+      real eqw,eqwerr
       REAL N,MA,MH,M,L,MUM,NTOT,MAM,MABUND(16),ntt
       REAL XIH,XIHM,XKHM,HJONH,HJONC,HJONN,HJONO,XNECNO
       REAL ABUVC(NDP),ABUVN(NDP),ABUVO(NDP),ABUVS(NDP),ABUVK(NDP)
@@ -50,15 +53,37 @@
      &          JLEV(NDP/5+1),EMOL(NMEMOL,NDP),BPLAN(NDP),
      &          X(NDP),S(NDP),plez(ndp),contop(ndp)
       doubleprecision XL1,XL2,DEL,XLMARG,XL1L,XL2R,XLBOFF,XLB
-      doubleprecision xl1l_tmp, xl2r_tmp !SBC
-      integer not_discard !SBC
       doubleprecision xlb_vshifted(ndp),lshift(ndp)
-      CHARACTER*20 LELE
+      real xlsingle
+      CHARACTER*20 lele,lel
       real newvoigt
 
+* special version NLTE
+      logical nlte_species,nlte
+      integer iii,ilevlo,ilevup,maxlevel,iiii
+      integer ndepth
+      character header_dep1*500,header_dep2*1000
+      character*20 idlevlo,idlevup
+      character nlte_specname*20
+      parameter (maxlevel=10000)
+      real abundance_nlte,gamst
+      real b_departure(ndp,0:maxlevel),taumod(ndp)
+      common /nlte_common/ nlte
+      integer modnlevel,maxmodlevel
+      parameter (maxmodlevel=2000)
+      real modenergy(maxmodlevel),modg(maxmodlevel)
+      integer modion(maxmodlevel)
+      character*40 modid(maxmodlevel)
+* Segments: limits and number of wavelength for each segment
+      integer nsegment,nsegmax,iseg,lstart,ii,lstop
+      parameter (nsegmax=200)
+      doubleprecision xlsegmin(nsegmax),xlsegmax(nsegmax)
+      integer nlseg(nsegmax)
+      doubleprecision dlambda,resolution
+*
       COMMON/POP/ N(NDP),A(NDP),DNUD(NDP),STIM(NDP),QUO(NDP),DBVCON
       COMMON/ATOM/ XL,MA,CHI,CHI2,chi3,CHIE,G,IDAMP,FDAMP,
-     &             GAMRAD,ALOGC6,ION
+     &             GAMRAD,ALOGC6,ION,gamst
       COMMON/ATMOS/ T(NDP),PE(NDP),PG(NDP),XI(NDP),MUM(NDP),RO(NDP),NTAU
       logical hydrovelo,debug,infoonly,computeIplus
       real velocity
@@ -81,6 +106,7 @@
       dimension presmo(30)
       COMMON/CMOL1/ EH,FE,FH,FHE,FC,FCE,FN,FNE,FO,FOE,FK,FKE,FS,FSE
       COMMON/CMOL2/ NNMOL,PK(30)
+      real eps,epsmem
 *
 * Special for spherical 
 *
@@ -95,7 +121,9 @@
       character*26   species,blabla
 
       doubleprecision xlambda,dist
-      common/large/ xlambda(lpoint),maxlam,ABSO(NDP,lpoint),
+      doubleprecision  emissivity(ndp),source_function
+      common/large/ xlambda(lpoint),source_function(ndp,lpoint),
+     & maxlam,ABSO(NDP,lpoint),
      & absos(ndp,lpoint),absocont(ndp,lpoint),absoscont(ndp,lpoint)
       logical oldpart,Ames,scan2001,oldscan,Barber
       common/oldpart/oldpart
@@ -134,18 +162,25 @@
 
       logical dattsuji,datspherical,datlimbdark,databfind,
      &        datmultidump,datxifix,datmrxf,dathydrovelo,datpureLTE,
-     &        pureLTE
+     &        pureLTE,datnlte,departbin,datdepartbin
       integer datnoffil,datncore,datmaxfil,datmihal,datiint
       real    isoch(1000),isochfact(1000),datisoch(1000),
      &        datisochfact(1000)
+      integer datnangles,nangles
+      real    datmuoutp(30),muoutp(30)
       real    datxmyc,datscattfrac
       character*128 datfilmet,datfilmol,datfilwavel
       character*256 datlinefil(maxfil),datdetout,
      &          datinatom,datinmod,datinabun,datcontinopac,datinpmod,
-     &          datinspec,datoutfil,datmongofil,datfilterfil
-      doubleprecision  datxl1,datxl2,datdel,datxlmarg,datxlboff
-      integer nsegments_lambda_min, nsegments_lambda_max !SBC
-      doubleprecision segments_lambda_min(400), segments_lambda_max(400)
+     &          datinspec,datoutfil,datmongofil,datfilterfil,
+     &          datmodelatomfile,datdeparturefile,departurefile,
+     &          modelatomfile,
+     &          contmaskfile,linemaskfile,segmentsfile,
+     &          datcontmaskfile,datlinemaskfile,datsegmentsfile,
+     &          datnlteinfofile,nlteinfofile
+      character*12 databund_source
+      doubleprecision  datxl1,datxl2,datdel,datxlmarg,datxlboff,
+     &                 datresolution
       common/inputdata/datmaxfil,dattsuji,datfilmet,datfilmol,
      &                 datnoffil,datlinefil,
      &                 datspherical,datmihal,dattaum,datncore,
@@ -159,9 +194,13 @@
      &                 datxifix,datxic,datmrxf,datinpmod,datcontinopac,
      &                 datfilwavel,dathydrovelo,
      &                 datxl1,datxl2,datdel,datxlmarg,datxlboff,
-     &                 datiint,datxmyc,datscattfrac,datpureLTE,
-     &                 nsegments_lambda_min,nsegments_lambda_max,
-     &                 segments_lambda_min, segments_lambda_max
+     &                 datresolution,
+     &                 datiint,datxmyc,datscattfrac,
+     &                 datpureLTE,
+     &                 datnlte,datmodelatomfile,datdeparturefile,
+     &                 datdepartbin,datcontmaskfile,datlinemaskfile,
+     &                 datsegmentsfile,datnlteinfofile,
+     &                 databund_source,datnangles,datmuoutp
 
       real amass(92,0:250),abund(92),fixabund(92),
      &         isotopfrac(92,0:250)
@@ -177,15 +216,16 @@
       real absave(100),symmfactor
 ***********************************************
       integer version
-      data version /191/
+      data version /201/
 ***********************************************
       data debug/.false./
       data nat/92/
-      logical newformat
+      logical newformat,starkformat,nlteformat
       character oneline*256
 
 ccc      external commn_handler
 
+      nlte=.false.
       tsuswitch =.false.
       Ames=.false.
       scan2001=.false.
@@ -211,18 +251,6 @@ ccc      external commn_handler
  
       call input
 
-* fraction of the line opacity to count as scattering.
-*  Remaining is counted in absorption    BPz 27/09-2002
-
-      scattfrac=datscattfrac
-      absfrac=1.0-scattfrac
-      if (scattfrac.gt.0.) then
-        print*
-        print*,' WARNING!!!!! ', scattfrac,' of the line opacity',
-     &     ' counted as scattering!!!!!'
-        print*
-      endif
-
       tsuji=dattsuji
       filmet=datfilmet
       filmol=datfilmol
@@ -245,6 +273,7 @@ ccc      external commn_handler
         diflog=1.0001
         computeIplus=.true.
       endif
+      print*,'hydrovelo, computeIplus :',hydrovelo,computeIplus
       detout=datdetout
       inatom=datinatom
       inmod=datinmod
@@ -274,6 +303,44 @@ ccc      external commn_handler
         isoch(i)=datisoch(i)
         isochfact(i)=datisochfact(i)
       enddo
+      nlte=datnlte
+      modelatomfile=datmodelatomfile
+      departbin=datdepartbin
+      departurefile=datdeparturefile
+!
+! when computing for multiple spectral segments, use resolution to define 
+! wavelength step within each segment. Default set in input.f at 500000.
+!
+      segmentsfile=datsegmentsfile
+      resolution=datresolution
+!
+      contmaskfile=datcontmaskfile
+      linemaskfile=datlinemaskfile
+      nlteinfofile=datnlteinfofile
+
+* fraction of the line opacity to count as scattering.
+*  Remaining is counted in absorption    BPz 27/09-2002
+* do not allow this in NLTE case
+
+      scattfrac=datscattfrac
+      absfrac=1.0-scattfrac
+      if (.not.nlte) then
+        if (scattfrac.gt.0.) then
+          print*
+          print*,' WARNING!!!!! ', scattfrac,' of the line opacity',
+     &     ' counted as scattering!!!!!'
+          print*
+        endif
+      else
+        if (scattfrac.gt.1.e-10) then
+          print*,'NLTE and setting arbitrary scattering in line'
+          print*,' are incompatible options'
+          stop 'Stop in bsyn'
+        endif
+      endif
+! mu-points for intensity output
+      nangles=datnangles
+      muoutp=datmuoutp
 
       print*,tsuji,filmet(1:index(filmet,' ')),
      &       filmol(1:index(filmol,' '))
@@ -380,10 +447,10 @@ cc     &     RECL=412)
 * if appropriate replace by fixabund.
 * for molecular equilibrium calculation and damping
 *
-      call makeabund(overall,alpha,helium,rabund,sabund,fixabund,
+      call makeabund(databund_source,
+     &               overall,alpha,helium,rabund,sabund,fixabund,
      &                  abund,amass,aname,isotopfrac)
 
-cc      OPEN(UNIT=11,FILE=INATOM,STATUS='OLD')
       print*,'metallicity changed by ',overall,' dex'
       do i=2,92
         if (abund(i).lt.-28.) then
@@ -448,11 +515,10 @@ cc      OPEN(UNIT=11,FILE=INATOM,STATUS='OLD')
 *
 * IP>=1 gives lots of printout, IP=0 less, IP=2 gives some on term.
 *
-cccc      call cstrip(alunit,27)
-cccc      READ(27,101) IP,EPS
       IP=0
+
+! kappa_line/kappa_cont > 10^-4 is good enough for all lines but hydrogen
       EPS=0.0001
-      NMY=6
       iweak=0
 *
 * limbdarkening?
@@ -461,9 +527,18 @@ cc        xl1=filtlam(1)
 cc        xl2=filtlam(ifilt)
         iint=1
       endif
-!      if (iint.gt.0) then
-!      OPEN(UNIT=66,FILE='sphlimb',STATUS='UNKNOWN',FORM='UNFORMATTED')
-!      endif
+      if (iint.gt.0) then
+! set number of quadrature points to 10 for the Gauss-Legendre quadrature of intensities.
+! This in order to ease interpolation to Gauss-Radau quadrature points wanted by interferometrists,
+! while keeping the original quadrature method in the radiative transfer part of the code.
+
+        NMY=10
+
+!        OPEN(UNIT=66,FILE='sphlimb',STATUS='UNKNOWN',FORM='UNFORMATTED')
+      else
+! only flux wanted ! could use e.g. NMY=6 to make it slightly faster.
+        NMY=10
+      endif
       if (hydrovelo) then
 * this allows line shifts from the first lambda to the last of the list 
 * (at least for v/c*lambda <5A.
@@ -484,23 +559,76 @@ ccc          stop
           print*
         endif
       endif
+       
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       IF(ABS(XLMARG).LT.1.E-6) XLMARG=5.0000
       XLM=(XL1+XL2)/2.
       XL1L=XL1-XLMARG
       XL2R=XL2+XLMARG
-      maxlam=int((xl2-xl1)/del)+1
+*
+* read wavelengths segments to be computed. Only lines falling in these segments will be kept,
+* and the flux/intensity will not be computed outside these windows.
+* unit number to open, file name, maximum allowed number of segments,
+* actual number of segments, lambdastart and end for each segment
+*
+      if (segmentsfile.ne.' ') then
+        print*,'segmentsfile = ',segmentsfile
+        call read_segments(77,segmentsfile,nsegmax,
+     &                        nsegment,xlsegmin,xlsegmax)
+        xl1l=1.e30
+        xl2r=0.
+        j=1
+        nltot=0
+        do i=1,nsegment
+          xl1l=min(xl1l,xlsegmin(i))
+          xl2r=max(xl2r,xlsegmax(i))
+! define lambdas for each segment
+          nlseg(i)=0
+          dlambda=(xlsegmax(i)+xlsegmin(i))*0.5/resolution
+          xlambda(j)=xlsegmin(i)
+          jj=0
+!          print*,'j',j,xlambda(j),jj
+          do while (xlambda(j).lt.xlsegmax(i))
+            j=j+1
+            jj=jj+1
+            xlambda(j)=xlsegmin(i)+dlambda*jj
+!           print*,'j',j,xlambda(j),jj
+          enddo
+          j=j+1
+          nlseg(i)=jj+1
+          nltot=nltot+nlseg(i)
+!         print*,'nlseg, nltot',i,nlseg(i),nltot
+! test
+!         print*,i,xlsegmin(i),xlsegmax(i)
+!         print*,i,'lam(nlseg)',xlambda(nltot)
+!         print*,(jj,xlambda(jj),jj=nltot-nlseg(i)+1,nltot)
+        enddo
+        maxlam=nltot
+      else
+! ordinary setup, constant lambda step, single spectral segment
+        nsegment=1
+        maxlam=int((xl2-xl1)/del)+1
+        do j=1,min(maxlam+100,lpoint)
+* concerning this min() see readmo, set up of the continuum opacities ! obsolete ??? BPz 15/07-2020
+          xlambda(J)=XL1+FLOAT(J-1)*DEL
+        enddo
+        xlsegmin(1)=xlambda(1)
+        xlsegmax(1)=xlambda(maxlam)
+        nlseg(1)=maxlam
+      endif
+!
       if (maxlam.gt.lpoint) stop 'bsyn: too many wavelengths'
-      do 400 j=1,min(maxlam+100,lpoint)
-* concerning this min() see readmo, set up of the continuum opacities
-       xlambda(J)=XL1+FLOAT(J-1)*DEL
-       do 401 k=1,ndp
-        abso(k,j)=0.0
-        absos(k,j)=0.0
-        absocont(k,j)=0.0
-        absoscont(k,j)=0.0
-401    continue
-400   continue
-       
+      do j=1,maxlam
+        do k=1,ndp
+          abso(k,j)=0.0
+          absos(k,j)=0.0
+          absocont(k,j)=0.0
+          absoscont(k,j)=0.0
+          source_function(k,j)=0.0
+        enddo
+      enddo
+*
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 *
 * EPS tells which small l/kappa is neglected.
 * XLM is a characteristic wavelength
@@ -538,9 +666,22 @@ cc      if (xlboff.lt.1.e-6) xlboff=0.0
 *
 * initiate total extinction
       do j=1,maxlam
+        xlsingle=sngl(xlambda(j))
         do K=1,ntau
-          absos(k,j)=absoscont(k,j)
-          abso(k,j)=absocont(k,j)
+! test          absos(k,j)=absoscont(k,j)
+! test          abso(k,j)=absocont(k,j)
+          if (nlte) then
+*
+* set emissivity / source function for continuum assuming LTE for continuum!
+* THIS IS NOT VALID IF CONTINUUM OPACITY IS, E.G., DUE TO A NLTE PHOTOIONIZATION
+*
+* this is actually emissivity (normalised by kappa_std)
+!            source_function(k,j)=absocont(k,j)*bpl(T(k),xlsingle)
+
+! test : source_function is now used only for lines
+            source_function(k,j)=0.0
+! test
+          endif
         enddo
       enddo
 *
@@ -579,28 +720,31 @@ c      call eqmol_pe(t(20),pg(20),pgpg,pe(20),
 c     &      1.,1.,k,niter,skiprelim)
 
 * Test Plez 11-May-2018
-      do 43 k=ntau,1,-1
-*      do 43 k=1,ntau
+      do k=ntau,1,-1
+*      do k=1,ntau
 * end of test
 
         if ((abs((t(k)-tp)/t(k)).lt.3.e-2).and.
      &      (abs((pe(k)-pep)/pe(k)).lt.0.6)) then
           skiprelim=.true.
         else
-          skiprelim=.false.
+!          skiprelim=.false.
+! try to skip it all the time (BPz 27-Jan-2025)
+          skiprelim=.true.
         endif
         tp=t(k)
         pep=pe(k)
         call eqmol_pe(t(k),pg(k),pgpg,pe(k),1.,1.,k,niter,skiprelim)
-c        print*,'eqmol_pe calculated ',niter,' iterations'
-c        print*,k,pg(k),pgpg,ro(k),rhotsuji
+        print*,'eqmol_pe calculated ',niter,' iterations'
+        print*,k,pg(k),pgpg,ro(k),rhotsuji
 
-ccc      write(*,'(i3,15e10.3,/,3x,15e10.3)') k,presmo
+!        write(*,'(i3,15e10.3,/,3x,15e10.3)') k,presmo
 *
         PH(K)=presneutral(k,1)
         phe(k)=presneutral(k,2)
         ph2(k)=partryck(k,2)
-43    continue
+      enddo
+
       abundh=1./xmytsuji
       print*,'new abundh:',abundh
 *
@@ -620,7 +764,7 @@ ccc      write(*,'(i3,15e10.3,/,3x,15e10.3)') k,presmo
 *
 * first, loop over line files
 *
-      do 98 ifil=1,noffil
+      do ifil=1,noffil
 *
         inline=linefil(ifil)
 c        print*,'soon opening file :' , inline(1:index(inline,' '))
@@ -640,6 +784,120 @@ cc        print*,'opened file '
         print*,species
         read(lunit,*) comment
         call getinfospecies(species,iel,natom,atom,isotope)
+*
+* find out if this species is treated in NLTE
+*
+! default values, but are set in call to read_nlteinfo
+        departbin=.true.
+        nlte_species=.false.
+!
+! not done like this anymore. No flag needed in line list
+!
+!        iii=1
+!        do while (iii.le.len(comment)-3)
+!          if (comment(iii:iii+3).eq.'NLTE'.or.
+!     &        comment(iii:iii+3).eq.'nlte') then
+!            nlte_species=.true.
+!*  nlte must be set to .true. if at least one species in nlte
+!            if (.not.nlte) then
+!              print*,'NLTE must be set to .true. in order to treat',
+!     &               ' nlte species consistently'
+!              stop 'Set NLTE !'
+!            endif
+!          endif
+!          iii=iii+1
+!        enddo
+!
+! The species NLTE information is now centralised in a single file.
+! 2021-02-23
+        if (nlte) then
+          if (nlteinfofile.eq.' ') stop 'missing NLTEINFOFILE !'
+          call read_nlteinfofile(77,nlteinfofile,iel,
+     &      modelatomfile,departurefile,departbin,nlte_species)
+        endif
+        if (nlte_species) then
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+*
+* read model atom file with level identifications
+! unit number to open, file name, max number of levels, number of level read, energy of the levels
+          print*,'modelatomfile = ',modelatomfile
+          call read_modelatom(77,modelatomfile,maxmodlevel,modnlevel,
+     &                          modenergy,modg,modion,modid,
+     &                          nlte_specname)
+          print*,'after read modelatom',maxmodlevel,
+     &            modenergy(1:modnlevel)
+          print*,modg(1:modnlevel)
+          print*,modion(1:modnlevel)
+          print*,modid(1:modnlevel)
+          print*,nlte_specname
+*
+* read departure coefficients table
+*
+          call read_departure(77,departurefile,departbin,maxlevel,
+     &                        modnlevel,ndp,ndepth,taumod,
+     &                    b_departure,abundance_nlte,header_dep1,
+     &                      header_dep2)
+!
+! DUMMY  for  LTE test
+!
+!          taumod=tau
+!
+!
+!
+!
+!
+
+! check
+          print*,'bsyn, modnlevel ',modnlevel
+          do iii=0,modnlevel
+            print*,iii,(b_departure(iiii,iii),iiii=1,ndepth)
+          enddo
+!
+! a couple of simple checks
+!
+          print*,'read departure file header '
+          print*,trim(adjustl(header_dep1))
+          print*,trim(adjustl(header_dep2))
+          print*,'NLTE abundance :',abundance_nlte
+
+          if (ndepth.ne.ntau) then
+            print*,'ndepth',ndepth,'ntau',ntau
+            stop ' wrong model or departure file! stop in bsyn.f !'
+          else
+            do iii=1,ntau
+              if (abs(tau(iii)/taumod(iii)-1.).gt.1.e-5) then
+                do iiii=1,ntau
+                  print*,tau(iiii),taumod(iiii)
+                enddo
+                print*,'tau scales differ in model atmos and ',
+     &                 'in departure coefficient file'
+                stop 'stopping in bsyn.f'
+              endif
+            enddo
+          endif
+*
+* TEMPORARY: SET ALL DEPARTURE COEFFICIENTS TO some value for testing purposes
+* 
+!          do iiii=0,maxlevel
+!            do iii=1,ntau
+!              b_departure(iii,iiii)=float(iiii)
+!            enddo
+!          enddo
+* END OF TEMPORARY
+*
+*
+        else
+! LTE case for this species
+          modnlevel = 0
+          do iiii=0,maxlevel
+            do iii=1,ntau
+              b_departure(iii,iiii)=1.0
+            enddo
+          enddo
+        endif
+*
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+*
 * find out if Ames H2O or Joergensen's
         if (iel.eq.10108) then
           do ic=1,77
@@ -674,18 +932,21 @@ cc        print*,'opened file '
           print 1234,species,lele,iel,ion,(isotope(nn),nn=1,natom)
           print*, 'nlines ', nline
 cc          call Hlineadd(lunit,nline,xlboff)
-          call hydropac(lunit,xlboff)
+! for hydrogen lines a different cut is chosen
+          epsmem=eps
+          eps=1.e-4
+! B Plez 2024-02-12: this cut is not used anymore for H lines. It did not save time.
+! include departure coefficients for hydrogen. BPz 17/11-2020
+          print*,'bsyn nlte, nlte_species',nlte,nlte_species
+          call hydropac(lunit,xlboff,nlte,
+     &                  nlte_species,maxlevel,modnlevel,
+     &                  b_departure,modenergy,
+     &                  modg,modion,modid)
+          eps=epsmem
           goto 9874
         endif
 
-*default fdamp (may be changed for each element further down)
-****        if (iel.gt.92) then
-****          fdamp=0.
-****        else
-****          fdamp=2.0
-****        endif
         g=1.
-ccc        raddmp=0.0
 * new element. we must compute more in depth
         oldpart=.false.
         symmfactor=1.e0
@@ -702,7 +963,6 @@ ccc        raddmp=0.0
 * scaled by overall, helium, etc (see options in input.f). 
 * This value may be overwritten by using ABCHANGE in input file.
 *
-* We don't read the atomic/molec data table anymore (atomda): abunp not used.
 * Partition functions
 * come now from partf and molecpartf. Chi, chi2, chi3 come from partf.f for 
 * atoms (Irwin data tables).
@@ -710,12 +970,46 @@ ccc        raddmp=0.0
 * Unsoeld recipe for vanderWaals broadening. 
 * Finally the mass is computed here.
 *
-ccc        CALL ATOMDA(IEL,LELE,CHI,CHI2,MAM,ABUNP)
 
         if (iel.le.92) then
+! Atomic species
           lele=aname(iel)
+! NLTE: check model atom id:
+          if (nlte_species) then
+            if (to_lower(aname(iel)).ne.
+     &                    to_lower(trim(nlte_specname))) then
+              print*,' Bsyn: NLTE species is ',aname(iel),
+     &               ' but model atom is for ',nlte_specname
+              stop 'ERROR'
+            else
+! check abundance
+              if (abs(log10(abund(iel))+12.-abundance_nlte)
+     &            .gt.0.0001) then
+                print*,' Bsyn: NLTE departure coeff calculated for',
+     &                 'abundance =',abundance_nlte,' while it is ',
+     &                  log10(abund(iel))+12.,' here'
+                stop 'Change abundance in script! '
+              endif
+            endif
+          endif
+!
         else
+! Molecular species
           call getlele(iel,ion,lele)
+! NLTE: check model molecule id:
+          if (nlte_species) then
+! quick and dirty fix to comply with MULTI convention of 2 characters length for species.
+! This must eventually be solved in MULTI as CO is then identical to Co, and HCN is not allowed. 
+! In TS it is 'C O' and 'Co'(or 'co').
+            if (lele(2:2).eq.' ') then
+              lel=lele(1:1)//lele(3:3)
+            endif
+            if (trim(lel).ne.trim(nlte_specname)) then
+              print*,' Bsyn: NLTE species is ',lel,
+     &               ' but model atom is for ',nlte_specname
+              stop 'ERROR'
+            endif
+          endif
         endif
         print*,'after getlele: ',iel,lele
         mam=0.
@@ -734,56 +1028,102 @@ ccc        CALL ATOMDA(IEL,LELE,CHI,CHI2,MAM,ABUNP)
      &         ' isotopes: ',5i3)
         print*,comment
         if (iel.le.92) then
-          ABUL=abund(iel)
           abunp=abund(iel)
         endif
-* With Tsuji equilibrium, abund is not needed.
 *
 * Test for molecular list format
 * allows backward compatibility for pre-v14.1 format molecular line lists
+        read(lunit,'(a)') oneline
+        backspace(lunit)
+        nlteformat=.false.
         if (iel.gt.92) then
-          read(lunit,'(a)') oneline
-          backspace(lunit)
+          starkformat=.false.
+          read(oneline,*,err=16,end=16) xlb,chie,gfelog,fdamp,gu,raddmp,
+     &                      levlo,levup,eqw,eqwerr,comment_line,
+     &                      ilevlo,ilevup,idlevlo,idlevup
+          nlteformat=.true.    ! compatible with newformat line list without Stark
+          newformat=.true.
+          goto 12
+16        continue
           read(oneline,*,err=11,end=11) xlb,chie,gfelog,fdamp,gu,raddmp,
      &                levlo,levup
           newformat=.true.
           goto 12
 11        newformat=.false.
-12        continue 
+12        continue
         else
+!
+! Test for atomic line list format, with or without Stark broadening parameter
+! gamst
+          read(oneline,*,err=8,end=8) xlb,chie,gfelog,fdamp,gu,raddmp,
+     &                gamst,levlo,levup
+          starkformat=.true.
           newformat=.true.
+          read(oneline,*,err=14,end=14) xlb,chie,gfelog,fdamp,gu,raddmp,
+     &                      gamst,
+     &                      levlo,levup,eqw,eqwerr,comment_line,
+     &                      ilevlo,ilevup,idlevlo,idlevup
+          nlteformat=.true.    ! compatible with newformat line list with/out Stark
+          goto 14
+8         starkformat=.false.
+          read(oneline,*,err=13,end=13) xlb,chie,gfelog,fdamp,gu,raddmp,
+     &                levlo,levup
+          newformat=.true.
+          read(oneline,*,err=14,end=14) xlb,chie,gfelog,fdamp,gu,raddmp,
+     &                      levlo,levup,eqw,eqwerr,comment_line,
+     &                      ilevlo,ilevup,idlevlo,idlevup
+          nlteformat=.true.    ! compatible with newformat line list with/out Stark
+          goto 14
+13        newformat=.false.
+14        continue
         endif
-          
+        if (.not.newformat.and.nlte_species) then
+          print*,'bsyn.f'
+          stop 'old line list format and NLTE. Incompatible options'
+        endif
+        if (nlte_species.and..not.nlteformat) then
+          print*,'**********************************************'
+          print*,' W A R N I N G     B S Y N'
+          print*,' Element ',lele, iel, ion
+          print*,' asking for NLTE calculation with a line list',
+     &           ' missing level identification'
+          print*,' calculation will be LTE for this element !'
+          print*,'**********************************************'
+        endif
+
 * Start wavelength loop
 *
-      ILINE=0
-      NALLIN=NALLIN+NLINE
+        ILINE=0
+        NALLIN=NALLIN+NLINE
+
+        ilevlo=0
+        ilevup=0  ! dummy values
 *
 * NLINE is the number of lines of the element IEL.
 *
 ***************************************************************
 *
-      iatouca=0
+        numberoflines=0
 *
 ***************************************************************
 *
 * Big jump to 64 from far below, line loop.
 *
-   64 CONTINUE
-      DGFE=0.
+   64   CONTINUE
+        DGFE=0.
 *
 * Loop for reading the lines
 *
-   50 CONTINUE
-      IF(ILINE.EQ.NLINE) then
-        print*,iline,' considered for element ',iel,ion
-        print*,ibadc6,' lines rejected because of negative c6'
-        GOTO 1
-      ENDIF
+   50   CONTINUE
+        IF(ILINE.EQ.NLINE) then
+          print*,iline,' considered for element ',iel,ion
+          print*,ibadc6,' lines rejected because of negative c6'
+          GOTO 1
+        ENDIF
 *
 * Now read the line data
 *
-* XLB= wavelength
+* XLB= wavelength in Angstroem
 * CHIE= excitation pot (in eV) of lower level
 * GFELOG= log(gf)
 * GU the upper statistical weight for the line, is only of
@@ -795,67 +1135,131 @@ ccc        CALL ATOMDA(IEL,LELE,CHI,CHI2,MAM,ABUNP)
 * warning! xlb is real*8
 *
 * new format for molecules, identical to that for atoms, starting with v14.1
+*
+* NLTE format includes also 2 more integers for lower and upper level identification
         if (newformat) then
-          read(lunit,*) xlb,chie,gfelog,fdamp,gu,raddmp,levlo,levup
-          !print*,'SBC*********** ',xlb,chie,gfelog,fdamp,gu,raddmp
-          !print*,'SBC----------- ',levlo,levup
+          if (starkformat) then
+            if (nlteformat) then
+! Stark + NLTE level identification
+              read(lunit,*) xlb,chie,gfelog,fdamp,gu,raddmp,gamst,
+     &                      levlo,levup,eqw,eqwerr,comment_line,
+     &                      ilevlo,ilevup,idlevlo,idlevup
+            else
+! Stark without NLTE level identification 
+              read(lunit,*) xlb,chie,gfelog,fdamp,gu,raddmp,gamst,
+     &                      levlo,levup
+              ilevlo=0
+              ilevup=0
+            endif
+          else
+            if (nlteformat) then
+! no Stark, but NLTE level identification
+              read(lunit,*) xlb,chie,gfelog,fdamp,gu,raddmp,
+     &                      levlo,levup,eqw,eqwerr,comment_line,
+     &                      ilevlo,ilevup,idlevlo,idlevup
+            else
+! no Stark, no NLTE level identification
+              read(lunit,*) xlb,chie,gfelog,fdamp,gu,raddmp,levlo,levup
+              ilevlo=0
+              ilevup=0
+            endif
+            gamst=0.
+          endif
+
+! check if we have proper level identification or not
+          if (nlte_species) then
+            if (ilevlo.gt.modnlevel.or.ilevup.gt.modnlevel) then
+              print*,'level number outside range!', ilevlo,ilevup,
+     &               ' max =',modnlevel
+              stop 'Stop in bsyn.f'
+            else if (ilevlo.eq.0.or.ilevup.eq.0) then
+              print*,'unidentified level ilevlo=',ilevlo,'ilevup=',
+     &               ilevup
+              print*,'wavelength=',sngl(xlb)
+              print*,'continuing with departure coefficient = 1. ',
+     &               'for that level'
+              ilevlo=0
+              ilevup=0
+            else if (ilevlo.lt.0.or.ilevup.lt.0) then
+              stop 'bsyn.f; level identification (<0) is wrong'
+            endif
+! check departure coeff
+!            print*,'ilevlo ilevup, lambda',ilevlo,ilevup,sngl(xlb)
+!            do k=1,ntau
+!               print*,k,b_departure(k,ilevlo),b_departure(k,ilevup)
+!            enddo
+!
+          else
+            ilevlo=0
+            ilevup=0
+          endif
         else
 * allows backward compatibility for older format molecular line lists
+          if (nlte_species) then
+            print*,' Bsyn: old format incompatible with NLTE line lists'
+            stop
+          endif
           read(lunit,*) xlb,chie,gfelog,fdamp,gu,raddmp
+          gamst=0.
         endif
 *
-      if (xlb.lt.xl1l.or.xlb.gt.xl2r) then
-        NALLIN=NALLIN-1
-        NLINE=NLINE-1
-        NREJCT=NREJCT+1
-        GOTO 50
-      endif
-        ! SBC:
-        if (nsegments_lambda_min.gt.0) then
-            not_discard = 0
-            do i = 1,nsegments_lambda_min 
-              xl1l_tmp = segments_lambda_min(i)-XLMARG
-              xl2r_tmp = segments_lambda_max(i)+XLMARG
-              if (xlb.gt.xl1l_tmp.and.xlb.lt.xl2r_tmp) then
-                   not_discard = 1
-                   exit
-              endif
-            enddo
-            if (not_discard.eq.0) then
-                NALLIN=NALLIN-1
-                NLINE=NLINE-1
-                NREJCT=NREJCT+1
-                GOTO 50
+        if (nsegment.eq.1) then
+          iseg=1
+          lstart=1
+          lstop=maxlam
+        else
+          iseg=0
+          do i=1,nsegment
+! find out if line belongs to one of our segments
+            if (xlb.ge.xlsegmin(i).and.xlb.le.xlsegmax(i)) then
+              iseg=i
+! find out index for first wavelength to consider in lambda array
+              lstart=1
+              do ii=1,iseg-1
+                lstart=lstart+nlseg(ii)
+              enddo
+              lstop=lstart+nlseg(iseg)-1
+              del=xlambda(lstart+1)-xlambda(lstart)
+              exit
             endif
+          enddo
         endif
-      f=10**(gfelog)
-      xlb=xlb+xlboff
+! keep this for single spectral interval. We then need to include lines outside the interval.
+! Multiple segments are already optimized to include all necessary lines.
+        if (xlb.lt.xl1l.or.xlb.gt.xl2r.or.iseg.eq.0) then
+          NALLIN=NALLIN-1
+          NLINE=NLINE-1
+          NREJCT=NREJCT+1
+          GOTO 50
+        endif
+        f=10**(gfelog)
+        xlb=xlb+xlboff
 *
 * Start line calculations
 *
-      if (IEL.ne.IELP) then 
+        if (IEL.ne.IELP) then 
 *
 * Calculate abundance of molecule/atom per gram stellar matter
 *
-        symmfactor=1.e0
-        infoonly=.false.
-        if (iel.gt.nat) then
-          molindex=0
-          infoonly=.true.
-          call takemolec(1,infoonly,lele,molindex)
-          if (lele.eq.'C C                 ') then
-            if ((isotope(1).eq.12.and.isotope(2).eq.13).or.
+          symmfactor=1.e0
+          infoonly=.false.
+          if (iel.gt.nat) then
+            molindex=0
+            infoonly=.true.
+            call takemolec(1,infoonly,lele,molindex)
+            if (lele.eq.'C C                 ') then
+              if ((isotope(1).eq.12.and.isotope(2).eq.13).or.
      &          (isotope(2).eq.12.and.isotope(1).eq.13)) then
-              symmfactor=2.
-              print*,' SYMMFACTOR = 2 for 12C13C'
-            else if ((isotope(1).eq.12.and.isotope(2).eq.12).or.
+                symmfactor=2.
+                print*,' SYMMFACTOR = 2 for 12C13C'
+              else if ((isotope(1).eq.12.and.isotope(2).eq.12).or.
      &               (isotope(1).eq.13.and.isotope(2).eq.13)) then
-              symmfactor=1.
-            else if (isotope(1).eq.0.and.isotope(2).eq.0) then
-              symmfactor=1.
-            else
-              stop 'Bsyn: Problem with C2 isotopic mix!!'
-            endif
+                symmfactor=1.
+              else if (isotope(1).eq.0.and.isotope(2).eq.0) then
+                symmfactor=1.
+              else
+                stop 'Bsyn: Problem with C2 isotopic mix!!'
+              endif
 * For TiO line scattering **********************************
 cc          else if (lele.eq.'TiO                 ') then
 cc            scattfrac=1.0
@@ -867,66 +1271,66 @@ cc     &           ' counted as scattering!!!!!'
 cc              print*
 cc            endif
 * For TiO line scattering **********************************
-          endif
-          if (molindex.eq.0) then 
-            print*,'bsyn: molecular species not implemented in atomda',
-     &           lele
-            stop
-          endif
-          do k=1,ntau
-            ntot(k)=partryck(k,molindex)/boltz/t(k)/ro(k)*symmfactor
-            ntt(k)=partryck(k,molindex)/boltz/t(k)/ro(k)*symmfactor
-          enddo
-          call partffordepth(ntau,t,lele,fpartition)
-        else 
-* For K I line scattering **********************************
-          if (iel.eq.19.and.ion.eq.1) then
-            scattfrac=0.0
-            absfrac=1.0-scattfrac
-          else
-            scattfrac=0.0
-            absfrac=1.0-scattfrac
-          endif
-          if (scattfrac.gt.0.) then
-            print*, 'Element ',iel,' Ion',ion
-            print*,' WARNING!!!!! ', scattfrac,' of the line opacity',
+            endif
+            if (molindex.eq.0) then 
+              print*,'bsyn: molecular species not implemented in',
+     &               ' atomda',lele
+              stop
+            endif
+            do k=1,ntau
+              ntot(k)=partryck(k,molindex)/boltz/t(k)/ro(k)*symmfactor
+              ntt(k)=partryck(k,molindex)/boltz/t(k)/ro(k)*symmfactor
+            enddo
+            call partffordepth(ntau,t,lele,fpartition)
+          else 
+* TEST For K I line scattering **********************************
+!            if (iel.eq.19.and.ion.eq.1) then
+!              scattfrac=0.0
+!              absfrac=1.0-scattfrac
+!            else
+!              scattfrac=0.0
+!              absfrac=1.0-scattfrac
+!            endif
+* End of test K I line scattering **********************************
+            if (scattfrac.gt.0.) then
+              print*, 'Element ',iel,' Ion',ion
+              print*,' WARNING!!!!! ', scattfrac,' of the line opacity',
      &         ' counted as scattering!!!!!'
-            print*
-          endif
-* For K I line scattering **********************************
-          do k=1,ntau
-            if (presneutral(k,iel).ge.0.) then
-              ntot(k)=(presneutral(k,iel)+presion(k,iel)+
+              print*
+            endif
+            do k=1,ntau
+              if (presneutral(k,iel).ge.0.) then
+                ntot(k)=(presneutral(k,iel)+presion(k,iel)+
      &                 presion2(k,iel)+presion3(k,iel))/
      &               boltz/t(k)/ro(k)
-              if (ion.eq.1) then
-                ntt(k)=presneutral(k,iel)/boltz/t(k)/ro(k)
-              else if (ion.eq.2) then
-                ntt(k)=presion(k,iel)/boltz/t(k)/ro(k)
-              else if (ion.eq.3) then
-                ntt(k)=presion2(k,iel)/boltz/t(k)/ro(k)
-              else if (ion.eq.4) then
-                ntt(k)=presion3(k,iel)/boltz/t(k)/ro(k)
+                if (ion.eq.1) then
+                  ntt(k)=presneutral(k,iel)/boltz/t(k)/ro(k)
+                else if (ion.eq.2) then
+                  ntt(k)=presion(k,iel)/boltz/t(k)/ro(k)
+                else if (ion.eq.3) then
+                  ntt(k)=presion2(k,iel)/boltz/t(k)/ro(k)
+                else if (ion.eq.4) then
+                  ntt(k)=presion3(k,iel)/boltz/t(k)/ro(k)
+                endif
+                call partf(iel,1,t(k),1,fpartition(k),ionpot)
+                chi=ionpot
+                call partf(iel,2,t(k),1,fpartition(k),ionpot)
+                chi2=ionpot
+                call partf(iel,3,t(k),1,fpartition(k),ionpot)
+                chi3=ionpot
+                call partf(iel,ion,t(k),1,fpartition(k),ionpot)
+              else
+                if (k.eq.1) then
+                  print*,'element not present in chemical equilibrium',
+     &            ' adopted abundance: ',log10(abunp)+12.
+                endif
+                ntot(k)=abunp*abundh/mh
+                ntt(k)=-1.0
               endif
-              call partf(iel,1,t(k),1,fpartition(k),ionpot)
-              chi=ionpot
-              call partf(iel,2,t(k),1,fpartition(k),ionpot)
-              chi2=ionpot
-              call partf(iel,3,t(k),1,fpartition(k),ionpot)
-              chi3=ionpot
-              call partf(iel,ion,t(k),1,fpartition(k),ionpot)
-            else
-              if (k.eq.1) then
-                print*,'element not present in chemical equilibrium',
-     &          ' adopted abundance: ',log10(abunp)+12.
-              endif
-              ntot(k)=abunp*abundh/mh
-              ntt(k)=-1.0
-            endif
-          enddo
-        endif
+            enddo
+          endif
 
-        do k=1,ntau
+          do k=1,ntau
 
 * we do not use this anymore. It could be reactivated easily,
 * to compute tau-scales with velocity.
@@ -940,42 +1344,39 @@ cc            endif
 * xlb_vshifted=xlb*lshift, with lshift calculated here:
 
 ccc          lshift(k)=1.d0-velocity(k)/2.99792458d10
-          lshift(k)=1.d0
+            lshift(k)=1.d0
 
-          do i=1,natom
-            ntot(k)=ntot(k)*isotopfrac(atom(i),isotope(i))
-            ntt(k)=ntt(k)*isotopfrac(atom(i),isotope(i))
-            if (ntot(k).eq.0.) then
-              print*,'Bsyn. WARNING!, ntot=0 for species: ',lele
-              print*,'atom=',atom(i),' isotope=',isotope(i)
-              print*,'isotopfrac =',isotopfrac(atom(i),isotope(i))
-            endif
+            do i=1,natom
+              ntot(k)=ntot(k)*isotopfrac(atom(i),isotope(i))
+              ntt(k)=ntt(k)*isotopfrac(atom(i),isotope(i))
+              if (ntot(k).eq.0.) then
+                print*,'Bsyn. WARNING!, ntot=0 for species: ',lele
+                print*,'atom=',atom(i),' isotope=',isotope(i)
+                print*,'isotopfrac =',isotopfrac(atom(i),isotope(i))
+              endif
+            enddo
           enddo
-***          ntot(k)=max(ntot(k),1.e-30)
-        enddo
  
-      endif
+        endif
 *
 * Print line information
 *
-ccc      IF(IP.GE.1) WRITE(7,990)IEL,ION,NMY,FDAMP,IINT,IMY,MAM,ABUL,
-ccc     &                       CHI,XITE
-      CHIU=CHIE+3.40*3647./XLB
-      if (iel.le.nat) then
-        XIONP=CHI
-        IF(ION.EQ.2) XIONP=CHI2
-        IF(ION.EQ.3) XIONP=CHI3
-        IF(ION.GT.3) THEN
-         PRINT *,'***************************************************'
-         PRINT *,'Error in BSYN, ION.GT.3 which has not been foreseen'
-         PRINT *,'***************************************************'
-         STOP '***** BSYN *****'
-        END IF
-      endif
+        CHIU=CHIE+3.40*3647./XLB
+        if (iel.le.nat) then
+          XIONP=CHI
+          IF(ION.EQ.2) XIONP=CHI2
+          IF(ION.EQ.3) XIONP=CHI3
+          IF(ION.GT.3) THEN
+           PRINT *,'***************************************************'
+           PRINT *,'Error in BSYN, ION.GT.3 which has not been foreseen'
+           PRINT *,'***************************************************'
+           STOP '***** BSYN *****'
+          END IF
+        endif
 *
 * Calculate damping parameters
 *
-      if (fdamp.ge.20.) then
+        if (fdamp.ge.20.) then
 *
 * BPz 02/06-2014
 * 1) use ABO theory (Anstee, Barklem, O'Mara) for collisional damping with H,
@@ -987,23 +1388,23 @@ ccc     &                       CHI,XITE
 * 3) if (2) not available, check in linelist for a gamma6 at 10000K
 * 4) if nothing else worked, comput Unsoeld approximation.
 *
-        sigmacross=int(fdamp)
-        velexp=fdamp-int(fdamp)
-        recipe='S'
+          sigmacross=int(fdamp)
+          velexp=fdamp-int(fdamp)
+          recipe='S'
 *
-      else IF (FDAMP.GT.0..and.fdamp.lt.20.) THEN
+        else if (FDAMP.GT.0..and.fdamp.lt.20.) THEN
 * We may use Unsoeld theory with fudge factor fdamp, and prepare for it.
         XXXXX=ION**2*(1./(XIONP-CHIU)**2-1./(XIONP-CHIE)**2)
-      END IF
+        end if
 
-      if (RADDMP.NE.0.) then
-*       Use radiative damping data in line list if available
-        GAMRAD=RADDMP
-      else
-*       default recipe for radiative damping
-        GAMRAD=6.669E15*G*F/(GU*XLB**2)
-      endif
-      XL=XLB*1.D-8
+        if (RADDMP.NE.0.) then
+*         Use radiative damping data in line list if available
+          GAMRAD=RADDMP
+        else
+*         default recipe for radiative damping
+          GAMRAD=6.669E15*G*F/(GU*XLB**2)
+        endif
+        XL=XLB*1.D-8
 *
 * check whether there are quantum mechanical damping data for this line
 *  (atoms only)
@@ -1011,55 +1412,54 @@ ccc     &                       CHI,XITE
 * may be set in anstee.f
 * we should not use the Unsoeld recipe for collisional broadening of molecular lines!
 *
-      if (iel.le.nat) then
-        xlbr=xlb
-        idamp=2
-        if (fdamp.lt.20.) then
+        if (iel.le.nat) then
+          xlbr=xlb
+          idamp=2
+          if (fdamp.lt.20.) then
 *
 * We call anstee only if we don't have quantum mechanical collisional data
 * in the line list
 *
-          call anstee(iel,ion,xlbr,chie,xionp,sigmacross,velexp,levlo,
+            call anstee(iel,ion,xlbr,chie,xionp,sigmacross,velexp,levlo,
      &              levup,recipe)
-        endif
-        if (recipe.eq.'U') then
+          endif
+          if (recipe.eq.'U') then
 * if the transition collisional broadening is not handled by anstee.f (e.g. 
 * for x ->x transitions), we have recipe='U' (Unsoeld approximation)
 * However we may have gamma van der Waals data in the line list, which we then use
 
-          if (fdamp.lt.0.) then
+            if (fdamp.lt.0.) then
 * fdamp contains log(gammavdW at 10000K) instead of the fudge factor for Unsoeld 
 * recipe. BPz 08/04-2013
 
-            recipe='W'
-          else if (xxxxx.le.0.) then
+              recipe='W'
+            else if (xxxxx.le.0.) then
 * skip the line
-            ibadc6=ibadc6+1
-            NALLIN=NALLIN-1
-            NLINE=NLINE-1
-            NREJCT=NREJCT+1
-            goto 50
-          else
+              ibadc6=ibadc6+1
+              NALLIN=NALLIN-1
+              NLINE=NLINE-1
+              NREJCT=NREJCT+1
+              goto 50
+            else
 * Unsoeld approximation
-            ALOGC6=ALOG10(XXXXX)-29.7278
+              ALOGC6=ALOG10(XXXXX)-29.7278
+            endif
           endif
-        endif
-      else
-        idamp=2
+        else
+          idamp=2
 ccc        recipe='U'
 ccc        recipe='T'
-        recipe='R'
+          recipe='R'
 * we cannot use Unsoeld recipe for molecules !
 * 'R' is for pure radiative damping
-      endif
+        endif
 *
 * Calculate occupation numbers
 *
-   54 CONTINUE
-      CALL DEPTH(IEL)
-      IELP=IEL
-      IONP=ION
-cc      IF(IP.GE.1) WRITE(7,230)
+   54   CONTINUE
+        CALL DEPTH(IEL)
+        IELP=IEL
+        IONP=ION
 cc      DBVK=XL*1.E-05
 cc      DO 6 JJ=1,NTAU,10
 cc        DBV=DBVK*DNUD(JJ)
@@ -1074,190 +1474,248 @@ cc      DLAMB0=DOPPLC*DNUD(JLEV0)*XL**2/C
 *
 * Constants
 *
-      CALF=constant*F
+        CALF=constant*F
 *
-cc      IF(FDAMP.GT.0..AND.IP.GE.1) WRITE(7,267) GAMRAD,ALOGC6
-cc      IF(IP.GE.1) WRITE(7,265) LELE,ABUL,ABUND,NTAU
-      do 111 j=1,ntau
-       plez(j)=n(j)*stim(j)/dnud(j)/ross(j)
-       xlb_vshifted(j)=xlb*lshift(j)
-111   continue
+        do 111 j=1,ntau
+          if (nlte) then
+            plez(j)=n(j)*b_departure(j,ilevlo)*
+     &           (1.+ (stim(j)-1.)*
+     &              b_departure(j,ilevup)/b_departure(j,ilevlo))/
+     &            dnud(j)/ross(j)
+            emissivity(j)=n(j)*stim(j)/dnud(j)/ross(j)*
+     &                 b_departure(j,ilevup)
+          else
+            plez(j)=n(j)*stim(j)/dnud(j)/ross(j)
+          endif
+          xlb_vshifted(j)=xlb*lshift(j)
+111     continue
 *
 * Start wavelength loop for this line
 *
 ccc      print*,xlb
-      zap=(xlb-xl1)/del
-      IF (zap.le.0.) THEN
+        zap=(xlb-xlambda(lstart))/del
+        IF (zap.le.0.) THEN
+!
 * treatment of the lines lying between xl1l and xl1
-       do k=1,ntau
-          contop(k)=absocont(k,1)
-       enddo 
-       do 222 i=1,maxlam
-         xkmax=0.
-         do 333 j=1,ntau
-          vt=(xlambda(i)-xlb_vshifted(j))*1.d-8
-          vt=c*vt/xl**2
-           v=vt/dnud(j)
+* This happens only if we have a single spectral interval
+!
+        do k=1,ntau
+          contop(k)=absocont(k,lstart)
+        enddo 
+        do 222 i=lstart,lstop
+          xlsingle=sngl(xlambda(i))
+          xkmax=0.
+          do 333 j=1,ntau
+            vt=(xlambda(i)-xlb_vshifted(j))*1.d-8
+            vt=c*vt/xl**2
+            v=vt/dnud(j)
 cc           CALL VOIGT(A(j),V,HVOIGT)
-           hvoigt=newvoigt(a(j),v)
-           l=calf*hvoigt*plez(j)
-           ABSO(j,i)=ABSO(j,i)+l*absfrac
-           ABSOS(j,i)=ABSOS(j,i)+l*scattfrac
+            hvoigt=newvoigt(a(j),v)
+            l=calf*hvoigt*plez(j)
+*
+* NLTE
+            if (nlte) then
+* source_function is emissivity here (normalised by standard opacity, i.e. ross()). 
+* It still needs to be divided by absorption (i.e. by abso(), which is also normalised by std op)
+              source_function(j,i)=source_function(j,i)+
+     &            emissivity(j)*bpl(T(j),xlsingle)*calf*hvoigt
+            endif
+* end of NLTE
+*
+            ABSO(j,i)=ABSO(j,i)+l*absfrac
+            ABSOS(j,i)=ABSOS(j,i)+l*scattfrac
 * we compare the line absorption to the continuum x at the rightmost
 * lambda of the interval to set the limit of inclusion of this line 
 * kappa. We take this continuum x just for convenience.
-           xkmax=max(xkmax,l/contop(j))
-333      continue
-         if (xkmax.lt.eps) goto 255
-222    continue
+            xkmax=max(xkmax,l/contop(j))
+333       continue
+          if (xkmax.lt.eps) goto 255
+222     continue
 *
-      ELSE
+        ELSE
 *
 * now lines lying in the [xl1,xl2] interval
 * lindex in xlambda of the closest wavelength > to the wavelength of 
 * the line
-      lindex=int(zap)+2
-      lindex=min(maxlam+1,lindex)
-      do k=1,ntau
-         contop(k)=absocont(k,min(maxlam,lindex))
-      enddo 
-      iii=0
-      do 2 i=lindex,maxlam
-       xkmax=0.
-       iii=iii+1
-       do 3 j=1,ntau
-        vt=(xlambda(i)-xlb_vshifted(j))*1.d-8
-        vt=c*vt/xl**2
-        v=vt/dnud(j)
-cc        CALL VOIGT(A(j),V,HVOIGT)
-        hvoigt=newvoigt(a(j),v)
-        l=calf*hvoigt*plez(j)
-        ABSO(j,i)=ABSO(j,i)+l*absfrac
-        ABSOS(j,i)=ABSOS(j,i)+l*scattfrac
-        xkmax=max(xkmax,l/contop(j))
+        lindex=lstart+int(zap)+1
+        lindex=min(lstop,lindex)
+        do k=1,ntau
+           contop(k)=absocont(k,min(lstop,lindex))
+        enddo 
+        iii=0
+        do 2 i=lindex,lstop
+          xlsingle=sngl(xlambda(i))
+          xkmax=0.
+          iii=iii+1
+          do 3 j=1,ntau
+            vt=(xlambda(i)-xlb_vshifted(j))*1.d-8
+            vt=c*vt/xl**2
+            v=vt/dnud(j)
+cc          CALL VOIGT(A(j),V,HVOIGT)
+            hvoigt=newvoigt(a(j),v)
+            l=calf*hvoigt*plez(j)
 *
-ccc        if(iprint.eq.1.and.j.eq.1) then
-ccc         print*,xlambda(i),hvoigt,xkmax,a(1),v
-ccc        endif
+* NLTE
+            if (nlte) then
+* source_function is emissivity here. It still needs to be divided by absorption
+              source_function(j,i)=source_function(j,i)+
+     &            emissivity(j)*bpl(T(j),xlsingle)*calf*hvoigt
+            endif
+* end of NLTE
 *
-3      continue
-       if (xkmax.lt.eps) goto 15
-2     continue
+            ABSO(j,i)=ABSO(j,i)+l*absfrac
+            ABSOS(j,i)=ABSOS(j,i)+l*scattfrac
+            xkmax=max(xkmax,l/contop(j))
+*
+ccc         if(iprint.eq.1.and.j.eq.1) then
+ccc          print*,xlambda(i),hvoigt,xkmax,a(1),v
+ccc         endif
+*
+3         continue
+          if (xkmax.lt.eps) goto 15
+2       continue
 * we get out without being under eps. 2possibilities:
 * 1) the line lies towards the end of the wavelength array
 * 2) the line encompasses the whole array
-      do 422 i=lindex-1,1,-1
-       xkmax=0.
-       do 433 j=1,ntau
-        vt=(xlb_vshifted(j)-xlambda(i))*1.d-8
-        vt=c*vt/xl**2
-        v=vt/dnud(j)
-cc        CALL VOIGT(A(j),V,HVOIGT)
-        hvoigt=newvoigt(a(j),v)
-        l=calf*hvoigt*plez(j)
-        ABSO(j,i)=ABSO(j,i)+l*absfrac
-        ABSOS(j,i)=ABSOS(j,i)+l*scattfrac
-        xkmax=max(xkmax,l/contop(j))
+        do 422 i=lindex-1,lstart,-1
+          xlsingle=sngl(xlambda(i))
+          xkmax=0.
+          do 433 j=1,ntau
+            vt=(xlb_vshifted(j)-xlambda(i))*1.d-8
+            vt=c*vt/xl**2
+            v=vt/dnud(j)
+cc          CALL VOIGT(A(j),V,HVOIGT)
+            hvoigt=newvoigt(a(j),v)
+            l=calf*hvoigt*plez(j)
 *
-ccc        if(iprint.eq.1.and.j.eq.1) then
-ccc         print*,xlambda(i),hvoigt,xkmax,a(1),v
-ccc        endif
+* NLTE
+            if (nlte) then
+* source_function is emissivity here. It still needs to be divided by absorption
+              source_function(j,i)=source_function(j,i)+
+     &           emissivity(j)*bpl(T(j),xlsingle)*calf*hvoigt
+            endif
+* end of NLTE
 *
-433    continue
-       if (xkmax.lt.eps) goto 255
-422   continue
-      goto 255
+            ABSO(j,i)=ABSO(j,i)+l*absfrac
+            ABSOS(j,i)=ABSOS(j,i)+l*scattfrac
+            xkmax=max(xkmax,l/contop(j))
+*
+ccc         if(iprint.eq.1.and.j.eq.1) then
+ccc          print*,xlambda(i),hvoigt,xkmax,a(1),v
+ccc         endif
+*
+433       continue
+          if (xkmax.lt.eps) goto 255
+422     continue
+        goto 255
 * here is the normal continuation
-15    CONTINUE
+15      CONTINUE
 * and now the other side of the profile
 *
 ********************** check n(contributing lines) ******************
 *
-      if (iii.gt.1) iatouca=iatouca+1
+        if (iii.gt.1) numberoflines=numberoflines+1
 *
 *********************************************************************
-      istart=max(1,lindex-iii-2)
+        istart=max(lstart,lindex-iii-2)
 ccc      print*,istart,lindex-1
-      do 22 i=istart,lindex-1
-       do 33 j=1,ntau
-        vt=(xlb_vshifted(j)-xlambda(i))*1.d-8
-        vt=c*vt/xl**2
-        v=vt/dnud(j)
-cc        CALL VOIGT(A(j),V,HVOIGT)
-        hvoigt=newvoigt(a(j),v)
-        l=calf*hvoigt*plez(j)
-        ABSO(j,i)=ABSO(j,i)+l*absfrac
-        ABSOS(j,i)=ABSOS(j,i)+l*scattfrac
+        do 22 i=istart,lindex-1
+          xlsingle=sngl(xlambda(i))
+          do 33 j=1,ntau
+           vt=(xlb_vshifted(j)-xlambda(i))*1.d-8
+           vt=c*vt/xl**2
+           v=vt/dnud(j)
+cc         CALL VOIGT(A(j),V,HVOIGT)
+           hvoigt=newvoigt(a(j),v)
+           l=calf*hvoigt*plez(j)
 *
-ccc        if(iprint.eq.1.and.j.eq.1) then
-ccc         print*,xlambda(i),hvoigt,xkmax,a(1),v
-ccc        endif
+* NLTE
+           if (nlte) then
+* source_function is emissivity here. It still needs to be divided by absorption
+             source_function(j,i)=source_function(j,i)+
+     &            emissivity(j)*bpl(T(j),xlsingle)*calf*hvoigt
+           endif
+* end of NLTE
 *
-33     continue
-22    continue
+           ABSO(j,i)=ABSO(j,i)+l*absfrac
+           ABSOS(j,i)=ABSOS(j,i)+l*scattfrac
 *
-      ENDIF
+33        continue
+22      continue
 *
-255   continue
+        ENDIF
+*
+255     continue
 *
 * End of line calculation
 *
-      ILINE=ILINE+1
+        ILINE=ILINE+1
 *
-      iannonce=mod(iline,30000)
-      if (iannonce.eq.0) then
-        call clock
-        print*,iline,' lines done'
-      endif
-      GOTO 64
+        iannonce=mod(iline,30000)
+        if (iannonce.eq.0) then
+          call clock
+          print*,iline,' lines done'
+        endif
+        GOTO 64
 *
 * End model loop
 *
 * end of line lists loop
 ******************************************************
 *
-      print*,'nombre de raies contribuant (environ) : ',iatouca,
-     &       ' n. total : ', iline
+        print*,'Approximate number of lines included in synthesis: ',
+     &        numberoflines
+        print*,' Total number of lines read: ', iline
 *
 ******************************************************
-9874  close(lunit)
-98    continue
+9874    close(lunit)
+      enddo
 * 
       WRITE(6,214) NREJCT,XL1L,XL2R,XLM
  214  FORMAT(1X,I8,' LINES WERE REJECTED, ONLY LINES BETWEEN',F10.3,
      &       ' AND',F10.3,' A CONSIDERED',/,'  CENTRAL WAVELENGTH=',
      &       F10.3,' A')
 *
+* NLTE
+* 
+      if (nlte) then
+* compute source function for lines
+        do j=1,maxlam
+          xlsingle=sngl(xlambda(j))
+          do k=1,ntau
+***********
+!            if (source_function(k,j)/abso(k,j)/bpl(T(k),xlsingle)-1.0
+!     &         .gt.0.01) then
+!              print*,'S and B differ (1%) ',xlsingle,k,
+!     &                source_function(k,j)/abso(k,j),
+!     &                bpl(T(k),xlsingle)
+!            endif
+***********
+*
+* now source function is the source function for the lines
+*
+!            write(61,*) xlsingle,k,source_function(k,j),abso(k,j)
+            if (abso(k,j).gt.0.0) then
+              source_function(k,j)=source_function(k,j)/abso(k,j)
+            else
+              source_function(k,j)=0.0
+            endif
+*
+          enddo
+        enddo
+      endif
+*
+* end of NLTE
+*
       call clock
       print*, 'now solve'
       print*,nallin,' lines in the interval'
-ccc      print*,icount1,' slow voigt',icount2,' nordlund',
-ccc     & icount3,' quick',
-ccc     &   icount4,' look-up table'
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-c        print*,'CHECK kappa !!'
-c        do j=1,maxlam
-c          if (abs(xlambda(j)-5240.41d0).lt.1.d-4.or.
-c     &        abs(xlambda(j)-5242.49d0).lt.1.d-4.or.
-c     &        abs(xlambda(j)-5241.62d0).lt.1.d-4)  then
-c            print*,'lambda=',xlambda(j)
-c            print*,'  K  log(chi) log(kappa) log(sigma)'
-c            do k=1,ntau
-c              print*,k,T(k),log10(ro(k)),
-c     &          log10((abso(k,j)+absos(k,j))*ross(k)),
-c     &          log10(abso(k,j)*ross(k)),
-c     &          log10(absos(k,j)*ross(k))
-c            enddo
-c          endif
-c        enddo
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+*
       if (.not.multidump) then
         if (spherical) then
-          CALL BSYNB(NALLIN)
+          call bsynb(nangles,muoutp)
         else
-          CALL BSYNBplatt(NALLIN)
+          call bsynbplatt(nangles,muoutp)
         endif
       else
 * dump opacities for MULTI input. 20 juin 1994.
@@ -1290,16 +1748,21 @@ c        enddo
           filprint=linefil(i)
           write(46) '''* ',filprint(1:index(filprint,' ')),''''
         enddo
-        write(46) (ieliel,log10(absave(ieliel))+12.,ieliel=1,60),
-     &              (ieliel,log10(absave(ieliel))+12.,ieliel=62,83)
+! BPz 2022-09-27 : why not all abundances?
+!
+!        write(46) (ieliel,log10(absave(ieliel))+12.,ieliel=1,60),
+!     &              (ieliel,log10(absave(ieliel))+12.,ieliel=62,83)
+
+        write(46) (ieliel,log10(abund(ieliel))+12.,ieliel=1,92)
+
         write(46) ntau,maxlam,xl1,xl2,del
         write(46) xls
         write(46) (tau(k),k=1,ntau),(xi(k),k=1,ntau)
         write(46) ((absocont(k,j)*ross(k),k=1,ntau),j=1,maxlam)
-        write(46) (((abso(k,j)-absocont(k,j))*ross(k),k=1,ntau),
-     &                                                  j=1,maxlam)
+        write(46) ((abso(k,j)*ross(k),k=1,ntau),j=1,maxlam)
         write(46) ((absos(k,j)*ross(k),k=1,ntau),j=1,maxlam)
       endif
+      close(46)
 *
 *
   100 FORMAT(4X,I1,6X,I3)
@@ -1335,6 +1798,6 @@ c        enddo
   990 FORMAT(' INPUT PARAMETERS:'/' IEL=',I3,
      & ' ION=',I1,' NMY=',I1,' FDAMP=',F3.1,' IINT=',I1,
      & ' IMY=',I1,' MA=',F6.2,' ABUND=',F4.2,' CHI=',F5.2,' XITE=',
-     & 1PE8.2)
+     & 1PE9.2)
 *
       END

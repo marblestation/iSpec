@@ -9,7 +9,7 @@ c
       integer mtemp
       real temp(mtemp),u(mtemp)
 C
-      real SUM(MTEMP),Q(MTEMP),QS(MTEMP),G(5000),O(3),OA(3),OB(3),
+      real Q(MTEMP),QS(MTEMP),G(5000),O(3),OA(3),OB(3),
      &     AC(3),AA(3),AB(3)
 C
 

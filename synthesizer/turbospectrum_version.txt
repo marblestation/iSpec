@@ -1,1 +1,5 @@
-v19.1
+https://github.com/bertrandplez/Turbospectrum_NLTE
+Commit: 9fbc39112d7d5a9136952a99d9ce2612cf1dbf7c
+From: May 12, 2025
+Mixed with: eqwidtb.f, eqwidtbplatt.f, and eqwidt.f from Turbospectrum v19.1 (https://github.com/bertrandplez/Turbospectrum2019)
+

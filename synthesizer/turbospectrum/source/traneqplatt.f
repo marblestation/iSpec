@@ -39,11 +39,16 @@
       COMMON/TAUC/ TAU(ndp),DTAULN(ndp),JTAU
       COMMON /CTRAN/X(NDP),S(NDP),BPLAN(NDP),XJ(NDP),xh(NDP),XK(NDP),
      & fillup(4*ndp+3)
-      COMMON/SPACE2/ SOURCE(ndp),ERROR(ndp),DUM(3*ndp),P(ndp),
+      COMMON/SPACE3/ SOURCE(ndp),ERROR(ndp),DUM(3*ndp),P(ndp),
      &               SP1(ndp,nrays),SP2(ndp,nrays),SP3(ndp,nrays),
      &               AN(ndp),AD(ndp),BD(ndp),FACT(ndp),DSO(ndp),
      &               tomatch(4*nrays*ndp-ndp+3*nrays+1)
-*
+!
+! special NLTE
+!
+      logical nlte
+      common /nlte_common/ nlte
+!
       PARAMETER (ITMAX=15)
       DIMENSION A(ITMAX)
 
@@ -104,6 +109,7 @@
 *
         DO 130 K=1,JTAU
           A(IT)=AMAX1(A(IT),ABS(ERROR(K)/SOURCE(K)))
+!          print*,'error traneqplatt ',xlsingle,it, a(it)
   130   CONTINUE
         IF(A(IT).LT.0.0001) GOTO 141
 *
