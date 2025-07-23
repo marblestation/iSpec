@@ -20,14 +20,14 @@ double start,end;
   double gammar,gammas,gammaw,gam; 
   char T[5];
   char tmp[10];
-  char buffer[120];
+  char buffer[200];
   int iso = 0;
   double relabund = 1.0;
   extern int flagI;
   extern int flagSq;
-  extern char buf2[120];
+  extern char buf2[200];
 
-  if(fgets(buffer,100,qf) == NULL) return(0);
+  if(fgets(buffer,200,qf) == NULL) return(0);
   if(buffer[0] == '#') return(3);
 
   strcpy(buf2,buffer);

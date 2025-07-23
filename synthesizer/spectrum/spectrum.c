@@ -186,8 +186,8 @@ int main(int argc, char *argv[])
   bkap4 = cmatrix(0,3,0,NTAU);
   if(flagN != 1) {
     printf("\nSPECTRUM, a Stellar Spectral Synthesis Program"); 
-    printf("\n(C) Richard O. Gray 1992 - 2018 Version 2.77");
-    printf("\nFeb 25, 2018");
+    printf("\n(C) Richard O. Gray 1992 - 2021 Version 2.77c");
+    printf("\nJuly 22, 2021");
     if(flagi == 1) printf("\nIntegrated Disk mode (normalized Intensity)\n\n");
     if(flagf == 1) printf("\nAbsolute Flux Mode (Integrated Disk)\n\n");
     if(flagM == 1) printf("\nSpecific Intensity Mode\n\n");
