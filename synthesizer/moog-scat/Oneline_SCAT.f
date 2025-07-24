@@ -64,7 +64,8 @@ c         d(1) = rinteg(xref,cd,dummy1,ntau,first)
          d_lc = adepth                                                  | Depth at Line Center                    
          do k=1,30
             if (k .eq. 30) then
-               write (*,1010) wave
+               !write (*,1010) wave !SBC
+               write (*,1010) wave1(lim1) !SBC: print the actual wavelength of the failed line so that it is easily identifiable
                stop
             endif
             wave = wave1(lim1) + 5.*st1                                 | Wavelength Step 
