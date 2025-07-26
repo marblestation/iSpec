@@ -34,6 +34,9 @@ from .common import Constants, _filter_linemasks_not_in_segments, _create_compar
 from ispec.synth.spectrum import _create_waveobs_mask
 from ispec.synth.common import generate_fundamental_spectrum
 from ispec.synth.grid import load_spectral_grid, valid_interpolated_spectrum_target
+from ispec.segments import merge_overlapping_regions
+
+PARINFO_BASE = 10
 
 class SynthModel(MPFitModel):
     """
@@ -160,11 +163,11 @@ class SynthModel(MPFitModel):
         self.cache = {}
         p = [teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, R ]
         #
-        self.abundances_file = None
+        self.abundances_files = []
         self.linelist_file = None
         self.isotope_file = None
         self.molecules_files = None
-        self.atmosphere_layers_file = None
+        self.atmosphere_layers_files = []
         super(SynthModel, self).__init__(p)
 
     def _model_function(self, x, p=None):
@@ -174,137 +177,149 @@ class SynthModel(MPFitModel):
             for i in range(len(p)):
                 self._parinfo[i]['value'] = p[i]
 
-        key = "%.0f %.2f %.2f %.2f %.2f " % (self.teff(), self.logg(), self.MH(), self.alpha(), self.vmic())
-        complete_key = "%.0f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %i" % (self.teff(), self.logg(), self.MH(), self.alpha(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
+        self.last_final_fluxes = [None] * self.n_stellar_components
+        for component in range(self.n_stellar_components):
+            key = "%.0f %.2f %.2f %.2f %.2f " % (self.teff(component=component), self.logg(component=component), self.MH(component=component), self.alpha(component=component), self.vmic(component=component))
+            complete_key = "%.0f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %i %.2f" % (self.teff(component=component), self.logg(component=component), self.MH(component=component), self.alpha(component=component), self.vmic(component=component), self.vmac(component=component), self.vsini(component=component), self.limb_darkening_coeff(component=component), int(self.R(component=component)), self.lf(component=component))
 
-        # Consider new loggf
-        linelist_free_loggf = self.generate_linelist_free_loggf()
+            # Consider new loggf
+            linelist_free_loggf = self.generate_linelist_free_loggf(component=component)
 
-        loggf_key = " ".join(["%.3f" % (x) for x in linelist_free_loggf['loggf']])
-        complete_key += " loggf [" + loggf_key + "]"
-        key += loggf_key
+            loggf_key = " ".join(["%.3f" % (x) for x in linelist_free_loggf['loggf']])
+            complete_key += " loggf [" + loggf_key + "]"
+            key += loggf_key
 
-        if len(linelist_free_loggf) > 0:
-            linelist = np.hstack((self.linelist, linelist_free_loggf))
-            linelist.sort(order=['wave_nm'])
-        else:
-            linelist = self.linelist
-
-        # Consider new abundances as fixed
-        fixed_abundances = self.free_abundances()
-
-        abundances_key = " ".join(["%.2f" % (x) for x in fixed_abundances['Abund']])
-        complete_key += " abund [" + abundances_key + "]"
-        key += abundances_key
-
-        # vrad
-        vrad = self.vrad()
-        vrad_key = " ".join(["%.2f" % (x) for x in vrad])
-        complete_key += " vrad [" + vrad_key + "]"
-
-        ##### [start] Check precomputed (solar abundance)
-        filename = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.alpha(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff())
-        fundamental_filename = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}.fits.gz".format(int(self.teff()), self.logg(), self.MH(), self.alpha(), self.vmic(), 0., 0., 0.)
-        precomputed_file = os.path.join(str(self.precomputed_grid_dir), "grid", filename)
-        precomputed_step_file = os.path.join(str(self.precomputed_grid_dir), "steps", filename)
-        fundamental_precomputed_file = os.path.join(str(self.precomputed_grid_dir), "grid", fundamental_filename)
-        fundamental_precomputed_step_file = os.path.join(str(self.precomputed_grid_dir), "steps", fundamental_filename)
-        if self.precomputed_grid_dir is not None and abundances_key == "" and (os.path.exists(precomputed_file) or os.path.exists(precomputed_step_file)):
-            if not self.quiet:
-                print("Pre-computed:", complete_key)
-            if os.path.exists(precomputed_file):
-                precomputed = read_spectrum(precomputed_file)
+            if len(linelist_free_loggf) > 0:
+                linelist = np.hstack((self.linelist, linelist_free_loggf))
+                linelist.sort(order=['wave_nm'])
             else:
-                precomputed = read_spectrum(precomputed_step_file)
-            convolved_precomputed = convolve_spectrum(precomputed, self.R())
+                linelist = self.linelist
 
-            convolved_precomputed = resample_spectrum(convolved_precomputed, self.waveobs, method="linear", zero_edges=True)
-            convolved_precomputed['flux'][self.waveobs_mask == 0] = 1.
-            self.last_fluxes = convolved_precomputed['flux'].copy()
-            self.last_final_fluxes = convolved_precomputed['flux'].copy()
+            # Consider new abundances as fixed
+            fixed_abundances = self.free_abundances(component=component)
 
-        elif self.precomputed_grid_dir is not None and abundances_key == "" and (os.path.exists(fundamental_precomputed_file) or os.path.exists(fundamental_precomputed_step_file)):
-            if not self.quiet:
-                print("Pre-computed (fundamental):", complete_key)
-            if os.path.exists(fundamental_precomputed_file):
-                fundamental_precomputed = read_spectrum(fundamental_precomputed_file)
-            else:
-                fundamental_precomputed = read_spectrum(fundamental_precomputed_step_file)
-            fundamental_precomputed = resample_spectrum(fundamental_precomputed, self.waveobs, method="linear", zero_edges=True)
-            fundamental_precomputed['flux'][self.waveobs_mask == 0] = 1.
-            self.last_fluxes = fundamental_precomputed['flux']
-            # Optimization to avoid too small changes in parameters or repetition
-            self.cache[key] = self.last_fluxes.copy()
-            self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, self.segments, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), vrad=self.vrad(), verbose=0)
-            self.last_final_fluxes[self.waveobs_mask == 0] = 1.
-        else:
-            if key in self.cache:
+            abundances_key = " ".join(["%.2f" % (x) for x in fixed_abundances['Abund']])
+            complete_key += " abund [" + abundances_key + "]"
+            key += abundances_key
+
+            # vrad
+            vrad = self.vrad(component=component)
+            if np.all(vrad[0] == vrad):
+                # When fitting a spectroscopic binary, the second component has a fixed vrad for all segments, simplify by showing just one value
+                vrad = np.unique(vrad)
+            vrad_key = " ".join(["%.2f" % (x) for x in vrad])
+            complete_key += " vrad [" + vrad_key + "]"
+
+            ##### [start] Check precomputed (solar abundance)
+            filename = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}.fits.gz".format(int(self.teff(component=component)), self.logg(component=component), self.MH(component=component), self.alpha(component=component), self.vmic(component=component), self.vmac(component=component), self.vsini(component=component), self.limb_darkening_coeff(component=component))
+            fundamental_filename = "{0}_{1:.2f}_{2:.2f}_{3:.2f}_{4:.2f}_{5:.2f}_{6:.2f}_{7:.2f}.fits.gz".format(int(self.teff(component=component)), self.logg(component=component), self.MH(component=component), self.alpha(component=component), self.vmic(component=component), 0., 0., 0.)
+            precomputed_file = os.path.join(str(self.precomputed_grid_dir), "grid", filename)
+            precomputed_step_file = os.path.join(str(self.precomputed_grid_dir), "steps", filename)
+            fundamental_precomputed_file = os.path.join(str(self.precomputed_grid_dir), "grid", fundamental_filename)
+            fundamental_precomputed_step_file = os.path.join(str(self.precomputed_grid_dir), "steps", fundamental_filename)
+            if self.precomputed_grid_dir is not None and abundances_key == "" and (os.path.exists(precomputed_file) or os.path.exists(precomputed_step_file)):
                 if not self.quiet:
-                    print("Cache:", complete_key)
-                self.last_fluxes = self.cache[key].copy()
-            else:
-                if not self.quiet:
-                    print("Generating:", complete_key)
-
-                if self.code != "grid":
-
-                    # Atmosphere
-                    atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, {'teff':self.teff(), 'logg':self.logg(), 'MH':self.MH(), 'alpha':self.alpha()}, code=self.code)
-                    # Fundamental synthetic fluxes
-                    if self.code == "turbospectrum":
-                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, use_molecules=self.use_molecules, tmp_dir=self.tmp_dir, timeout=self.timeout)
-                    elif self.code in ("moog", "moog-scat"):
-                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
-                    elif self.code == "synthe":
-                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(), atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, molecules_files=self.molecules_files, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
-                    elif self.code == "sme":
-                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(), regions=self.segments, verbose=0, code=self.code, timeout=self.timeout)
-                        ## Do not abort failed synthesis, the minimization algorithm will just consider this point as a bad one
-                        #if np.all(self.last_fluxes == 0):
-                            #raise Exception("SME has failed.")
-                    elif self.code == "spectrum":
-                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(),  atmosphere_layers_file=self.atmosphere_layers_file, abundances_file=self.abundances_file, linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
-
-                        ## Do not abort failed synthesis, the minimization algorithm will just consider this point as a bad one
-                        #if np.all(self.last_fluxes == 0):
-                            #raise Exception("SPECTRUM has failed.")
-                    else:
-                        raise Exception("Unknown code: %s" % (self.code))
+                    print("Pre-computed:", complete_key)
+                if os.path.exists(precomputed_file):
+                    precomputed = read_spectrum(precomputed_file)
                 else:
-                    atmosphere_layers = None
-                    linelist = None
-                    abundances = None
-                    fixed_abundances = None
-                    self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(), self.logg(), self.MH(), self.alpha(), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(), code=self.code, grid=self.grid, regions=self.segments)
+                    precomputed = read_spectrum(precomputed_step_file)
+                convolved_precomputed = convolve_spectrum(precomputed, self.R(component=component))
 
+                convolved_precomputed = resample_spectrum(convolved_precomputed, self.waveobs, method="linear", zero_edges=True)
+                convolved_precomputed['flux'][self.waveobs_mask == 0] = 1.
+                self.last_fluxes = convolved_precomputed['flux'].copy()
+                self.last_final_fluxes[component] = convolved_precomputed['flux'].copy()
+
+            elif self.precomputed_grid_dir is not None and abundances_key == "" and (os.path.exists(fundamental_precomputed_file) or os.path.exists(fundamental_precomputed_step_file)):
+                if not self.quiet:
+                    print("Pre-computed (fundamental):", complete_key)
+                if os.path.exists(fundamental_precomputed_file):
+                    fundamental_precomputed = read_spectrum(fundamental_precomputed_file)
+                else:
+                    fundamental_precomputed = read_spectrum(fundamental_precomputed_step_file)
+                fundamental_precomputed = resample_spectrum(fundamental_precomputed, self.waveobs, method="linear", zero_edges=True)
+                fundamental_precomputed['flux'][self.waveobs_mask == 0] = 1.
+                self.last_fluxes = fundamental_precomputed['flux']
                 # Optimization to avoid too small changes in parameters or repetition
                 self.cache[key] = self.last_fluxes.copy()
-
-            if not np.all(self.last_fluxes == 0):
-                # If synthesis did not fail
-                self.last_final_fluxes = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, self.segments, macroturbulence=self.vmac(), vsini=self.vsini(), limb_darkening_coeff=self.limb_darkening_coeff(), R=self.R(), vrad=self.vrad(), verbose=0)
-
-                if self.normalize_func is not None:
-                    self.last_final_fluxes = self.normalize_func(create_spectrum_structure(self.waveobs, self.last_final_fluxes))['flux']
+                self.last_final_fluxes[component] = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, self.segments, macroturbulence=self.vmac(component=component), vsini=self.vsini(component=component), limb_darkening_coeff=self.limb_darkening_coeff(component=component), R=self.R(component=component), vrad=self.vrad(component=component), verbose=0)
+                self.last_final_fluxes[component][self.waveobs_mask == 0] = 1.
             else:
-                self.last_final_fluxes = self.last_fluxes
+                if key in self.cache:
+                    if not self.quiet:
+                        print("Cache:", complete_key)
+                    self.last_fluxes = self.cache[key].copy()
+                else:
+                    if not self.quiet:
+                        print("Generating:", complete_key)
 
-            if (self.code != "grid" and model_atmosphere_is_closest_copy(self.modeled_layers_pack, {'teff':self.teff(), 'logg':self.logg(), 'MH':self.MH(), 'alpha':self.alpha(), 'vmic': self.vmic()})) \
-               or (self.code == "grid" and not valid_interpolated_spectrum_target(self.grid, {'teff':self.teff(), 'logg':self.logg(), 'MH':self.MH(), 'alpha':self.alpha(), 'vmic': self.vmic()})):
-                   self.last_final_fluxes *= 0.
+                    if self.code != "grid":
 
-        return self.last_final_fluxes[self.comparing_mask]
+                        # Atmosphere
+                        atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, {'teff':self.teff(component=component), 'logg':self.logg(component=component), 'MH':self.MH(component=component), 'alpha':self.alpha(component=component)}, code=self.code)
+                        # Fundamental synthetic fluxes
+                        if self.code == "turbospectrum":
+                            self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(component=component), self.logg(component=component), self.MH(component=component), self.alpha(component=component), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(component=component), atmosphere_layers_file=self.atmosphere_layers_files[component], abundances_file=self.abundances_files[component], linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, use_molecules=self.use_molecules, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                        elif self.code in ("moog", "moog-scat"):
+                            self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(component=component), self.logg(component=component), self.MH(component=component), self.alpha(component=component), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(component=component), atmosphere_layers_file=self.atmosphere_layers_files[component], abundances_file=self.abundances_files[component], linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                        elif self.code == "synthe":
+                            self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(component=component), self.logg(component=component), self.MH(component=component), self.alpha(component=component), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(component=component), atmosphere_layers_file=self.atmosphere_layers_files[component], abundances_file=self.abundances_files[component], linelist_file=self.linelist_file, molecules_files=self.molecules_files, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                        elif self.code == "sme":
+                            self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(component=component), self.logg(component=component), self.MH(component=component), self.alpha(component=component), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(component=component), regions=self.segments, verbose=0, code=self.code, timeout=self.timeout)
+                            ## Do not abort failed synthesis, the minimization algorithm will just consider this point as a bad one
+                            #if np.all(self.last_fluxes == 0):
+                                #raise Exception("SME has failed.")
+                        elif self.code == "spectrum":
+                            self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(component=component), self.logg(component=component), self.MH(component=component), self.alpha(component=component), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(component=component),  atmosphere_layers_file=self.atmosphere_layers_files[component], abundances_file=self.abundances_files[component], linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
 
-    def fitData(self, waveobs, segments, comparing_mask, fluxes, weights=None, parinfo=None, use_errors=False, max_iterations=20, quiet=True, code="spectrum", use_molecules=False, vmic_from_empirical_relation=True, vmac_from_empirical_relation=True, tmp_dir=None, timeout=1800):
+                            ## Do not abort failed synthesis, the minimization algorithm will just consider this point as a bad one
+                            #if np.all(self.last_fluxes == 0):
+                                #raise Exception("SPECTRUM has failed.")
+                        else:
+                            raise Exception("Unknown code: %s" % (self.code))
+                    else:
+                        atmosphere_layers = None
+                        linelist = None
+                        abundances = None
+                        fixed_abundances = None
+                        self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(component=component), self.logg(component=component), self.MH(component=component), self.alpha(component=component), linelist, self.isotopes, abundances, fixed_abundances, self.vmic(component=component), code=self.code, grid=self.grid, regions=self.segments)
+
+                    # Optimization to avoid too small changes in parameters or repetition
+                    self.cache[key] = self.last_fluxes.copy()
+
+                if not np.all(self.last_fluxes == 0):
+                    # If synthesis did not fail
+                    self.last_final_fluxes[component] = apply_post_fundamental_effects(self.waveobs, self.last_fluxes, self.segments, macroturbulence=self.vmac(component=component), vsini=self.vsini(component=component), limb_darkening_coeff=self.limb_darkening_coeff(component=component), R=self.R(component=component), vrad=self.vrad(component=component), verbose=0)
+
+                    if self.normalize_func is not None:
+                        self.last_final_fluxes[component] = self.normalize_func(create_spectrum_structure(self.waveobs, self.last_final_fluxes[component]))['flux']
+                else:
+                    self.last_final_fluxes[component] = self.last_fluxes
+
+                if (self.code != "grid" and model_atmosphere_is_closest_copy(self.modeled_layers_pack, {'teff':self.teff(component=component), 'logg':self.logg(component=component), 'MH':self.MH(component=component), 'alpha':self.alpha(component=component), 'vmic': self.vmic(component=component)})) \
+                   or (self.code == "grid" and not valid_interpolated_spectrum_target(self.grid, {'teff':self.teff(component=component), 'logg':self.logg(component=component), 'MH':self.MH(component=component), 'alpha':self.alpha(component=component), 'vmic': self.vmic(component=component)})):
+                       self.last_final_fluxes[component] *= 0.
+
+        self.combined_final_fluxes = np.zeros_like(self.last_final_fluxes[0])
+        for component in range(self.n_stellar_components):
+            self.combined_final_fluxes += self.last_final_fluxes[component] * self.lf(component=component)
+
+        return self.combined_final_fluxes[self.comparing_mask]
+
+    def fitData(self, spectrum, segments, comparing_mask, weights, parinfo=None, parinfo_bases=None, use_errors=False, max_iterations=20, quiet=True, code="spectrum", use_molecules=False, vmic_from_empirical_relation=True, vmac_from_empirical_relation=True, n_stellar_components=1, tmp_dir=None, timeout=1800):
         code = code.lower()
         if code not in ['spectrum', 'turbospectrum', 'moog', 'moog-scat', 'synthe', 'sme', 'grid']:
             raise Exception("Unknown radiative transfer code: %s" % (code))
 
         self.timeout = timeout
         self.use_errors = use_errors
-        base = 9
-        if len(parinfo) < base:
+
+        base = PARINFO_BASE
+        if len(parinfo) < base*n_stellar_components:
             raise Exception("Wrong number of parameters!")
+        self.parinfo_bases = parinfo_bases
+        self.n_stellar_components = n_stellar_components
 
         if sys.platform == "win32":
             # On Windows, the best timer is time.clock()
@@ -312,7 +327,10 @@ class SynthModel(MPFitModel):
         else:
             # On most other platforms the best timer is time.time()
             default_timer = time.time
-        self.waveobs = waveobs
+        self.spectrum = spectrum
+        if weights is None:
+            weights = np.ones(len(spectrum['waveobs']))
+        self.weights = weights
         self.code = code
         if self.code == "grid" and self.grid is None:
             self.grid = load_spectral_grid(self.precomputed_grid_dir)
@@ -322,13 +340,11 @@ class SynthModel(MPFitModel):
         self.tmp_dir = tmp_dir
 
 
-        # Synthesis for wavelengths with mask different from 0.0
         self.segments = segments
-        self.waveobs_mask = _create_waveobs_mask(waveobs, segments)
-
+        self.waveobs = spectrum['waveobs']
+        self.waveobs_mask = _create_waveobs_mask(spectrum['waveobs'], segments)
         self.comparing_mask = comparing_mask == 1.0 # Wavelengths to be compared for the least square algorithm
-        if weights is None:
-            weights = np.ones(len(waveobs))
+
         ftol = 1.e-4 # Terminate when the improvement in chisq between iterations is ftol > -(new_chisq/chisq)**2 +1
         xtol = 1.e-4
         gtol = 1.e-4
@@ -336,11 +352,12 @@ class SynthModel(MPFitModel):
         _t0 = default_timer()
 
         # Write abundances and linelist to avoid writing the same info in each iteration
-        alpha_in_free_params = not parinfo[3]['fixed']
-        if self.enhance_abundances or alpha_in_free_params or self.abundances is None:
-            self.abundances_file = None
-        else:
-            self.abundances_file = write_solar_abundances(self.abundances)
+        for i in range(n_stellar_components):
+            alpha_in_free_params = not parinfo[3+self.parinfo_bases[i]]['fixed']
+            if self.enhance_abundances or alpha_in_free_params or self.abundances is None:
+                self.abundances_files.append(None)
+            else:
+                self.abundances_files.append(write_solar_abundances(self.abundances))
 
         if len(self.linelist_free_loggf) == 0:
             # Only write linelist (for optimization purposes) if there is no free loggf
@@ -356,19 +373,17 @@ class SynthModel(MPFitModel):
         if self.code == "spectrum":
             self.isotope_file = write_isotope_data(self.isotopes, tmp_dir=tmp_dir)
 
-        # If teff, logg, MH and alpha are fixed
-        if self.code not in ('sme', 'grid') and parinfo[0]['fixed'] and parinfo[1]['fixed'] and parinfo[2]['fixed'] and parinfo[3]['fixed']:
-            atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, {'teff':parinfo[0]['value'], 'logg':parinfo[1]['value'], 'MH':parinfo[2]['value'], 'alpha':parinfo[3]['value']})
-            self.atmosphere_layers_file = write_atmosphere(atmosphere_layers, parinfo[0]['value'], parinfo[1]['value'], parinfo[2]['value'], code=self.code, atmosphere_filename=None, tmp_dir=tmp_dir)
+        for i in range(n_stellar_components):
+            # If teff, logg, MH and alpha are fixed
+            if self.code not in ('sme', 'grid') and parinfo[0+self.parinfo_bases[i]]['fixed'] and parinfo[1+self.parinfo_bases[i]]['fixed'] and parinfo[2+self.parinfo_bases[i]]['fixed'] and parinfo[3+self.parinfo_bases[i]]['fixed']:
+                atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, {'teff':parinfo[0+self.parinfo_bases[i]]['value'], 'logg':parinfo[1+self.parinfo_bases[i]]['value'], 'MH':parinfo[2+self.parinfo_bases[i]]['value'], 'alpha':parinfo[3+self.parinfo_bases[i]]['value']})
+                self.atmosphere_layers_files.append(write_atmosphere(atmosphere_layers, parinfo[0+self.parinfo_bases[i]]['value'], parinfo[1+self.parinfo_bases[i]]['value'], parinfo[2+self.parinfo_bases[i]]['value'], code=self.code, atmosphere_filename=None, tmp_dir=tmp_dir))
+            else:
+                self.atmosphere_layers_files.append(None)
 
-        if self.use_errors:
-            super(SynthModel, self).fitData(waveobs[self.comparing_mask], fluxes[self.comparing_mask], weights=weights[self.comparing_mask], parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet)
-        else:
-            # Do not consider errors for minimization (all weights set to one)
-            ones = np.ones(len(fluxes))
-            super(SynthModel, self).fitData(waveobs[self.comparing_mask], fluxes[self.comparing_mask], weights=ones[self.comparing_mask], parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet)
+        super(SynthModel, self).fitData(spectrum['waveobs'][self.comparing_mask], spectrum['flux'][self.comparing_mask], weights=weights[self.comparing_mask], parinfo=parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet)
 
-        residuals = self.last_final_fluxes[self.comparing_mask] - fluxes[self.comparing_mask]
+        residuals = self.combined_final_fluxes[self.comparing_mask] - spectrum['flux'][self.comparing_mask]
         self.rms = np.sqrt(np.sum(np.power(residuals,2))/len(residuals))
 
         #### Unweighted (no errors considered):
@@ -381,8 +396,6 @@ class SynthModel(MPFitModel):
 
         self.cache = {}
 
-        if self.abundances_file is not None:
-            os.remove(self.abundances_file)
         if len(self.linelist_free_loggf) == 0 and self.code not in ('sme', 'moog', 'moog-scat', 'grid'):
             os.remove(self.linelist_file)
         if self.code == 'spectrum':
@@ -390,89 +403,149 @@ class SynthModel(MPFitModel):
         if self.code == 'synthe' and self.molecules_files is not None:
             for molecules_file in self.molecules_files:
                 os.remove(molecules_file)
-        # If teff, logg, MH and alpha are fixed
-        if self.code not in ("sme", "grid") and parinfo[0]['fixed'] and parinfo[1]['fixed'] and parinfo[2]['fixed'] and parinfo[3]['fixed']:
-            os.remove(self.atmosphere_layers_file)
-        self.abundances_file = None
+        for i in range(n_stellar_components):
+            if self.atmosphere_layers_files[i] is not None and os.path.exists(self.atmosphere_layers_files[i]):
+                os.remove(self.atmosphere_layers_files[i])
+        for i in range(n_stellar_components):
+            if self.abundances_files[i] is not None and os.path.exists(self.abundances_files[i]):
+                os.remove(self.abundances_files[i])
+        self.abundances_files = []
         self.linelist_file = None
         self.isotope_file = None
         self.molecules_files = None
-        self.atmosphere_layers_file = None
+        self.atmosphere_layers_files = []
 
         _t1 = default_timer()
         sec = timedelta(seconds=int(_t1 - _t0))
         self.calculation_time = datetime(1,1,1) + sec
 
-    def teff(self): return self._parinfo[0]['value']
-    def logg(self): return self._parinfo[1]['value']
-    def MH(self): return self._parinfo[2]['value']
-    def alpha(self):
+    def teff(self, component=0): return self._parinfo[0+self.parinfo_bases[component]]['value']
+    def logg(self, component=0): return self._parinfo[1+self.parinfo_bases[component]]['value']
+    def MH(self, component=0): return self._parinfo[2+self.parinfo_bases[component]]['value']
+    def alpha(self, component=0):
         if self.enhance_abundances:
-            alpha_enhancement = determine_abundance_enchancements(self.MH(), scale=self.scale)
+            alpha_enhancement = determine_abundance_enchancements(self.MH(component=component), scale=self.scale)
         else:
-            alpha_enhancement = self._parinfo[3]['value']
+            alpha_enhancement = self._parinfo[3+self.parinfo_bases[component]]['value']
         return alpha_enhancement
-    def vmic(self): return self._parinfo[4]['value']
-    def vmac(self): return self._parinfo[5]['value']
-    def vsini(self): return self._parinfo[6]['value']
-    def limb_darkening_coeff(self): return self._parinfo[7]['value']
-    def R(self): return self._parinfo[8]['value']
-    def vrad(self):
+    def vmic(self, component=0): return self._parinfo[4+self.parinfo_bases[component]]['value']
+    def vmac(self, component=0): return self._parinfo[5+self.parinfo_bases[component]]['value']
+    def vsini(self, component=0): return self._parinfo[6+self.parinfo_bases[component]]['value']
+    def limb_darkening_coeff(self, component=0): return self._parinfo[7+self.parinfo_bases[component]]['value']
+    def R(self, component=0): return self._parinfo[8+self.parinfo_bases[component]]['value']
+    def lf(self, component=0):
+        if self.n_stellar_components <= 2:
+            # For single stars, there is nothing to do
+            # For binary stars, companion's lf is tied to primary's lf via parinfo['tied']
+            return self._parinfo[9+self.parinfo_bases[component]]['value']
+        else:
+            # Normalization is required
+            total_lf = sum( [self._parinfo[9+self.parinfo_bases[c]]['value'] for c in range(self.n_stellar_components)])
+            return self._parinfo[9+self.parinfo_bases[component]]['value'] / total_lf # ensure the final sum of light fraction equals to 1
+    def vrad(self, component=0):
         vrad = []
-        base = 9
-        if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
+        base = PARINFO_BASE + self.parinfo_bases[component]
+        component_with_vrad_parname = len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']
+        if component_with_vrad_parname:
             top = base+len(self.segments)
             for i in range(base, top):
                 vrad.append(self._parinfo[i]['value'])
+        else:
+            vrad = np.zeros(len(self.segments))
         return vrad
-    def free_loggf(self):
-        base = 9
-        if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
+    def free_loggf(self, component=0):
+        base = PARINFO_BASE + self.parinfo_bases[component]
+        component_with_vrad_parname = len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']
+        if component_with_vrad_parname:
             base += len(self.segments)
         loggf = []
         for i in range(base, base+len(self.linelist_free_loggf)):
             loggf.append(self._parinfo[i]['value'])
         return loggf
-    def free_abundances(self):
-        base = 9
-        if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
+    def free_abundances(self, component=0):
+        base = PARINFO_BASE + self.parinfo_bases[component]
+        component_with_vrad_parname = len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']
+        if component_with_vrad_parname:
             base += len(self.segments)
         base += len(self.linelist_free_loggf)
-        fixed_abundances = np.recarray((len(self._parinfo)-base, ), dtype=[('code', int),('Abund', float), ('element', '|U30')])
-        for i in range(len(self._parinfo)-base):
+        # Find the top for this component to infer how many free abundances there are
+        if component >= len(self.parinfo_bases)-1:
+            top = len(self._parinfo)
+        else:
+            top = self.parinfo_bases[component+1]
+        n_free_abundances = top - base
+        fixed_abundances = np.recarray((n_free_abundances, ), dtype=[('code', int),('Abund', float), ('element', '|U30')])
+        for i in range(n_free_abundances):
             fixed_abundances['code'][i] = int(self._parinfo[base+i]['parname'])
             fixed_abundances['Abund'][i] = self._parinfo[base+i]['value']
             fixed_abundances['element'][i] = ""
         return fixed_abundances
 
-    def eteff(self): return self.m.perror[0]
-    def elogg(self): return self.m.perror[1]
-    def eMH(self): return self.m.perror[2]
-    def ealpha(self): return self.m.perror[3]
-    def evmic(self): return self.m.perror[4]
-    def evmac(self): return self.m.perror[5]
-    def evsini(self): return self.m.perror[6]
-    def elimb_darkening_coeff(self): return self.m.perror[7]
-    def eR(self): return self.m.perror[8]
-    def evrad(self):
-        base = 9
+    def eteff(self, component=0): return self.m.perror[0+self.parinfo_bases[component]]
+    def elogg(self, component=0): return self.m.perror[1+self.parinfo_bases[component]]
+    def eMH(self, component=0): return self.m.perror[2+self.parinfo_bases[component]]
+    def ealpha(self, component=0): return self.m.perror[3+self.parinfo_bases[component]]
+    def evmic(self, component=0): return self.m.perror[4+self.parinfo_bases[component]]
+    def evmac(self, component=0): return self.m.perror[5+self.parinfo_bases[component]]
+    def evsini(self, component=0): return self.m.perror[6+self.parinfo_bases[component]]
+    def elimb_darkening_coeff(self, component=0): return self.m.perror[7+self.parinfo_bases[component]]
+    def eR(self, component=0): return self.m.perror[8+self.parinfo_bases[component]]
+    def elf(self, component=0):
+        if self.n_stellar_components <= 2:
+            # For single stars, there is nothing to do
+            # For binary stars, companion's lf is tied to primary's lf via parinfo['tied']
+            return self.m.perror[9+self.parinfo_bases[component]]
+        else:
+            ## Because lf (light fraction) is normalized in df(), error needs to be propagated accordingly:
+            # 1. Get raw fitted values and covariance matrix for the LF parameters
+            lf_indices = [9 + self.parinfo_bases[c] for c in range(self.n_stellar_components)]
+            raw_lfs = np.array([self._parinfo[i]['value'] for i in lf_indices])
+            # Extract the relevant sub-matrix from the full covariance matrix
+            full_covar = self.m.covar
+            lf_covar = full_covar[np.ix_(lf_indices, lf_indices)]
+            # 2. Calculate the total sum of raw light fractions
+            S = np.sum(raw_lfs)
+            # 3. Construct the Jacobian matrix (J_ik = dl_i / dL_k)
+            J = np.zeros((self.n_stellar_components, self.n_stellar_components))
+            for i in range(self.n_stellar_components):
+                for k in range(self.n_stellar_components):
+                    if i == k:
+                        J[i, k] = (S - raw_lfs[i]) / (S**2)
+                    else:
+                        J[i, k] = -raw_lfs[i] / (S**2)
+
+            # 4. Propagate the error
+            #    Cov_new = J * Cov_old * J.T
+            covar_new = J @ lf_covar @ J.T
+
+            # 5. The error is the square root of the diagonal element
+            variance_new = covar_new[component, component]
+
+            return np.sqrt(variance_new)
+    def evrad(self, component=0):
+        base = PARINFO_BASE + self.parinfo_bases[component]
         evrad = []
-        if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
+        component_with_vrad_parname = len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']
+        if component_with_vrad_parname:
             top = base+len(self.segments)
             for i in range(base, top):
                 evrad.append(self.m.perror[i])
+        else:
+            evrad = np.zeros(len(self.segments))
         return evrad
-    def efree_loggf(self):
-        base = 9
-        if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
+    def efree_loggf(self, component=0):
+        base = PARINFO_BASE + self.parinfo_bases[component]
+        component_with_vrad_parname = len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']
+        if component_with_vrad_parname:
             base += len(self.segments)
         eloggf = []
         for i in range(base, base+len(self.linelist_free_loggf)):
             eloggf.append(self.m.perror[i])
         return eloggf
-    def efree_abundances(self):
-        base = 9
-        if len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']:
+    def efree_abundances(self, component=0):
+        base = PARINFO_BASE + self.parinfo_bases[component]
+        component_with_vrad_parname = len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']
+        if component_with_vrad_parname:
             base += len(self.segments)
         base += len(self.linelist_free_loggf)
         eabundances = []
@@ -480,23 +553,23 @@ class SynthModel(MPFitModel):
             eabundances.append(self.m.perror[base+i])
         return eabundances
 
-    def generate_linelist_free_loggf(self):
+    def generate_linelist_free_loggf(self, component=0):
         linelist_free_loggf = self.linelist_free_loggf.copy()
-        new_loggf = self.free_loggf()
+        new_loggf = self.free_loggf(component=component)
         for i in range(len(linelist_free_loggf)):
             linelist_free_loggf['loggf'][i] = new_loggf[i]
         return linelist_free_loggf
 
-    def transformed_free_loggf(self):
+    def transformed_free_loggf(self, component=0):
         free_loggf = {}
-        free_loggf['linelist'] = self.generate_linelist_free_loggf()
-        free_loggf['loggf'] = self.free_loggf()
-        free_loggf['eloggf'] = self.efree_loggf()
+        free_loggf['linelist'] = self.generate_linelist_free_loggf(component=component)
+        free_loggf['loggf'] = self.free_loggf(component=component)
+        free_loggf['eloggf'] = self.efree_loggf(component=component)
         return free_loggf
 
-    def transformed_free_abundances(self):
-        free_abundances = self.free_abundances()
-        efree_abundances = self.efree_abundances()
+    def transformed_free_abundances(self, component=0):
+        free_abundances = self.free_abundances(component=component)
+        efree_abundances = self.efree_abundances(component=component)
 
         transformed_abund = np.recarray((len(free_abundances), ), dtype=[('code', int),('Abund', float), ('element', '|U5'), ('[X/H]', float), ('A(X)', float), ('[X/Fe]', float), ('eAbund', float), ('e[X/H]', float), ('e[X/Fe]', float), ('eA(X)', float)])
 
@@ -533,7 +606,7 @@ class SynthModel(MPFitModel):
             transformed_abund['eA(X)'][i] = efree_abundances[i]
         return transformed_abund
 
-    def print_solution(self):
+    def print_solution(self, component=0):
         if self.use_errors:
             #error_scale_factor = self.reduced_wchisq
             #error_scale_factor = self.wchisq
@@ -544,8 +617,8 @@ class SynthModel(MPFitModel):
         else:
             error_scale_factor = 1.
         header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("teff","logg","MH","alpha","vmic","vmac","vsini","limb","R")
-        solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i" % (self.teff(), self.logg(), self.MH(), self.alpha(), self.vmic(), self.vmac(), self.vsini(), self.limb_darkening_coeff(), int(self.R()))
-        errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i" % (self.eteff()*error_scale_factor, self.elogg()*error_scale_factor, self.eMH()*error_scale_factor, self.ealpha()*error_scale_factor, self.evmic()*error_scale_factor, self.evmac()*error_scale_factor, self.evsini()*error_scale_factor, self.elimb_darkening_coeff()*error_scale_factor, int(self.eR()*error_scale_factor))
+        solution = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i" % (self.teff(component=component), self.logg(component=component), self.MH(component=component), self.alpha(component=component), self.vmic(component=component), self.vmac(component=component), self.vsini(component=component), self.limb_darkening_coeff(component=component), int(self.R(component=component)))
+        errors = "%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8.2f\t%8i" % (self.eteff(component=component)*error_scale_factor, self.elogg(component=component)*error_scale_factor, self.eMH(component=component)*error_scale_factor, self.ealpha(component=component)*error_scale_factor, self.evmic(component=component)*error_scale_factor, self.evmac(component=component)*error_scale_factor, self.evsini(component=component)*error_scale_factor, self.elimb_darkening_coeff(component=component)*error_scale_factor, int(self.eR(component=component)*error_scale_factor))
 
         # Append free individual abundances
         abundances_header = ""
@@ -554,7 +627,7 @@ class SynthModel(MPFitModel):
 
 
         if self.code != "grid":
-            transformed_abund = self.transformed_free_abundances()
+            transformed_abund = self.transformed_free_abundances(component=component)
             for i in range(len(transformed_abund)):
                 element = transformed_abund['element'][i]
                 x_absolute_name = "A(" + element + ")"
@@ -574,15 +647,20 @@ class SynthModel(MPFitModel):
         else:
             transformed_abund = []
 
-        if len(self.vrad()) >= 1:
-            vrad_header = "          %8s\t%8s\t%8s\t%8s" % ("wave_base","wave_top","vrad","error")
-            vrad_stats = ""
-            for i, (vrad, evrad, segment) in enumerate(zip(self.vrad(), self.evrad(), self.segments)):
-                vrad_stats += "Segment   %8.2f\t%8.2f\t%8.2f\t%8.2f\n" % (segment['wave_base'], segment['wave_top'], vrad, evrad)
-            print("")
-            print(vrad_header)
-            print(vrad_stats)
-            print("")
+        base = PARINFO_BASE + self.parinfo_bases[component]
+        component_with_vrad_parname = len(self._parinfo) > base and "vrad" in self._parinfo[base]['parname']
+        if component_with_vrad_parname:
+            top = base+len(self.segments)
+            component_with_free_vrad = any([not p['fixed']for p in self._parinfo[base:top]])
+            if component_with_free_vrad:
+                vrad_header = "          %8s\t%8s\t%8s\t%8s" % ("wave_base","wave_top","vrad","error")
+                vrad_stats = ""
+                for i, (vrad, evrad, segment) in enumerate(zip(self.vrad(component=component), self.evrad(component=component), self.segments)):
+                    vrad_stats += "Segment   %8.2f\t%8.2f\t%8.2f\t%8.2f\n" % (segment['wave_base'], segment['wave_top'], vrad, evrad)
+                print("")
+                print(vrad_header)
+                print(vrad_stats)
+                print("")
 
 
         print("           ", header)
@@ -596,7 +674,7 @@ class SynthModel(MPFitModel):
             print("")
 
         if self.code != "grid":
-            transformed_free_loggf = self.transformed_free_loggf()
+            transformed_free_loggf = self.transformed_free_loggf(component=component)
             transformed_linelist_free_loggf = transformed_free_loggf['linelist']
             loggf = transformed_free_loggf['loggf']
             eloggf = transformed_free_loggf['eloggf']
@@ -613,10 +691,10 @@ class SynthModel(MPFitModel):
         print("Calculation time:\t%d:%d:%d:%d" % (self.calculation_time.day-1, self.calculation_time.hour, self.calculation_time.minute, self.calculation_time.second))
         header = "%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s\t%8s" % ("DOF","niter","nsynthesis","wchisq","rwchisq","chisq","rchisq","rms")
         stats = "%8i\t%8i\t%8i\t%8.2f\t%8.4f\t%8.2f\t%8.4f\t%8.4f" % (self.m.dof, self.m.niter, self.m.nfev, self.wchisq, self.reduced_wchisq, self.chisq, self.reduced_chisq, self.rms)
-        if self.code != "grid" and model_atmosphere_is_closest_copy(self.modeled_layers_pack, {'teff':self.teff(), 'logg':self.logg(), 'MH':self.MH(), 'alpha':self.alpha(), 'vmic': self.vmic()}):
+        if self.code != "grid" and model_atmosphere_is_closest_copy(self.modeled_layers_pack, {'teff':self.teff(component=component), 'logg':self.logg(component=component), 'MH':self.MH(component=component), 'alpha':self.alpha(component=component), 'vmic': self.vmic(component=component)}):
             print("")
             print("WARNING: Model atmosphere used for the final solution was not interpolated, it is a copy of the closest model.")
-        if self.code == "grid" and not valid_interpolated_spectrum_target(self.grid, {'teff':self.teff(), 'logg':self.logg(), 'MH':self.MH(), 'alpha':self.alpha(), 'vmic': self.vmic()}):
+        if self.code == "grid" and not valid_interpolated_spectrum_target(self.grid, {'teff':self.teff(component=component), 'logg':self.logg(component=component), 'MH':self.MH(component=component), 'alpha':self.alpha(component=component), 'vmic': self.vmic(component=component)}):
             print("")
             print("WARNING: Spectrum used for the final solution was not interpolated, it is a copy of the closest model.")
         print("")
@@ -627,11 +705,11 @@ class SynthModel(MPFitModel):
 
 
 
-def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, alpha_range, vmic_range, vmic_from_empirical_relation, vmac_from_empirical_relation):
+def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_lf, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, alpha_range, vmic_range, vmic_from_empirical_relation, vmac_from_empirical_relation):
     """
     Creates the structure needed for the mpfitmodel
     """
-    base = 9
+    base = PARINFO_BASE
     free_params = [param.lower() for param in free_params]
     if "vrad" in free_params or np.any(initial_vrad != 0):
         parinfo = [{'value':0., 'fixed':False, 'limited':[False, False], 'limits':[0., 0.], 'step':0, 'mpmaxstep':0} for i in np.arange(base+len(initial_vrad)+len(free_abundances)+len(linelist_free_loggf))]
@@ -657,7 +735,8 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
     parinfo[1]['value'] = initial_logg
     parinfo[1]['fixed'] = not parinfo[1]['parname'].lower() in free_params
     parinfo[1]['step'] = Constants.SYNTH_STEP_LOGG # For auto-derivatives
-    #parinfo[1]['mpmaxstep'] = 0.50 # Maximum change to be made in the parameter
+    #if not parinfo[1]['fixed']:
+        #parinfo[1]['mpmaxstep'] = 0.50 # Maximum change to be made in the parameter
     parinfo[1]['limited'] = [True, True]
     parinfo[1]['limits'] = [min_logg, max_logg]
     if parinfo[1]['value'] > parinfo[1]['limits'][1] or parinfo[1]['value'] < parinfo[1]['limits'][0]:
@@ -740,23 +819,37 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
         parinfo[8]['mpmaxstep'] = float(initial_R)/4. # Maximum change to be made in the parameter
     if parinfo[8]['value'] > parinfo[8]['limits'][1] or parinfo[8]['value'] < parinfo[8]['limits'][0]:
         raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[8]['parname'], parinfo[8]['value'], parinfo[8]['limits'][0], parinfo[8]['limits'][1]))
+    #
+    parinfo[9]['parname'] = "lf" # Light Fraction (useful for binaries, ...)
+    parinfo[9]['value'] = initial_lf
+    parinfo[9]['fixed'] = not parinfo[9]['parname'].lower() in free_params
+    parinfo[9]['mpprint'] = not parinfo[9]['fixed'] # Do not print if it is fixed
+    parinfo[9]['step'] = Constants.SYNTH_STEP_LF # For auto-derivatives
+    parinfo[9]['limited'] = [True, True]
+    parinfo[9]['limits'] = [1e-6, 1.0]
+    if not parinfo[9]['fixed']:
+        parinfo[9]['mpmaxstep'] = 0.25 # Maximum change to be made in the parameter
+    if parinfo[9]['value'] > parinfo[9]['limits'][1] or parinfo[9]['value'] < parinfo[9]['limits'][0]:
+        raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[9]['parname'], parinfo[9]['value'], parinfo[9]['limits'][0], parinfo[9]['limits'][1]))
     # VRAD
     if "vrad" in free_params or np.any(initial_vrad != 0):
-        base = 9
+        base = PARINFO_BASE
         for i in range(len(initial_vrad)):
             parinfo[base+i]['parname'] = "vrad%03i" % (i)
             parinfo[base+i]['value'] = initial_vrad[i]
             parinfo[base+i]['fixed'] = not "vrad" in free_params
+            parinfo[base+i]['mpprint'] = not parinfo[base+i]['fixed'] # Do not print if it is fixed
             parinfo[base+i]['step'] = Constants.SYNTH_STEP_VRAD # For auto-derivatives
             parinfo[base+i]['limited'] = [True, True]
-            parinfo[base+i]['limits'] = [-5., 5]
+            vrad_threshold = 5.0
+            parinfo[base+i]['limits'] = [initial_vrad[i]-vrad_threshold, initial_vrad[i]+vrad_threshold]
             if parinfo[base+i]['value'] > parinfo[base+i]['limits'][1] or parinfo[base+i]['value'] < parinfo[base+i]['limits'][0]:
                 raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[base+i]['parname'], parinfo[base+i]['value'], parinfo[base+i]['limits'][0], parinfo[base+i]['limits'][1]))
     # log(gf)
     if "vrad" in free_params or np.any(initial_vrad != 0):
-        base = 9 + len(initial_vrad)
+        base = PARINFO_BASE + len(initial_vrad)
     else:
-        base = 9
+        base = PARINFO_BASE
     for i in range(len(linelist_free_loggf)):
         parinfo[base+i]['parname'] = str(linelist_free_loggf['wave_nm'][i])
         parinfo[base+i]['value'] = linelist_free_loggf['loggf'][i]
@@ -767,9 +860,9 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
         if parinfo[base+i]['value'] > parinfo[base+i]['limits'][1] or parinfo[base+i]['value'] < parinfo[base+i]['limits'][0]:
             raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[base+i]['parname'], parinfo[base+i]['value'], parinfo[base+i]['limits'][0], parinfo[base+i]['limits'][1]))
     if "vrad" in free_params or np.any(initial_vrad != 0):
-        base = 9 + len(initial_vrad) + len(linelist_free_loggf)
+        base = PARINFO_BASE + len(initial_vrad) + len(linelist_free_loggf)
     else:
-        base = 9 + len(linelist_free_loggf)
+        base = PARINFO_BASE + len(linelist_free_loggf)
     # ABUNDANCES
     for i in range(len(free_abundances)):
         parinfo[base+i]['parname'] = str(free_abundances['code'][i])
@@ -783,7 +876,8 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
 
     return parinfo
 
-def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=None, linemasks=None, enhance_abundances=False, scale=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1, code="spectrum", grid=None, use_molecules=False, vmic_from_empirical_relation=False, vmac_from_empirical_relation=False, normalize_func=None, tmp_dir=None, timeout=1800):
+def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=None, linemasks=None, enhance_abundances=False, scale=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1, code="spectrum", grid=None, use_molecules=False, vmic_from_empirical_relation=False, vmac_from_empirical_relation=False, initial_lf=1, normalize_func=None, tmp_dir=None, timeout=1800):
+
     """
     It matches synthetic spectrum to observed spectrum by applying a least
     square algorithm.
@@ -813,22 +907,89 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     if code not in ['spectrum', 'turbospectrum', 'moog', 'moog-scat', 'synthe', 'sme', 'grid']:
         raise Exception("Unknown radiative transfer code: %s" % (code))
 
+    # Convert single values to a list with a single element
+    if not isinstance(initial_teff, (list, tuple)): initial_teff = [initial_teff]
+    if not isinstance(initial_logg, (list, tuple)): initial_logg = [initial_logg]
+    if not isinstance(initial_MH, (list, tuple)): initial_MH = [initial_MH]
+    if not isinstance(initial_alpha, (list, tuple)): initial_alpha = [initial_alpha]
+    if not isinstance(initial_vmic, (list, tuple)): initial_vmic = [initial_vmic]
+    if not isinstance(initial_vmac, (list, tuple)): initial_vmac = [initial_vmac]
+    if not isinstance(initial_vsini, (list, tuple)): initial_vsini = [initial_vsini]
+    if not isinstance(initial_limb_darkening_coeff, (list, tuple)): initial_limb_darkening_coeff = [initial_limb_darkening_coeff]
+    if not isinstance(initial_R, (list, tuple)): initial_R = [initial_R]
+    if not isinstance(initial_vrad, (list, tuple)): initial_vrad = [initial_vrad]
+    if not isinstance(initial_lf, (list, tuple)): initial_lf = [initial_lf]
+    if not isinstance(segments, (list, tuple)): segments = [segments]
+    if not isinstance(linemasks, (list, tuple)): linemasks = [linemasks]
 
-    if segments is not None:
-        # Wavelengths to be computed: segments
-        wfilter = create_wavelength_filter(spectrum, regions=segments)
-        spectrum = create_spectrum_structure(spectrum['waveobs'][wfilter], spectrum['flux'][wfilter], spectrum['err'][wfilter])
-    else:
-        # Wavelengths to be computed: all
-        spectrum = spectrum.copy() # duplicate
+    #--------------------------------------------------------------------------------
+    # All input variables need to have the same number of elements (i.e., for a spectroscopic binary, we need two initial_teff, two initial_logg...)
+    names = [
+        'initial_teff', 'initial_logg', 'initial_MH', 'initial_alpha',
+        'initial_vmic', 'initial_vmac', 'initial_vsini',
+        'initial_limb_darkening_coeff', 'initial_R', 'initial_vrad',
+        'initial_lf', 'segments', 'linemasks'
+    ]
 
-    # Normalization
-    spectrum = normalize_spectrum(spectrum, continuum_model)
+    # Fetch the local variables by name
+    lengths = {name: len(locals()[name]) for name in names}
 
-    waveobs = spectrum['waveobs']
-    flux = spectrum['flux']
-    err = spectrum['err']
+    if len(set(lengths.values())) != 1:
+        raise ValueError(f"Inconsistent lengths among inputs: {lengths}")
+    #--------------------------------------------------------------------------------
 
+    n_stellar_components = len(initial_teff)
+    if n_stellar_components == 1:
+        # For single stars, these assumptions need to be respected:
+        assert initial_vrad[0] == 0
+        assert initial_lf[0] == 1
+    assert sum(initial_lf) == 1, "light fractions should sum up to one"
+
+    #--------------------------------------------------------------------------------
+    # Pre-process the segments list to replace all `None` values
+    # 1. Define a default segment that covers the entire spectrum range
+    full_spectrum_segment = np.recarray((1,), dtype=[('wave_base', float), ('wave_top', float)])
+    full_spectrum_segment['wave_base'][0] = np.min(spectrum['waveobs'])
+    full_spectrum_segment['wave_top'][0] = np.max(spectrum['waveobs'])
+    # 2. If a segment is None, use the default full_spectrum_segment. Otherwise, use the existing segment.
+    segments = [s if s is not None else full_spectrum_segment for s in segments]
+    #--------------------------------------------------------------------------------
+
+    #--------------------------------------------------------------------------------
+    # Pre-process the linemasks list to replace all `None` values AND discard linemasks not within a segment
+    for i, component_segments in enumerate(segments):
+        if linemasks[i] is None:
+            # If there are no linemasks, then compare all fluxes in the segments for this component
+            component_linemasks = np.recarray((len(component_segments),),  dtype=[('wave_peak', float), ('wave_base', float), ('wave_top', float)])
+            component_linemasks['wave_base'] = component_segments['wave_base']
+            component_linemasks['wave_top'] = component_segments['wave_top']
+            component_linemasks['wave_peak'] = (component_linemasks['wave_base'] + component_linemasks['wave_top']) / 2
+            linemasks[i] = component_linemasks
+        # Remove linemasks that are outside the segments
+        component_linemasks = linemasks[i]
+        linemasks[i] = _filter_linemasks_not_in_segments(component_linemasks, component_segments)
+    #--------------------------------------------------------------------------------
+
+    global_segments = None
+    global_linemasks = None
+    for i, component_segments in enumerate(segments):
+        if global_segments is None:
+            global_segments = component_segments
+        else:
+            global_segments = np.hstack((global_segments, component_segments))
+        if global_linemasks is None:
+            global_linemasks = component_linemasks
+        else:
+            global_linemasks = np.hstack((global_linemasks, component_linemasks))
+    #
+    global_segments = merge_overlapping_regions(global_segments)
+    global_linemasks = merge_overlapping_regions(global_linemasks)
+
+    # Wavelengths to be computed: component_segments
+    wfilter = create_wavelength_filter(spectrum, regions=global_segments)
+    filtered_spectrum = create_spectrum_structure(spectrum['waveobs'][wfilter], spectrum['flux'][wfilter], spectrum['err'][wfilter])
+    #
+    filtered_spectrum = normalize_spectrum(spectrum, continuum_model)
 
     if free_abundances is None:
         # No free abundances
@@ -894,162 +1055,181 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
         vmac_from_empirical_relation = False
         logging.warning("'vmac_from_empirical_relation' changed to False because vmac is a free parameter")
 
-    if segments is None:
-        wave_base = np.min(waveobs)
-        wave_top = np.max(waveobs)
-        segments = np.recarray((1,),  dtype=[('wave_base', float), ('wave_top', float)])
-        segments['wave_base'][0] = wave_base
-        segments['wave_top'][0] = wave_top
-        if linelist is not None:
-            # Limit linelist
-            # Provide some margin or near-by deep lines might be omitted
-            margin = 2. # 2 nm
-            lfilter = np.logical_and(linelist['wave_A'] >= (wave_base-margin)*10., linelist['wave_A'] <= (wave_top+margin)*10.)
-            linelist = linelist[lfilter]
-    else:
-        if linelist is not None:
-            # Limit linelist
-            linelist = _filter_linelist(linelist, segments)
 
-    if linemasks is None:
-        comparing_mask = np.ones(len(waveobs)) # Compare all fluxes
-    else:
-        linemasks = _filter_linemasks_not_in_segments(linemasks, segments)
-        # Compare fluxes inside line masks that belong to a segment
-        comparing_mask = _create_comparing_mask(waveobs, linemasks, segments)
+    #--------------------------------------------------------------------------------
+    # Limit linelist for this component (unless linelist is not defined, thus using a pre-computed grid)
+    if linelist is not None:
+        linelist = _filter_linelist(linelist, global_segments)
+    #--------------------------------------------------------------------------------
 
+    #--------------------------------------------------------------------------------
+    # Compare fluxes inside line masks that belong to a segment
+    comparing_mask = _create_comparing_mask(filtered_spectrum['waveobs'], global_linemasks, global_segments)
 
     ## Fluxes
-    negative_zero_flux = flux <= 0.0
+    negative_zero_flux = filtered_spectrum['flux'] <= 0.0
     bad_fluxes = np.logical_and(comparing_mask == 1, negative_zero_flux)
     num_bad_fluxes = len(np.where(bad_fluxes)[0])
     # Do not compare negative or zero fluxes
     if num_bad_fluxes > 0:
-        logging.warning("%i fluxes have been discarded because they are negative or zero" % num_bad_fluxes)
+        logging.warning(f"{num_bad_fluxes} fluxes have been discarded because they are negative or zero")
         comparing_mask[negative_zero_flux] = 0.0
 
     ## Errors
-    if use_errors and np.all(err[comparing_mask == 1] <= 0):
-        logging.warning("Use of errors has been desactivated because all of them are set to zero.")
+    if use_errors and np.all(filtered_spectrum['err'][comparing_mask == 1] <= 0):
+        logging.warning(f"Use of errors has been desactivated because all of them are set to zero")
         use_errors = False
 
-    negative_zero_err = err <= 0.0
+    negative_zero_err = filtered_spectrum['err'] <= 0.0
     bad_errors = np.logical_and(comparing_mask == 1, negative_zero_err)
     num_bad_errors = len(np.where(bad_errors)[0])
     ## Do not compare negative or zero errors
     if use_errors and num_bad_errors > 0:
-        logging.warning("%i fluxes have been discarded because their ERRORS are negative or zero" % num_bad_errors)
+        logging.warning(f"{num_bad_errors} fluxes have been discarded because their ERRORS are negative or zero")
         comparing_mask[negative_zero_err] = 0.0
 
-
     if np.all(comparing_mask == 0):
-        logging.error("No fluxes left to be compared!")
-        raise Exception("No fluxes left to be compared!")
+        logging.error(f"No fluxes left to be compared!")
+        raise Exception(f"No fluxes left to be compared!")
 
     accept_weights = np.logical_and(comparing_mask == 1., np.logical_not(negative_zero_err))
-    weights = np.ones(len(waveobs))
-    weights[accept_weights] = 1. / err[accept_weights]
+    #--------------------------------------------------------------------------------
+
+    #--------------------------------------------------------------------------------
+    weights = np.ones(len(filtered_spectrum['waveobs']))
+    weights[accept_weights] = 1. / filtered_spectrum['err'][accept_weights]
     weights[~accept_weights] = 0.
     #weights /= np.sum(weights) # Normalize
     #weights /= np.max(weights) # Normalize
     #weights *= len(np.where(accept_weights)[0]) # Scale to number of points
     #weights *= 10000
     weights = np.sqrt(weights)  # When squaring the flux errors, we get more reasonable parameter's errors (empirically validated)
+    #--------------------------------------------------------------------------------
 
+    # Convert initial_vrad from one per component to one per global segment
+    initial_vrad = [np.ones(len(global_segments))*i_vrad for i_vrad in initial_vrad]
 
-    if type(initial_vrad) not in (np.ndarray, list, tuple):
-        if segments is not None:
-            initial_vrad = np.ones(len(segments))*initial_vrad
-        else:
-            initial_vrad = np.ones(1)*initial_vrad
-    elif type(initial_vrad) in (list, tuple):
-        initial_vrad = np.asarray(initial_vrad)
+    parinfos = []
+    parinfo_bases = []
+    for i_teff, i_logg, i_MH, i_alpha, i_vmic, i_vmac, i_vsini, i_limb_darkening_coeff, i_R, i_lf, i_vrad in zip(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_lf, initial_vrad):
+        parinfo = __create_param_structure(i_teff, i_logg, i_MH, i_alpha, i_vmic, i_vmac, i_vsini, i_limb_darkening_coeff, i_R, i_lf, i_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, alpha_range, vmic_range, vmic_from_empirical_relation, vmac_from_empirical_relation)
+        parinfo_bases.append(len(parinfos))
+        parinfos += parinfo # concatenate
 
-    if len(initial_vrad) != len(segments) and "vrad" in free_params:
-        raise Exception("Number of Vrad should be equal to number of segments.")
-
-    parinfo = __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, alpha_range, vmic_range, vmic_from_empirical_relation, vmac_from_empirical_relation)
+    if n_stellar_components == 2:
+        lf_indices = [9 + parinfo_bases[c] for c in range(n_stellar_components)]
+        parinfos[lf_indices[1]]['tied'] = f'1 - p[{lf_indices[0]}]'
+        parinfos[lf_indices[0]]['limits'] = [1e-6, 1.0-1e-6]
+        parinfos[lf_indices[1]]['limits'] = [1e-6, 1.0-1e-6]
 
     synth_model = SynthModel(modeled_layers_pack, linelist, isotopes, linelist_free_loggf, abundances, enhance_abundances=enhance_abundances, scale=scale, precomputed_grid_dir=precomputed_grid_dir, grid=grid, normalize_func=normalize_func)
 
     #segments = None
-    synth_model.fitData(waveobs, segments, comparing_mask, flux, weights=weights, parinfo=parinfo, use_errors=use_errors, max_iterations=max_iterations, quiet=quiet, code=code, use_molecules=use_molecules, vmic_from_empirical_relation=vmic_from_empirical_relation, vmac_from_empirical_relation=vmac_from_empirical_relation, tmp_dir=tmp_dir, timeout=timeout)
+    synth_model.fitData(filtered_spectrum, global_segments, comparing_mask, weights, parinfo=parinfos, parinfo_bases=parinfo_bases, use_errors=use_errors, max_iterations=max_iterations, quiet=quiet, code=code, use_molecules=use_molecules, vmic_from_empirical_relation=vmic_from_empirical_relation, vmac_from_empirical_relation=vmac_from_empirical_relation, n_stellar_components=n_stellar_components, tmp_dir=tmp_dir, timeout=timeout)
 
     if verbose:
         print("\n")
 
     if linemasks is not None:
-        stats_linemasks = _get_stats_per_linemask(waveobs, flux, synth_model.last_final_fluxes, weights, free_params, linemasks, verbose=verbose)
+        stats_linemasks = _get_stats_per_linemask(filtered_spectrum['waveobs'], filtered_spectrum['flux'], synth_model.combined_final_fluxes, weights, free_params, global_linemasks, verbose=verbose)
     else:
         stats_linemasks = None
 
     if verbose:
         print("\n")
-        synth_model.print_solution()
+        for component in range(n_stellar_components):
+            if n_stellar_components > 1:
+                print(f"[Component {component+1}/{n_stellar_components}] Light Fraction: {synth_model.lf(component=component):.2f} +/- {synth_model.elf(component=component):.2f}")
+            synth_model.print_solution(component=component)
 
     # Collect information to be returned
-    params = {}
-    params['teff'] = synth_model.teff()
-    params['logg'] = synth_model.logg()
-    params['MH'] = synth_model.MH()
-    params['alpha'] = synth_model.alpha()
-    params['vmic'] = synth_model.vmic()
-    params['vmac'] = synth_model.vmac()
-    params['vsini'] = synth_model.vsini()
-    params['limb_darkening_coeff'] = synth_model.limb_darkening_coeff()
-    params['R'] = synth_model.R()
-    for i, vrad in enumerate(synth_model.vrad()):
-        params['vrad%04i' % (i)] = vrad
+    all_params = []
+    all_errors = []
+    all_free_abundances = []
+    all_free_loggf = []
+    for i in range(n_stellar_components):
 
-    errors = {}
-    errors['teff'] = synth_model.eteff()
-    errors['logg'] = synth_model.elogg()
-    errors['MH'] = synth_model.eMH()
-    errors['alpha'] = synth_model.ealpha()
-    errors['vmic'] = synth_model.evmic()
-    errors['vmac'] = synth_model.evmac()
-    errors['vsini'] = synth_model.evsini()
-    errors['limb_darkening_coeff'] = synth_model.elimb_darkening_coeff()
-    errors['R'] = synth_model.eR()
-    for i, evrad in enumerate(synth_model.evrad()):
-        errors['vrad%04i' % (i)] = evrad
+        params = {}
+        params['teff'] = synth_model.teff()
+        params['logg'] = synth_model.logg()
+        params['MH'] = synth_model.MH()
+        params['alpha'] = synth_model.alpha()
+        params['vmic'] = synth_model.vmic()
+        params['vmac'] = synth_model.vmac()
+        params['vsini'] = synth_model.vsini()
+        params['limb_darkening_coeff'] = synth_model.limb_darkening_coeff()
+        params['R'] = synth_model.R()
+        params['lf'] = synth_model.lf()
+        for i, vrad in enumerate(synth_model.vrad()):
+            params['vrad%04i' % (i)] = vrad
 
-    if code != "grid":
-        # Free abundances (original, transformed [X/H] [X/Fe] and errors)
-        free_abundances = synth_model.transformed_free_abundances()
-    else:
-        free_abundances = []
+        errors = {}
+        errors['teff'] = synth_model.eteff()
+        errors['logg'] = synth_model.elogg()
+        errors['MH'] = synth_model.eMH()
+        errors['alpha'] = synth_model.ealpha()
+        errors['vmic'] = synth_model.evmic()
+        errors['vmac'] = synth_model.evmac()
+        errors['vsini'] = synth_model.evsini()
+        errors['limb_darkening_coeff'] = synth_model.elimb_darkening_coeff()
+        errors['R'] = synth_model.eR()
+        errors['lf'] = synth_model.elf()
+        for i, evrad in enumerate(synth_model.evrad()):
+            errors['vrad%04i' % (i)] = evrad
 
-    ### Scale errors using the reduced weigthed chisq (tanh)
-    #   * It requires that spectrum errors are well estimated (weights are derived from them)
-    # - Better fits and better SNR produce:
-    #      - rwchisq(tanh) closer to 1
-    #      - smaller scale factor (below 1, so the original error is divided by 1/x)
-    #      - smaller errors
-    if use_errors:
-        #error_scale_factor = synth_model.reduced_wchisq
-        #error_scale_factor = synth_model.wchisq
-        error_scale_factor = 1.
-        # https://www.gnu.org/software/gsl/manual/html_node/Example-programs-for-Nonlinear-Least_002dSquares-Fitting.html
-        # https://www.gnu.org/software/gsl/manual/gsl-ref_38.html
-        #error_scale_factor = np.max((1., synth_model.wchisq/np.sqrt(synth_model.m.dof)))
-    else:
-        error_scale_factor = 1.
-    errors['teff'] *= error_scale_factor
-    errors['logg'] *= error_scale_factor
-    errors['MH'] *= error_scale_factor
-    errors['vmic'] *= error_scale_factor
-    errors['vmac'] *= error_scale_factor
-    errors['vsini'] *= error_scale_factor
-    errors['limb_darkening_coeff'] *= error_scale_factor
-    errors['R'] *= error_scale_factor
-    for i, evrad in enumerate(synth_model.evrad()):
-        errors['vrad%04i' % (i)] *= error_scale_factor
-    for i in range(len(free_abundances)):
-        free_abundances['eAbund'][i] *= error_scale_factor
-        free_abundances['e[X/H]'][i] *= error_scale_factor
-        free_abundances['e[X/Fe]'][i] *= error_scale_factor
-        free_abundances['eA(X)'][i] *= error_scale_factor
+        if code != "grid":
+            # Free abundances (original, transformed [X/H] [X/Fe] and errors)
+            free_abundances = synth_model.transformed_free_abundances()
+        else:
+            free_abundances = []
+
+        ### Scale errors using the reduced weigthed chisq (tanh)
+        #   * It requires that spectrum errors are well estimated (weights are derived from them)
+        # - Better fits and better SNR produce:
+        #      - rwchisq(tanh) closer to 1
+        #      - smaller scale factor (below 1, so the original error is divided by 1/x)
+        #      - smaller errors
+        if use_errors:
+            #error_scale_factor = synth_model.reduced_wchisq
+            #error_scale_factor = synth_model.wchisq
+            error_scale_factor = 1.
+            # https://www.gnu.org/software/gsl/manual/html_node/Example-programs-for-Nonlinear-Least_002dSquares-Fitting.html
+            # https://www.gnu.org/software/gsl/manual/gsl-ref_38.html
+            #error_scale_factor = np.max((1., synth_model.wchisq/np.sqrt(synth_model.m.dof)))
+        else:
+            error_scale_factor = 1.
+        errors['teff'] *= error_scale_factor
+        errors['logg'] *= error_scale_factor
+        errors['MH'] *= error_scale_factor
+        errors['vmic'] *= error_scale_factor
+        errors['vmac'] *= error_scale_factor
+        errors['vsini'] *= error_scale_factor
+        errors['limb_darkening_coeff'] *= error_scale_factor
+        errors['R'] *= error_scale_factor
+        for i, evrad in enumerate(synth_model.evrad()):
+            errors['vrad%04i' % (i)] *= error_scale_factor
+        for i in range(len(free_abundances)):
+            free_abundances['eAbund'][i] *= error_scale_factor
+            free_abundances['e[X/H]'][i] *= error_scale_factor
+            free_abundances['e[X/Fe]'][i] *= error_scale_factor
+            free_abundances['eA(X)'][i] *= error_scale_factor
+
+        if code != "grid":
+            free_loggf = synth_model.transformed_free_loggf()
+        else:
+            free_loggf = []
+
+        all_params.append(params)
+        all_errors.append(errors)
+        all_free_abundances.append(free_abundances)
+        all_free_loggf.append(free_loggf)
+
+    if n_stellar_components == 1:
+        # For backward compatibility, if the fit was for a single star, just return results not in an array
+        all_params = all_params[0]
+        all_errors = all_errors[0]
+        all_free_abundances = all_free_abundances[0]
+        all_free_loggf = all_free_loggf[0]
 
     status = {}
     status['days'] = synth_model.calculation_time.day-1
@@ -1072,13 +1252,9 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     status['nsynthesis'] = synth_model.m.nfev
     status['status'] = synth_model.m.status
 
-    synth_spectrum = create_spectrum_structure(waveobs, synth_model.last_final_fluxes)
+    synth_spectrum = create_spectrum_structure(filtered_spectrum['waveobs'], synth_model.combined_final_fluxes)
 
-    if code != "grid":
-        free_loggf = synth_model.transformed_free_loggf()
-    else:
-        free_loggf = []
 
-    return spectrum, synth_spectrum, params, errors, free_abundances, free_loggf, status, stats_linemasks
+    return spectrum, synth_spectrum, all_params, all_errors, all_free_abundances, all_free_loggf, status, stats_linemasks
 
 

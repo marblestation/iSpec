@@ -73,7 +73,8 @@ def apply_post_fundamental_effects(waveobs, fluxes, segments, macroturbulence = 
             wfilter = np.logical_and(waveobs >= wave_base, waveobs <= wave_top)
             modified = np.logical_or(modified, wfilter)
             spectrum = create_spectrum_structure(waveobs[wfilter], fluxes[wfilter])
-            spectrum = correct_velocity(spectrum, velocity)
+            # Opposite velocity to simplify input and output interpretation for spectroscopic binaries; for simple individual line shifts, the sense is not that important
+            spectrum = correct_velocity(spectrum, -velocity)
             spectrum = resample_spectrum(spectrum, waveobs[wfilter], method="linear", zero_edges=True)
             fluxes[wfilter] = spectrum['flux']
         fluxes[~modified] = 1.
