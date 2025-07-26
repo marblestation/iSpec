@@ -166,13 +166,26 @@ def interpolate_atmosphere_layers(modeled_layers_pack, target, code="spectrum"):
     if "MARCS" in base_dirname:
         compatible_fields.append("radius")
     #interpolated_atm_compatible_format = interpolated_atm[compatible_fields]
+
     try:
         interpolated_atm_compatible_format = pd.DataFrame(interpolated_atm)[compatible_fields].to_records(index=False)
     except ValueError:
         # Pandas raises exception when interpolated_atm is a FITS table read with astropy (case where there wasn't an interpolation but just the closest point was read)
         #  - ValueError: Big-endian buffer not supported on little-endian compiler
-        # Bytes should be swapped and FITS converted to numpy array:
-        interpolated_atm_compatible_format = pd.DataFrame(np.array(interpolated_atm.byteswap().newbyteorder()))[compatible_fields].to_records(index=False)
+        #
+        # The issue: interpolated_atm has big-endian byte order ('>f8' in dtype)
+        # but pandas/numpy on this system expects little-endian data
+        #
+        # newbyteorder('=') converts the data to the native byte order of the current system:
+        # - '>' means big-endian (most significant byte first)
+        # - '<' means little-endian (least significant byte first)
+        # - '=' means native byte order (whatever the current system uses)
+        #
+        # This conversion ensures the data is in the format expected by pandas
+        interpolated_atm_native = interpolated_atm.astype(interpolated_atm.dtype.newbyteorder('='))
+
+        # Now we can safely create a DataFrame and convert to records without endianness errors
+        interpolated_atm_compatible_format = pd.DataFrame(interpolated_atm_native)[compatible_fields].to_records(index=False)
     interpolated_atm_compatible_format = interpolated_atm_compatible_format.view(float).reshape(interpolated_atm_compatible_format.shape + (-1,))
     # SME fails if it is not a np.ndarray (it does not accept views either)
     # built like this:
