@@ -16,7 +16,7 @@
 #    along with iSpec. If not, see <http://www.gnu.org/licenses/>.
 #
 import numpy as np
-from ispec.abundances import enhance_solar_abundances
+from ispec.common import enhance_solar_abundances
 from . import moog
 from . import sme
 from . import spectrum
@@ -24,7 +24,7 @@ from . import synthe
 from . import turbospectrum
 from . import grid as grid_module
 
-def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, code="spectrum", use_molecules=False, grid=None, tmp_dir=None):
+def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, nlte_departure_coefficients=None, code="spectrum", use_molecules=False, grid=None, tmp_dir=None):
     """
     """
     code = code.lower()
@@ -49,7 +49,7 @@ def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, al
         abundances = enhance_solar_abundances(abundances, alpha)
 
         if code == "turbospectrum":
-            return turbospectrum.generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
+            return turbospectrum.generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, nlte_departure_coefficients=nlte_departure_coefficients, tmp_dir=tmp_dir, timeout=timeout)
         elif code in ("moog", "moog-scat"):
             return moog.generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout, code=code)
         elif code == "synthe":
@@ -64,7 +64,7 @@ def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, al
         return grid_module.generate_fundamental_spectrum(grid, waveobs, teff, logg, MH, alpha, microturbulence_vel, regions=regions)
 
 
-def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.60, R=500000, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, code="spectrum", use_molecules=False, grid=None, tmp_dir=None):
+def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = 2.0, macroturbulence = 3.0, vsini = 2.0, limb_darkening_coeff = 0.60, R=500000, verbose=0, gui_queue=None, timeout=1800, atmosphere_layers_file=None, abundances_file=None, fixed_abundances_file=None, linelist_file=None, molecules_files=None, isotope_file=None, regions=None, nlte_departure_coefficients=None, code="spectrum", use_molecules=False, grid=None, tmp_dir=None):
     """
     """
     code = code.lower()
@@ -89,7 +89,7 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
         abundances = enhance_solar_abundances(abundances, alpha)
 
         if code == "turbospectrum":
-            return turbospectrum.generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
+            return turbospectrum.generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, use_molecules=use_molecules, nlte_departure_coefficients=nlte_departure_coefficients, tmp_dir=tmp_dir, timeout=timeout)
         elif code in ("moog", "moog-scat"):
             return moog.generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, macroturbulence=macroturbulence, R=R, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, regions=regions, tmp_dir=tmp_dir, timeout=timeout, code=code)
         elif code == "synthe":

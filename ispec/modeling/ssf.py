@@ -25,7 +25,7 @@ import logging
 from .mpfitmodels import MPFitModel
 from ispec.abundances import write_solar_abundances
 from ispec.abundances import determine_abundance_enchancements
-from ispec.atmospheres import write_atmosphere, interpolate_atmosphere_layers, model_atmosphere_is_closest_copy
+from ispec.atmospheres import write_atmosphere, interpolate_atmosphere_layers, model_atmosphere_is_closest_copy, interpolate_nlte_departure_coefficients
 from ispec.lines import write_atomic_linelist, write_isotope_data, _get_atomic_linelist_definition
 from ispec.common import estimate_vmic, estimate_vmac
 from ispec.spectrum import create_spectrum_structure, convolve_spectrum, resample_spectrum, read_spectrum, create_wavelength_filter, read_spectrum, normalize_spectrum
@@ -260,7 +260,17 @@ class SynthModel(MPFitModel):
                         atmosphere_layers = interpolate_atmosphere_layers(self.modeled_layers_pack, {'teff':self.teff(component=component), 'logg':self.logg(component=component), 'MH':self.MH(component=component), 'alpha':self.alpha(component=component)}, code=self.code)
                         # Fundamental synthetic fluxes
                         if self.code == "turbospectrum":
-                            self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(component=component), self.logg(component=component), self.MH(component=component), self.alpha(component=component), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(component=component), atmosphere_layers_file=self.atmosphere_layers_files[component], abundances_file=self.abundances_files[component], linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, use_molecules=self.use_molecules, tmp_dir=self.tmp_dir, timeout=self.timeout)
+                            if len(self.nlte_originally_available) > 0:
+                                # NLTE departure coefficient interpolation
+                                nlte_departure_coefficients = interpolate_nlte_departure_coefficients(self.modeled_layers_pack, self.abundances, {'teff':self.teff(component=component), 'logg': self.logg(component=component), 'MH': self.MH(component=component), 'alpha': self.alpha(component=component)}, fixed_abundances=fixed_abundances, linelist=linelist, regions=self.segments, code=self.code)
+                                if len(nlte_departure_coefficients) != len(self.nlte_originally_available):
+                                    # Some elements may be ignored if there are no absorption lines in the considered regions
+                                    self.nlte_available = list(nlte_departure_coefficients.keys())
+                                    self.nlte_ignored = list(set(self.nlte_originally_available) - set(nlte_departure_coefficients.keys()))
+                            else:
+                                nlte_departure_coefficients = None
+                            #
+                            self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(component=component), self.logg(component=component), self.MH(component=component), self.alpha(component=component), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(component=component), atmosphere_layers_file=self.atmosphere_layers_files[component], abundances_file=self.abundances_files[component], linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, use_molecules=self.use_molecules, nlte_departure_coefficients=nlte_departure_coefficients, tmp_dir=self.tmp_dir, timeout=self.timeout)
                         elif self.code in ("moog", "moog-scat"):
                             self.last_fluxes = generate_fundamental_spectrum(self.waveobs, atmosphere_layers, self.teff(component=component), self.logg(component=component), self.MH(component=component), self.alpha(component=component), linelist, self.isotopes, self.abundances, fixed_abundances, self.vmic(component=component), atmosphere_layers_file=self.atmosphere_layers_files[component], abundances_file=self.abundances_files[component], linelist_file=self.linelist_file, isotope_file=self.isotope_file, regions=self.segments, verbose=0, code=self.code, tmp_dir=self.tmp_dir, timeout=self.timeout)
                         elif self.code == "synthe":
@@ -334,6 +344,13 @@ class SynthModel(MPFitModel):
         self.code = code
         if self.code == "grid" and self.grid is None:
             self.grid = load_spectral_grid(self.precomputed_grid_dir)
+        self.nlte_originally_available = []
+        if self.code == "turbospectrum":
+            nlte_dep_grid = self.modeled_layers_pack[8]
+            if nlte_dep_grid is not None and len(nlte_dep_grid) > 0:
+                self.nlte_originally_available = list(nlte_dep_grid.keys())
+        self.nlte_available = self.nlte_originally_available
+        self.nlte_ignored = []
         self.use_molecules = use_molecules
         self.vmic_from_empirical_relation = vmic_from_empirical_relation
         self.vmac_from_empirical_relation = vmac_from_empirical_relation
@@ -1141,6 +1158,14 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
             if n_stellar_components > 1:
                 print(f"[Component {component+1}/{n_stellar_components}] Light Fraction: {synth_model.lf(component=component):.2f} +/- {synth_model.elf(component=component):.2f}")
             synth_model.print_solution(component=component)
+
+    if len(synth_model.nlte_available) > 0:
+        if len(synth_model.nlte_ignored) > 0:
+            print(f"NLTE for elements: {synth_model.nlte_available} | Not in region: {synth_model.nlte_ignored}")
+        else:
+            print(f"NLTE available for elements: {synth_model.nlte_available}")
+    else:
+        print("Only LTE")
 
     # Collect information to be returned
     all_params = []

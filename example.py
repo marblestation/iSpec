@@ -994,6 +994,7 @@ def synthesize_spectrum(code="spectrum"):
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
     model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.NLTE/" # NLTE for turbospectrum and certain elements, LTE for other codes
     #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
@@ -1028,6 +1029,8 @@ def synthesize_spectrum(code="spectrum"):
     solar_abundances = ispec.read_solar_abundances(solar_abundances_file)
 
     ## Custom fixed abundances
+    #chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
+    #chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
     #fixed_abundances = ispec.create_free_abundances_structure(["C", "N", "O"], chemical_elements, solar_abundances)
     #fixed_abundances['Abund'] = [-3.49, -3.71, -3.54] # Abundances in SPECTRUM scale (i.e., x - 12.0 - 0.036) and in the same order ["C", "N", "O"]
     ## No fixed abundances
@@ -1042,13 +1045,19 @@ def synthesize_spectrum(code="spectrum"):
     # Prepare atmosphere model
     atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, code=code)
 
+    if "NLTE" in model and code == "turbospectrum":
+        nlte_departure_coefficients = ispec.interpolate_nlte_departure_coefficients(modeled_layers_pack, solar_abundances, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, fixed_abundances=None, linelist=atomic_linelist, regions=regions, code=code)
+    else:
+        nlte_departure_coefficients = None
+
     # Synthesis
     synth_spectrum = ispec.create_spectrum_structure(np.arange(wave_base, wave_top, wave_step))
     synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], \
             atmosphere_layers, teff, logg, MH, alpha, atomic_linelist, isotopes, solar_abundances, \
             fixed_abundances, microturbulence_vel = microturbulence_vel, \
             macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, \
-            R=resolution, regions=regions, verbose=1,
+            R=resolution, regions=regions, verbose=1, \
+            nlte_departure_coefficients=nlte_departure_coefficients, \
             code=code)
     ##--- Save spectrum ------------------------------------------------------------
     logging.info("Saving spectrum...")
@@ -1097,6 +1106,7 @@ def synthesize_spectroscopic_binary(code="spectrum"):
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
     model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.NLTE/" # NLTE for turbospectrum and certain elements, LTE for other codes
     #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
@@ -1131,6 +1141,8 @@ def synthesize_spectroscopic_binary(code="spectrum"):
     solar_abundances = ispec.read_solar_abundances(solar_abundances_file)
 
     ## Custom fixed abundances
+    #chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
+    #chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
     #fixed_abundances = ispec.create_free_abundances_structure(["C", "N", "O"], chemical_elements, solar_abundances)
     #fixed_abundances['Abund'] = [-3.49, -3.71, -3.54] # Abundances in SPECTRUM scale (i.e., x - 12.0 - 0.036) and in the same order ["C", "N", "O"]
     ## No fixed abundances
@@ -1147,13 +1159,19 @@ def synthesize_spectroscopic_binary(code="spectrum"):
         # Prepare atmosphere model
         atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, code=code)
 
+        if "NLTE" in model and code == "turbospectrum":
+            nlte_departure_coefficients = ispec.interpolate_nlte_departure_coefficients(modeled_layers_pack, solar_abundances, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, fixed_abundances=None, linelist=atomic_linelist, regions=regions, code=code)
+        else:
+            nlte_departure_coefficients = None
+
         # Synthesis
         synth_spectrum = ispec.create_spectrum_structure(np.arange(wave_base, wave_top, wave_step))
         synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], \
                 atmosphere_layers, teff, logg, MH, alpha, atomic_linelist, isotopes, solar_abundances, \
                 fixed_abundances, microturbulence_vel = microturbulence_vel, \
                 macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, \
-                R=resolution, regions=regions, verbose=1,
+                R=resolution, regions=regions, verbose=1, \
+                nlte_departure_coefficients=nlte_departure_coefficients, \
                 code=code)
 
         synth_spectrum = ispec.correct_velocity(synth_spectrum, rv)
@@ -1275,6 +1293,7 @@ def precompute_synthetic_grid(code="spectrum"):
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
     model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.NLTE/" # NLTE for turbospectrum and certain elements, LTE for other codes
     #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
@@ -1309,6 +1328,8 @@ def precompute_synthetic_grid(code="spectrum"):
     solar_abundances = ispec.read_solar_abundances(solar_abundances_file)
 
     ## Custom fixed abundances
+    #chemical_elements_file = ispec_dir + "/input/abundances/chemical_elements_symbols.dat"
+    #chemical_elements = ispec.read_chemical_elements(chemical_elements_file)
     #fixed_abundances = ispec.create_free_abundances_structure(["C", "N", "O"], chemical_elements, solar_abundances)
     #fixed_abundances['Abund'] = [-3.49, -3.71, -3.54] # Abundances in SPECTRUM scale (i.e., x - 12.0 - 0.036) and in the same order ["C", "N", "O"]
     ## No fixed abundances
@@ -1388,6 +1409,7 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
     model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.NLTE/" # NLTE for turbospectrum and certain elements, LTE for other codes
     #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
@@ -1603,6 +1625,7 @@ def determine_astrophysical_parameters_using_synth_spectra_for_spectroscopic_bin
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
     model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.NLTE/" # NLTE for turbospectrum and certain elements, LTE for other codes
     #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
@@ -2113,6 +2136,7 @@ def estimate_initial_ap_with_precomputed_grid_and_determine_ap_using_synth_spect
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
     model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.NLTE/" # NLTE for turbospectrum and certain elements, LTE for other codes
     #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
@@ -2308,6 +2332,7 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
     model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.NLTE/" # NLTE for turbospectrum and certain elements, LTE for other codes
     #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
@@ -2517,6 +2542,7 @@ def determine_abundances_using_synth_spectra_for_spectroscopic_binary(code="spec
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
     model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.NLTE/" # NLTE for turbospectrum and certain elements, LTE for other codes
     #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
@@ -2689,6 +2715,7 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
     model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.NLTE/" # NLTE for turbospectrum and certain elements, LTE for other codes
     #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
@@ -2915,6 +2942,7 @@ def determine_abundances_line_by_line_using_synth_spectra_for_spectroscopic_bina
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
     model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.NLTE/" # NLTE for turbospectrum and certain elements, LTE for other codes
     #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
@@ -3109,6 +3137,7 @@ def determine_loggf_line_by_line_using_synth_spectra(code="spectrum"):
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
     model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.NLTE/" # NLTE for turbospectrum and certain elements, LTE for other codes
     #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
@@ -3416,6 +3445,7 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
     model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.NLTE/" # NLTE for turbospectrum and certain elements, LTE for other codes
     #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
@@ -3676,6 +3706,7 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
     # Selected model amtosphere and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
     model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.NLTE/" # NLTE for turbospectrum and certain elements, LTE for other codes
     #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
@@ -3730,6 +3761,7 @@ def calculate_theoretical_ew_and_depth(code="spectrum"):
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
     model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.NLTE/" # NLTE for turbospectrum and certain elements, LTE for other codes
     #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"
@@ -3852,6 +3884,7 @@ def interpolate_atmosphere(code="spectrum"):
     # Selected model amtosphere, linelist and solar abundances
     #model = ispec_dir + "/input/atmospheres/MARCS/"
     model = ispec_dir + "/input/atmospheres/MARCS.GES/"
+    #model = ispec_dir + "/input/atmospheres/MARCS.NLTE/" # NLTE for turbospectrum and certain elements, LTE for other codes
     #model = ispec_dir + "/input/atmospheres/MARCS.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.APOGEE/"
     #model = ispec_dir + "/input/atmospheres/ATLAS9.Castelli/"

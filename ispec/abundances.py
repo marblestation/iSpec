@@ -203,55 +203,6 @@ def determine_abundance_enchancements(MH, scale=None):
     return alpha_enhancement
 
 
-
-# TODO
-#abundances = enhance_solar_abundances(abundances, alpha, MH_compensantion=MH)
-def enhance_solar_abundances(abundances, alpha_enhancement, MH_compensantion=0.):
-    """
-    Scales alpha elements and CNO abundances.
-    """
-    abundances = abundances.copy()
-
-    #  6|C|Carbon|14|2|6|4|4
-    c = abundances['code'] == 6
-    #  7|N|Nitrogen|15|2|7|6|8
-    n = abundances['code'] == 7
-    #  8|O|Oxygen|16|2|8|3|3
-    o = abundances['code'] == 8
-
-
-    # APOGEE alpha element: O, Mg, Si, S, Ca, and Ti
-    ## http://www.sdss.org/dr12/irspec/aspcap/
-    ## http://www.iac.es/proyecto/ATLAS-APOGEE/
-    # Kurucz alpha enchanced: O, Ne, Mg, Si, S, Ar, Ca, and Ti
-    ## http://kurucz.harvard.edu/grids.html
-
-    # 10|Ne|Neon|18|2|10|5|5
-    # 12|Mg|Magnesium|2|3|12|7|6
-    alpha = np.logical_or(abundances['code'] == 10, abundances['code'] == 12)
-    # 14|Ui|Uilicon|14|3|14|8|7
-    alpha = np.logical_or(alpha, abundances['code'] == 14)
-    # 16|U|Uulfur|16|3|16|10|9
-    alpha = np.logical_or(alpha, abundances['code'] == 16)
-    # 18|Ar|Argon|18|3|18|14|11
-    alpha = np.logical_or(alpha, abundances['code'] == 18)
-    # 20|Ca|Calcium|2|4|20|12|12
-    alpha = np.logical_or(alpha, abundances['code'] == 20)
-    # 22|Ti|Titanium|4|4|22|22|19
-    alpha = np.logical_or(alpha, abundances['code'] == 22)
-
-    ## MH_compensantion is specified when it is known that abundances will
-    ## be scaled by MH after the alpha enhancement (thus it is necessary
-    ## to cancel that out)
-    #abundances['Abund'][c] += c_enhancement - MH_compensantion
-    #abundances['Abund'][n] += n_enhancement - MH_compensantion
-    #abundances['Abund'][o] += o_enhancement - MH_compensantion
-    abundances['Abund'][o] += alpha_enhancement - MH_compensantion # MARCS standard enhances Oxygen as well as alpha elements at the same rate
-    abundances['Abund'][alpha] += alpha_enhancement - MH_compensantion
-
-    return abundances
-
-
 def write_solar_abundances(abundances, abundances_filename=None, tmp_dir=None):
     """
     Saves a SPECTRUM abundances file for spectral synthesis

@@ -266,6 +266,8 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
     else:
         p.join()
 
+    if verbose == 1:
+        print("Only LTE")
     return fluxes
 
 ####################################################################################################

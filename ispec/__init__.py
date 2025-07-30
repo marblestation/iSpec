@@ -33,10 +33,11 @@ def resource_path(relative):
 
 from .abundances import determine_abundances
 from .abundances import read_solar_abundances
-from .abundances import enhance_solar_abundances
+from .common import enhance_solar_abundances
 from .abundances import determine_abundance_enchancements
 from .abundances import create_free_abundances_structure
 from .atmospheres import interpolate_atmosphere_layers
+from .atmospheres import interpolate_nlte_departure_coefficients
 from .atmospheres import load_modeled_layers_pack
 from .atmospheres import valid_atmosphere_target
 from .atmospheres import write_atmosphere

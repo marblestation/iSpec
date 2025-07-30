@@ -215,16 +215,35 @@ def read_line_regions(line_regions_filename):
         raise Exception("Filename '{}' does not exist!".format(line_regions_filename))
     atomic_dtype = _get_atomic_linelist_definition()
     fitted_dtype = __get_fitted_lines_definition()
-    try:
-        num_cols = len(open(line_regions_filename, "r").readline().split("\t"))
-        if num_cols == len(atomic_dtype) + len(fitted_dtype):
-            # Atomic + fitted information
-            line_regions = np.genfromtxt(line_regions_filename, dtype=atomic_dtype+fitted_dtype, delimiter="\t", skip_header=1, loose=False)
-        elif num_cols == 4:
-            line_regions = np.array([tuple(line.rstrip('\r\n').split("\t")) for line in open(line_regions_filename,)][1:], dtype=[('wave_peak', float),('wave_base', float),('wave_top', float), ('note', '|U100')])
-        else:
-            raise Exception()
-    except:
+
+    num_cols = len(open(line_regions_filename, "r").readline().split("\t"))
+    if num_cols == len(atomic_dtype) + len(fitted_dtype):
+        # Atomic + fitted information
+        line_regions = np.genfromtxt(line_regions_filename, dtype=atomic_dtype+fitted_dtype, delimiter="\t", skip_header=1, loose=False)
+    elif num_cols == len(atomic_dtype) + len(fitted_dtype) - 5:
+        # Old fitted line region without NLTE fields
+        atomic_dtype_without_nlte = [t for t in atomic_dtype if not t[0].startswith('nlte')]
+        nlte_dtype = [t for t in atomic_dtype if t[0].startswith('nlte')]
+
+        line_regions = np.genfromtxt(line_regions_filename, dtype=atomic_dtype_without_nlte+fitted_dtype, delimiter="\t", skip_header=1, loose=False)
+
+        # Create new structured array
+        nlte_expanded_line_regions = np.empty(len(line_regions), dtype=atomic_dtype+fitted_dtype)
+
+        # Copy old data
+        for name, dtype in atomic_dtype_without_nlte+fitted_dtype:
+            nlte_expanded_line_regions[name] = line_regions[name]
+
+        # Initialize new NLTE fields with appropriate default values
+        nlte_expanded_line_regions['nlte'] = 'F'
+        nlte_expanded_line_regions['nlte_level_low'] = 0
+        nlte_expanded_line_regions['nlte_level_up'] = 0
+        nlte_expanded_line_regions['nlte_label_low'] = 'none'
+        nlte_expanded_line_regions['nlte_label_up'] = 'none'
+        line_regions = nlte_expanded_line_regions
+    elif num_cols == 4:
+        line_regions = np.array([tuple(line.rstrip('\r\n').split("\t")) for line in open(line_regions_filename,)][1:], dtype=[('wave_peak', float),('wave_base', float),('wave_top', float), ('note', '|U100')])
+    else:
         raise Exception("Wrong line regions file format!")
 
     if np.any(line_regions['wave_top'] - line_regions['wave_base'] <= 0):
@@ -704,6 +723,11 @@ def __create_linemasks_structure(num_peaks):
     #linemasks['isotope_002'] = 0
     linemasks['spectrum_synthe_isotope'] = 0
     linemasks['ion'] = 0
+    linemasks['nlte'] = ""
+    linemasks['nlte_level_low'] = 0
+    linemasks['nlte_level_up'] = 0
+    linemasks['nlte_label_low'] = "none"
+    linemasks['nlte_label_up'] = "none"
     linemasks['spectrum_moog_species'] = ""
     linemasks['turbospectrum_species'] = ""
     linemasks['width_species'] = ""
@@ -728,6 +752,26 @@ def read_atomic_linelist(linelist_filename, wave_base=None, wave_top=None):
         if num_cols == len(atomic_dtype):
             # Only atomic linelist
             linelist = np.genfromtxt(linelist_filename, dtype=atomic_dtype, delimiter="\t", skip_header=1, loose=False, encoding='utf-8')
+        elif num_cols == len(atomic_dtype) - 5:
+            # Old atomic line list without NLTE fields
+            atomic_dtype_without_nlte = [t for t in atomic_dtype if not t[0].startswith('nlte')]
+            nlte_dtype = [t for t in atomic_dtype if t[0].startswith('nlte')]
+            linelist = np.genfromtxt(linelist_filename, dtype=atomic_dtype_without_nlte, delimiter="\t", skip_header=1, loose=False, encoding='utf-8')
+
+            # Create new structured array
+            nlte_expanded_linelist = np.empty(len(linelist), dtype=atomic_dtype)
+
+            # Copy old data
+            for name, dtype in atomic_dtype_without_nlte:
+                nlte_expanded_linelist[name] = linelist[name]
+
+            # Initialize new NLTE fields with appropriate default values
+            nlte_expanded_linelist['nlte'] = 'F'
+            nlte_expanded_linelist['nlte_level_low'] = 0
+            nlte_expanded_linelist['nlte_level_up'] = 0
+            nlte_expanded_linelist['nlte_label_low'] = 'none'
+            nlte_expanded_linelist['nlte_label_up'] = 'none'
+            linelist = nlte_expanded_linelist
         #elif num_cols == len(atomic_dtype) + len(fitted_dtype):
             ## Atomic + fitted information
             #linelist = np.genfromtxt(linelist_filename, dtype=atomic_dtype+fitted_dtype, delimiter="\t", skip_header=1, loose=False)
@@ -816,6 +860,12 @@ def _get_atomic_linelist_definition():
      ('width_species', '|U6'),
      ('reference_code', '|U10'),
      #('reference', '|U39'),
+     ('nlte', '|U1'),
+     ('nlte_level_low', '<i4'),
+     ('nlte_level_up', '<i4'),
+     ('nlte_label_low', '|U20'),
+     ('nlte_label_up', '|U20'),
+     #
      ('spectrum_support', '|U1'),
      ('turbospectrum_support', '|U1'),
      ('moog_support', '|U1'),
@@ -929,6 +979,12 @@ def __generic_write_atomic_linelist_element(out, data, include_fit):
     out.write("%s\t" % (data['width_species']))
     out.write("%s\t" % (data['reference_code']))
     #out.write("%s\t" % (data['reference']))
+    out.write("%s\t" % (str(data['nlte'])[0])) # Only 'T' or 'F' to save memory
+    out.write("%i\t" % (data['nlte_level_low']))
+    out.write("%i\t" % (data['nlte_level_up']))
+    out.write("%s\t" % (data['nlte_label_low']))
+    out.write("%s\t" % (data['nlte_label_up']))
+    #
     out.write("%s\t" % (str(data['spectrum_support'])[0])) # Only 'T' or 'F' to save memory
     out.write("%s\t" % (str(data['turbospectrum_support'])[0]))
     out.write("%s\t" % (str(data['moog_support'])[0]))
@@ -2741,24 +2797,49 @@ def __turbospectrum_write_atomic_linelist(linelist, linelist_filename=None, tmp_
         for element in np.unique(sublinelist['element']):
             #print element
             subsublinelist = sublinelist[sublinelist['element'] == element]
+            nlte = 'nlte_label_low' in subsublinelist.dtype.fields.keys() and np.any((subsublinelist['nlte_label_low'] != 'none') | (subsublinelist['nlte_label_up'] != 'none'))
             molecule = subsublinelist['molecule'][0] == "T"
             # '   3.000            '    1        28
-            # 'Li I   '
             out.write("'%20s' %4s %9i\n" % (species, subsublinelist['ion'][0], len(subsublinelist)))
-            out.write("'%-7s'\n" % (element))
+            if nlte:
+                # 'Fe I    NLTE'
+                out.write("'%-7s NLTE'\n" % (element))
+            else:
+                # 'Li I   LTE'
+                out.write("'%-7s LTE'\n" % (element))
+                nlte
             for line in subsublinelist:
                 # Do not use error or turbospectrum will calculate 3 times the abundance for a single line
                 #line_ew_err = line['ew_err']
                 line_ew_err = 0.0
                 if with_ew:
                     line_ew = line['ew']
+                if nlte:
+                    nlte_level_low = line['nlte_level_low']
+                    nlte_level_up = line['nlte_level_up']
+                    nlte_label_low = line['nlte_label_low']
+                    nlte_label_up = line['nlte_label_up']
+                else:
+                    nlte_level_low = 0
+                    nlte_level_up = 0
+                    nlte_label_low = 'none'
+                    nlte_label_up = 'none'
                 # NOTE: turbospectrum_fdamp corresponds to waals
                 if not molecule:
-                    # 4602.826  1.848 -0.613 2006.342    4.0  6.61E+07 'p' 'd'   0.0    1.0 'Li I LS:1s2.2p 2P* LS:1s2.4d 2D'
-                    out.write("%10.3f %9.5f %6.3f %8.3f %6.1f %9.2E '%s' '%s' %5.1f %6.1f '%s'\n" % (line['wave_A'], line['lower_state_eV'], \
-                                                    line['loggf'], line['turbospectrum_fdamp'], line['upper_g'], \
-                                                    line['turbospectrum_rad'], line['lower_orbital_type'], \
-                                                    line['upper_orbital_type'], line_ew, line_ew_err, ""))
+                    if nlte:
+                        # 4200.087  3.884 -1.130   -7.420    7.0  5.01E+07  0.000  'p' 'd'   0.0    1.0 'Fe I LS:3p6.3d6.(5D).4s.4p.(3P*) z3D* LS:3p6.3d7.(4F).4d f3F'  82 0  'z3D3*' 'none'
+                        # 4200.463  4.154 -3.374   -7.290    9.0  2.45E+08  0.000  'p' 'd'   0.0    1.0 'Fe I LS:3p6.3d7.(4F).4p y5D* LS:3p6.3d6.(5D).4s.\ (6D).5d 7F'  90 484  'y5D3*' '6s5F'
+                        out.write("%10.3f %9.5f %6.3f %8.3f %6.1f %9.2E '%s' '%s' %5.1f %6.1f '%s' %3i %3i '%s' '%s'\n" % (line['wave_A'], line['lower_state_eV'], \
+                                                        line['loggf'], line['turbospectrum_fdamp'], line['upper_g'], \
+                                                        line['turbospectrum_rad'], line['lower_orbital_type'], \
+                                                        line['upper_orbital_type'], line_ew, line_ew_err, "", \
+                                                        nlte_level_low, nlte_level_up, nlte_label_low, nlte_label_up))
+                    else:
+                        # 4602.826  1.848 -0.613 2006.342    4.0  6.61E+07 'p' 'd'   0.0    1.0 'Li I LS:1s2.2p 2P* LS:1s2.4d 2D'
+                        out.write("%10.3f %9.5f %6.3f %8.3f %6.1f %9.2E '%s' '%s' %5.1f %6.1f '%s'\n" % (line['wave_A'], line['lower_state_eV'], \
+                                                        line['loggf'], line['turbospectrum_fdamp'], line['upper_g'], \
+                                                        line['turbospectrum_rad'], line['lower_orbital_type'], \
+                                                        line['upper_orbital_type'], line_ew, line_ew_err, ""))
                 else:
                     # 5152.971   1.08000 -3.516    0.000   14.0  2.00E+08 'X' 'X'   0.0    1.0 'X' 'X' 0.0 1.0 'pP2(7.5) 1 6.5 e 2 - 3 7.5 e 8 '
                     out.write("%10.3f %9.5f %6.3f %8.3f %6.1f %9.2E '%s' '%s' %5.1f %6.1f  '%s' '%s' %5.1f %6.1f  '%s'\n" % (line['wave_A'], line['lower_state_eV'], \

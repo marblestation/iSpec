@@ -428,6 +428,8 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
                     macroturbulence=macroturbulence, vsini=vsini, \
                     limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
 
+    if verbose == 1:
+        print("Only LTE")
     return synth_spectrum['flux']
 
 

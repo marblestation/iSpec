@@ -32,10 +32,10 @@ from ispec.spectrum import create_spectrum_structure, resample_spectrum
 from .effects import _filter_linelist, apply_post_fundamental_effects
 
 
-def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, regions=None, use_molecules=False, tmp_dir=None, timeout=1800):
-    return generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0, use_molecules=use_molecules, tmp_dir=tmp_dir, timeout=timeout)
+def generate_fundamental_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, regions=None, use_molecules=False, nlte_departure_coefficients=None, tmp_dir=None, timeout=1800):
+    return generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=verbose,  atmosphere_layers_file=atmosphere_layers_file, linelist_file=linelist_file, regions=regions, R=0, macroturbulence=0, vsini=0, limb_darkening_coeff=0, use_molecules=use_molecules, nlte_departure_coefficients=nlte_departure_coefficients, tmp_dir=tmp_dir, timeout=timeout)
 
-def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, use_molecules=False, tmp_dir=None, timeout=1800):
+def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel, verbose=0,  atmosphere_layers_file=None, linelist_file=None, regions=None, R=None, macroturbulence=None, vsini=None, limb_darkening_coeff=None, use_molecules=False, nlte_departure_coefficients=None, tmp_dir=None, timeout=1800):
     if not is_turbospectrum_support_enabled():
         raise Exception("Turbospectrum support is not enabled")
 
@@ -120,6 +120,83 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
     else:
         linelist_filename = linelist_file
 
+    #--------------------------------------------------------------------------------
+    # NLTE
+    #--------------------------------------------------------------------------------
+    tmp_departures_dir = None
+    absolute_atom_model_dirname = None
+    nlte_info_file_content = []
+    nlte_available = []
+    nlte_ignored = []
+    if nlte_departure_coefficients is not None:
+        for element_name, (interpolated_departures, interpolated_tau, ndep, nk, atomic_number, absolute_abundance, absolute_atom_model_filename, ) in nlte_departure_coefficients.items():
+            if atomic_number > 1: # hydrogen (atomic number == 1) is usually encoded into radiative transfer codes and not necessarily present in the atomic linelist
+                # Check if there is any atomic line related to this element that has NLTE data
+                element_lines_filter = np.floor(np.asarray(linelist['turbospectrum_species'], dtype=float)) == atomic_number
+                element_linelist = linelist[element_lines_filter]
+                linelist_has_nlte_data_for_element = 'T' in element_linelist['nlte'] and (np.any(element_linelist[element_linelist['nlte'] == 'T']['nlte_label_low'] != 'none') or np.any(element_linelist[element_linelist['nlte'] == 'T']['nlte_label_up'] != 'none'))
+                if not linelist_has_nlte_data_for_element:
+                    # Skip interpolattion of departure coefficient for elements that do not have any line with NLTE data in the linelist
+                    nlte_ignored.append(element_name)
+                    continue
+            # interpolate
+            if tmp_departures_dir is None:
+                tmp_departures_dir = tempfile.mkdtemp(dir=tmp_dir)
+            if absolute_atom_model_dirname is None:
+                absolute_atom_model_dirname = os.path.dirname(absolute_atom_model_filename)
+            else:
+                assert absolute_atom_model_dirname == os.path.dirname(absolute_atom_model_filename)
+            atom_model_filename = os.path.basename(absolute_atom_model_filename)
+            out = tempfile.NamedTemporaryFile(mode="wt", delete=False, dir=tmp_departures_dir, encoding='utf-8')
+            out.close()
+            departure_coefficient_filename = out.name
+
+            # Overwrite tau (depth) to avoid turbospectrum's error "tau scales differ in model atmos and in departure coefficient file"
+            # - tau is interpolated at the atmosphere level and at the departure coefficient level
+            #   both from the same MARCS model atmospheres, however, due to differences in how the
+            #   interpolation is done, the interpolated tau can be slighly different (difference
+            #   bigger than the hardcoded turbospectrum threshold)
+            interpolated_tau = atmosphere_layers[:, 7]
+
+            # Write departure coefficient file
+            _turbospectrum_write_departure_coefficient_file(
+                departure_coefficient_filename,
+                ndep=ndep,
+                nlevel=nk,
+                tau_log10=interpolated_tau,
+                depart_coeffs=interpolated_departures,
+                atmos_str='interpolated',
+                abundance=absolute_abundance,
+                binary=False
+            )
+            nlte_available.append(element_name)
+            nlte_info_file_content.append((atomic_number, element_name, atom_model_filename, os.path.basename(departure_coefficient_filename),))
+
+
+    nlte_info_filename = None
+    if len(nlte_info_file_content) > 0:
+        out = tempfile.NamedTemporaryFile(mode="wt", delete=False, dir=tmp_departures_dir, encoding='utf-8')
+        out.close()
+        nlte_info_filename = out.name
+        with open(nlte_info_filename, "w") as f:
+            f.write("# This file controls which species are treated in LTE/NLTE\n")
+            f.write("# It also gives the path to the model atom and the departure files\n")
+            f.write("# First created 2021-02-22\n")
+            f.write("# if a species is absent it is assumed to be LTE\n")
+            f.write("#\n")
+            f.write("# each line contains :\n")
+            f.write("# atomic number / name / (n)lte / model atom / departure file / binary or ascii departure file\n")
+            f.write("#\n")
+            f.write("# path for model atom files     ! don't change this line !\n")
+            f.write(f"{absolute_atom_model_dirname}/\n")
+            f.write("#\n")
+            f.write("# path for departure files      ! don't change this line !\n")
+            f.write(f"{tmp_departures_dir}/\n")
+            f.write("#\n")
+            f.write("# atomic (N)LTE setup\n")
+            for atomic_number, element_name, atom_model_filename, departure_coefficient_filename in nlte_info_file_content:
+                f.write(f"{atomic_number}\t'{element_name}'\t'nlte'\t'{atom_model_filename}'\t'{departure_coefficient_filename}'\t'ascii'\n")
+    #--------------------------------------------------------------------------------
 
     synth_fluxes = []
     synth_waveobs = []
@@ -141,8 +218,11 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
 
         command = turbospectrum_bsyn_lu
         command_input = ""
-        command_input += "'NLTE :'          '.false.'\n"
-        #command_input += 'NLTEINFOFILE:'  'DATA/SPECIES_LTE_NLTE.dat' # TODO: To be implemented following https://github.com/bertrandplez/Turbospectrum_NLTE/tree/master/DOC
+        if nlte_info_filename is not None:
+            command_input += "'NLTE :'          '.true.'\n"
+            command_input += f"'NLTEINFOFILE:'  '{nlte_info_filename}'\n"
+        else:
+            command_input += "'NLTE :'          '.false.'\n"
         command_input += "'LAMBDA_MIN:'  '"+str(wave_base*10.)+"'\n"
         command_input += "'LAMBDA_MAX:'  '"+str(wave_top*10.)+"'\n"
         command_input += "'LAMBDA_STEP:' '"+str(wave_step*10.)+"'\n"
@@ -255,6 +335,8 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
         os.remove(atmosphere_layers_file)
     if remove_tmp_linelist_file:
         os.remove(linelist_filename)
+    if tmp_departures_dir is not None:
+        shutil.rmtree(tmp_departures_dir)
 
     synth_spectrum = create_spectrum_structure(synth_waveobs, synth_fluxes)
     synth_spectrum.sort(order=['waveobs'])
@@ -269,6 +351,108 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
                     macroturbulence=macroturbulence, vsini=vsini, \
                     limb_darkening_coeff=limb_darkening_coeff, R=R, vrad=vrad)
 
+
+    if verbose == 1:
+        if nlte_info_filename is not None:
+            if len(nlte_ignored) > 0:
+                print(f"NLTE for elements: {nlte_available} | Not in region: {nlte_ignored}")
+            else:
+                print(f"NLTE for elements: {nlte_available}")
+        else:
+            print("Only LTE")
+
     return synth_spectrum['flux']
 
+#--------------------------------------------------------------------------------
+def _write_fortran_record(f, data):
+    """
+    Writes a Fortran-style unformatted record to a file.
+    A record is data surrounded by 4-byte integers specifying the data length.
+    """
+    # '<i' means little-endian 4-byte integer
+    len_bytes = struct.pack('<i', len(data))
+    f.write(len_bytes)
+    f.write(data)
+    f.write(len_bytes)
+
+def _turbospectrum_write_departure_coefficient_file(filename, ndep, nlevel, tau_log10, depart_coeffs, atmos_str='default_atmos', abundance=7.50, binary=False):
+    """
+    Creates a departure coefficient file in the format expected by the Fortran code.
+
+    Args:
+        filename (str): The name of the file to create.
+        ndep (int): The number of depth points.
+        nlevel (int): The number of energy levels.
+        tau_log10 (np.ndarray): 1D array of log10(tau) values, shape (ndep,).
+        depart_coeffs (np.ndarray): 2D array of departure coefficients.
+                                   MUST have shape (nlevel, ndep).
+        atmos_str (str): A descriptive string for the atmosphere model.
+        abundance (float): The NLTE abundance to write to the file.
+        binary (bool): If True, creates a binary file. If False, creates ASCII.
+    """
+    if depart_coeffs.shape != (nlevel, ndep):
+        raise ValueError(f"Shape of depart_coeffs is {depart_coeffs.shape}, "
+                         f"but expected ({nlevel}, {ndep})")
+
+    if binary:
+        # Create a little-endian, unformatted binary file
+        #print(f"Creating BINARY departure file: {filename}")
+        with open(filename, 'wb') as f:
+            # Record 1: header_dep1 (500 bytes)
+            header1 = atmos_str.ljust(500)
+            _write_fortran_record(f, header1.encode('latin-1'))
+
+            # Record 2: abundance_nlte (4-byte float)
+            _write_fortran_record(f, struct.pack('<f', abundance))
+
+            # Record 3: header_dep2 (1000 bytes)
+            header2 = "Binary departure file created with Python".ljust(1000)
+            _write_fortran_record(f, header2.encode('latin-1'))
+
+            # Record 4: ndepth_read (4-byte integer)
+            _write_fortran_record(f, struct.pack('<i', ndep))
+
+            # Record 5: modnlevel_read (4-byte integer)
+            _write_fortran_record(f, struct.pack('<i', nlevel))
+
+            # Record 6: taumod array (linear tau)
+            tau_linear = 10.0**tau_log10
+            # '<{ndep}f' creates a format string like '<56f' for 56 floats
+            tau_data = struct.pack(f'<{ndep}f', *tau_linear)
+            _write_fortran_record(f, tau_data)
+
+            # Records 7 to 7+nlevel-1: Departure coefficients (level-major)
+            # The input `depart_coeffs` is already (nlevel, ndep), which is correct.
+            for j in range(nlevel):
+                level_data = depart_coeffs[j, :]
+                b_dep_data = struct.pack(f'<{ndep}f', *level_data)
+                _write_fortran_record(f, b_dep_data)
+
+    else:
+        # Create a formatted ASCII file
+        #print(f"Creating ASCII departure file: {filename}")
+        with open(filename, 'w') as f:
+            # 1. Header (8 lines) - we'll just write placeholders
+            f.write("  placeholder_str           0.0         0.0         0.0\n" * 8)
+
+            # 2. Abundance
+            f.write(f"{abundance:.2f}\n")
+
+            # 3. Number of depth points
+            f.write(f"{ndep}\n")
+
+            # 4. Number of levels
+            f.write(f"{nlevel}\n")
+
+            # 5. Optical depths (log10(tau))
+            # The format is free, so one value per line is simplest.
+            for t in tau_log10:
+                f.write(f" {t:12.4f}\n")
+
+            # 6. Departure coefficients (depth-major)
+            # We need to transpose the (nlevel, ndep) array to (ndep, nlevel).
+            depart_transposed = depart_coeffs.T
+            # Use np.savetxt for easy and clean formatting.
+            np.savetxt(f, depart_transposed, fmt='%.8f')
+#--------------------------------------------------------------------------------
 

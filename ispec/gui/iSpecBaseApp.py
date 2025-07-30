@@ -4328,7 +4328,6 @@ iSpec uses the following radiative transfer codes:
             self.status_message("Interpolating atmosphere model...")
             atmosphere_layers = ispec.interpolate_atmosphere_layers(self.modeled_layers_pack[selected_atmosphere_models], {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha})
 
-
             if not in_segments and not in_lines:
                 regions = None # Compute fluxes for all the wavelengths
             else:
@@ -4340,6 +4339,11 @@ iSpec uses the following radiative transfer codes:
                 regions = self.regions[elements_type]
                 wave_base = np.min(regions['wave_base'])
                 wave_top = np.max(regions['wave_top'])
+
+            if "NLTE" in selected_atmosphere_models and code == "turbospectrum":
+                nlte_departure_coefficients = ispec.interpolate_nlte_departure_coefficients(self.modeled_layers_pack[selected_atmosphere_models], abundances, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, fixed_abundances=None, linelist=linelist, regions=regions, code=code)
+            else:
+                nlte_departure_coefficients = None
 
             if wave_base >= wave_top:
                 msg = "Bad wavelength range definition, maximum value cannot be lower than minimum value."
@@ -4374,11 +4378,11 @@ iSpec uses the following radiative transfer codes:
 
             self.operation_in_progress = True
             self.status_message("Synthesizing spectrum...")
-            thread = threading.Thread(target=self.on_synthesize_thread, args=(code, waveobs, regions, linelist, isotopes, abundances, atmosphere_layers, teff, logg, MH, alpha, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, ))
+            thread = threading.Thread(target=self.on_synthesize_thread, args=(code, waveobs, regions, linelist, isotopes, abundances, atmosphere_layers, teff, logg, MH, alpha, microturbulence_vel,  macroturbulence, vsini, limb_darkening_coeff, resolution, nlte_departure_coefficients, ))
             thread.setDaemon(True)
             thread.start()
 
-    def on_synthesize_thread(self, code, waveobs, regions, linelist, isotopes, abundances, atmosphere_layers, teff, logg, MH, alpha, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution):
+    def on_synthesize_thread(self, code, waveobs, regions, linelist, isotopes, abundances, atmosphere_layers, teff, logg, MH, alpha, microturbulence_vel, macroturbulence, vsini, limb_darkening_coeff, resolution, nlte_departure_coefficients):
 
         synth_spectrum = ispec.create_spectrum_structure(waveobs)
 
@@ -4388,7 +4392,7 @@ iSpec uses the following radiative transfer codes:
         error_message = None
         try:
             # waveobs is multiplied by 10.0 in order to be converted from nm to armstrongs
-            synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, regions=regions, verbose=1, gui_queue=self.queue, code=code)
+            synth_spectrum['flux'] = ispec.generate_spectrum(synth_spectrum['waveobs'], atmosphere_layers, teff, logg, MH, alpha, linelist, isotopes, abundances, fixed_abundances, microturbulence_vel = microturbulence_vel, macroturbulence=macroturbulence, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, R=resolution, regions=regions, nlte_departure_coefficients=nlte_departure_coefficients, verbose=1, gui_queue=self.queue, code=code)
         except Exception as e:
             error_message = str(e)
 

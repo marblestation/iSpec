@@ -25,11 +25,11 @@ from multiprocessing import JoinableQueue
 from queue import Empty
 import logging
 
-from ispec.abundances import write_solar_abundances, write_fixed_abundances, enhance_solar_abundances
+from ispec.abundances import write_solar_abundances, write_fixed_abundances
 from ispec.atmospheres import write_atmosphere
 from ispec.lines import write_atomic_linelist, write_isotope_data
 from ispec.common import is_spectrum_support_enabled
-from ispec.common import which
+from ispec.common import which, enhance_solar_abundances
 from ispec.spectrum import create_spectrum_structure, resample_spectrum
 from .effects import _filter_linelist, apply_post_fundamental_effects
 
@@ -157,6 +157,8 @@ def generate_spectrum(waveobs, atmosphere_layers, teff, logg, MH, alpha, linelis
     if remove_tmp_isotope_file:
         os.remove(isotope_file)
 
+    if verbose == 1:
+        print("Only LTE")
     return fluxes
 
 
