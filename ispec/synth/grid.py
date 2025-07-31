@@ -110,6 +110,32 @@ def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, M
             # Prepare atmosphere model
             atmosphere_layers = interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, code=code)
             fixed_abundances=None
+
+            #--------------------------------------------------------------------------------
+            nlte_departure_coefficients = None
+            nlte_originally_available = []
+            nlte_available = []
+            nlte_ignored = []
+            if code == "turbospectrum":
+                nlte_dep_grid = modeled_layers_pack[8]
+                if nlte_dep_grid is not None and len(nlte_dep_grid) > 0:
+                    nlte_originally_available = list(nlte_dep_grid.keys())
+                    nlte_departure_coefficients = ispec.interpolate_nlte_departure_coefficients(modeled_layers_pack, solar_abundances, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, fixed_abundances=fixed_abundances, linelist=atomic_linelist, regions=segments, code=code)
+                    if len(nlte_departure_coefficients) != len(nlte_originally_available):
+                        # Some elements may be ignored if there are no absorption lines in the considered regions
+                        nlte_available = list(nlte_departure_coefficients.keys())
+                        nlte_ignored = list(set(nlte_originally_available) - set(nlte_departure_coefficients.keys()))
+
+            if len(nlte_available) > 0:
+                if len(nlte_ignored) > 0:
+                    nlte_info = f"NLTE for elements: {nlte_available} | Not in region: {nlte_ignored}"
+                else:
+                    nlte_info = f"NLTE available for elements: {nlte_available}"
+            else:
+                nlte_info = "Only LTE"
+            print(nlte_info)
+            #--------------------------------------------------------------------------------
+
             # Synthesis
             synth_spectrum = create_spectrum_structure(wavelengths)
             synth_spectrum['flux'] = ispec.synth.common.generate_spectrum(synth_spectrum['waveobs'], \
@@ -117,7 +143,8 @@ def __generate_synthetic_fits(filename_out, wavelengths, segments, teff, logg, M
                     fixed_abundances, microturbulence_vel = vmic, \
                     macroturbulence=vmac, vsini=vsini, limb_darkening_coeff=limb_darkening_coeff, \
                     R=resolution, regions=segments, verbose=0, \
-                    code=code, use_molecules=use_molecules, tmp_dir=tmp_dir)
+                    code=code, use_molecules=use_molecules, tmp_dir=tmp_dir, \
+                    nlte_departure_coefficients=nlte_departure_coefficients)
             # FITS
             write_spectrum(synth_spectrum, filename_out)
             print("[finished]", teff, logg, MH, alpha, vmic, vmac, vsini, limb_darkening_coeff, resolution)
