@@ -956,10 +956,6 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     #--------------------------------------------------------------------------------
 
     n_stellar_components = len(initial_teff)
-    if n_stellar_components == 1:
-        # For single stars, these assumptions need to be respected:
-        assert initial_vrad[0] == 0
-        assert initial_lf[0] == 1
     assert sum(initial_lf) == 1, "light fractions should sum up to one"
 
     #--------------------------------------------------------------------------------
