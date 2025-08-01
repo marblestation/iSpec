@@ -1046,7 +1046,7 @@ def synthesize_spectrum(code="spectrum"):
     atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, code=code)
 
     if "NLTE" in model and code == "turbospectrum":
-        nlte_departure_coefficients = ispec.interpolate_nlte_departure_coefficients(modeled_layers_pack, solar_abundances, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, fixed_abundances=None, linelist=atomic_linelist, regions=regions, code=code)
+        nlte_departure_coefficients = ispec.interpolate_nlte_departure_coefficients(modeled_layers_pack, solar_abundances, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, fixed_abundances=fixed_abundances, linelist=atomic_linelist, regions=regions, code=code)
     else:
         nlte_departure_coefficients = None
 
@@ -1160,7 +1160,7 @@ def synthesize_spectroscopic_binary(code="spectrum"):
         atmosphere_layers = ispec.interpolate_atmosphere_layers(modeled_layers_pack, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, code=code)
 
         if "NLTE" in model and code == "turbospectrum":
-            nlte_departure_coefficients = ispec.interpolate_nlte_departure_coefficients(modeled_layers_pack, solar_abundances, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, fixed_abundances=None, linelist=atomic_linelist, regions=regions, code=code)
+            nlte_departure_coefficients = ispec.interpolate_nlte_departure_coefficients(modeled_layers_pack, solar_abundances, {'teff':teff, 'logg':logg, 'MH':MH, 'alpha':alpha}, fixed_abundances=fixed_abundances, linelist=atomic_linelist, regions=regions, code=code)
         else:
             nlte_departure_coefficients = None
 
