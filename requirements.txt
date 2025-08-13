@@ -9,3 +9,4 @@ statsmodels>=0.14.4
 dill>=0.3.8
 h5py>=3.14.0
 hdf5plugin>=5.1.0
+setuptools>=72.1.0
