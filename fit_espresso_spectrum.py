@@ -80,6 +80,13 @@ log = logging.getLogger(__name__)
 ESPRESSO_R = 140_000          # resolving power (ESPRESSO HR mode, 1-UT)
 # ESPRESSO_R = 190_000        # ESPRESSO UHR mode
 
+# Default initial stellar parameters (from stepar-syn + isochrone fitting
+# for a ~10 Myr, ~K-type, ~1 M_sun star)
+INITIAL_TEFF  = 4400.0        # K
+INITIAL_LOGG  = 4.3           # dex (cgs)
+INITIAL_MH    = 0.00          # [M/H]; near-solar assumed for a young disk star
+INITIAL_VSINI = 10.0          # km/s; young stars often rotate faster
+
 ISPEC_INPUT = ISPEC_DIR / "input"
 
 
