@@ -1116,6 +1116,14 @@ def main():
         np.nanmedian(spectrum["flux"]),
     )
 
+    # Strip NaN/inf pixels – these silently corrupt the Jacobian in the
+    # Levenberg-Marquardt fitter, causing parameters to become NaN.
+    finite_mask = np.isfinite(spectrum["flux"]) & np.isfinite(spectrum["waveobs"])
+    n_bad = int((~finite_mask).sum())
+    if n_bad:
+        log.warning("Removing %d NaN/Inf pixels from spectrum before fitting.", n_bad)
+    spectrum = spectrum[finite_mask]
+
     # Trim to the requested wavelength range (GES linelist: 420–920 nm)
     wmin, wmax = args.wmin, args.wmax
     mask = (spectrum["waveobs"] >= wmin) & (spectrum["waveobs"] <= wmax)

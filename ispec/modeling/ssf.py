@@ -1080,6 +1080,13 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     comparing_mask = _create_comparing_mask(filtered_spectrum['waveobs'], global_linemasks, global_segments)
 
     ## Fluxes
+    nan_inf_flux = ~np.isfinite(filtered_spectrum['flux'])
+    bad_nan_fluxes = np.logical_and(comparing_mask == 1, nan_inf_flux)
+    num_bad_nan = len(np.where(bad_nan_fluxes)[0])
+    if num_bad_nan > 0:
+        logging.warning(f"{num_bad_nan} fluxes have been discarded because they are NaN or Inf")
+        comparing_mask[nan_inf_flux] = 0.0
+
     negative_zero_flux = filtered_spectrum['flux'] <= 0.0
     bad_fluxes = np.logical_and(comparing_mask == 1, negative_zero_flux)
     num_bad_fluxes = len(np.where(bad_fluxes)[0])
