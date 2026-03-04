@@ -428,78 +428,33 @@ def detect_espresso_format(fits_path: str) -> str:
 # Radial velocity measurement
 # ===========================================================================
 
-def _build_vald_ccf_mask(ispec_dir: Path, wmin_nm: float, wmax_nm: float,
-                          min_depth: float = 0.05) -> np.ndarray:
-    """
-    Build a CCF mask from the VALD atomic linelist bundled with iSpec.
-
-    Returns a structured array with ``wave_peak`` (nm) and ``depth`` columns
-    as expected by :func:`ispec.cross_correlate_with_mask`.
-    """
-    linelist_file = (ispec_dir /
-                     "input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv")
-    if not linelist_file.exists():
-        linelist_file = (ispec_dir /
-                         "input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv")
-    if not linelist_file.exists():
-        return None
-
-    log.info("Building CCF mask from VALD linelist: %s", linelist_file.name)
-    atomic = ispec.read_atomic_linelist(
-        str(linelist_file), wave_base=wmin_nm, wave_top=wmax_nm
-    )
-    strong = atomic[atomic["theoretical_depth"] >= min_depth]
-    if len(strong) == 0:
-        log.warning("No VALD lines with depth >= %.2f in range; lowering threshold.", min_depth)
-        strong = atomic[atomic["theoretical_depth"] >= 0.01]
-
-    mask = np.recarray(len(strong), dtype=[("wave_peak", float), ("depth", float)])
-    mask["wave_peak"] = strong["wave_peak"]
-    mask["depth"]     = strong["theoretical_depth"]
-    log.info("VALD CCF mask: %d lines between %.1f–%.1f nm", len(mask), wmin_nm, wmax_nm)
-    return mask
-
-
 def measure_and_correct_rv(spectrum, ispec_dir: Path,
                             initial_teff: float = 4400.0,
                             output_dir: Path = None) -> tuple:
     """
-    Measure the radial velocity via CCF with the VALD linelist and return
-    the RV-corrected spectrum plus the measured RV [km/s].
-
-    The VALD atomic linelist (bundled with iSpec) is used as the CCF mask,
-    filtered to lines with theoretical_depth >= 0.05 in the observed wavelength
-    range.  This gives better RV accuracy than the generic HARPS/SOPHIE binary
-    masks for targets where the spectrum quality is already known.
+    Measure the radial velocity via CCF with a HARPS/SOPHIE binary mask and
+    return the RV-corrected spectrum plus the measured RV [km/s].
     """
-    wmin_nm = float(spectrum['waveobs'].min())
-    wmax_nm = float(spectrum['waveobs'].max())
+    if initial_teff < 3800:
+        mask_name = "HARPS_SOPHIE.M5.400_687nm"
+    elif initial_teff < 4500:
+        mask_name = "HARPS_SOPHIE.K5.378_680nm"
+    elif initial_teff < 5200:
+        mask_name = "HARPS_SOPHIE.K0.378_679nm"
+    elif initial_teff < 6000:
+        mask_name = "HARPS_SOPHIE.G2.375_679nm"
+    else:
+        mask_name = "HARPS_SOPHIE.F0.360_698nm"
 
-    ccf_mask = _build_vald_ccf_mask(ispec_dir, wmin_nm, wmax_nm)
-    mask_label = "VALD"
+    mask_file = ispec_dir / f"input/linelists/CCF/{mask_name}/mask.lst"
+    if not mask_file.exists():
+        mask_file = ispec_dir / "input/linelists/CCF/Synthetic.Sun.350_1100nm/mask.lst"
+    if not mask_file.exists():
+        log.warning("No CCF mask available. Skipping RV measurement; assuming RV = 0 km/s.")
+        return spectrum, 0.0, 0.0
 
-    if ccf_mask is None or len(ccf_mask) == 0:
-        # Fall back to SOPHIE binary masks if VALD linelist is missing
-        log.warning("VALD linelist not found; falling back to HARPS/SOPHIE mask.")
-        if initial_teff < 3800:
-            mask_name = "HARPS_SOPHIE.M5.400_687nm"
-        elif initial_teff < 4500:
-            mask_name = "HARPS_SOPHIE.K5.378_680nm"
-        elif initial_teff < 5200:
-            mask_name = "HARPS_SOPHIE.K0.378_679nm"
-        elif initial_teff < 6000:
-            mask_name = "HARPS_SOPHIE.G2.375_679nm"
-        else:
-            mask_name = "HARPS_SOPHIE.F0.360_698nm"
-        mask_file = ispec_dir / f"input/linelists/CCF/{mask_name}/mask.lst"
-        if not mask_file.exists():
-            mask_file = ispec_dir / "input/linelists/CCF/Synthetic.Sun.350_1100nm/mask.lst"
-        if not mask_file.exists():
-            log.warning("No CCF mask available. Skipping RV measurement; assuming RV = 0 km/s.")
-            return spectrum, 0.0, 0.0
-        ccf_mask = ispec.read_cross_correlation_mask(str(mask_file))
-        mask_label = mask_file.name
-
+    ccf_mask = ispec.read_cross_correlation_mask(str(mask_file))
+    mask_label = mask_file.name
     log.info("Measuring radial velocity with mask: %s", mask_label)
     models, ccf = ispec.cross_correlate_with_mask(
         spectrum, ccf_mask,
