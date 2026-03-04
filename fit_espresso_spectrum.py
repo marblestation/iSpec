@@ -734,7 +734,6 @@ def fit_stellar_parameters(
     max_iterations: int,
     limb_darkening: float = 0.6,
     fit_limb_darkening: bool = False,
-    fix_vrad: bool = False,
 ):
     """
     Run iSpec's synthetic-spectrum fitting and return the full result tuple.
@@ -753,15 +752,9 @@ def fit_stellar_parameters(
     log.info("Initial vmac (empirical) = %.2f km/s", initial_vmac)
 
     initial_limb_darkening = limb_darkening
-    initial_vrad = 0.0              # spectrum already RV-corrected
+    initial_vrad = 0.0              # spectrum already RV-corrected; vrad fixed
 
-    # Parameters that are free (optimised)
-    # vrad absorbs any residual velocity shift left after the CCF correction
-    # (iSpec bounds it to ±5 km/s around initial_vrad, which is enough to
-    # mop up typical template-mismatch residuals without unconstrained drift).
     free_params = ["teff", "logg", "MH", "vmic", "vsini"]
-    if not fix_vrad:
-        free_params.append("vrad")
     if free_vmac:
         free_params.append("vmac")
         log.info("vmac will be fitted freely.")
@@ -773,10 +766,7 @@ def fit_stellar_parameters(
                  initial_limb_darkening)
     else:
         log.info("limb_darkening_coeff fixed to %.3f.", initial_limb_darkening)
-    if not fix_vrad:
-        log.info("vrad free: will absorb residual RV within ±5 km/s of 0.")
-    else:
-        log.info("vrad fixed at 0.0 km/s (--fix-vrad set).")
+    log.info("vrad fixed at 0.0 km/s (RV already corrected by CCF step).")
 
     # Segments: fit windows around each line (+/- 0.25 nm)
     line_regions = ispec.adjust_linemasks(spectrum, line_regions, max_margin=0.5)
@@ -1070,15 +1060,6 @@ def parse_args():
         )
     )
     p.add_argument(
-        "--fix-vrad", action="store_true", default=False,
-        help=(
-            "Hold the residual radial velocity at zero instead of fitting it. "
-            "By default vrad is a free parameter bounded to ±5 km/s so the "
-            "fit can absorb any CCF-correction residual. Only use this flag "
-            "if you are certain the RV correction is exact."
-        )
-    )
-    p.add_argument(
         "--limb-darkening", type=float, default=0.6,
         metavar="U",
         help=(
@@ -1273,7 +1254,6 @@ def main():
         max_iterations=args.max_iterations,
         limb_darkening=args.limb_darkening,
         fit_limb_darkening=args.fit_limb_darkening,
-        fix_vrad=args.fix_vrad,
     )
 
     # ---- 8. (Optional) second-pass individual abundances ----------------
