@@ -498,6 +498,36 @@ def normalize_spectrum(spectrum, resolution: int):
     For a cool K-type star with a dense absorption spectrum, we use a
     conservative spline with wide median/max windows to avoid over-fitting.
     """
+    # Diagnose the spectrum before continuum fitting so problems are visible.
+    n_pix = len(spectrum)
+    wmin  = float(spectrum["waveobs"].min())
+    wmax  = float(spectrum["waveobs"].max())
+    fmed  = float(np.nanmedian(spectrum["flux"]))
+    emed  = float(np.nanmedian(spectrum["err"]))
+    log.info(
+        "Spectrum going into continuum fit: %d pixels, %.3f–%.3f nm, "
+        "median flux=%.4g, median err=%.4g",
+        n_pix, wmin, wmax, fmed, emed,
+    )
+
+    if n_pix == 0:
+        raise ValueError(
+            "Spectrum is empty before continuum fitting. "
+            "Check that --wmin/--wmax match your data's wavelength range "
+            "and that the file is in the expected format (waveobs in nm, "
+            "tab-separated, header: waveobs\\tflux\\terr)."
+        )
+
+    # If all errors are zero (common for reduced spectra without error arrays),
+    # error-weighted continuum fitting hits 1/0 and produces NaN in the
+    # continuum model, which then makes every normalised flux value NaN.
+    use_errors = bool(np.any(spectrum["err"] > 0))
+    if not use_errors:
+        log.warning(
+            "All flux errors are zero — fitting continuum without error "
+            "weighting (use_errors_for_fitting=False)."
+        )
+
     log.info("Fitting continuum...")
     continuum_model = ispec.fit_continuum(
         spectrum,
@@ -510,7 +540,7 @@ def normalize_spectrum(spectrum, resolution: int):
         order="median+max",
         automatic_strong_line_detection=True,
         strong_line_probability=0.5,
-        use_errors_for_fitting=True,
+        use_errors_for_fitting=use_errors,
     )
     normalized = ispec.normalize_spectrum(
         spectrum, continuum_model, consider_continuum_errors=False
