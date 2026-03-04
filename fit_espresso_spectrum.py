@@ -1228,10 +1228,10 @@ def main():
 
     line_regions = ispec.read_line_regions("/Users/apx061/Desktop/CRIRES/aleixs_line_identifications.txt")
     # Trim to observed wavelength range
-    # wmin = spectrum["waveobs"].min() + 0.5
-    # wmax = spectrum["waveobs"].max() - 0.5
-    # mask = (line_regions["wave_peak"] >= wmin) & (line_regions["wave_peak"] <= wmax)
-    line_regions = line_regions
+    wmin = spectrum["waveobs"].min() + 0.5
+    wmax = spectrum["waveobs"].max() - 0.5
+    mask = (line_regions["wave_peak"] >= wmin) & (line_regions["wave_peak"] <= wmax)
+    line_regions = line_regions[mask]
     
 
     # ---- 6. (Optional) free individual abundances -----------------------
