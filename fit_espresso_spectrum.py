@@ -429,7 +429,8 @@ def detect_espresso_format(fits_path: str) -> str:
 # ===========================================================================
 
 def measure_and_correct_rv(spectrum, ispec_dir: Path,
-                            initial_teff: float = 4400.0) -> tuple:
+                            initial_teff: float = 4400.0,
+                            output_dir: Path = None) -> tuple:
     """
     Measure the radial velocity via CCF with an appropriate mask and return
     the RV-corrected spectrum plus the measured RV [km/s].
@@ -479,12 +480,36 @@ def measure_and_correct_rv(spectrum, ispec_dir: Path,
         log.warning("RV CCF fit failed; assuming RV = 0 km/s.")
         return spectrum, 0.0, 0.0
 
-    rv     = round(float(models[0].mu()),  2)
-    rv_err = round(float(models[0].emu()), 2)
-    log.info("Measured RV = %.2f ± %.2f km/s", rv, rv_err)
+    g = models[0]
+    rv      = float(g.mu())
+    rv_err  = float(g.emu())
+    fwhm    = float(g.sig()) * 2.3548  # σ → FWHM in km/s
+    depth   = float(g.A())             # Gaussian amplitude (negative = absorption dip)
+    baseline = float(g.baseline())
+
+    log.info("CCF fit results:")
+    log.info("  RV       = %+.4f ± %.4f km/s", rv, rv_err)
+    log.info("  FWHM     = %.4f km/s  (σ = %.4f km/s)", fwhm, float(g.sig()))
+    log.info("  depth    = %.4f  (relative to baseline %.4f)", depth, baseline)
+    log.info("  mask     = %s", mask_file.name)
+
+    # Save the CCF profile so it can be compared against known RVs externally.
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        ccf_file = output_dir / "ccf_profile.txt"
+        with open(ccf_file, "w") as f:
+            f.write("# CCF profile written by fit_espresso_spectrum.py\n")
+            f.write(f"# mask: {mask_file}\n")
+            f.write(f"# fitted RV = {rv:+.6f} km/s  (err = {rv_err:.6f} km/s)\n")
+            f.write(f"# FWHM = {fwhm:.6f} km/s\n")
+            f.write("# velocity_km_s\tccf\n")
+            for vel, val in zip(ccf['velocity'], ccf['ccf']):
+                f.write(f"{vel:.6f}\t{val:.8f}\n")
+        log.info("CCF profile saved to %s", ccf_file)
 
     corrected = ispec.correct_velocity(spectrum, rv)
-    return corrected, rv, rv_err
+    return corrected, round(rv, 4), round(rv_err, 4)
 
 
 # ===========================================================================
@@ -1214,7 +1239,8 @@ def main():
     rv, rv_err = 0.0, 0.0
     if not args.no_rv_correction:
         spectrum, rv, rv_err = measure_and_correct_rv(
-            spectrum, ISPEC_DIR, initial_teff=args.teff
+            spectrum, ISPEC_DIR, initial_teff=args.teff,
+            output_dir=output_dir,
         )
 
     # ---- 3. Continuum normalisation -------------------------------------
