@@ -376,7 +376,7 @@ def load_modeled_layers_pack(input_path):
                 warnings.filterwarnings(
                     "ignore",
                     message="dtype.*align",
-                    category=np.VisibleDeprecationWarning,
+                    category=VisibleDeprecationWarning,
                 )
                 delaunay_triangulations, kdtree = pickle.load(open(cache_filename, 'rb'))
         for delaunay_triangulation, parameters_subset in zip(delaunay_triangulations['precomputed'], parameters_subsets):
