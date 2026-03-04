@@ -1224,7 +1224,15 @@ def main():
         load_ispec_data(ISPEC_DIR, wmin, wmax)
 
     # ---- 5. Load line regions -------------------------------------------
-    line_regions = load_line_regions(ISPEC_DIR, code, spectrum)
+    # line_regions = load_line_regions(ISPEC_DIR, code, spectrum)
+
+    line_regions = ispec.read_line_regions("/Users/apx061/Desktop/CRIRES/aleixs_line_identifications.txt")
+    # Trim to observed wavelength range
+    # wmin = spectrum["waveobs"].min() + 0.5
+    # wmax = spectrum["waveobs"].max() - 0.5
+    # mask = (line_regions["wave_peak"] >= wmin) & (line_regions["wave_peak"] <= wmax)
+    line_regions = line_regions
+    
 
     # ---- 6. (Optional) free individual abundances -----------------------
     free_abundances = setup_free_abundances(
