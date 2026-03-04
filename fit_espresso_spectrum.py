@@ -769,7 +769,9 @@ def fit_stellar_parameters(
     log.info("vrad fixed at 0.0 km/s (RV already corrected by CCF step).")
 
     # Segments: fit windows around each line (+/- 0.25 nm)
-    line_regions = ispec.adjust_linemasks(spectrum, line_regions, max_margin=0.5)
+    # min_margin preserves the user's window width even in crowded spectral regions
+    # where the nearest continuum point would otherwise collapse the window to ~1 pixel.
+    line_regions = ispec.adjust_linemasks(spectrum, line_regions, max_margin=0.5, min_margin=0.04)
     segments = ispec.create_segments_around_lines(line_regions, margin=0.25)
 
     log.info("Starting synthetic-spectrum fitting with %d lines...", len(line_regions))
