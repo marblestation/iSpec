@@ -1086,17 +1086,27 @@ def main():
     log.info("Output directory: %s", output_dir.resolve())
 
     # ---- 1. Read spectrum -----------------------------------------------
-    fmt = args.format
-    if fmt == "auto":
-        fmt = detect_espresso_format(args.input)
-    log.info("ESPRESSO format: %s", fmt.upper())
+    input_path = args.input.lower()
+    is_fits = any(input_path.endswith(ext)
+                  for ext in (".fits", ".fit", ".fits.gz", ".fit.gz"))
 
-    if fmt == "s2d":
-        spectrum = _read_espresso_s2d(
-            args.input, wmin_nm=380.0, wmax_nm=788.0
-        )
+    if not is_fits:
+        # Plain text file (tab-separated waveobs/flux/err, or NARVAL/ESPaDOnS
+        # format) — iSpec's built-in reader handles all text variants.
+        log.info("Reading text spectrum: %s", args.input)
+        spectrum = ispec.read_spectrum(args.input)
     else:
-        spectrum = _read_espresso_s1d(args.input)
+        fmt = args.format
+        if fmt == "auto":
+            fmt = detect_espresso_format(args.input)
+        log.info("ESPRESSO FITS format: %s", fmt.upper())
+
+        if fmt == "s2d":
+            spectrum = _read_espresso_s2d(
+                args.input, wmin_nm=380.0, wmax_nm=788.0
+            )
+        else:
+            spectrum = _read_espresso_s1d(args.input)
 
     log.info(
         "Spectrum loaded: %d pixels, %.2f – %.2f nm, median flux = %.2f",
