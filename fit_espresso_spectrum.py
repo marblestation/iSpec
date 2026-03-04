@@ -428,44 +428,79 @@ def detect_espresso_format(fits_path: str) -> str:
 # Radial velocity measurement
 # ===========================================================================
 
+def _build_vald_ccf_mask(ispec_dir: Path, wmin_nm: float, wmax_nm: float,
+                          min_depth: float = 0.05) -> np.ndarray:
+    """
+    Build a CCF mask from the VALD atomic linelist bundled with iSpec.
+
+    Returns a structured array with ``wave_peak`` (nm) and ``depth`` columns
+    as expected by :func:`ispec.cross_correlate_with_mask`.
+    """
+    linelist_file = (ispec_dir /
+                     "input/linelists/transitions/VALD.300_1100nm/atomic_lines.tsv")
+    if not linelist_file.exists():
+        linelist_file = (ispec_dir /
+                         "input/linelists/transitions/GESv6_atom_hfs_iso.420_920nm/atomic_lines.tsv")
+    if not linelist_file.exists():
+        return None
+
+    log.info("Building CCF mask from VALD linelist: %s", linelist_file.name)
+    atomic = ispec.read_atomic_linelist(
+        str(linelist_file), wave_base=wmin_nm, wave_top=wmax_nm
+    )
+    strong = atomic[atomic["theoretical_depth"] >= min_depth]
+    if len(strong) == 0:
+        log.warning("No VALD lines with depth >= %.2f in range; lowering threshold.", min_depth)
+        strong = atomic[atomic["theoretical_depth"] >= 0.01]
+
+    mask = np.recarray(len(strong), dtype=[("wave_peak", float), ("depth", float)])
+    mask["wave_peak"] = strong["wave_peak"]
+    mask["depth"]     = strong["theoretical_depth"]
+    log.info("VALD CCF mask: %d lines between %.1f–%.1f nm", len(mask), wmin_nm, wmax_nm)
+    return mask
+
+
 def measure_and_correct_rv(spectrum, ispec_dir: Path,
                             initial_teff: float = 4400.0,
                             output_dir: Path = None) -> tuple:
     """
-    Measure the radial velocity via CCF with an appropriate mask and return
+    Measure the radial velocity via CCF with the VALD linelist and return
     the RV-corrected spectrum plus the measured RV [km/s].
 
-    For cool K-type stars (Teff ~ 4400 K) we use the K0 mask.
+    The VALD atomic linelist (bundled with iSpec) is used as the CCF mask,
+    filtered to lines with theoretical_depth >= 0.05 in the observed wavelength
+    range.  This gives better RV accuracy than the generic HARPS/SOPHIE binary
+    masks for targets where the spectrum quality is already known.
     """
-    # Choose CCF mask appropriate for the stellar type
-    if initial_teff < 3800:
-        mask_name = "HARPS_SOPHIE.M5.400_687nm"
-    elif initial_teff < 4500:
-        mask_name = "HARPS_SOPHIE.K5.378_680nm"
-    elif initial_teff < 5200:
-        mask_name = "HARPS_SOPHIE.K0.378_679nm"
-    elif initial_teff < 6000:
-        mask_name = "HARPS_SOPHIE.G2.375_679nm"
-    else:
-        mask_name = "HARPS_SOPHIE.F0.360_698nm"
+    wmin_nm = float(spectrum['waveobs'].min())
+    wmax_nm = float(spectrum['waveobs'].max())
 
-    mask_file = ispec_dir / f"input/linelists/CCF/{mask_name}/mask.lst"
+    ccf_mask = _build_vald_ccf_mask(ispec_dir, wmin_nm, wmax_nm)
+    mask_label = "VALD"
 
-    if not mask_file.exists():
-        log.warning(
-            "CCF mask not found at %s. Trying generic Sun mask.", mask_file
-        )
-        mask_file = ispec_dir / "input/linelists/CCF/Synthetic.Sun.350_1100nm/mask.lst"
+    if ccf_mask is None or len(ccf_mask) == 0:
+        # Fall back to SOPHIE binary masks if VALD linelist is missing
+        log.warning("VALD linelist not found; falling back to HARPS/SOPHIE mask.")
+        if initial_teff < 3800:
+            mask_name = "HARPS_SOPHIE.M5.400_687nm"
+        elif initial_teff < 4500:
+            mask_name = "HARPS_SOPHIE.K5.378_680nm"
+        elif initial_teff < 5200:
+            mask_name = "HARPS_SOPHIE.K0.378_679nm"
+        elif initial_teff < 6000:
+            mask_name = "HARPS_SOPHIE.G2.375_679nm"
+        else:
+            mask_name = "HARPS_SOPHIE.F0.360_698nm"
+        mask_file = ispec_dir / f"input/linelists/CCF/{mask_name}/mask.lst"
+        if not mask_file.exists():
+            mask_file = ispec_dir / "input/linelists/CCF/Synthetic.Sun.350_1100nm/mask.lst"
+        if not mask_file.exists():
+            log.warning("No CCF mask available. Skipping RV measurement; assuming RV = 0 km/s.")
+            return spectrum, 0.0, 0.0
+        ccf_mask = ispec.read_cross_correlation_mask(str(mask_file))
+        mask_label = mask_file.name
 
-    if not mask_file.exists():
-        log.warning(
-            "No CCF mask available. Skipping RV measurement; assuming RV = 0 km/s."
-        )
-        return spectrum, 0.0, 0.0
-
-    log.info("Measuring radial velocity with mask: %s", mask_file.name)
-    ccf_mask = ispec.read_cross_correlation_mask(str(mask_file))
-
+    log.info("Measuring radial velocity with mask: %s", mask_label)
     models, ccf = ispec.cross_correlate_with_mask(
         spectrum, ccf_mask,
         lower_velocity_limit=-200,
@@ -484,27 +519,28 @@ def measure_and_correct_rv(spectrum, ispec_dir: Path,
     rv      = float(g.mu())
     rv_err  = float(g.emu())
     fwhm    = float(g.sig()) * 2.3548  # σ → FWHM in km/s
-    depth   = float(g.A())             # Gaussian amplitude (negative = absorption dip)
+    depth   = float(g.A())
     baseline = float(g.baseline())
 
     log.info("CCF fit results:")
     log.info("  RV       = %+.4f ± %.4f km/s", rv, rv_err)
     log.info("  FWHM     = %.4f km/s  (σ = %.4f km/s)", fwhm, float(g.sig()))
     log.info("  depth    = %.4f  (relative to baseline %.4f)", depth, baseline)
-    log.info("  mask     = %s", mask_file.name)
+    log.info("  mask     = %s", mask_label)
 
     # Save the CCF profile so it can be compared against known RVs externally.
+    # The CCF recarray returned by iSpec uses fields 'x' (velocity) and 'y' (CCF).
     if output_dir is not None:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         ccf_file = output_dir / "ccf_profile.txt"
         with open(ccf_file, "w") as f:
             f.write("# CCF profile written by fit_espresso_spectrum.py\n")
-            f.write(f"# mask: {mask_file}\n")
+            f.write(f"# mask: {mask_label}\n")
             f.write(f"# fitted RV = {rv:+.6f} km/s  (err = {rv_err:.6f} km/s)\n")
             f.write(f"# FWHM = {fwhm:.6f} km/s\n")
             f.write("# velocity_km_s\tccf\n")
-            for vel, val in zip(ccf['velocity'], ccf['ccf']):
+            for vel, val in zip(ccf['x'], ccf['y']):
                 f.write(f"{vel:.6f}\t{val:.8f}\n")
         log.info("CCF profile saved to %s", ccf_file)
 

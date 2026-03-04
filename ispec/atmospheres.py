@@ -17,6 +17,7 @@
 #
 import os
 import sys
+import warnings
 import numpy as np
 from subprocess import Popen, PIPE
 import math
@@ -371,7 +372,13 @@ def load_modeled_layers_pack(input_path):
     use_dump = False
     if os.path.exists(cache_filename):
         use_dump = True
-        delaunay_triangulations, kdtree = pickle.load(open(cache_filename, 'rb'))
+        with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="dtype.*align",
+                    category=np.VisibleDeprecationWarning,
+                )
+                delaunay_triangulations, kdtree = pickle.load(open(cache_filename, 'rb'))
         for delaunay_triangulation, parameters_subset in zip(delaunay_triangulations['precomputed'], parameters_subsets):
             if delaunay_triangulation is None:
                 continue
