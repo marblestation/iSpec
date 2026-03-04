@@ -600,9 +600,9 @@ class SynthModel(MPFitModel):
         #abund[1:*] = 10^abund[1:*] ; transform to linear
         #return, alog10(abund / abund[0]) + 12
         #end
-        sun_log_Nh_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == 1]
+        sun_log_Nh_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == 1][0]
         for i in range(len(free_abundances)):
-            sun_log_Nx_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == free_abundances['code'][i]]
+            sun_log_Nx_over_Ntotal = self.abundances['Abund'][self.abundances['code'] == free_abundances['code'][i]][0]
             x_absolute = free_abundances['Abund'][i] + 12. - sun_log_Nh_over_Ntotal # absolute, A(X)
             #x_over_fe = free_abundances['Abund'][i] - sun_log_Nx_over_Ntotal
             #x_over_h = x_over_fe + self.MH()

@@ -716,6 +716,8 @@ def fit_stellar_parameters(
     code: str,
     resolution: int,
     max_iterations: int,
+    limb_darkening: float = 0.6,
+    fit_limb_darkening: bool = False,
 ):
     """
     Run iSpec's synthetic-spectrum fitting and return the full result tuple.
@@ -733,7 +735,7 @@ def fit_stellar_parameters(
                                        relation="GES")
     log.info("Initial vmac (empirical) = %.2f km/s", initial_vmac)
 
-    initial_limb_darkening = 0.6    # typical for solar-type / cool stars
+    initial_limb_darkening = limb_darkening
     initial_vrad = 0.0              # spectrum already RV-corrected
 
     # Parameters that are free (optimised)
@@ -743,6 +745,12 @@ def fit_stellar_parameters(
         log.info("vmac will be fitted freely.")
     else:
         log.info("vmac fixed by GES empirical relation.")
+    if fit_limb_darkening:
+        free_params.append("limb_darkening_coeff")
+        log.info("limb_darkening_coeff will be fitted freely (start=%.3f, bounds=[0,1]).",
+                 initial_limb_darkening)
+    else:
+        log.info("limb_darkening_coeff fixed to %.3f.", initial_limb_darkening)
 
     # Segments: fit windows around each line (+/- 0.25 nm)
     line_regions = ispec.adjust_linemasks(spectrum, line_regions, max_margin=0.5)
@@ -1036,6 +1044,26 @@ def parse_args():
         )
     )
     p.add_argument(
+        "--limb-darkening", type=float, default=0.6,
+        metavar="U",
+        help=(
+            "Linear limb-darkening coefficient u (default: 0.6). "
+            "Used as the fixed value when --fit-limb-darkening is not given, "
+            "or as the starting point when it is."
+        )
+    )
+    p.add_argument(
+        "--fit-limb-darkening", action="store_true", default=False,
+        help=(
+            "Fit the limb-darkening coefficient as a free parameter "
+            "within [0, 1]. Without this flag the coefficient is fixed "
+            "to --limb-darkening (equivalent to a delta-function prior). "
+            "iSpec uses a least-squares optimiser, not a sampler, so "
+            "only box constraints are available; for a tight prior set "
+            "--limb-darkening to your best estimate and keep it fixed."
+        )
+    )
+    p.add_argument(
         "--abundances", nargs="+", default=[],
         metavar="ELEMENT",
         help=(
@@ -1207,6 +1235,8 @@ def main():
         code=code,
         resolution=args.resolution,
         max_iterations=args.max_iterations,
+        limb_darkening=args.limb_darkening,
+        fit_limb_darkening=args.fit_limb_darkening,
     )
 
     # ---- 8. (Optional) second-pass individual abundances ----------------
