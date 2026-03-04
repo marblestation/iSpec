@@ -129,7 +129,7 @@ def create_free_abundances_structure(free_abundance_elements, chemical_elements,
         if "." in specie:
             raise Exception("Bad format '%s'" % element_name)
         free_abundances['code'][i] = int(specie)
-        free_abundances['Abund'][i] = solar_abundances['Abund'][solar_abundances['code'] == int(specie)]
+        free_abundances['Abund'][i] = solar_abundances['Abund'][solar_abundances['code'] == int(specie)][0]
         free_abundances['element'][i] = element_name
     return free_abundances
 
