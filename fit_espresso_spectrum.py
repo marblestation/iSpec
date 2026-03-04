@@ -734,6 +734,7 @@ def fit_stellar_parameters(
     max_iterations: int,
     limb_darkening: float = 0.6,
     fit_limb_darkening: bool = False,
+    vsini_range: tuple = (0.0, 300.0),
 ):
     """
     Run iSpec's synthetic-spectrum fitting and return the full result tuple.
@@ -810,6 +811,7 @@ def fit_stellar_parameters(
         use_molecules=False,      # molecular lines not in GESv6 atom list
         tmp_dir=None,
         timeout=3600,
+        vsini_range=vsini_range,
     )
     return result
 
@@ -1055,6 +1057,16 @@ def parse_args():
 
     # ---- Fitting options ------------------------------------------------
     p.add_argument(
+        "--vsini-min", type=float, default=0.0,
+        metavar="KM_S",
+        help="Lower bound on vsini during fitting [km/s] (default: 0)"
+    )
+    p.add_argument(
+        "--vsini-max", type=float, default=300.0,
+        metavar="KM_S",
+        help="Upper bound on vsini during fitting [km/s] (default: 300)"
+    )
+    p.add_argument(
         "--free-vmac", action="store_true", default=False,
         help=(
             "Fit vmac as a free parameter instead of using the "
@@ -1264,6 +1276,7 @@ def main():
         max_iterations=args.max_iterations,
         limb_darkening=args.limb_darkening,
         fit_limb_darkening=args.fit_limb_darkening,
+        vsini_range=(args.vsini_min, args.vsini_max),
     )
 
     # ---- 8. (Optional) second-pass individual abundances ----------------

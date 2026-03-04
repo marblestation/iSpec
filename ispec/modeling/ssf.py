@@ -722,7 +722,7 @@ class SynthModel(MPFitModel):
 
 
 
-def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_lf, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, alpha_range, vmic_range, vmic_from_empirical_relation, vmac_from_empirical_relation):
+def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_lf, initial_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, alpha_range, vmic_range, vmic_from_empirical_relation, vmac_from_empirical_relation, vsini_range=(0.0, 300.0)):
     """
     Creates the structure needed for the mpfitmodel
     """
@@ -813,7 +813,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
     parinfo[6]['fixed'] = not parinfo[6]['parname'].lower() in free_params
     parinfo[6]['step'] = Constants.SYNTH_STEP_VSINI # For auto-derivatives
     parinfo[6]['limited'] = [True, True]
-    parinfo[6]['limits'] = [0.0, 300.0]
+    parinfo[6]['limits'] = [float(np.min(vsini_range)), float(np.max(vsini_range))]
     if parinfo[6]['value'] > parinfo[6]['limits'][1] or parinfo[6]['value'] < parinfo[6]['limits'][0]:
         raise Exception("Initial {} '{}' is out of range: '{}' - '{}'".format(parinfo[6]['parname'], parinfo[6]['value'], parinfo[6]['limits'][0], parinfo[6]['limits'][1]))
     #
@@ -893,7 +893,7 @@ def __create_param_structure(initial_teff, initial_logg, initial_MH, initial_alp
 
     return parinfo
 
-def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=None, linemasks=None, enhance_abundances=False, scale=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1, code="spectrum", grid=None, use_molecules=False, vmic_from_empirical_relation=False, vmac_from_empirical_relation=False, initial_lf=1, normalize_func=None, tmp_dir=None, timeout=1800):
+def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, isotopes, abundances, free_abundances, linelist_free_loggf, initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_vrad, free_params, segments=None, linemasks=None, enhance_abundances=False, scale=None, precomputed_grid_dir=None, use_errors=True, max_iterations=20, verbose=1, code="spectrum", grid=None, use_molecules=False, vmic_from_empirical_relation=False, vmac_from_empirical_relation=False, initial_lf=1, normalize_func=None, tmp_dir=None, timeout=1800, vsini_range=(0.0, 300.0)):
 
     """
     It matches synthetic spectrum to observed spectrum by applying a least
@@ -1132,7 +1132,7 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     parinfos = []
     parinfo_bases = []
     for i_teff, i_logg, i_MH, i_alpha, i_vmic, i_vmac, i_vsini, i_limb_darkening_coeff, i_R, i_lf, i_vrad in zip(initial_teff, initial_logg, initial_MH, initial_alpha, initial_vmic, initial_vmac, initial_vsini, initial_limb_darkening_coeff, initial_R, initial_lf, initial_vrad):
-        parinfo = __create_param_structure(i_teff, i_logg, i_MH, i_alpha, i_vmic, i_vmac, i_vsini, i_limb_darkening_coeff, i_R, i_lf, i_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, alpha_range, vmic_range, vmic_from_empirical_relation, vmac_from_empirical_relation)
+        parinfo = __create_param_structure(i_teff, i_logg, i_MH, i_alpha, i_vmic, i_vmac, i_vsini, i_limb_darkening_coeff, i_R, i_lf, i_vrad, free_params, free_abundances, linelist_free_loggf, teff_range, logg_range, MH_range, alpha_range, vmic_range, vmic_from_empirical_relation, vmac_from_empirical_relation, vsini_range=vsini_range)
         parinfo_bases.append(len(parinfos))
         parinfos += parinfo # concatenate
 
