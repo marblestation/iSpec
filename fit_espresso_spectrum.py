@@ -1246,7 +1246,15 @@ def main():
     wmax = spectrum["waveobs"].max() - 0.5
     mask = (line_regions["wave_peak"] >= wmin) & (line_regions["wave_peak"] <= wmax)
     line_regions = line_regions[mask]
-    
+
+    if len(line_regions) == 0:
+        sys.exit(
+            f"ERROR: No line regions fall within the spectrum wavelength range "
+            f"({wmin:.2f}–{wmax:.2f} nm).\n"
+            "Check that your line mask file wavelengths are in nm and overlap "
+            "with the observed spectrum."
+        )
+    log.info("Using %d line regions for fitting.", len(line_regions))
 
     # ---- 6. (Optional) free individual abundances -----------------------
     free_abundances = setup_free_abundances(

@@ -204,6 +204,14 @@ class SynthModel(MPFitModel):
 
             # vrad
             vrad = self.vrad(component=component)
+            if len(vrad) == 0:
+                raise Exception(
+                    "No spectral segments are available for synthesis. "
+                    "This usually means the line mask contains no lines within "
+                    "the observed spectrum's wavelength range. "
+                    "Check that your line regions file covers the same wavelength "
+                    "range as the spectrum."
+                )
             if np.all(vrad[0] == vrad):
                 # When fitting a spectroscopic binary, the second component has a fixed vrad for all segments, simplify by showing just one value
                 vrad = np.unique(vrad)
