@@ -1240,7 +1240,7 @@ def main():
     # ---- 5. Load line regions -------------------------------------------
     # line_regions = load_line_regions(ISPEC_DIR, code, spectrum)
 
-    line_regions = ispec.read_line_regions("/Users/apx061/Desktop/CRIRES/aleixs_line_identifications.txt")
+    line_regions = ispec.read_line_regions("/Users/apx061/Desktop/CRIRES/mylinefits_identifications_contrast007to03.txt")
     # Trim to observed wavelength range
     wmin = spectrum["waveobs"].min() + 0.5
     wmax = spectrum["waveobs"].max() - 0.5
