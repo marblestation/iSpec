@@ -175,7 +175,7 @@ def degrade_resolution():
     #--- Resolution degradation ----------------------------------------------------
     logging.info("Resolution degradation...")
     from_resolution = 80000
-    to_resolution = 47000
+    to_resolution = 42000
     convolved_star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, \
                                                     from_resolution=from_resolution)
 
@@ -216,7 +216,7 @@ def merge_spectra():
     #          the logical thing is to merge spectra from the same star/instrument
     #          and different wavelength ranges
     #--- Mergin spectra ------------------------------------------------------------
-    logging.info("Mergin spectra...")
+    logging.info("Merging spectra...")
     left_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_Sun_Vesta-1.txt.gz")
     right_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_muCas.txt.gz")
     merged_spectrum = np.hstack((left_spectrum, right_spectrum))
@@ -755,9 +755,9 @@ def fit_lines_determine_ew_and_crossmatch_with_atomic_data(use_ares=False):
     vel_telluric = np.round(models[0].mu(), 2) # km/s
     vel_telluric_err = np.round(models[0].emu(), 2) # km/s
     #--- Resolution degradation ----------------------------------------------------
-    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and GES/VALD atomic linelist.
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 42,000 and GES/VALD atomic linelist.
     from_resolution = 80000
-    to_resolution = 47000
+    to_resolution = 42000
     star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -800,10 +800,10 @@ def fit_lines_determine_ew_and_crossmatch_with_atomic_data(use_ares=False):
     #telluric_linelist = None
     #vel_telluric = None
 
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/moog_synth_good_for_params_all.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/width_synth_good_for_params_all.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_synth_good_for_params_all.txt")
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/width_synth_good_for_params_all.txt")
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/moog_synth_good_for_params_all.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/width_synth_good_for_params_all.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/moog_synth_good_for_params_all.txt")
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/width_synth_good_for_params_all.txt")
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
 
     linemasks = ispec.fit_lines(line_regions, normalized_star_spectrum, star_continuum_model, \
@@ -887,9 +887,9 @@ def fit_lines_already_crossmatched_with_atomic_data_and_determine_ew(use_ares=Fa
     vel_telluric = np.round(models[0].mu(), 2) # km/s
     vel_telluric_err = np.round(models[0].emu(), 2) # km/s
     #--- Resolution degradation ----------------------------------------------------
-    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and GES/VALD atomic linelist.
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 42,000 and GES/VALD atomic linelist.
     from_resolution = 80000
-    to_resolution = 47000
+    to_resolution = 42000
     star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -916,10 +916,10 @@ def fit_lines_already_crossmatched_with_atomic_data_and_determine_ew(use_ares=Fa
     star_continuum_model = ispec.fit_continuum(star_spectrum, fixed_value=1.0, model="Fixed value")
 
     #--- Read lines with atomic data ------------------------------------------------
-    line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/moog_synth_good_for_params_all_extended.txt")
-    #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/width_synth_good_for_params_all_extended.txt")
-    #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/moog_synth_good_for_params_all_extended.txt")
-    #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/width_synth_good_for_params_all_extended.txt")
+    line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/moog_synth_good_for_params_all_extended.txt")
+    #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/width_synth_good_for_params_all_extended.txt")
+    #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/moog_synth_good_for_params_all_extended.txt")
+    #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/width_synth_good_for_params_all_extended.txt")
 
     smoothed_star_spectrum = ispec.convolve_spectrum(star_spectrum, 2*to_resolution)
     line_regions_with_atomic_data = ispec.adjust_linemasks(smoothed_star_spectrum, line_regions_with_atomic_data, max_margin=0.5)
@@ -1365,9 +1365,9 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
     logging.info("Radial velocity correction... %.2f +/- %.2f" % (rv, rv_err))
     star_spectrum = ispec.correct_velocity(star_spectrum, rv)
     #--- Resolution degradation ----------------------------------------------------
-    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and GES/VALD atomic linelist.
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 42,000 and GES/VALD atomic linelist.
     from_resolution = 80000
-    to_resolution = 47000
+    to_resolution = 42000
     star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -1459,10 +1459,10 @@ def determine_astrophysical_parameters_using_synth_spectra(code="spectrum"):
         line_region_code = "moog"
     else:
         line_region_code = code
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     ## Select only some lines to speed up the execution (in a real analysis it is better not to do this)
     line_regions = line_regions[np.logical_or(line_regions['note'] == 'Ti 1', line_regions['note'] == 'Ti 2')]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -1577,7 +1577,7 @@ def determine_astrophysical_parameters_using_synth_spectra_for_spectroscopic_bin
         logging.info("Radial velocity correction... %.2f +/- %.2f" % (rv, rv_err))
         star_spectrum = ispec.correct_velocity(star_spectrum, rv)
     #--- Resolution degradation ----------------------------------------------------
-    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and GES/VALD atomic linelist.
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 42,000 and GES/VALD atomic linelist.
     from_resolution = 42000
     to_resolution = 40000
     star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
@@ -1675,10 +1675,10 @@ def determine_astrophysical_parameters_using_synth_spectra_for_spectroscopic_bin
         line_region_code = "moog"
     else:
         line_region_code = code
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     ## Select only some lines to speed up the execution (in a real analysis it is better not to do this)
     line_regions = line_regions[np.logical_or(line_regions['note'] == 'Ti 1', line_regions['note'] == 'Ti 2')]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -1762,9 +1762,9 @@ def determine_astrophysical_parameters_using_grid():
     logging.info("Radial velocity correction... %.2f +/- %.2f" % (rv, rv_err))
     star_spectrum = ispec.correct_velocity(star_spectrum, rv)
     #--- Resolution degradation ----------------------------------------------------
-    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and GES/VALD atomic linelist.
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 42,000 and GES/VALD atomic linelist.
     from_resolution = 80000
-    to_resolution = 47000
+    to_resolution = 42000
     star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -1823,10 +1823,10 @@ def determine_astrophysical_parameters_using_grid():
         line_region_code = "moog"
     else:
         line_region_code = code
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     ## Select only some lines to speed up the execution (in a real analysis it is better not to do this)
     #line_regions = line_regions[np.logical_or(line_regions['note'] == 'Ti 1', line_regions['note'] == 'Ti 2')]
     #line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -1940,7 +1940,7 @@ def determine_astrophysical_parameters_using_grid_for_spectroscopic_binary():
         logging.info("Radial velocity correction... %.2f +/- %.2f" % (rv, rv_err))
         star_spectrum = ispec.correct_velocity(star_spectrum, rv)
     #--- Resolution degradation ----------------------------------------------------
-    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and GES/VALD atomic linelist.
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 42,000 and GES/VALD atomic linelist.
     from_resolution = 42000
     to_resolution = 40000
     star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
@@ -2005,10 +2005,10 @@ def determine_astrophysical_parameters_using_grid_for_spectroscopic_binary():
         line_region_code = "moog"
     else:
         line_region_code = code
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     ## Select only some lines to speed up the execution (in a real analysis it is better not to do this)
     #line_regions = line_regions[np.logical_or(line_regions['note'] == 'Ti 1', line_regions['note'] == 'Ti 2')]
     #line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -2099,9 +2099,9 @@ def estimate_initial_ap_with_precomputed_grid_and_determine_ap_using_synth_spect
     star_spectrum = ispec.correct_velocity(star_spectrum, rv)
 
     #--- Resolution degradation ----------------------------------------------------
-    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and GES/VALD atomic linelist.
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 42,000 and GES/VALD atomic linelist.
     from_resolution = 80000
-    to_resolution = 47000
+    to_resolution = 42000
     star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
 
     #--- Continuum fit -------------------------------------------------------------
@@ -2186,10 +2186,10 @@ def estimate_initial_ap_with_precomputed_grid_and_determine_ap_using_synth_spect
         line_region_code = "moog"
     else:
         line_region_code = code
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     # Select only some lines to speed up the execution (in a real analysis it is better not to do this)
     line_regions = line_regions[np.logical_or(line_regions['note'] == 'Ti 1', line_regions['note'] == 'Ti 2')]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -2287,9 +2287,9 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
     star_spectrum = ispec.correct_velocity(star_spectrum, rv)
 
     #--- Resolution degradation ----------------------------------------------------
-    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and GES/VALD atomic linelist.
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 42,000 and GES/VALD atomic linelist.
     from_resolution = 80000
-    to_resolution = 47000
+    to_resolution = 42000
     star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
 
     #--- Continuum fit -------------------------------------------------------------
@@ -2391,10 +2391,10 @@ def determine_abundances_using_synth_spectra(code="spectrum"):
         line_region_code = "moog"
     else:
         line_region_code = code
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     # Select only the lines to get abundances from
     line_regions = line_regions[np.logical_or(line_regions['note'] == element_name+' 1', line_regions['note'] == element_name+' 2')]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -2493,7 +2493,7 @@ def determine_abundances_using_synth_spectra_for_spectroscopic_binary(code="spec
         star_spectrum = ispec.correct_velocity(star_spectrum, rv)
 
     #--- Resolution degradation ----------------------------------------------------
-    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and GES/VALD atomic linelist.
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 42,000 and GES/VALD atomic linelist.
     from_resolution = 42000
     to_resolution = 40000
     star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
@@ -2601,10 +2601,10 @@ def determine_abundances_using_synth_spectra_for_spectroscopic_binary(code="spec
         line_region_code = "moog"
     else:
         line_region_code = code
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     # Select only the lines to get abundances from
     line_regions = line_regions[np.logical_or(line_regions['note'] == element_name+' 1', line_regions['note'] == element_name+' 2')]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -2670,9 +2670,9 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
     star_spectrum = ispec.correct_velocity(star_spectrum, rv)
 
     #--- Resolution degradation ----------------------------------------------------
-    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and GES/VALD atomic linelist.
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 42,000 and GES/VALD atomic linelist.
     from_resolution = 80000
-    to_resolution = 47000
+    to_resolution = 42000
     star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
 
     #--- Continuum fit -------------------------------------------------------------
@@ -2768,13 +2768,15 @@ def determine_abundances_line_by_line_using_synth_spectra(code="spectrum"):
         line_region_code = "moog"
     else:
         line_region_code = code
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     # Select only the lines to get abundances from
     line_regions = line_regions[:5]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
+
+    multiprocessing.set_start_method("fork")
 
     output_dirname = "example_abundance_line_by_line_%s" % (code,)
     ispec.mkdir_p(output_dirname)
@@ -2893,7 +2895,7 @@ def determine_abundances_line_by_line_using_synth_spectra_for_spectroscopic_bina
 
 
     #--- Resolution degradation ----------------------------------------------------
-    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and GES/VALD atomic linelist.
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 42,000 and GES/VALD atomic linelist.
     from_resolution = 42000
     to_resolution = 40000
     star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
@@ -2995,10 +2997,10 @@ def determine_abundances_line_by_line_using_synth_spectra_for_spectroscopic_bina
         line_region_code = "moog"
     else:
         line_region_code = code
-    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
-    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+    #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     # Select only the lines to get abundances from
     line_regions = line_regions[:5]
     line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
@@ -3092,9 +3094,9 @@ def determine_loggf_line_by_line_using_synth_spectra(code="spectrum"):
     star_spectrum = ispec.correct_velocity(star_spectrum, rv)
 
     #--- Resolution degradation ----------------------------------------------------
-    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and GES/VALD atomic linelist.
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 42,000 and GES/VALD atomic linelist.
     from_resolution = 80000
-    to_resolution = 47000
+    to_resolution = 42000
     star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
 
     #--- Continuum fit -------------------------------------------------------------
@@ -3190,8 +3192,8 @@ def determine_loggf_line_by_line_using_synth_spectra(code="spectrum"):
         line_region_code = "moog"
     else:
         line_region_code = code
-    line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
-    #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+    #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
     # Select only the lines to get abundances from
     line_regions_with_atomic_data = line_regions_with_atomic_data[:5]
     line_regions_with_atomic_data = ispec.adjust_linemasks(normalized_star_spectrum, line_regions_with_atomic_data, max_margin=0.5)
@@ -3295,9 +3297,9 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
     vel_telluric = np.round(models[0].mu(), 2) # km/s
     vel_telluric_err = np.round(models[0].emu(), 2) # km/s
     #--- Resolution degradation ----------------------------------------------------
-    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and GES/VALD atomic linelist.
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 42,000 and GES/VALD atomic linelist.
     from_resolution = 80000
-    to_resolution = 47000
+    to_resolution = 42000
     star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -3338,11 +3340,11 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
         else:
             line_region_code = code
         if code in ['width', 'moog', 'moog-scat']:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_ew_ispec_good_for_params_all_extended.txt".format(line_region_code))
-            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_ew_ispec_good_for_params_all_extended.txt".format(line_region_code))
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_ew_ispec_good_for_params_all_extended.txt".format(line_region_code))
+            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_ew_ispec_good_for_params_all_extended.txt".format(line_region_code))
         else:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
-            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
 
         # Select only iron lines
         line_regions_with_atomic_data = line_regions_with_atomic_data[np.logical_or(line_regions_with_atomic_data['note'] == "Fe 1", line_regions_with_atomic_data['note'] == "Fe 2")]
@@ -3377,11 +3379,11 @@ def determine_astrophysical_parameters_from_ew(code="width", use_lines_already_c
         else:
             line_region_code = code
         if code in ['width', 'moog', 'moog-scat']:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_ew_ispec_good_for_params_all.txt".format(line_region_code))
-            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_ew_ispec_good_for_params_all.txt".format(line_region_code))
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_ew_ispec_good_for_params_all.txt".format(line_region_code))
+            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_ew_ispec_good_for_params_all.txt".format(line_region_code))
         else:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
-            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
 
         line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
 
@@ -3557,9 +3559,9 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
     vel_telluric = np.round(models[0].mu(), 2) # km/s
     vel_telluric_err = np.round(models[0].emu(), 2) # km/s
     #--- Resolution degradation ----------------------------------------------------
-    # NOTE: The line selection was built based on a solar spectrum with R ~ 47,000 and GES/VALD atomic linelist.
+    # NOTE: The line selection was built based on a solar spectrum with R ~ 42,000 and GES/VALD atomic linelist.
     from_resolution = 80000
-    to_resolution = 47000
+    to_resolution = 42000
     star_spectrum = ispec.convolve_spectrum(star_spectrum, to_resolution, from_resolution)
     #--- Continuum fit -------------------------------------------------------------
     model = "Splines" # "Polynomy"
@@ -3600,11 +3602,11 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
         else:
             line_region_code = code
         if code in ['width', 'moog', 'moog-scat']:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_ew_ispec_good_for_params_all_extended.txt".format(line_region_code))
-            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_ew_ispec_good_for_params_all_extended.txt".format(line_region_code))
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_ew_ispec_good_for_params_all_extended.txt".format(line_region_code))
+            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_ew_ispec_good_for_params_all_extended.txt".format(line_region_code))
         else:
-            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
-            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+            line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
+            #line_regions_with_atomic_data = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all_extended.txt".format(line_region_code))
 
         # Select only iron lines
         line_regions_with_atomic_data = line_regions_with_atomic_data[np.logical_or(line_regions_with_atomic_data['note'] == "Fe 1", line_regions_with_atomic_data['note'] == "Fe 2")]
@@ -3639,11 +3641,11 @@ def determine_abundances_from_ew(code="spectrum", use_lines_already_crossmatched
         else:
             line_region_code = code
         if code in ['width', 'moog', 'moog-scat']:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_ew_ispec_good_for_params_all.txt".format(line_region_code))
-            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_ew_ispec_good_for_params_all.txt".format(line_region_code))
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_ew_ispec_good_for_params_all.txt".format(line_region_code))
+            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_ew_ispec_good_for_params_all.txt".format(line_region_code))
         else:
-            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
-            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/47000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
+            line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_GES/{}_synth_good_for_params_all.txt".format(line_region_code))
+            #line_regions = ispec.read_line_regions(ispec_dir + "/input/regions/42000_VALD/{}_synth_good_for_params_all.txt".format(line_region_code))
 
         line_regions = ispec.adjust_linemasks(normalized_star_spectrum, line_regions, max_margin=0.5)
 
