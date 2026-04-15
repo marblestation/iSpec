@@ -119,10 +119,14 @@ class GaussianModel(MPFitModel):
             #return self.baseline() + ((self.A()*1.)/np.sqrt(2*np.pi*self.sig()**2))*np.exp(-(x-self.mu())**2/(2*self.sig()**2))
             return self.baseline() + self.A()*np.exp(-(x-self.mu())**2/(2*self.sig()**2))
 
-    def fitData(self, x, y, weights=None, parinfo=None):
+    def fitData(self, x, y, weights=None, parinfo=None, max_iterations=200, quiet=True):
         if len(parinfo) != 4:
             raise Exception("Wrong number of parameters!")
-        super(GaussianModel, self).fitData(x, y, weights, parinfo)
+        ftol = 1.e-10 # Terminate when the improvement in chisq between iterations is ftol > -(new_chisq/chisq)**2 +1
+        xtol = 1.e-10
+        gtol = 1.e-10
+        damp = 0.0   # Do not limit residuals between -1.0 and 1.0 (np.tanh(residuals/1.0))
+        super(GaussianModel, self).fitData(x, y, weights, parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet)
 
     def baseline(self): return self._parinfo[0]['value']
     def A(self): return self._parinfo[1]['value']
@@ -207,15 +211,19 @@ class VoigtModel(MPFitModel):
             voigt_result = self.baseline() + (self.A() * w.real*(2*np.pi)**-0.5/self.sig())
         return voigt_result
 
-    def fitData(self, x, y, weights=None, parinfo=None):
+    def fitData(self, x, y, weights=None, parinfo=None, max_iterations=200, quiet=True):
         if len(parinfo) != 5:
             raise Exception("Wrong number of parameters!")
-        super(VoigtModel, self).fitData(x, y, weights, parinfo)
+        ftol = 1.e-10 # Terminate when the improvement in chisq between iterations is ftol > -(new_chisq/chisq)**2 +1
+        xtol = 1.e-10
+        gtol = 1.e-10
+        damp = 0.0   # Do not limit residuals between -1.0 and 1.0 (np.tanh(residuals/1.0))
+        super(VoigtModel, self).fitData(x, y, weights, parinfo, ftol=ftol, xtol=xtol, gtol=gtol, damp=damp, maxiter=max_iterations, quiet=quiet)
 
 
     def baseline(self): return self._parinfo[0]['value']
     def A(self): return self._parinfo[1]['value']
-    def sig(self): return self._parinfo[2]['value']
+    def sig(self): return max(self._parinfo[2]['value'], 1e-10) # Minimum to avoid zero-divisions (this works better than setting lower limit to non-zero)
     def mu(self): return self._parinfo[3]['value']
     def gamma(self): return self._parinfo[4]['value']
     def ebaseline(self): return self.m.perror[0]

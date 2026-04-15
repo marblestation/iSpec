@@ -440,7 +440,7 @@ def __fit_voigt(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=Non
     parinfo[1]['limits'] = [(min_flux-baseline) * 1.25, -1e-10]
     parinfo[2]['value'] = sig # Only positives (absorption lines) and lower than the spectrum slice
     parinfo[2]['limited'] = [True, True]
-    parinfo[2]['limits'] = [1e-10, x[-1] - x[0]]
+    parinfo[2]['limits'] = [0, x[-1] - x[0]] # Having a zero limit but enforcing a minimum via the model `sig(self)` method works better than having a non-zero limit
     parinfo[3]['value'] = mu # Peak only within the spectrum slice
     if not free_mu:
         parinfo[3]['fixed'] = True
@@ -459,7 +459,7 @@ def __fit_voigt(spectrum_slice, continuum_model, mu, sig=None, A=None, gamma=Non
     if len(spectrum_slice) == 4:
         parinfo[3]['fixed'] = True
 
-    model.fitData(x, y, parinfo=parinfo)
+    model.fitData(x, y, parinfo=parinfo, max_iterations=200)
 
     return model
 
@@ -1430,7 +1430,10 @@ def fit_lines(regions, spectrum, continuum_model, atomic_linelist, max_atomic_wa
                     regions['integrated_flux'][i] = -1.*regions['A'][i]*np.sqrt(2*np.pi*regions['sig'][i]**2) # nm
                     regions['ew'][i] = regions['integrated_flux'][i]/ line_model.baseline() # nm
                 else:
-                    regions['integrated_flux'][i] = -1 * line_model.integrate(from_x, to_x) # nm^2
+                    # Sigma may be too small to be used to define the region to be used for integration (use at least 1nm):
+                    integrate_from_x = min(from_x, regions['mu'][i] - 0.5)
+                    integrate_to_x = max(to_x, regions['mu'][i] + 0.5)
+                    regions['integrated_flux'][i] = -1 * line_model.integrate(integrate_from_x, integrate_to_x) # nm^2
                     regions['ew'][i] = regions['integrated_flux'][i]/ line_model.baseline() # nm
                 regions['ewr'][i] = np.log10(regions['ew'][i]/ regions['mu'][i])
                 regions['ew'][i] *= 10000. # from nm to mA
