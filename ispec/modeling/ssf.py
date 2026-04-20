@@ -949,7 +949,9 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
     ]
 
     # Fetch the local variables by name
-    lengths = {name: len(locals()[name]) for name in names}
+    local_snapshot = dict(locals())
+    # ^ Create a snapshot of the locals (list comprehensions have their own scope in Python 3)
+    lengths = {name: len(local_snapshot[name]) for name in names}
 
     if len(set(lengths.values())) != 1:
         raise ValueError(f"Inconsistent lengths among inputs: {lengths}")
