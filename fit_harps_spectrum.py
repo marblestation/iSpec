@@ -87,6 +87,17 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
+def _add_file_logging(log_path: Path) -> logging.FileHandler:
+    """Attach a FileHandler to the root logger so every log.* call is also written to disk."""
+    handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s  %(levelname)-8s  %(message)s", datefmt="%H:%M:%S"
+    ))
+    logging.getLogger().addHandler(handler)
+    log.info("Log file: %s", log_path)
+    return handler
+
+
 # ===========================================================================
 # Constants
 # ===========================================================================
@@ -967,35 +978,44 @@ def fit_individual_abundances(
 # Result reporting and saving
 # ===========================================================================
 
-def print_results(params: dict, errors: dict, abundances=None, rv: float = 0.0):
-    """Pretty-print the fitted stellar parameters."""
+def print_results(params: dict, errors: dict, abundances=None, rv: float = 0.0,
+                  out_file: Path = None):
+    """Pretty-print the fitted stellar parameters to stdout and optionally to a file."""
     separator = "─" * 60
 
-    print()
-    print(separator)
-    print("  iSpec Stellar Parameter Fit (HARPS) — Results")
-    print(separator)
-    print(f"  Radial velocity (pre-corrected):  {rv:+.2f} km/s")
-    print()
-    print(f"  Teff   = {params['teff']:7.1f} ± {errors.get('teff', 0):5.1f}  K")
-    print(f"  log g  = {params['logg']:7.3f} ± {errors.get('logg', 0):5.3f}  dex (cgs)")
-    print(f"  [M/H]  = {params['MH']:+7.3f} ± {errors.get('MH', 0):5.3f}  dex")
-    print(f"  vmic   = {params['vmic']:7.2f} ± {errors.get('vmic', 0):5.2f}  km/s")
-    print(f"  vmac   = {params['vmac']:7.2f} ± {errors.get('vmac', 0):5.2f}  km/s")
-    print(f"  vsini  = {params['vsini']:7.2f} ± {errors.get('vsini', 0):5.2f}  km/s")
-    print(f"  alpha  = {params['alpha']:+7.3f}                  dex")
-    print()
+    lines = [
+        "",
+        separator,
+        "  iSpec Stellar Parameter Fit (HARPS) — Results",
+        separator,
+        f"  Radial velocity (pre-corrected):  {rv:+.2f} km/s",
+        "",
+        f"  Teff   = {params['teff']:7.1f} ± {errors.get('teff', 0):5.1f}  K",
+        f"  log g  = {params['logg']:7.3f} ± {errors.get('logg', 0):5.3f}  dex (cgs)",
+        f"  [M/H]  = {params['MH']:+7.3f} ± {errors.get('MH', 0):5.3f}  dex",
+        f"  vmic   = {params['vmic']:7.2f} ± {errors.get('vmic', 0):5.2f}  km/s",
+        f"  vmac   = {params['vmac']:7.2f} ± {errors.get('vmac', 0):5.2f}  km/s",
+        f"  vsini  = {params['vsini']:7.2f} ± {errors.get('vsini', 0):5.2f}  km/s",
+        f"  alpha  = {params['alpha']:+7.3f}                  dex",
+        "",
+    ]
 
     if abundances is not None and len(abundances) > 0:
-        print("  Individual abundances [X/H]:")
+        lines.append("  Individual abundances [X/H]:")
         for row in abundances:
             elem = row["element"] if hasattr(row, "__getitem__") else "?"
             abund = row["Abund"] if hasattr(row, "__getitem__") else 0.0
-            print(f"    {elem:<8s}  {abund:+.3f} dex")
-        print()
+            lines.append(f"    {elem:<8s}  {abund:+.3f} dex")
+        lines.append("")
 
-    print(separator)
-    print()
+    lines += [separator, ""]
+
+    text = "\n".join(lines)
+    print(text)
+
+    if out_file is not None:
+        with open(out_file, "a", encoding="utf-8") as f:
+            f.write(text + "\n")
 
 
 def save_results(output_dir: Path, params: dict, errors: dict,
@@ -1204,6 +1224,9 @@ def main():
             )
 
     output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    log_path = output_dir / "run.log"
+    _add_file_logging(log_path)
     log.info("Output directory: %s", output_dir.resolve())
 
     # ---- 1. Read spectrum -----------------------------------------------
@@ -1340,7 +1363,7 @@ def main():
         individual_abundances = abundances_found
 
     # ---- 9. Report results ----------------------------------------------
-    print_results(params, errors, individual_abundances, rv)
+    print_results(params, errors, individual_abundances, rv, out_file=log_path)
 
     # ---- 10. Save results -----------------------------------------------
     save_results(
