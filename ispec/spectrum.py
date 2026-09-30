@@ -967,30 +967,46 @@ def add_noise(spectrum, snr, distribution="poisson"):
 
 def random_realizations(spectrum, number, distribution="poisson"):
     """
-    Derive a group of spectra from a single spectrum by considering fluxes as
-    mean (mu), errors as standard deviations (sigma) and a distribution.
-    The distribution can be "poisson" or "gaussian"
+    Generate random realizations of a spectrum using its flux as the mean
+    and its errors as standard deviations.
+
+    Supported distributions are "poisson" and "gaussian".
     """
+    distribution = distribution.lower()
+
+    if distribution not in ("poisson", "gaussian"):
+        raise ValueError("Distribution must be 'poisson' or 'gaussian'")
+
+    flux = np.asarray(spectrum['flux'])
+    sigma = np.asarray(spectrum['err'])
+    # Pixels with finite, positive uncertainties can be randomized
+    valid_error = np.isfinite(sigma) & (sigma > 0.0)
     realizations = []
-    for i in range(number):
+    for _ in range(number):
         new_derived_spectrum = create_spectrum_structure(spectrum['waveobs'], spectrum['flux'], spectrum['err'])
-        if distribution.lower() == "gaussian":
-            sigma = spectrum['err']
-            sigma[np.isnan(sigma)] = 1.0e-10
-            sigma[sigma <= 0.0] = 1.0e-10
-            new_derived_spectrum['flux'] += np.random.normal(0, sigma, len(spectrum))
-            #new_derived_spectrum['err'] += sigma
+        # Start from the original flux so unsupported pixels remain unchanged
+        new_flux = flux.copy()
+
+        if distribution == "gaussian":
+            # Add Gaussian noise with the supplied standard deviation
+            new_flux[valid_error] += np.random.normal(0.0, sigma[valid_error])
         else:
-            # poison
-            sigma = spectrum['err']
-            lamb = spectrum['flux']/ np.power(sigma, 2)
-            lamb[np.isnan(lamb)] = 0.0
-            lamb[lamb < 0.0] = 0.0
-            new_derived_spectrum['flux'] = np.random.poisson(lamb)
-            new_derived_spectrum['flux'] *= sigma*sigma
-            #new_derived_spectrum['err'] += new_derived_spectrum['flux'] / np.sqrt(lamb)
+            # Poisson statistics additionally require positive finite flux
+            valid = (valid_error & np.isfinite(flux) & (flux > 0.0))
+            if np.any(valid):
+                # Convert the supplied standard deviation to variance
+                variance = np.power(sigma[valid], 2)
+                # Infer the effective gain from the Poisson variance
+                effective_gain = flux[valid] / variance
+                # Convert flux to equivalent Poisson counts
+                expected_counts = flux[valid] * effective_gain
+                # Draw counts and convert back to flux units
+                new_flux[valid] = np.random.poisson(expected_counts) / effective_gain
+        new_derived_spectrum['flux'] = new_flux
         realizations.append(new_derived_spectrum)
+
     return realizations
+
 
 def create_wavelength_filter(spectrum, wave_base=None, wave_top=None, regions=None):
     """
