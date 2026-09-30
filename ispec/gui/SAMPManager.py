@@ -21,7 +21,7 @@ import signal
 import sys
 from astropy.io.votable import parse
 from astropy.io.votable.tree import VOTableFile, Resource, Table, Field, Group
-from astropy.samp import SAMPIntegratedClient
+from pyvo.samp import SAMPIntegratedClient
 import urllib.request, urllib.error, urllib.parse
 import numpy as np
 from astropy.io import fits as pyfits
