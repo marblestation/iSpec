@@ -138,6 +138,12 @@ def __read_fits_spectrum(spectrum_filename):
         for i in range(len(hdulist)):
             if type(hdulist[i]) is pyfits.hdu.table.BinTableHDU:
                 data = hdulist[i].data
+                try:
+                    dtype = hdulist[i].data.dtype
+                    header = hdulist[i].header
+                except:
+                    dtype = None
+                    header = None
                 if len(data) == 1:
                     # Sometimes we have an array inside another as a single element
                     data = data[0]
@@ -150,6 +156,15 @@ def __read_fits_spectrum(spectrum_filename):
                         continue
                     else:
                         break
+                # If a wavelength key is found, identify its position and check if there is any metadata about its units (e.g., Angstrom)
+                if waveobs is not None and dtype is not None and header is not None:
+                    key_position = np.where(key == np.asarray(dtype.names))[0]
+                    if len(key_position) == 1:
+                        key_position = key_position[0]
+                        unit = header.get(f"TUNIT{key_position + 1}")
+                        if unit and unit.lower() in ('angstrom', ):
+                            waveobs /= 10 # Convert to nanometers
+
                 flux = None
                 for key in ('FLUX', 'FLUX_REDUCED'):
                     try:
@@ -165,6 +180,9 @@ def __read_fits_spectrum(spectrum_filename):
                     except:
                         continue
                     else:
+                        # Accept, unless all errors are NaNs, in that case we just do not assign errors
+                        if error is not None and np.all(np.isnan(error)):
+                            error = None
                         break
 
                 if waveobs is not None and flux is not None:
