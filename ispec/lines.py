@@ -1995,7 +1995,7 @@ def __cross_correlation_function_uniform_in_velocity(spectrum, mask, lower_veloc
         tflux = fft(flux)
         tresampled_mask = fft(resampled_mask)
         conj_tresampled_mask = np.conj(tresampled_mask)
-        num = len(resampled_mask)/2+1
+        num = len(resampled_mask)//2+1
         tmp = abs(ifft(tflux*conj_tresampled_mask))
         ccf = np.hstack((tmp[num:], tmp[:num]))
 
@@ -2016,8 +2016,8 @@ def __cross_correlation_function_uniform_in_velocity(spectrum, mask, lower_veloc
         #ccf_err = np.hstack((tmp[num:], tmp[:num]))
         #ccf_err = np.sqrt(ccf_err)
 
-        # Velocities
-        velocities = velocity_step * (np.arange(len(resampled_mask), dtype=float)+1 - num)
+        # Velocities: after the rotation above, bin i holds lag i - (len - num)
+        velocities = velocity_step * (np.arange(len(resampled_mask), dtype=float) - (len(resampled_mask) - num))
 
         # Filter to area of interest
         xfilter = np.logical_and(velocities >= lower_velocity_limit, velocities <= upper_velocity_limit)
