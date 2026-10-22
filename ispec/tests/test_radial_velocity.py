@@ -41,6 +41,57 @@ class TestRadialVelocity(unittest.TestCase):
         self.assertAlmostEqual(rv, -96.43)
         self.assertAlmostEqual(rv_err, 0.03736164048308909)
 
+    def _synthetic_spectrum_and_mask(self, even, rv, velocity_step=1.0):
+        # Synthetic absorption spectrum shifted by rv, with the wavelength
+        # range chosen so the velocity-uniform CCF grid has the requested parity
+        c = 299792.4580 # km/s
+        wave_base = 500.0
+        grid = ispec.lines._sampling_uniform_in_velocity(wave_base, 510.5, velocity_step)
+        k = len(grid) - 10
+        if (k % 2 == 0) != even:
+            k -= 1
+        wave_top = (grid[k-1] + grid[k]) / 2.
+        n = len(ispec.lines._sampling_uniform_in_velocity(wave_base, wave_top, velocity_step))
+        self.assertEqual(n % 2 == 0, even)
+
+        line_waves = np.arange(501.0, 510.0, 1.0)
+        spectrum = ispec.create_spectrum_structure(np.linspace(wave_base, wave_top, 20000))
+        spectrum['flux'] = 1.0
+        spectrum['err'] = 0.01
+        for wave in line_waves:
+            shifted_wave = wave * (1 + rv / c)
+            sigma = shifted_wave * 4.0 / c
+            spectrum['flux'] -= 0.5 * np.exp(-0.5 * ((spectrum['waveobs'] - shifted_wave) / sigma)**2)
+
+        mask = np.recarray((len(line_waves), ), dtype=[('wave_peak', float), ('depth', float)])
+        mask['wave_peak'] = line_waves
+        mask['depth'] = 0.5
+        return spectrum, mask
+
+    def _assert_fourier_matches_direct_cross_correlation(self, even):
+        rv = 10.0 # km/s
+        spectrum, mask = self._synthetic_spectrum_and_mask(even, rv)
+        results = {}
+        for fourier in (False, True):
+            results[fourier] = ispec.cross_correlate_with_mask(spectrum, mask, \
+                                    lower_velocity_limit=-50, upper_velocity_limit=50, \
+                                    velocity_step=1.0, mask_depth=0.01, \
+                                    fourier=fourier)
+        direct_models, direct_ccf = results[False]
+        fourier_models, fourier_ccf = results[True]
+
+        np.testing.assert_array_equal(fourier_ccf['x'], direct_ccf['x'])
+        np.testing.assert_allclose(fourier_ccf['y'], direct_ccf['y'], rtol=1e-9)
+        np.testing.assert_allclose(fourier_ccf['err'], direct_ccf['err'], rtol=1e-9)
+        self.assertEqual(fourier_ccf['x'][np.argmin(fourier_ccf['y'])], rv)
+        self.assertAlmostEqual(fourier_models[0].mu(), rv, delta=0.5)
+
+    def test_cross_correlate_with_mask_fourier_even_length(self):
+        self._assert_fourier_matches_direct_cross_correlation(even=True)
+
+    def test_cross_correlate_with_mask_fourier_odd_length(self):
+        self._assert_fourier_matches_direct_cross_correlation(even=False)
+
     def determine_radial_velocity_with_template(self):
         mu_cas_spectrum = ispec.read_spectrum(ispec_dir + "/input/spectra/examples/NARVAL_muCas.txt.gz")
         #--- Radial Velocity determination with template -------------------------------
