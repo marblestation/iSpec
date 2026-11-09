@@ -948,9 +948,8 @@ def model_spectrum(spectrum, continuum_model, modeled_layers_pack, linelist, iso
         'initial_lf', 'segments', 'linemasks'
     ]
 
-    # Fetch the local variables by name
+    # Create a snapshot of the locals (list comprehensions have their own scope in Python <=3.11)
     local_snapshot = dict(locals())
-    # ^ Create a snapshot of the locals (list comprehensions have their own scope in Python 3)
     lengths = {name: len(local_snapshot[name]) for name in names}
 
     if len(set(lengths.values())) != 1:
